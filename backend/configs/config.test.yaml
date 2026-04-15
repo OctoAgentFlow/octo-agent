@@ -1,0 +1,21 @@
+api:
+  host: "0.0.0.0"
+  port: 10001
+admin:
+  host: "0.0.0.0"
+  port: 10002
+mysql:
+  data_source: "admin:6HNzatYAu]+G@tcp(database-1.cdeiw4yyml4x.ap-southeast-1.rds.amazonaws.com:3306)/octo_test?timeout=60s&readTimeout=180s&writeTimeout=180s&charset=utf8mb4&parseTime=true"
+  max_idle_conns: 10
+  max_open_conns: 100
+  max_lifetime: 3600
+  max_idletime: 1800
+log:
+  level: "debug"
+  encoding: "json"
+  api_output_path: "logs/api.log"
+  admin_output_path: "logs/admin.log"
+  max_size: 100
+  max_backups: 30
+  max_age: 7
+  compress: true

@@ -1,0 +1,3 @@
+package jobs
+
+func PublishPostJob() {}

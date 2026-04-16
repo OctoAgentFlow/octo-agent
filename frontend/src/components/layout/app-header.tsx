@@ -5,6 +5,7 @@ import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { useT } from "@/i18n/use-t";
+import { ConnectWalletButton } from "@/components/web3/connect-wallet-button";
 
 export function AppHeader() {
   const { t } = useT();
@@ -16,6 +17,7 @@ export function AppHeader() {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <LanguageSwitcher className="hidden sm:block" />
+        <ConnectWalletButton className="hidden sm:inline-flex" connectLabel={t("auth.card.connectWallet")} />
         <span className="stable-meta-chip hidden rounded-full border border-white/15 bg-white/6 px-2 py-1 text-xs text-white/60 sm:inline-flex">
           {t("dashboard.header.synced", { minutes: 2 })}
         </span>

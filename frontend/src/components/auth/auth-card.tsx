@@ -1,26 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { LoginForm } from "@/components/forms/login-form";
-import { Button } from "@/components/ui/button";
+import { ConnectWalletButton } from "@/components/web3/connect-wallet-button";
 import { useT } from "@/i18n/use-t";
+import { signIn } from "@/lib/auth-session";
+import { bindWalletAddressToCurrentUser } from "@/lib/web3/wallet-binding";
 
 import { AuthModeSwitch } from "./auth-mode-switch";
-import { WalletConnectModal } from "./wallet-connect-modal";
 
 type AuthMode = "login" | "register";
 
-export function AuthCard() {
+type AuthCardProps = {
+  nextPath?: string;
+};
+
+export function AuthCard({ nextPath = "/dashboard" }: AuthCardProps) {
+  const router = useRouter();
   const { t } = useT();
   const [mode, setMode] = useState<AuthMode>("login");
-  const [walletModalOpen, setWalletModalOpen] = useState(false);
-  const [walletStatus, setWalletStatus] = useState<string | null>(null);
 
-  const handleWalletSelect = (provider: "MetaMask" | "WalletConnect") => {
-    setWalletStatus(`Connected with ${provider} (mock)`);
-    setWalletModalOpen(false);
+  const handleAuthSuccess = () => {
+    signIn();
+    router.replace(nextPath);
+  };
+
+  const handleWalletConnected = async (address: string) => {
+    await bindWalletAddressToCurrentUser(address);
+    signIn();
+    router.replace(nextPath);
   };
 
   return (
@@ -36,7 +46,7 @@ export function AuthCard() {
 
         <div className="space-y-4">
           <AuthModeSwitch mode={mode} onChange={setMode} />
-          <LoginForm mode={mode} />
+          <LoginForm mode={mode} onSuccess={handleAuthSuccess} />
 
           <div className="relative py-1">
             <div className="absolute inset-0 flex items-center">
@@ -45,24 +55,13 @@ export function AuthCard() {
             <p className="relative mx-auto w-fit bg-[#0d1122] px-2 text-xs text-white/50">OR</p>
           </div>
 
-          <Button
-            variant="outline"
-            className="h-10 w-full border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-            onClick={() => setWalletModalOpen(true)}
-          >
-            <Wallet className="size-4" />
-            {t("auth.card.connectWallet")}
-          </Button>
+          <ConnectWalletButton className="w-full" connectLabel={t("auth.card.connectWallet")} onConnected={handleWalletConnected} />
 
           <p className="rounded-xl border border-blue-300/25 bg-blue-500/10 px-3 py-2 text-xs text-blue-100/90">
             {t("auth.card.freeTrialNote")}
           </p>
-
-          {walletStatus ? <p className="text-xs text-emerald-300">{walletStatus}</p> : null}
         </div>
       </section>
-
-      <WalletConnectModal open={walletModalOpen} onClose={() => setWalletModalOpen(false)} onSelect={handleWalletSelect} />
     </>
   );
 }

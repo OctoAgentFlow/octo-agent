@@ -14,12 +14,13 @@ type AuthMode = "login" | "register";
 
 type LoginFormProps = {
   mode: AuthMode;
+  onSuccess?: (mode: AuthMode) => void;
 };
 
 type LoginValues = z.infer<typeof loginSchema>;
 type RegisterValues = z.infer<typeof registerSchema>;
 
-export function LoginForm({ mode }: LoginFormProps) {
+export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   const { t } = useT();
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
 
@@ -50,6 +51,7 @@ export function LoginForm({ mode }: LoginFormProps) {
     setSubmitMessage(null);
     await new Promise((resolve) => setTimeout(resolve, 700));
     setSubmitMessage(mode === "login" ? t("auth.form.mock.loginSuccess") : t("auth.form.mock.registerSuccess"));
+    onSuccess?.(mode);
   });
 
   return (

@@ -4,6 +4,8 @@ export const dict: I18nDict = {
   "common.brand": "Octo-Agent",
   "common.login": "登入",
   "common.startFreeTrial": "開始免費試用",
+  "common.dashboard": "儀表板",
+  "common.logout": "登出",
 
   "marketing.nav.capabilities": "功能",
   "marketing.nav.workflow": "流程",

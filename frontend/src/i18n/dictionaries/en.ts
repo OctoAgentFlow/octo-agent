@@ -5,6 +5,8 @@ export const dict: I18nDict = {
   "common.brand": "Octo-Agent",
   "common.login": "Log in",
   "common.startFreeTrial": "Start Free Trial",
+  "common.dashboard": "Dashboard",
+  "common.logout": "Log out",
 
   // marketing nav
   "marketing.nav.capabilities": "Capabilities",

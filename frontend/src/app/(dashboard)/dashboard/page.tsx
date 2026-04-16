@@ -1,8 +1,19 @@
+import { AutomationOverview } from "@/components/dashboard/automation-overview";
+import { RecentActivityList } from "@/components/dashboard/recent-activity-list";
+import { StatusOverviewCards } from "@/components/dashboard/status-overview-cards";
+import { TrialUpgradeBanner } from "@/components/dashboard/trial-upgrade-banner";
+import { XAccountStatus } from "@/components/dashboard/x-account-status";
+
 export default function DashboardPage() {
   return (
-    <div className="space-y-2 p-6">
-      <h2 className="text-xl font-semibold">Dashboard</h2>
-      <p className="text-sm text-muted-foreground">Try `GET /health` or `GET /api/v1/posts` from backend to verify integration.</p>
+    <div className="space-y-4 md:space-y-5">
+      <StatusOverviewCards />
+      <XAccountStatus />
+      <AutomationOverview />
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <RecentActivityList />
+        <TrialUpgradeBanner />
+      </div>
     </div>
   );
 }

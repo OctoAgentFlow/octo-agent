@@ -1,1 +1,52 @@
-export function AppSidebar() { return <aside className="w-64 border-r p-4">Sidebar</aside>; }
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Activity, BadgeDollarSign, BarChart3, BellRing, Bot, LayoutDashboard, Settings } from "lucide-react";
+import { useT } from "@/i18n/use-t";
+
+const navItems = [
+  { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "sidebar.nav.activity", href: "/dashboard/activity", icon: Activity },
+  { labelKey: "sidebar.nav.automations", href: "/dashboard/agents", icon: Bot },
+  { labelKey: "sidebar.nav.analytics", href: "/dashboard/analytics", icon: BarChart3 },
+  { labelKey: "sidebar.nav.billing", href: "/dashboard/billing", icon: BadgeDollarSign },
+  { labelKey: "sidebar.nav.notifications", href: "/dashboard/settings", icon: BellRing },
+  { labelKey: "sidebar.nav.settings", href: "/dashboard/settings", icon: Settings },
+];
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const { t } = useT();
+
+  return (
+    <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
+      <div className="mb-8 flex items-center gap-2">
+        <span className="inline-block size-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-400" />
+        <span className="text-sm font-semibold tracking-wide text-white">{t("common.brand")}</span>
+      </div>
+      <nav className="space-y-1">
+        {navItems.map((item) => {
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                active ? "bg-white/12 text-white" : "text-white/65 hover:bg-white/8 hover:text-white"
+              }`}
+            >
+              <item.icon className="size-4" />
+              {t(item.labelKey)}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="surface-card mt-auto p-3">
+        <p className="text-xs text-white/55">{t("sidebar.workspace")}</p>
+        <p className="text-sm font-medium text-white">{t("sidebar.workspaceTeam")}</p>
+      </div>
+    </aside>
+  );
+}

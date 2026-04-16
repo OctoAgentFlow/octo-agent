@@ -1,35 +1,27 @@
-async function getHealthStatus() {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1";
-  const healthURL = base.replace("/api/v1", "/health");
-  try {
-    const res = await fetch(healthURL, { cache: "no-store" });
-    if (!res.ok) {
-      return `unhealthy (${res.status})`;
-    }
-    return "ok";
-  } catch {
-    return "unreachable";
-  }
-}
+import { FAQSection } from "@/components/marketing/faq-section";
+import { FeatureCardsSection } from "@/components/marketing/feature-cards-section";
+import { MarketingFooter } from "@/components/marketing/footer";
+import { HeroSection } from "@/components/marketing/hero-section";
+import { MobileCtaBar } from "@/components/marketing/mobile-cta-bar";
+import { MarketingNavbar } from "@/components/marketing/navbar";
+import { PricingSection } from "@/components/marketing/pricing-section";
+import { DashboardPreviewSection } from "@/components/marketing/dashboard-preview-section";
+import { WorkflowSection } from "@/components/marketing/workflow-section";
 
-export default async function Home() {
-  const health = await getHealthStatus();
+export default function Home() {
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center gap-8 p-8">
-      <main className="space-y-4 rounded-lg border p-8">
-        <h1 className="text-3xl font-semibold">Octo-Agent</h1>
-        <p className="text-muted-foreground">Full-stack scaffold is ready. Use the links below to enter auth and dashboard routes.</p>
-        <div className="flex gap-4">
-          <a className="rounded bg-foreground px-4 py-2 text-background" href="/login">
-            Login
-          </a>
-          <a className="rounded border px-4 py-2" href="/dashboard">
-            Dashboard
-          </a>
-        </div>
-        <p className="text-sm text-muted-foreground">Backend base API: {process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1"}</p>
-        <p className="text-sm text-muted-foreground">Backend health: {health}</p>
+    <div className="surface-page relative min-h-screen overflow-hidden">
+      <MarketingNavbar />
+      <main className="pb-20 md:pb-0">
+        <HeroSection />
+        <FeatureCardsSection />
+        <WorkflowSection />
+        <DashboardPreviewSection />
+        <PricingSection />
+        <FAQSection />
       </main>
+      <MarketingFooter />
+      <MobileCtaBar />
     </div>
   );
 }

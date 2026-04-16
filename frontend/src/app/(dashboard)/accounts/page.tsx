@@ -1,3 +1,5 @@
+import { AccountsClient } from "@/components/accounts/accounts-client";
+
 export default function AccountsPage() {
-  return <div className="p-6">Accounts</div>;
+  return <AccountsClient />;
 }

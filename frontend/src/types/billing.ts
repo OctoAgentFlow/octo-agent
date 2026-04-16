@@ -1,0 +1,38 @@
+import type { TranslateParams } from "@/i18n/types";
+
+export type CurrentSubscription = {
+  planKey: string;
+  expirationDate: string;
+  remainingTrialDays: number;
+  statusKey: string;
+};
+
+export type Plan = {
+  nameKey: string;
+  price: string;
+  periodKey: string;
+  descriptionKey: string;
+  featureKeys: string[];
+  priceNoteKey?: string;
+  priceNoteParams?: TranslateParams;
+  highlight: boolean;
+};
+
+export type PaymentMethod = {
+  methodKey: string;
+  networkKey: string;
+  addressMask: string;
+  noteKey: string;
+};
+
+export type PaymentStatus = "paid" | "pending" | "failed";
+
+export type PaymentRecord = {
+  date: string;
+  planKey: string;
+  amount: string;
+  methodKey: string;
+  status: PaymentStatus;
+  txHash: string;
+};
+

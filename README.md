@@ -67,7 +67,8 @@ Frontend services:
 - Backend 分层：
   - `controller`, `service`, `model`, `repository`, `router`, `middleware`, `dto`, `email`, `jobs` 等
 - AutoMigrate（见 `backend/internal/database/migrate.go`）:
-  - `User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `TwitterAccount`, `AutomationConfig`, `ActivityLog`, `Post`, `Agent`, `Task`
+  - `User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `TwitterAccount`, `AutomationConfig`, `ActivityLog`, `ReplyReservation`, `Post`, `Agent`, `Task`, `BillingOrder`, `BillingChainTx`
+  - 启动时会执行表注释（`ApplyTableComments`）及部分活动字段回填（`BackfillActivityReplyFields`）
 - 文档：`docs/`（[API 索引](docs/api/README.md)、库表、部署环境等）
 
 ## Repository Structure

@@ -162,13 +162,13 @@ Base path: `/api/v1`
 - **Dashboard**：`GET /dashboard/overview`
 - **Automations**：`GET /automations`、`PUT /automations/{type}`、`POST /automations/{type}/toggle`、`GET /automations/runtime-status`
 - **Activities**：`GET /activities`（分页 query）
-- **Billing**：`GET /billing/subscription`、`/plans`、`/payment-methods`
+- **Billing**：`GET /billing/subscription`、`/plans`、`/payment-methods`、`POST /billing/orders`、`GET /billing/orders/{id}`；链上确认见 `POST /billing/webhooks/onchain`（[billing.md](./billing.md)）
 
 仍为 **后端占位** 的接口：
 
 - `GET /agents`（见 [agent.md](./agent.md)）
 
-帖子接口见 [post.md](./post.md)（已实现 CRUD）。
+帖子接口见 [post.md](./post.md)（CRUD、execute 与定时调度均已实现）。
 
 关键实现点：
 

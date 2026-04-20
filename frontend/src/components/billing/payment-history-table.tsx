@@ -1,10 +1,9 @@
 "use client";
 
-import { paymentRecords } from "@/mocks/billing.mock";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/i18n/use-t";
-import type { PaymentStatus } from "@/types/billing";
+import type { PaymentRecord, PaymentStatus } from "@/types/billing";
 
 function statusVariant(status: PaymentStatus) {
   if (status === "paid") return "success";
@@ -12,7 +11,7 @@ function statusVariant(status: PaymentStatus) {
   return "danger";
 }
 
-export function PaymentHistoryTable() {
+export function PaymentHistoryTable({ paymentRecords }: { paymentRecords: PaymentRecord[] }) {
   const { t } = useT();
   return (
     <SectionCard title={t("billing.history.title")} description={t("billing.history.description")}>
@@ -29,7 +28,13 @@ export function PaymentHistoryTable() {
             </tr>
           </thead>
           <tbody className="text-white/80">
-            {paymentRecords.map((record) => (
+            {paymentRecords.length === 0 ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-sm text-white/60" colSpan={6}>
+                  No payment history yet.
+                </td>
+              </tr>
+            ) : paymentRecords.map((record) => (
               <tr key={record.txHash} className="border-b border-white/8 hover:bg-white/5">
                 <td className="px-3 py-3">{record.date}</td>
                 <td className="px-3 py-3">{t(record.planKey)}</td>

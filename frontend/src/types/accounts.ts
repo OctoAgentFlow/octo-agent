@@ -8,8 +8,8 @@ export type ConnectedXAccount = {
   username: string;
   displayName: string;
   status: AccountStatus;
-  lastSyncedKey: string;
+  lastSyncedKey?: string;
   lastSyncedParams?: TranslateParams;
-  followers: string;
+  followers?: string;
 };
 

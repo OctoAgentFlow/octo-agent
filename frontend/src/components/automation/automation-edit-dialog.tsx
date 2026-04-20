@@ -15,7 +15,7 @@ type Props = {
   module: AutomationModule | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (type: AutomationModule["type"], config: AutomationModuleConfig) => void;
+  onSave: (type: AutomationModule["type"], config: AutomationModuleConfig) => Promise<void> | void;
 };
 
 function schemaForType(type: AutomationModule["type"]) {
@@ -47,8 +47,7 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
 
   const submit = form.handleSubmit(async (values) => {
     setSaved(false);
-    await new Promise((r) => setTimeout(r, 450));
-    onSave(module.type, values as unknown as AutomationModuleConfig);
+    await onSave(module.type, values as unknown as AutomationModuleConfig);
     setSaved(true);
   });
 
@@ -142,7 +141,7 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-emerald-300">{saved ? t("automation.edit.savedMock") : ""}</p>
+          <p className="text-xs text-emerald-300">{saved ? t("automation.edit.saved") : ""}</p>
           <Button type="submit" disabled={form.formState.isSubmitting}>
             {form.formState.isSubmitting ? t("automation.edit.saving") : t("automation.edit.save")}
           </Button>

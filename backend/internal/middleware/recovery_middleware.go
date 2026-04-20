@@ -1,5 +1,11 @@
 package middleware
 
-import "github.com/gin-gonic/gin"
+import (
+	ginzap "github.com/gin-contrib/zap"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
 
-func Recovery() gin.HandlerFunc { return gin.Recovery() }
+func Recovery() gin.HandlerFunc {
+	return ginzap.RecoveryWithZap(zap.L(), true)
+}

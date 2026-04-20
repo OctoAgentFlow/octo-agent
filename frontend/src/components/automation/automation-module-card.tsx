@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Pencil, Power } from "lucide-react";
 
 import type { AutomationModule } from "@/types/automation";
@@ -35,6 +36,16 @@ export function AutomationModuleCard({ module, onToggle, onEdit }: Props) {
           </Button>
         </div>
       </div>
+      {module.type === "post" ? (
+        <div className="mt-3 rounded-lg border border-violet-300/25 bg-violet-500/10 p-3">
+          <p className="text-xs text-violet-100/90">{t("automation.module.post.contentHint")}</p>
+          <Link href="/posts/create" className="mt-2 inline-flex">
+            <Button size="sm" variant="outline" type="button">
+              {t("automation.module.post.createCta")}
+            </Button>
+          </Link>
+        </div>
+      ) : null}
     </Card>
   );
 }

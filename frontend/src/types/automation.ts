@@ -20,6 +20,13 @@ export type AutomationModuleConfig = {
   safety: AutomationSafetyLimits;
 };
 
+export type AutomationReplyUsage = {
+  todayCount: number;
+  dailyLimit: number;
+  remainingToday: number;
+  lastExecutedAt?: string;
+};
+
 export type AutomationModule = {
   type: AutomationModuleType;
   nameKey: string;
@@ -30,6 +37,12 @@ export type AutomationModule = {
   lastRunParams?: Record<string, string | number>;
   nextRunKey: string;
   nextRunParams?: Record<string, string | number>;
+  executedToday: number;
+  /** Present for Auto Reply when API returns usage stats */
+  replyUsage?: AutomationReplyUsage;
+  /** Relative time label for last reply execution (reply module only) */
+  replyLastRelativeKey?: string;
+  replyLastRelativeParams?: Record<string, string | number>;
 };
 
 export type AutomationRuntimeStatus = {

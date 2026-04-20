@@ -1,5 +1,224 @@
+ "use client";
+
+import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+
 import { BillingPageContent } from "@/components/billing/billing-page-content";
+import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
+import {
+  broadcastDataSynced,
+  broadcastPageRefreshComplete,
+  subscribePageRefreshRequest,
+} from "@/lib/app-page-refresh";
+import { billingService, type BillingPaymentMethodApi } from "@/services/billing.service";
+import type { CurrentSubscription, PaymentMethodOption, Plan } from "@/types/billing";
+
+type LoadState = "loading" | "ready" | "error";
+
+function mapPlanKey(code: string) {
+  if (code === "free_trial") return "billing.plan.freeTrial";
+  if (code === "basic_monthly" || code === "basic") return "billing.plan.basic";
+  return "billing.plan.basic";
+}
+
+function mapSubscriptionStatusKey(status: string) {
+  if (status === "active") return "billing.subscription.status.active";
+  if (status === "expired") return "billing.subscription.status.expired";
+  return "billing.subscription.status.active";
+}
+
+function maskAddr(addr: string) {
+  const s = addr.trim();
+  if (s.length <= 14) return s;
+  return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
+function networkKeyForApi(network: string) {
+  const n = network.trim().toUpperCase();
+  if (n === "BEP20") return "billing.payment.network.bep20";
+  if (n === "ERC20") return "billing.payment.network.erc20";
+  return "billing.payment.network.trc20";
+}
+
+function mapPaymentMethods(items: BillingPaymentMethodApi[]): PaymentMethodOption[] {
+  return items.map((m) => ({
+    methodKey: "billing.payment.method.usdt",
+    networkKey: networkKeyForApi(m.network),
+    networkCode: m.network.trim().toUpperCase(),
+    receiverMasked: maskAddr(m.receiver_address),
+    tokenMasked: maskAddr(m.token_address),
+    chainId: m.chain_id,
+    note: m.note,
+    isDefault: m.is_default,
+  }));
+}
 
 export default function BillingPage() {
-  return <BillingPageContent />;
+  const { pushToast } = useToast();
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<CurrentSubscription | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+
+  const fetchBilling = useCallback(
+    async (options?: { quiet?: boolean }) => {
+    const quiet = Boolean(options?.quiet);
+    if (!quiet) {
+      setLoadState("loading");
+    }
+    setErrorMessage(null);
+    try {
+      const [subscriptionData, plansData, methodsData] = await Promise.all([
+        billingService.subscription(),
+        billingService.plans(),
+        billingService.paymentMethods(),
+      ]);
+
+      setSubscription({
+        planKey: mapPlanKey(subscriptionData.plan),
+        expirationDate: subscriptionData.expiration_date,
+        remainingTrialDays: subscriptionData.trial_days_left,
+        statusKey: mapSubscriptionStatusKey(subscriptionData.status),
+      });
+
+      setPlans(
+        plansData.items.map((item) => ({
+          nameKey: mapPlanKey(item.code),
+          price: item.price,
+          periodKey: item.period === "7 days" ? "billing.plan.period.sevenDays" : "billing.plan.period.month",
+          descriptionKey:
+            item.code === "free_trial" ? "billing.plan.freeTrial.description" : "billing.plan.basic.description",
+          featureKeys:
+            item.code === "free_trial"
+              ? [
+                  "billing.plan.features.autoPost",
+                  "billing.plan.features.autoReply",
+                  "billing.plan.features.basicAutoDm",
+                  "billing.plan.features.communitySupport",
+                ]
+              : [
+                  "billing.plan.features.allAutomations",
+                  "billing.plan.features.unlimitedRuns",
+                  "billing.plan.features.priorityQueue",
+                  "billing.plan.features.advancedAnalytics",
+                ],
+          highlight: item.highlight,
+        }))
+      );
+
+      setPaymentMethods(mapPaymentMethods(methodsData.items));
+      setLoadState("ready");
+      broadcastDataSynced(Date.now());
+    } catch (error) {
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || "Failed to load billing data."
+        : "Failed to load billing data.";
+      setErrorMessage(msg);
+      if (!quiet) {
+        setLoadState("error");
+      } else {
+        pushToast(msg);
+      }
+    }
+  },
+    [pushToast]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([billingService.subscription(), billingService.plans(), billingService.paymentMethods()])
+      .then(([subscriptionData, plansData, methodsData]) => {
+        if (cancelled) return;
+        setSubscription({
+          planKey: mapPlanKey(subscriptionData.plan),
+          expirationDate: subscriptionData.expiration_date,
+          remainingTrialDays: subscriptionData.trial_days_left,
+          statusKey: mapSubscriptionStatusKey(subscriptionData.status),
+        });
+        setPlans(
+          plansData.items.map((item) => ({
+            nameKey: mapPlanKey(item.code),
+            price: item.price,
+            periodKey: item.period === "7 days" ? "billing.plan.period.sevenDays" : "billing.plan.period.month",
+            descriptionKey:
+              item.code === "free_trial" ? "billing.plan.freeTrial.description" : "billing.plan.basic.description",
+            featureKeys:
+              item.code === "free_trial"
+                ? [
+                    "billing.plan.features.autoPost",
+                    "billing.plan.features.autoReply",
+                    "billing.plan.features.basicAutoDm",
+                    "billing.plan.features.communitySupport",
+                  ]
+                : [
+                    "billing.plan.features.allAutomations",
+                    "billing.plan.features.unlimitedRuns",
+                    "billing.plan.features.priorityQueue",
+                    "billing.plan.features.advancedAnalytics",
+                  ],
+            highlight: item.highlight,
+          }))
+        );
+        setPaymentMethods(mapPaymentMethods(methodsData.items));
+        setLoadState("ready");
+        broadcastDataSynced(Date.now());
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        if (axios.isAxiosError(error)) {
+          setErrorMessage(error.response?.data?.message || "Failed to load billing data.");
+        } else {
+          setErrorMessage("Failed to load billing data.");
+        }
+        setLoadState("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return subscribePageRefreshRequest(() => {
+      void (async () => {
+        try {
+          await fetchBilling({ quiet: true });
+        } finally {
+          broadcastPageRefreshComplete();
+        }
+      })();
+    });
+  }, [fetchBilling]);
+
+  if (loadState === "loading") {
+    return (
+      <Card>
+        <CardHeader title="Loading billing data..." description="Fetching subscription, plans and payment methods." />
+      </Card>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <Card>
+        <CardHeader title="Failed to load billing data" description={errorMessage || "Please retry."} />
+        <div className="flex justify-end">
+          <Button onClick={() => void fetchBilling()}>Retry</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <BillingPageContent
+      subscription={subscription}
+      plans={plans}
+      paymentMethods={paymentMethods}
+      paymentRecords={[]}
+      onPaymentConfirmed={() => void fetchBilling({ quiet: true })}
+    />
+  );
 }

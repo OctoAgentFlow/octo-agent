@@ -1,0 +1,118 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+import Link from "next/link";
+
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/use-t";
+import { postService } from "@/services/post.service";
+import type { PostItem } from "@/types/post";
+
+type LoadState = "loading" | "ready" | "error";
+
+function statusLabel(t: (k: string) => string, s: string) {
+  const key = `posts.status.${s}` as const;
+  const v = t(key);
+  return v === key ? s : v;
+}
+
+export function PostsClient() {
+  const { t } = useT();
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [items, setItems] = useState<PostItem[]>([]);
+
+  const fetchPosts = useCallback(async () => {
+    setLoadState("loading");
+    setErrorMessage(null);
+    try {
+      const data = await postService.list({ page: 1, page_size: 50 });
+      setItems(data.items);
+      setLoadState("ready");
+    } catch (error) {
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || "Failed to load posts."
+        : "Failed to load posts.";
+      setErrorMessage(msg);
+      setLoadState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial list load
+    void fetchPosts();
+  }, [fetchPosts]);
+
+  return (
+    <div className="space-y-4 md:space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-title">{t("posts.page.title")}</h2>
+          <p className="text-subtitle mt-2">{t("posts.page.subtitle")}</p>
+        </div>
+        <Link href="/posts/create" className={cn(buttonVariants())}>
+          {t("posts.actions.new")}
+        </Link>
+      </div>
+
+      {loadState === "loading" ? (
+        <Card>
+          <CardHeader title={t("posts.list.loading")} description="" />
+        </Card>
+      ) : null}
+
+      {loadState === "error" ? (
+        <Card>
+          <CardHeader title={t("posts.list.error")} description={errorMessage || ""} />
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => void fetchPosts()}>
+              {t("posts.list.retry")}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {loadState === "ready" && items.length === 0 ? (
+        <Card>
+          <CardHeader title={t("posts.list.empty")} description="" />
+        </Card>
+      ) : null}
+
+      {loadState === "ready" && items.length > 0 ? (
+        <div className="space-y-3">
+          {items.map((post) => (
+            <Link
+              key={post.id}
+              href={`/posts/${post.id}`}
+              className="surface-card block p-4 transition-colors hover:bg-white/[0.04] md:p-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p className="line-clamp-2 text-sm text-white/90">{post.content}</p>
+                  <div className="flex flex-wrap gap-3 text-xs text-white/55">
+                    <span>
+                      {t("posts.list.col.status")}:{" "}
+                      <span className="text-white/75">{statusLabel(t, post.status)}</span>
+                    </span>
+                    <span>
+                      {t("posts.list.col.account")}: #{post.x_account_id}
+                    </span>
+                    {post.scheduled_at ? (
+                      <span>
+                        {t("posts.list.col.scheduled")}: {new Date(post.scheduled_at).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <span className="text-xs text-white/45">{new Date(post.updated_at).toLocaleString()}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}

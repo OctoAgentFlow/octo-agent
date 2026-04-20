@@ -18,11 +18,16 @@ export type Plan = {
   highlight: boolean;
 };
 
-export type PaymentMethod = {
+export type PaymentMethodOption = {
   methodKey: string;
   networkKey: string;
-  addressMask: string;
-  noteKey: string;
+  /** API value e.g. BEP20 — used when creating orders */
+  networkCode: string;
+  receiverMasked: string;
+  tokenMasked: string;
+  chainId: number;
+  note: string;
+  isDefault: boolean;
 };
 
 export type PaymentStatus = "paid" | "pending" | "failed";

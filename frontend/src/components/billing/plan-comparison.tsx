@@ -1,10 +1,10 @@
 "use client";
 
-import { plans } from "@/mocks/billing.mock";
+import type { Plan } from "@/types/billing";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useT } from "@/i18n/use-t";
 
-export function PlanComparison() {
+export function PlanComparison({ plans }: { plans: Plan[] }) {
   const { t } = useT();
   return (
     <SectionCard title={t("billing.plans.title")} description={t("billing.plans.description")}>

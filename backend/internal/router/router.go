@@ -1,37 +1,80 @@
 package router
 
 import (
+	"strings"
+
+	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/controller"
+	"octo-agent/backend/internal/email"
+	"octo-agent/backend/internal/jobs"
 	"octo-agent/backend/internal/middleware"
+	"octo-agent/backend/internal/repository"
+	"octo-agent/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 func newBaseRouter() *gin.Engine {
 	r := gin.New()
-	r.Use(middleware.Logger(), middleware.Recovery(), middleware.CORS())
+	r.Use(middleware.RequestID(), middleware.Logger(), middleware.Recovery(), middleware.CORS())
 	return r
 }
 
-func NewAPI(_ *gorm.DB) *gin.Engine {
+func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	r := newBaseRouter()
 
 	h := controller.NewHealthController()
-	a := controller.NewAuthController()
-	u := controller.NewUserController()
-	acc := controller.NewAccountController()
-	p := controller.NewPostController()
+	userRepo := repository.NewUserRepository(db)
+	walletRepo := repository.NewWalletRepository(db)
+	twitterAccountRepo := repository.NewTwitterAccountRepository(db)
+	postRepo := repository.NewPostRepository(db)
+	automationRepo := repository.NewAutomationRepository(db)
+	activityRepo := repository.NewActivityRepository(db)
+	replyReservationRepo := repository.NewReplyReservationRepository(db)
+	verificationRepo := repository.NewEmailVerificationRepository(db)
+	if strings.ToLower(strings.TrimSpace(cfg.Email.Provider)) != "ses" {
+		zap.L().Fatal("unsupported email provider", zap.String("provider", cfg.Email.Provider))
+	}
+	sesSender, err := email.NewSESSender(cfg.Email.SES)
+	if err != nil {
+		zap.L().Fatal("init ses sender failed", zap.Error(err))
+	}
+	emailService := email.NewService(sesSender)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, emailService)
+	walletService := service.NewWalletService(walletRepo)
+	accountService := service.NewAccountService(twitterAccountRepo, cfg.XOAuth)
+	dashboardService := service.NewDashboardService(userRepo, walletRepo, twitterAccountRepo, activityRepo)
+	automationService := service.NewAutomationService(automationRepo, userRepo, activityRepo, postRepo)
+	activityService := service.NewActivityService(activityRepo)
+	billingOrderRepo := repository.NewBillingOrderRepository(db)
+	billingService := service.NewBillingService(userRepo, billingOrderRepo, cfg)
+	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo)
+	autoReplyService := service.NewAutoReplyService(twitterAccountRepo, automationRepo, activityRepo, replyReservationRepo, userRepo)
+	a := controller.NewAuthController(authService)
+	wc := controller.NewWalletController(walletService)
+	dc := controller.NewDashboardController(dashboardService)
+	acc := controller.NewAccountController(accountService, cfg.App.FrontendBaseURL)
+	auto := controller.NewAutomationController(automationService)
+	act := controller.NewActivityController(activityService)
+	bill := controller.NewBillingController(billingService)
+	p := controller.NewPostController(postService)
 	ag := controller.NewAgentController()
 
 	r.GET("/health", h.Ping)
 
 	v1 := r.Group("/api/v1")
 	RegisterAuth(v1, a)
-	RegisterUser(v1, u)
+	RegisterWallet(v1, wc)
+	RegisterDashboard(v1, dc)
 	RegisterAccount(v1, acc)
+	RegisterAutomation(v1, auto)
+	RegisterActivity(v1, act)
+	RegisterBilling(v1, bill)
 	RegisterPost(v1, p)
 	RegisterAgent(v1, ag)
+	jobs.Start(authService, postService, postRepo, autoReplyService)
 
 	return r
 }

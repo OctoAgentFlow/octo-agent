@@ -1,13 +1,16 @@
 "use client";
 
-import { currentSubscription } from "@/mocks/billing.mock";
+import type { CurrentSubscription } from "@/types/billing";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { Button } from "@/components/ui/button";
 import { CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 
-export function SubscriptionStatusCard() {
+export function SubscriptionStatusCard({ subscription }: { subscription: CurrentSubscription | null }) {
   const { t } = useT();
+  if (!subscription) {
+    return null;
+  }
   return (
     <SectionCard>
       <CardHeader
@@ -19,22 +22,22 @@ export function SubscriptionStatusCard() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <p className="text-xs text-white/55">{t("billing.subscription.fields.currentPlan")}</p>
-            <p className="text-sm font-medium text-white">{t(currentSubscription.planKey)}</p>
+            <p className="text-sm font-medium text-white">{t(subscription.planKey)}</p>
           </div>
           <div>
             <p className="text-xs text-white/55">{t("billing.subscription.fields.expirationDate")}</p>
-            <p className="text-sm font-medium text-white">{currentSubscription.expirationDate}</p>
+            <p className="text-sm font-medium text-white">{subscription.expirationDate}</p>
           </div>
           <div>
             <p className="text-xs text-white/55">{t("billing.subscription.fields.remainingTrialDays")}</p>
             <p className="text-sm font-medium text-white">
-              {t("billing.subscription.remainingTrialDays", { days: currentSubscription.remainingTrialDays })}
+              {t("billing.subscription.remainingTrialDays", { days: subscription.remainingTrialDays })}
             </p>
           </div>
           <div>
             <p className="text-xs text-white/55">{t("billing.subscription.fields.status")}</p>
             <span className="inline-flex rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2.5 py-1 text-xs text-emerald-200">
-              {t(currentSubscription.statusKey)}
+              {t(subscription.statusKey)}
             </span>
           </div>
         </div>

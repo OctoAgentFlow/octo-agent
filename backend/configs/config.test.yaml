@@ -19,3 +19,41 @@ log:
   max_backups: 30
   max_age: 7
   compress: true
+email:
+  provider: "ses"
+  ses:
+    region: "ap-southeast-1"
+    access_key_id: "AKIATO6YHJKQHG3DWMNA"
+    secret_access_key: "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"
+    from_email: "no-reply@mail.octo-agent.com"
+
+app:
+  frontend_base_url: "http://localhost:3000"
+
+x_oauth:
+  client_id: ""
+  client_secret: ""
+  redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
+  state_secret: ""
+
+billing:
+  order_ttl_minutes: 30
+  webhook_secret: ""
+  rpc_urls:
+    "56": "https://bsc-dataseed.binance.org"
+  payment_methods:
+    - method: "USDT"
+      network: "BEP20"
+      chain_id: 56
+      token_address: "0x11F5f03aB5eA442eB43F3dbB71390533f149ECF2"
+      receiver_address: "0x0000000000000000000000000000000000000001"
+      decimals: 18
+      is_default: true
+      note: "推荐使用 BEP20，手续费更低"
+  plans:
+    basic_monthly:
+      name: "Basic"
+      amount: "10"
+      currency: "USDT"
+      period_days: 30
+      description: "Full automation for one month."

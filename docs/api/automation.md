@@ -16,9 +16,14 @@ Base path: `/api/v1`
 
 - **鉴权**：需要（Bearer Token）
 - **用途**：列出当前用户的自动化模块（`post` / `reply` / `dm`）。首次访问会为该用户 **EnsureDefaults** 写入默认配置行。
-- **数据来源**：数据库表 `automation_configs`（真实持久化）。首次对该用户访问时会 **EnsureDefaults** 插入三条默认模块行（若尚未存在）。
+- **数据来源**：数据库表 `automation_configs`（真实持久化）。
 
-响应 `data.modules` 为数组，元素字段与 `PUT` 请求体结构对应，并包含 `state`、`last_run_at`、`next_run_at`（若有）等。
+响应 `data.modules` 为数组。除与 `PUT` 对齐的 `type`、`name`、`state`、`config`、`last_run_at`、`next_run_at` 外，还包含：
+
+| 字段 | 说明 |
+| --- | --- |
+| `executed_today` | 当日 **成功** 活动数（按模块 `type` 统计 `activity_logs`） |
+| `reply_usage` | **仅 `type=reply` 时**：当日回复成功数、日限额、剩余额度、最近一次回复活动执行时间（RFC3339） |
 
 ## PUT /api/v1/automations/{type}
 
@@ -53,7 +58,7 @@ Base path: `/api/v1`
 ## GET /api/v1/automations/runtime-status
 
 - **鉴权**：需要
-- **用途**：供控制台「运行时」类展示。
+- **用途**：供控制台「运行时」类展示；**指标均来自数据库与配置推导**（非固定假数据）。
 
 响应示例：
 
@@ -68,11 +73,15 @@ Base path: `/api/v1`
 
 ### 字段与实现说明（以代码为准）
 
-| 字段 | 含义 | 是否来自真实业务指标 |
+| 字段 | 含义 | 实现要点 |
 | --- | --- | --- |
-| `needs_review` | 当前用户各模块中 `state == "Needs Review"` 的个数 | **是**（由 DB 模块行统计） |
-| `queue_depth` | 当前实现为 `enabled_module_count * 6` | **否**（占位算法） |
-| `last_success_at` | 当前实现为「请求时刻 − 2 分钟」的 RFC3339 字符串 | **否**（占位） |
-| `retries_last_24h` | 当前实现为 `needs_review + 1` | **否**（占位） |
+| `needs_review` | 待审核活动条数 | `activity_logs` 中 `status=review` 的总数 |
+| `retries_last_24h` | 近 24 小时失败次数 | `activity_logs` 中 `status=failed` 且 `executed_at` 在 24h 内 |
+| `last_success_at` | 最近一次任意成功活动 | 全类型成功记录的 `executed_at` 最大值（RFC3339）；无则空字符串 |
+| `queue_depth` | 队列深度估计 | `scheduled`+`processing` 帖子数 + `needs_review` + **已启用模块数**（`enabledCount` 作为轻量 worker 基线） |
 
-后续接入真实任务队列/执行流水后，应替换上述占位字段的实现。
+后台任务说明（与配置开关有关，非本接口字段）：
+
+- **Auto Post**：调度器每分钟扫描 `scheduled` 且到期帖子（需 `post` 模块 `enabled`）。
+- **Auto Reply**：调度器每分钟对开启 `reply` 的用户拉取评论并回复（固定模板，无 AI）。
+- **Auto DM**：仅有配置行与开关，**尚无调度执行器**（未实现自动发私信）。

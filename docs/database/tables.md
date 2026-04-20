@@ -1,13 +1,13 @@
 # Tables
 
-> 以下表均在 `backend/internal/database/migrate.go` 的 `AutoMigrate` 中注册；以 **GORM model** 为权威定义。
+> 以下表均在 `backend/internal/database/migrate.go` 的 `AutoMigrate` 中注册；以 **GORM model** 为权威定义。表级 COMMENT 由 `ApplyTableComments` 在迁移时写入 MySQL。
 
 ## 已落地（当前代码）
 
 ### users
 
 - 用途：用户主表（邮箱注册/登录）
-- 核心字段：`id`、`email`（unique）、`password_hash`、`display_name`、`status`、`created_at`、`updated_at`
+- 核心字段：`id`、`email`（unique）、`password_hash`、`display_name`、`status`、`created_at`、`updated_at`；订阅相关字段见 model（试用/到期等）
 
 ### email_verification_codes
 
@@ -37,6 +37,11 @@
 ### activity_logs
 
 - 用途：活动/任务执行记录（Dashboard 统计与 Activity 列表）
+- `type=reply` 时可含 `reply_*` 预览字段；成功回复对同一评论去重依赖 `ref_tweet_id` 与唯一索引（见 model）
+
+### reply_reservations
+
+- 用途：自动回复 **并发占位**（`user_id` + `comment_tweet_id`），防止重复回复同一评论
 
 ### posts
 
@@ -46,11 +51,17 @@
 
 - 用途：历史 scaffold 实体；**`GET /agents` 仍为占位**；任务表供后续执行器使用
 
+### billing_orders
+
+- 用途：链上 USDT 支付订单（pending/paid 等）；与 `users` 关联
+
+### billing_chain_txs
+
+- 用途：已消费的链上交易哈希（按 `chain_id`+`tx_hash` 唯一），防止重复确认
+
 ---
 
-## 规划中（未在 migrate 中出现则未实现）
+## 说明
 
-以下若未出现在 `migrate.go` 中，则 **尚未落地**：
-
-- 独立 `subscriptions` / `billing_orders` / `payment_records` 等计费表（当前 Billing 多为服务层静态/MVP 逻辑）
-- `x_accounts` 更名迁移（当前仍使用 `twitter_accounts` 表名）
+- 独立 `subscriptions` 表：**当前未使用**；订阅字段在 `users` 上维护（以 model 为准）。
+- `x_accounts` 更名迁移：当前仍使用 **`twitter_accounts`** 表名。

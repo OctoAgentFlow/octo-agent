@@ -15,7 +15,7 @@ Base path: `/api/v1`
 | `type` | 可选：`post` \| `reply` \| `dm` |
 | `status` | 可选：`success` \| `review` \| `failed` |
 
-- **数据来源**：数据库表 `activity_logs`（如发帖成功/失败等操作写入的真实记录）。失败类记录可含 **`error_message`**（上游或系统原因摘要）。
+- **数据来源**：数据库表 `activity_logs`（发帖/自动回复等写入的真实记录）。失败类记录可含 **`error_message`**。`type=reply` 且成功时可能含 **`reply_*`** 字段（被回复用户、原文与回复预览），供前端拼叙事文案。
 
 ### 示例响应
 
@@ -32,6 +32,18 @@ Base path: `/api/v1`
         "preview_key": "activity.preview.postQueued",
         "account_handle": "octo_agent_flow",
         "executed_at": "2026-04-19T08:00:00Z"
+      },
+      {
+        "id": 2,
+        "type": "reply",
+        "status": "success",
+        "preview_key": "activity.preview.replySuccess",
+        "account_handle": "octo_agent_flow",
+        "executed_at": "2026-04-19T09:00:00Z",
+        "reply_comment_tweet_id": "1234567890",
+        "reply_to_username": "someone",
+        "reply_to_text_preview": "Nice post!",
+        "reply_text_preview": "Thanks for your comment!"
       }
     ],
     "pagination": {

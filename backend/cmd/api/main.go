@@ -29,8 +29,14 @@ func main() {
 	if err := database.AutoMigrate(db); err != nil {
 		log.Fatalf("auto migrate failed: %v", err)
 	}
+	if err := database.BackfillLegacySubscriptions(db); err != nil {
+		log.Fatalf("backfill subscriptions failed: %v", err)
+	}
+	if err := database.BackfillBillingChainTx(db); err != nil {
+		log.Fatalf("backfill billing chain tx failed: %v", err)
+	}
 
-	r := router.NewAPI(db)
+	r := router.NewAPI(db, cfg)
 	if err := r.Run(cfg.API.Address()); err != nil {
 		log.Fatalf("api server run failed: %v", err)
 	}

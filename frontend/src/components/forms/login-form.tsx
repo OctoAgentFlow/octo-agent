@@ -1,28 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import axios from "axios";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { loginSchema, registerSchema } from "@/schemas/auth.schema";
+import { authService } from "@/services/auth.service";
 
 type AuthMode = "login" | "register";
 
 type LoginFormProps = {
   mode: AuthMode;
-  onSuccess?: (mode: AuthMode) => void;
+  onSuccess?: (mode: AuthMode, tokens: { accessToken: string; refreshToken: string }) => void;
 };
 
 type LoginValues = z.infer<typeof loginSchema>;
 type RegisterValues = z.infer<typeof registerSchema>;
+const CODE_COOLDOWN_SECONDS = 60;
+const CODE_COOLDOWN_UNTIL_KEY = "octo_auth_code_cooldown_until";
 
 export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   const { t } = useT();
-  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const { pushToast } = useToast();
+  const [codeCooldown, setCodeCooldown] = useState(0);
+  const [sendingCode, setSendingCode] = useState(false);
 
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -31,7 +38,7 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
 
   const registerForm = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: "", password: "", confirmPassword: "" },
+    defaultValues: { name: "", email: "", verificationCode: "", password: "", confirmPassword: "" },
   });
 
   const currentForm = mode === "login" ? loginForm : registerForm;
@@ -47,12 +54,97 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
       ? loginForm.formState.errors.password?.message
       : registerForm.formState.errors.password?.message;
 
-  const onSubmit = currentForm.handleSubmit(async () => {
-    setSubmitMessage(null);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    setSubmitMessage(mode === "login" ? t("auth.form.mock.loginSuccess") : t("auth.form.mock.registerSuccess"));
-    onSuccess?.(mode);
+  const onSubmit = currentForm.handleSubmit(async (values) => {
+    try {
+      if (mode === "login") {
+        const data = await authService.login({
+          email: values.email,
+          password: values.password,
+        });
+        pushToast("Login success.");
+        onSuccess?.(mode, {
+          accessToken: data.tokens.access_token,
+          refreshToken: data.tokens.refresh_token,
+        });
+        return;
+      }
+
+      const registerValues = values as RegisterValues;
+      const data = await authService.register({
+        email: registerValues.email,
+        password: registerValues.password,
+        name: registerValues.name,
+        verification_code: registerValues.verificationCode,
+      });
+      pushToast("Account created.");
+      onSuccess?.(mode, {
+        accessToken: data.tokens.access_token,
+        refreshToken: data.tokens.refresh_token,
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message || "Request failed.";
+        pushToast(message);
+        return;
+      }
+      pushToast("Request failed.");
+    }
   });
+
+  const sendEmailCode = async () => {
+    if (sendingCode || codeCooldown > 0) return;
+    const email = registerForm.getValues("email");
+    if (!email) {
+      pushToast("Please input email first.");
+      return;
+    }
+    setSendingCode(true);
+    try {
+      await authService.sendEmailCode({ email, purpose: "register" });
+      pushToast("Verification code sent.");
+      const cooldownUntil = Date.now() + CODE_COOLDOWN_SECONDS * 1000;
+      window.localStorage.setItem(CODE_COOLDOWN_UNTIL_KEY, String(cooldownUntil));
+      setCodeCooldown(CODE_COOLDOWN_SECONDS);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message || "Failed to send code.";
+        pushToast(message);
+      } else {
+        pushToast("Failed to send code.");
+      }
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  useEffect(() => {
+    if (codeCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setCodeCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [codeCooldown]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(CODE_COOLDOWN_UNTIL_KEY);
+    if (!saved) return;
+    const cooldownUntil = Number(saved);
+    if (!Number.isFinite(cooldownUntil)) {
+      window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
+      return;
+    }
+    const remainSeconds = Math.ceil((cooldownUntil - Date.now()) / 1000);
+    if (remainSeconds > 0) {
+      setCodeCooldown(remainSeconds);
+      return;
+    }
+    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (codeCooldown > 0) return;
+    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
+  }, [codeCooldown]);
 
   return (
     <form className="space-y-3" onSubmit={onSubmit}>
@@ -83,18 +175,49 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
       </div>
 
       {mode === "register" ? (
-        <div className="space-y-1.5">
-          <label htmlFor="confirmPassword" className="text-xs text-white/70">
-            {t("auth.form.confirmPassword.label")}
-          </label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            placeholder={t("auth.form.confirmPassword.placeholder")}
-            error={registerForm.formState.errors.confirmPassword?.message}
-            {...registerForm.register("confirmPassword")}
-          />
-        </div>
+        <>
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="text-xs text-white/70">
+              Name
+            </label>
+            <Input id="name" type="text" placeholder="Your name" error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="verificationCode" className="text-xs text-white/70">
+              Verification code
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="verificationCode"
+                type="text"
+                placeholder="6-digit code"
+                error={registerForm.formState.errors.verificationCode?.message}
+                {...registerForm.register("verificationCode")}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 shrink-0"
+                onClick={sendEmailCode}
+                disabled={sendingCode || codeCooldown > 0}
+              >
+                {sendingCode ? "Sending..." : codeCooldown > 0 ? `${codeCooldown}s` : "Send code"}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="confirmPassword" className="text-xs text-white/70">
+              {t("auth.form.confirmPassword.label")}
+            </label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              placeholder={t("auth.form.confirmPassword.placeholder")}
+              error={registerForm.formState.errors.confirmPassword?.message}
+              {...registerForm.register("confirmPassword")}
+            />
+          </div>
+        </>
       ) : null}
 
       <Button
@@ -108,8 +231,6 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
             ? t("auth.form.submit.login")
             : t("auth.form.submit.register")}
       </Button>
-
-      {submitMessage ? <p className="text-xs text-emerald-300">{submitMessage}</p> : null}
     </form>
   );
 }

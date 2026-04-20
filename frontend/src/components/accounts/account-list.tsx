@@ -6,10 +6,11 @@ type AccountListProps = {
   accounts: ConnectedXAccount[];
   onManage: (id: string) => void;
   onReconnect: (id: string) => void;
-  onDisconnect: (id: string) => void;
+  onDisconnect: (id: string) => Promise<void>;
+  disconnectingAccountId?: string | null;
 };
 
-export function AccountList({ accounts, onManage, onReconnect, onDisconnect }: AccountListProps) {
+export function AccountList({ accounts, onManage, onReconnect, onDisconnect, disconnectingAccountId }: AccountListProps) {
   return (
     <div className="space-y-3">
       {accounts.map((account) => (
@@ -19,6 +20,7 @@ export function AccountList({ accounts, onManage, onReconnect, onDisconnect }: A
           onManage={onManage}
           onReconnect={onReconnect}
           onDisconnect={onDisconnect}
+          isDisconnecting={disconnectingAccountId === account.id}
         />
       ))}
     </div>

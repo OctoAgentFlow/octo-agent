@@ -49,6 +49,27 @@ export function AutomationModuleSummary({ module }: { module: AutomationModule }
         <span>{t("automation.summary.lastRun", { time: t(module.lastRunKey, module.lastRunParams) })}</span>
         <span>{t("automation.summary.nextRun", { time: t(module.nextRunKey, module.nextRunParams) })}</span>
       </div>
+
+      {module.type === "reply" && module.replyUsage ? (
+        <div className="grid gap-2 text-sm text-white/70 sm:grid-cols-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <p className="text-xs text-white/55">{t("automation.summary.reply.today")}</p>
+            <p className="mt-1">{module.replyUsage.todayCount}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <p className="text-xs text-white/55">{t("automation.summary.reply.remaining")}</p>
+            <p className="mt-1">{module.replyUsage.remainingToday} / {module.replyUsage.dailyLimit}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <p className="text-xs text-white/55">{t("automation.summary.reply.lastExecution")}</p>
+            <p className="mt-1">
+              {module.replyLastRelativeKey
+                ? t(module.replyLastRelativeKey, module.replyLastRelativeParams)
+                : t("automation.time.paused")}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

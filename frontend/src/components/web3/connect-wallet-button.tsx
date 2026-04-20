@@ -14,6 +14,7 @@ type ConnectWalletButtonProps = {
   connectLabel?: string;
   disconnectLabel?: string;
   onConnected?: (address: string) => void | Promise<void>;
+  onDisconnected?: (address: string) => void | Promise<void>;
 };
 
 function shortAddress(address: string) {
@@ -25,6 +26,7 @@ export function ConnectWalletButton({
   connectLabel = "Connect Wallet",
   disconnectLabel = "Disconnect",
   onConnected,
+  onDisconnected,
 }: ConnectWalletButtonProps) {
   const ready = useWeb3Ready();
 
@@ -50,6 +52,7 @@ export function ConnectWalletButton({
       connectLabel={connectLabel}
       disconnectLabel={disconnectLabel}
       onConnected={onConnected}
+      onDisconnected={onDisconnected}
     />
   );
 }
@@ -59,6 +62,7 @@ function ConnectWalletButtonInner({
   connectLabel = "Connect Wallet",
   disconnectLabel = "Disconnect",
   onConnected,
+  onDisconnected,
 }: ConnectWalletButtonProps) {
   const { open } = useAppKit();
   const { address, isConnected } = useAccount();
@@ -80,6 +84,9 @@ function ConnectWalletButtonInner({
   };
 
   const onDisconnect = () => {
+    if (address) {
+      void Promise.resolve(onDisconnected?.(address));
+    }
     disconnect();
     clearBoundWalletAddress();
   };

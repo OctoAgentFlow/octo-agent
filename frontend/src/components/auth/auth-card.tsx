@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { LoginForm } from "@/components/forms/login-form";
+import { useToast } from "@/components/providers/toast-provider";
 import { ConnectWalletButton } from "@/components/web3/connect-wallet-button";
+import { useWalletBinding } from "@/hooks/use-wallet-binding";
 import { useT } from "@/i18n/use-t";
 import { signIn } from "@/lib/auth-session";
-import { bindWalletAddressToCurrentUser } from "@/lib/web3/wallet-binding";
 
 import { AuthModeSwitch } from "./auth-mode-switch";
 
@@ -20,17 +21,24 @@ type AuthCardProps = {
 export function AuthCard({ nextPath = "/dashboard" }: AuthCardProps) {
   const router = useRouter();
   const { t } = useT();
+  const { pushToast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
+  const { bindWallet } = useWalletBinding({
+    unauthMessage: "Please login or register first, then bind wallet.",
+    bindSuccessMessage: "Wallet bound successfully.",
+    onMessage: pushToast,
+  });
 
-  const handleAuthSuccess = () => {
-    signIn();
+  const handleAuthSuccess = (_mode: AuthMode, tokens: { accessToken: string; refreshToken: string }) => {
+    signIn(tokens.accessToken, tokens.refreshToken);
     router.replace(nextPath);
   };
 
   const handleWalletConnected = async (address: string) => {
-    await bindWalletAddressToCurrentUser(address);
-    signIn();
-    router.replace(nextPath);
+    const ok = await bindWallet(address);
+    if (ok) {
+      router.replace(nextPath);
+    }
   };
 
   return (

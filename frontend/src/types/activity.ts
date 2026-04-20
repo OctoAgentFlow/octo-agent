@@ -9,5 +9,12 @@ export type ActivityRecord = {
   previewKey: string;
   accountHandle: string;
   executedAt: string; // ISO string for easy future API swap
+  /** Server-side failure detail when present */
+  errorMessage?: string;
+  /** Reply automation: comment tweet id */
+  replyCommentTweetId?: string;
+  replyToUsername?: string;
+  replyToTextPreview?: string;
+  replyTextPreview?: string;
 };
 

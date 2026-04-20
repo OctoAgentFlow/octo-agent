@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, BadgeDollarSign, BarChart3, BellRing, Bot, LayoutDashboard, LogOut, Settings } from "lucide-react";
+import {
+  Activity,
+  BadgeDollarSign,
+  BarChart3,
+  Bot,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  UserCircle,
+  Users,
+} from "lucide-react";
 import { useT } from "@/i18n/use-t";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth-session";
@@ -11,10 +21,11 @@ const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.activity", href: "/activity", icon: Activity },
   { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
+  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+  { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
-  { labelKey: "sidebar.nav.notifications", href: "/settings", icon: BellRing },
-  { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
+  { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
 
 export function AppSidebar() {

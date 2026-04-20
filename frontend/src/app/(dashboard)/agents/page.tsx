@@ -1,17 +1,102 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 
-import { automationModulesMock, automationRuntimeStatusMock } from "@/mocks/automation/automation.mock";
-import type { AutomationModule, AutomationModuleConfig } from "@/types/automation";
+import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
+import {
+  broadcastDataSynced,
+  broadcastPageRefreshComplete,
+  subscribePageRefreshRequest,
+} from "@/lib/app-page-refresh";
+import { automationService, type AutomationModuleApi, type AutomationRuntimeStatusApi } from "@/services/automation.service";
+import type { AutomationModule, AutomationModuleConfig, AutomationRuntimeStatus } from "@/types/automation";
 
 import { AutomationEditDialog } from "@/components/automation/automation-edit-dialog";
 import { AutomationModuleCard } from "@/components/automation/automation-module-card";
 import { AutomationPageHeader } from "@/components/automation/automation-page-header";
 import { AutomationStatusPanel } from "@/components/automation/automation-status-panel";
 
+type LoadState = "loading" | "ready" | "error";
+
+function mapTimeToKey(iso?: string) {
+  if (!iso) return { key: "automation.time.paused", params: undefined };
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return { key: "automation.time.paused", params: undefined };
+  const diffMin = Math.max(1, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (diffMin > 24*60) return { key: "automation.time.yesterdayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
+  if (diffMin > 60) return { key: "automation.time.todayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
+  return { key: "automation.time.minutesAgo", params: { minutes: diffMin } };
+}
+
+function mapModule(item: AutomationModuleApi): AutomationModule {
+  const last = mapTimeToKey(item.last_run_at);
+  const next = item.config.enabled ? mapTimeToKey(item.next_run_at) : { key: "automation.time.paused", params: undefined };
+  const replyUsage = item.reply_usage
+    ? {
+        todayCount: item.reply_usage.today_count,
+        dailyLimit: item.reply_usage.daily_limit,
+        remainingToday: item.reply_usage.remaining_today,
+        lastExecutedAt: item.reply_usage.last_executed_at,
+      }
+    : undefined;
+  const lastReply =
+    item.type === "reply" && item.reply_usage?.last_executed_at
+      ? mapTimeToKey(item.reply_usage.last_executed_at)
+      : null;
+  return {
+    type: item.type,
+    nameKey: `automation.module.${item.type}.name`,
+    descriptionKey: `automation.module.${item.type}.description`,
+    state: item.state,
+    config: {
+      enabled: item.config.enabled,
+      frequency: {
+        intervalMinutes: item.config.frequency.interval_minutes,
+        dailyLimit: item.config.frequency.daily_limit,
+      },
+      tone: item.config.tone,
+      safety: {
+        requireApproval: item.config.safety.require_approval,
+        maxPerHour: item.config.safety.max_per_hour,
+        blockedKeywords: item.config.safety.blocked_keywords || [],
+      },
+    },
+    lastRunKey: last.key,
+    lastRunParams: last.params,
+    nextRunKey: next.key,
+    nextRunParams: next.params,
+    executedToday: item.executed_today ?? 0,
+    replyUsage,
+    replyLastRelativeKey: lastReply?.key,
+    replyLastRelativeParams: lastReply?.params,
+  };
+}
+
+function mapRuntime(data: AutomationRuntimeStatusApi): AutomationRuntimeStatus {
+  const last = mapTimeToKey(data.last_success_at);
+  return {
+    queueDepth: data.queue_depth,
+    lastSuccessKey: last.key,
+    lastSuccessParams: last.params,
+    retriesLast24h: data.retries_last_24h,
+    needsReview: data.needs_review,
+  };
+}
+
 export default function AgentsPage() {
-  const [modules, setModules] = useState<AutomationModule[]>(automationModulesMock);
+  const { pushToast } = useToast();
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modules, setModules] = useState<AutomationModule[]>([]);
+  const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
+    queueDepth: 0,
+    lastSuccessKey: "automation.time.paused",
+    retriesLast24h: 0,
+    needsReview: 0,
+  });
   const [editType, setEditType] = useState<AutomationModule["type"] | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -26,10 +111,84 @@ export default function AgentsPage() {
     return "Running" as const;
   }, [modules]);
 
-  const onToggle = (type: AutomationModule["type"], enabled: boolean) => {
-    setModules((prev) =>
-      prev.map((m) => (m.type === type ? { ...m, config: { ...m.config, enabled }, state: enabled ? m.state : "Paused" } : m))
-    );
+  const fetchAll = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      const quiet = Boolean(options?.quiet);
+      if (!quiet) {
+        setLoadState("loading");
+      }
+      setErrorMessage(null);
+      try {
+        const [mod, runtime] = await Promise.all([automationService.list(), automationService.runtimeStatus()]);
+        setModules(mod.modules.map(mapModule));
+        setRuntimeStatus(mapRuntime(runtime));
+        setLoadState("ready");
+        broadcastDataSynced(Date.now());
+      } catch (error) {
+        const msg = axios.isAxiosError(error)
+          ? error.response?.data?.message || "Failed to load automations."
+          : "Failed to load automations.";
+        setErrorMessage(msg);
+        if (!quiet) {
+          setLoadState("error");
+        } else {
+          pushToast(msg);
+        }
+      }
+    },
+    [pushToast]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([automationService.list(), automationService.runtimeStatus()])
+      .then(([mod, runtime]) => {
+        if (cancelled) return;
+        setModules(mod.modules.map(mapModule));
+        setRuntimeStatus(mapRuntime(runtime));
+        setLoadState("ready");
+        broadcastDataSynced(Date.now());
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        if (axios.isAxiosError(error)) {
+          setErrorMessage(error.response?.data?.message || "Failed to load automations.");
+        } else {
+          setErrorMessage("Failed to load automations.");
+        }
+        setLoadState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return subscribePageRefreshRequest(() => {
+      void (async () => {
+        try {
+          await fetchAll({ quiet: true });
+        } finally {
+          broadcastPageRefreshComplete();
+        }
+      })();
+    });
+  }, [fetchAll]);
+
+  const onToggle = async (type: AutomationModule["type"], enabled: boolean) => {
+    try {
+      const updated = await automationService.toggle(type, enabled);
+      setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
+      const runtime = await automationService.runtimeStatus();
+      setRuntimeStatus(mapRuntime(runtime));
+      pushToast(`Automation ${type} ${enabled ? "enabled" : "disabled"} successfully.`);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        pushToast(error.response?.data?.message || "Failed to toggle automation.");
+      } else {
+        pushToast("Failed to toggle automation.");
+      }
+    }
   };
 
   const onEdit = (type: AutomationModule["type"]) => {
@@ -37,13 +196,53 @@ export default function AgentsPage() {
     setEditOpen(true);
   };
 
-  const onSave = (type: AutomationModule["type"], config: AutomationModuleConfig) => {
-    setModules((prev) => prev.map((m) => (m.type === type ? { ...m, config } : m)));
+  const onSave = async (type: AutomationModule["type"], config: AutomationModuleConfig) => {
+    try {
+      const updated = await automationService.update(type, {
+        enabled: config.enabled,
+        frequency: {
+          interval_minutes: config.frequency.intervalMinutes,
+          daily_limit: config.frequency.dailyLimit,
+        },
+        tone: config.tone,
+        safety: {
+          require_approval: config.safety.requireApproval,
+          max_per_hour: config.safety.maxPerHour,
+          blocked_keywords: config.safety.blockedKeywords,
+        },
+      });
+      setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
+      const runtime = await automationService.runtimeStatus();
+      setRuntimeStatus(mapRuntime(runtime));
+      pushToast(`Automation ${type} config saved.`);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        pushToast(error.response?.data?.message || "Failed to save automation config.");
+      } else {
+        pushToast("Failed to save automation config.");
+      }
+      throw error;
+    }
   };
 
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
+
+      {loadState === "loading" ? (
+        <Card>
+          <CardHeader title="Loading automations..." description="Fetching modules and runtime status." />
+        </Card>
+      ) : null}
+
+      {loadState === "error" ? (
+        <Card>
+          <CardHeader title="Failed to load automations" description={errorMessage || "Please retry."} />
+          <div className="flex justify-end">
+            <Button onClick={() => void fetchAll()}>Retry</Button>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         {modules.map((module) => (
@@ -51,7 +250,7 @@ export default function AgentsPage() {
         ))}
       </div>
 
-      <AutomationStatusPanel status={automationRuntimeStatusMock} />
+      <AutomationStatusPanel status={runtimeStatus} />
 
       <AutomationEditDialog
         module={editing}

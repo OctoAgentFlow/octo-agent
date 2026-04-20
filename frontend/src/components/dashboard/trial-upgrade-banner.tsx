@@ -1,14 +1,29 @@
 "use client";
 
+import { CheckCircle2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { membership, upgradePrompt } from "@/mocks/dashboard.mock";
+import { upgradePrompt } from "@/mocks/dashboard.mock";
 import { useT } from "@/i18n/use-t";
+import type { DashboardOverview } from "@/services/dashboard.service";
 
 import { SectionCard } from "./section-card";
 
-export function TrialUpgradeBanner() {
+type TrialUpgradeBannerProps = {
+  overview?: DashboardOverview | null;
+};
+
+function planKeyFromCode(plan: string) {
+  if (plan === "free_trial") return "dashboard.membership.plan.freeTrial";
+  if (plan === "basic_monthly") return "dashboard.membership.plan.basicMonthly";
+  return "dashboard.membership.plan.freeTrial";
+}
+
+export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const { t } = useT();
-  const MembershipBadge = membership.badge;
+  const plan = planKeyFromCode(overview?.plan || "free_trial");
+  const trialDaysLeft = overview?.trial_days_left ?? 0;
+  const expired = overview?.subscription_status === "expired";
 
   return (
     <SectionCard
@@ -19,11 +34,13 @@ export function TrialUpgradeBanner() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="inline-flex items-center gap-2 text-sm text-blue-100">
-              <MembershipBadge className="size-4" />
-              {t("dashboard.upgrade.membershipLine", {
-                plan: t(membership.planKey),
-                days: membership.trialDaysLeft,
-              })}
+              <CheckCircle2 className="size-4" />
+              {expired
+                ? t("dashboard.upgrade.expiredLine", { plan: t(plan) })
+                : t("dashboard.upgrade.membershipLine", {
+                    plan: t(plan),
+                    days: trialDaysLeft,
+                  })}
             </p>
             <h4 className="text-lg font-semibold text-white">{t(upgradePrompt.titleKey)}</h4>
             <p className="text-sm text-white/70">{t(upgradePrompt.descriptionKey)}</p>
@@ -40,7 +57,7 @@ export function TrialUpgradeBanner() {
             </span>
           ))}
         </div>
-        <p className="mt-3 text-xs text-white/55">{t(membership.billingHintKey, membership.billingHintParams)}</p>
+        <p className="mt-3 text-xs text-white/55">{t("dashboard.membership.billingHint.basic", { price: 10 })}</p>
       </div>
     </SectionCard>
   );

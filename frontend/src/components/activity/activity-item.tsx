@@ -6,6 +6,7 @@ import type { ActivityRecord } from "@/types/activity";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
+import { activityNarrativeLine } from "@/lib/activity-narrative";
 
 function statusVariant(status: ActivityRecord["status"]) {
   if (status === "success") return "success";
@@ -46,7 +47,10 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
             </div>
-            <p className="line-clamp-2 text-sm text-white/75">{t(record.previewKey)}</p>
+            <p className="line-clamp-3 text-sm text-white/80">{activityNarrativeLine(record, t)}</p>
+            {record.errorMessage ? (
+              <p className="text-xs leading-snug text-rose-200/90">{record.errorMessage}</p>
+            ) : null}
             <div className="flex flex-wrap gap-4 text-xs text-white/55">
               <span>{record.accountHandle}</span>
               <span>{relativeTime(record.executedAt, t)}</span>

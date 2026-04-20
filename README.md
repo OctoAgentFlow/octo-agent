@@ -19,12 +19,13 @@ Octo-Agent is a full-stack scaffold for AI-assisted social content operations.
 
 ### 1) Backend
 
-1. Create env file:
-   - `cp backend/configs/.env.example backend/configs/.env`
+1. Configure MySQL and YAML:
+   - Edit `backend/configs/config.local.yaml`（或设置 `APP_ENV` 指向其它 `config.<env>.yaml`）。
+   - 可选：在 `backend/configs/.env` 中设置 `APP_ENV`（若不存在则默认 `local`）。
 2. Ensure MySQL is running and the target DB exists.
 3. Start backend services:
-   - API: `make api-dev`
-   - Admin: `make admin-dev`
+   - API: `make api-local`
+   - Admin: `make admin-local`
 
 Backend services:
 - API listens on `http://localhost:10001`, with:
@@ -36,13 +37,13 @@ Backend services:
 
 ### 2) Frontend
 
-1. Create env file:
-   - `cp frontend/.env.example frontend/.env.local`
+1. Create `frontend/.env.local`（若仓库未提供示例文件，可至少设置）：
+   - `NEXT_PUBLIC_API_BASE_URL=http://localhost:10001/api/v1`
 2. Install deps:
    - `cd frontend && npm install`
 3. Start frontend services:
-   - API Front: `make api-front-dev`
-   - Admin Front: `make admin-front-dev`
+   - API Front: `make api-front-local`
+   - Admin Front: `make admin-front-local`
 
 Frontend services:
 - API Front runs on `http://localhost:3000`
@@ -50,25 +51,24 @@ Frontend services:
 
 ## Useful Commands
 
-- `make frontend-dev` - run default Next.js dev server (api-front)
-- `make api-front-dev` - run API Front service (3000)
-- `make admin-front-dev` - run Admin Front service (3001)
-- `make api-dev` - run Gin API service (10001)
-- `make admin-dev` - run Gin Admin service (10002)
+- `make frontend-local` - run default Next.js dev server (api-front)
+- `make api-front-local` - run API Front service (3000)
+- `make admin-front-local` - run Admin Front service (3001)
+- `make api-local` - run Gin API service (见 `config.local.yaml` 中 `api.port`，默认与文档示例一致）
+- `make admin-local` - run Gin Admin service (10002)
 - `make install` - install frontend deps + tidy go mod
 - `make lint` - frontend lint + backend tests
 
 ## Current Scaffold Coverage
 
-- Frontend route groups:
-  - `(auth)`: login
-  - `(dashboard)`: dashboard/accounts/posts/agents/analytics/settings
-- Backend layered architecture:
-  - `controller`, `service`, `model`, `repository`, `router`, `middleware`, `dto`, `integration`, `jobs`
-- AutoMigrate models:
-  - `User`, `TwitterAccount`, `Post`, `Agent`, `Task`
-- Deployment/doc templates:
-  - `deploy/nginx`, `deploy/docker`, `deploy/compose`, `docs/*`
+- Frontend（`frontend/src/app`）:
+  - `(auth)`：登录注册
+  - `(dashboard)`：dashboard、accounts、agents、activity、billing、posts、analytics、settings、profile 等
+- Backend 分层：
+  - `controller`, `service`, `model`, `repository`, `router`, `middleware`, `dto`, `email`, `jobs` 等
+- AutoMigrate（见 `backend/internal/database/migrate.go`）:
+  - `User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `TwitterAccount`, `AutomationConfig`, `ActivityLog`, `Post`, `Agent`, `Task`
+- 文档：`docs/`（[API 索引](docs/api/README.md)、库表、部署环境等）
 
 ## Repository Structure
 

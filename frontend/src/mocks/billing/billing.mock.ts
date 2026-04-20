@@ -1,4 +1,4 @@
-import type { CurrentSubscription, PaymentMethod, PaymentRecord, Plan } from "@/types/billing";
+import type { CurrentSubscription, PaymentMethodOption, PaymentRecord, Plan } from "@/types/billing";
 
 export const currentSubscription: CurrentSubscription = {
   planKey: "billing.plan.freeTrial",
@@ -36,19 +36,25 @@ export const plans: Plan[] = [
   },
 ];
 
-export const paymentMethod: PaymentMethod = {
-  methodKey: "billing.payment.method.usdt",
-  networkKey: "billing.payment.network.trc20",
-  addressMask: "TQ8f...4Rz9",
-  noteKey: "billing.payment.note",
-};
+export const paymentMethods: PaymentMethodOption[] = [
+  {
+    methodKey: "billing.payment.method.usdt",
+    networkKey: "billing.payment.network.bep20",
+    networkCode: "BEP20",
+    receiverMasked: "0xabcd…123456",
+    tokenMasked: "0x11F5…9ECF2",
+    chainId: 56,
+    note: "Mock BEP20 route",
+    isDefault: true,
+  },
+];
 
 export const paymentRecords: PaymentRecord[] = [
   {
     date: "2026-04-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
-    methodKey: "billing.payment.method.usdt_trc20",
+    methodKey: "billing.payment.method.usdt",
     status: "paid",
     txHash: "0x8f2c...9ab1",
   },
@@ -56,7 +62,7 @@ export const paymentRecords: PaymentRecord[] = [
     date: "2026-03-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
-    methodKey: "billing.payment.method.usdt_trc20",
+    methodKey: "billing.payment.method.usdt",
     status: "paid",
     txHash: "0xa312...e2c9",
   },
@@ -64,7 +70,7 @@ export const paymentRecords: PaymentRecord[] = [
     date: "2026-02-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
-    methodKey: "billing.payment.method.usdt_trc20",
+    methodKey: "billing.payment.method.usdt",
     status: "pending",
     txHash: "0xc73d...1fa3",
   },

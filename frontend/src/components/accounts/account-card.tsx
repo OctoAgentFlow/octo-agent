@@ -11,7 +11,8 @@ type AccountCardProps = {
   account: ConnectedXAccount;
   onManage: (id: string) => void;
   onReconnect: (id: string) => void;
-  onDisconnect: (id: string) => void;
+  onDisconnect: (id: string) => Promise<void>;
+  isDisconnecting?: boolean;
 };
 
 function statusVariant(status: ConnectedXAccount["status"]) {
@@ -26,14 +27,22 @@ function statusLabel(status: ConnectedXAccount["status"]) {
   return "accounts.status.disconnected";
 }
 
-export function AccountCard({ account, onManage, onReconnect, onDisconnect }: AccountCardProps) {
+export function AccountCard({ account, onManage, onReconnect, onDisconnect, isDisconnecting = false }: AccountCardProps) {
   const { t } = useT();
   return (
     <Card className="p-4 md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="relative size-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-            <Image src={account.avatarUrl} alt={account.displayName} fill className="object-cover" />
+            <Image
+              src={account.avatarUrl}
+              alt={account.displayName}
+              fill
+              className="object-cover"
+              sizes="48px"
+              unoptimized
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -46,8 +55,10 @@ export function AccountCard({ account, onManage, onReconnect, onDisconnect }: Ac
                 <Link2 className="size-3.5" />
                 {t("accounts.labels.xAccount")}
               </span>
-              <span>{t("accounts.labels.followers", { count: account.followers })}</span>
-              <span>{t("accounts.labels.lastSync", { time: t(account.lastSyncedKey, account.lastSyncedParams) })}</span>
+              {account.followers ? <span>{t("accounts.labels.followers", { count: account.followers })}</span> : null}
+              {account.lastSyncedKey ? (
+                <span>{t("accounts.labels.lastSync", { time: t(account.lastSyncedKey, account.lastSyncedParams) })}</span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -63,9 +74,14 @@ export function AccountCard({ account, onManage, onReconnect, onDisconnect }: Ac
               {t("accounts.actions.reconnect")}
             </Button>
           ) : null}
-          <Button variant="ghost" className="text-rose-200 hover:text-rose-100" onClick={() => onDisconnect(account.id)}>
+          <Button
+            variant="ghost"
+            className="text-rose-200 hover:text-rose-100"
+            onClick={() => void onDisconnect(account.id)}
+            disabled={isDisconnecting}
+          >
             <Unplug className="size-4" />
-            {t("accounts.actions.disconnect")}
+            {isDisconnecting ? "Disconnecting..." : t("accounts.actions.disconnect")}
           </Button>
         </div>
       </div>

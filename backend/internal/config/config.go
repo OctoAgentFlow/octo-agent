@@ -3,16 +3,67 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	API   ServerConfig `yaml:"api"`
-	Admin ServerConfig `yaml:"admin"`
-	MySQL MySQLConfig  `yaml:"mysql"`
-	Log   LogConfig    `yaml:"log"`
+	API    ServerConfig   `yaml:"api"`
+	Admin  ServerConfig   `yaml:"admin"`
+	MySQL  MySQLConfig    `yaml:"mysql"`
+	Log    LogConfig      `yaml:"log"`
+	Email  EmailConfig    `yaml:"email"`
+	App    AppConfig      `yaml:"app"`
+	XOAuth XOAuthConfig   `yaml:"x_oauth"`
+	Billing BillingConfig `yaml:"billing"`
+}
+
+// BillingConfig holds USDT payment settings (loaded from YAML; do not hardcode in code).
+type BillingConfig struct {
+	OrderTTLMinutes int    `yaml:"order_ttl_minutes"`
+	WebhookSecret   string `yaml:"webhook_secret"`
+	// RpcURLs maps chain id as string (e.g. "56", "1") to JSON-RPC HTTP endpoint for EVM verification.
+	RpcURLs        map[string]string           `yaml:"rpc_urls"`
+	PaymentMethods []PaymentMethodConfig       `yaml:"payment_methods"`
+	Plans          map[string]BillingPlanEntry `yaml:"plans"`
+}
+
+// PaymentMethodConfig is one USDT route (MVP: BEP20 only).
+type PaymentMethodConfig struct {
+	Method          string `yaml:"method"`
+	Network         string `yaml:"network"`
+	ChainID         int64  `yaml:"chain_id"`
+	TokenAddress    string `yaml:"token_address"`
+	ReceiverAddress string `yaml:"receiver_address"`
+	Decimals        int    `yaml:"decimals"`
+	IsDefault       bool   `yaml:"is_default"`
+	Note            string `yaml:"note"`
+}
+
+// BillingPlanEntry defines a purchasable subscription SKU.
+type BillingPlanEntry struct {
+	Name        string   `yaml:"name"`
+	Amount      string   `yaml:"amount"`
+	Currency    string   `yaml:"currency"`
+	PeriodDays  int      `yaml:"period_days"`
+	Description string   `yaml:"description"`
+	Features    []string `yaml:"features"`
+}
+
+// AppConfig holds cross-cutting app settings (not server bind addresses).
+type AppConfig struct {
+	// FrontendBaseURL is the origin used after X OAuth callback redirects (e.g. http://localhost:3000).
+	FrontendBaseURL string `yaml:"frontend_base_url"`
+}
+
+// XOAuthConfig holds X (Twitter) OAuth 2.0 PKCE settings for account linking.
+type XOAuthConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	RedirectURI  string `yaml:"redirect_uri"`
+	StateSecret  string `yaml:"state_secret"`
 }
 
 type ServerConfig struct {
@@ -51,6 +102,27 @@ type LogConfig struct {
 	MaxBackups      int    `yaml:"max_backups"`
 	MaxAge          int    `yaml:"max_age"`
 	Compress        bool   `yaml:"compress"`
+}
+
+type EmailConfig struct {
+	Provider string    `yaml:"provider"`
+	SES      SESConfig `yaml:"ses"`
+}
+
+type SESConfig struct {
+	Region          string `yaml:"region"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	SecretAccessKey string `yaml:"secret_access_key"`
+	FromEmail       string `yaml:"from_email"`
+}
+
+// SMTPConfig is kept for compatibility with legacy code paths.
+type SMTPConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	From     string `yaml:"from"`
 }
 
 func (m MySQLConfig) DSN() string {
@@ -106,9 +178,6 @@ func Load() (*Config, error) {
 		cfg.Admin.Port = 8081
 	}
 
-	if v := os.Getenv("MYSQL_PASSWORD"); v != "" {
-		cfg.MySQL.Password = v
-	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "debug"
 	}
@@ -129,6 +198,24 @@ func Load() (*Config, error) {
 	}
 	if cfg.Log.AdminOutputPath == "" {
 		cfg.Log.AdminOutputPath = "logs/admin.log"
+	}
+	if cfg.Email.Provider == "" {
+		cfg.Email.Provider = "ses"
+	}
+	if cfg.Email.SES.Region == "" {
+		cfg.Email.SES.Region = "ap-southeast-1"
+	}
+	if cfg.Email.SES.FromEmail == "" {
+		cfg.Email.SES.FromEmail = "no-reply@mail.octo-agent.com"
+	}
+	if strings.TrimSpace(cfg.App.FrontendBaseURL) == "" {
+		cfg.App.FrontendBaseURL = "http://localhost:3000"
+	}
+	if cfg.Billing.OrderTTLMinutes <= 0 {
+		cfg.Billing.OrderTTLMinutes = 30
+	}
+	if cfg.Billing.RpcURLs == nil {
+		cfg.Billing.RpcURLs = map[string]string{}
 	}
 	return &cfg, nil
 }

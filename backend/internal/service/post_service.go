@@ -1,5 +1,616 @@
 package service
 
-type PostService struct{}
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
 
-func NewPostService() *PostService { return &PostService{} }
+	"octo-agent/backend/internal/dto"
+	"octo-agent/backend/internal/integration/twitter"
+	"octo-agent/backend/internal/model"
+	"octo-agent/backend/internal/pkg/requestid"
+	"octo-agent/backend/internal/pkg/subscription"
+	"octo-agent/backend/internal/repository"
+
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+const (
+	maxPostContentRunes = 5000
+	minPostContentRunes = 1
+
+	staleProcessingRecovery = 5 * time.Minute
+	defaultRateLimitBackoff = 15 * time.Minute
+	maxRateLimitBackoff     = 24 * time.Hour
+	errMsgMaxRunes          = 1000
+)
+
+type PostService struct {
+	postRepo       *repository.PostRepository
+	accountRepo    *repository.TwitterAccountRepository
+	automationRepo *repository.AutomationRepository
+	activityRepo   *repository.ActivityRepository
+	userRepo       *repository.UserRepository
+}
+
+func NewPostService(
+	postRepo *repository.PostRepository,
+	accountRepo *repository.TwitterAccountRepository,
+	automationRepo *repository.AutomationRepository,
+	activityRepo *repository.ActivityRepository,
+	userRepo *repository.UserRepository,
+) *PostService {
+	return &PostService{
+		postRepo:       postRepo,
+		accountRepo:    accountRepo,
+		automationRepo: automationRepo,
+		activityRepo:   activityRepo,
+		userRepo:       userRepo,
+	}
+}
+
+// ErrExecuteUpstream is returned when X API rejects the publish after the post was marked failed.
+type ErrExecuteUpstream string
+
+func (e ErrExecuteUpstream) Error() string { return string(e) }
+
+// ErrExecuteRateLimited is returned on manual execute when X rate-limits; post is rescheduled.
+type ErrExecuteRateLimited string
+
+func (e ErrExecuteRateLimited) Error() string { return string(e) }
+
+// StaleProcessingMaxAge is exported for the job layer (processing → scheduled recovery).
+func StaleProcessingMaxAge() time.Duration { return staleProcessingRecovery }
+
+func (s *PostService) List(userID uint, q dto.PostListQuery) (*dto.PostListResponse, error) {
+	page := q.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := q.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	items, total, err := s.postRepo.List(userID, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.PostItem, 0, len(items))
+	for _, p := range items {
+		out = append(out, postModelToDTO(p))
+	}
+	return &dto.PostListResponse{
+		Items: out,
+		Pagination: dto.PostPagination{
+			Page:     page,
+			PageSize: pageSize,
+			Total:    total,
+		},
+	}, nil
+}
+
+func (s *PostService) Get(userID, id uint) (*dto.PostItem, error) {
+	p, err := s.postRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	item := postModelToDTO(*p)
+	return &item, nil
+}
+
+func (s *PostService) Create(userID uint, req dto.PostCreateRequest) (*dto.PostItem, error) {
+	content := strings.TrimSpace(req.Content)
+	if err := validatePostContent(content); err != nil {
+		return nil, err
+	}
+	if _, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, req.XAccountID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("x_account_id not found or not connected")
+		}
+		return nil, err
+	}
+	status := strings.TrimSpace(strings.ToLower(req.Status))
+	if status == "" {
+		status = "draft"
+	}
+	if !isUserSettablePostStatus(status) {
+		return nil, errors.New("invalid status")
+	}
+	if status == "scheduled" || status == "published" {
+		if err := s.assertSubscriptionAllowsContentProduction(userID); err != nil {
+			return nil, err
+		}
+	}
+	sched, pub, err := parseCreateTimes(status, req.ScheduledAt, req.PublishedAt)
+	if err != nil {
+		return nil, err
+	}
+	if status == "scheduled" && sched == nil {
+		return nil, errors.New("scheduled_at is required when status is scheduled")
+	}
+	if status == "published" && pub == nil {
+		now := time.Now().UTC()
+		pub = &now
+	}
+	p := &model.Post{
+		UserID:      userID,
+		XAccountID:  req.XAccountID,
+		Content:     content,
+		Status:      status,
+		ScheduledAt: sched,
+		PublishedAt: pub,
+	}
+	if err := s.postRepo.Create(p); err != nil {
+		return nil, err
+	}
+	item := postModelToDTO(*p)
+	return &item, nil
+}
+
+func (s *PostService) Update(userID, id uint, req dto.PostUpdateRequest) (*dto.PostItem, error) {
+	p, err := s.postRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	oldStatus := strings.ToLower(strings.TrimSpace(p.Status))
+	if p.Status == "processing" {
+		return nil, errors.New("post is being published; try again later")
+	}
+	if req.Content != nil {
+		c := strings.TrimSpace(*req.Content)
+		if err := validatePostContent(c); err != nil {
+			return nil, err
+		}
+		p.Content = c
+	}
+	if req.XAccountID != nil {
+		if _, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, *req.XAccountID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("x_account_id not found or not connected")
+			}
+			return nil, err
+		}
+		p.XAccountID = *req.XAccountID
+	}
+	if req.Status != nil {
+		st := strings.TrimSpace(strings.ToLower(*req.Status))
+		if !isUserSettablePostStatus(st) {
+			return nil, errors.New("invalid status")
+		}
+		p.Status = st
+	}
+	// Times: apply if pointer present in request (empty string clears optional fields handled below)
+	if req.ScheduledAt != nil {
+		if strings.TrimSpace(*req.ScheduledAt) == "" {
+			p.ScheduledAt = nil
+		} else {
+			t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.ScheduledAt))
+			if err != nil {
+				return nil, errors.New("invalid scheduled_at (use RFC3339)")
+			}
+			utc := t.UTC()
+			p.ScheduledAt = &utc
+		}
+	}
+	if req.PublishedAt != nil {
+		if strings.TrimSpace(*req.PublishedAt) == "" {
+			p.PublishedAt = nil
+		} else {
+			t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.PublishedAt))
+			if err != nil {
+				return nil, errors.New("invalid published_at (use RFC3339)")
+			}
+			utc := t.UTC()
+			p.PublishedAt = &utc
+		}
+	}
+	if p.Status == "scheduled" && p.ScheduledAt == nil {
+		return nil, errors.New("scheduled_at is required when status is scheduled")
+	}
+	stOut := strings.ToLower(strings.TrimSpace(p.Status))
+	needsSub := false
+	switch {
+	case stOut == "scheduled":
+		needsSub = true
+	case stOut == "published" && oldStatus != "published":
+		needsSub = true
+	}
+	if needsSub {
+		if err := s.assertSubscriptionAllowsContentProduction(userID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.postRepo.Save(p); err != nil {
+		return nil, err
+	}
+	item := postModelToDTO(*p)
+	return &item, nil
+}
+
+func (s *PostService) Delete(userID, id uint) error {
+	p, err := s.postRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return err
+	}
+	if p.Status == "processing" {
+		return errors.New("post is being published; try again later")
+	}
+	return s.postRepo.DeleteByUserAndID(userID, id)
+}
+
+// Execute publishes the post via X API (manual run). Only draft or scheduled posts are allowed.
+func (s *PostService) Execute(ctx context.Context, userID, postID uint) (*dto.PostExecuteResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	item, tweetID, err := s.executePublish(ctx, userID, postID, []string{"draft", "scheduled"}, "manual")
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PostExecuteResponse{Post: *item, TweetID: tweetID}, nil
+}
+
+// ExecuteScheduled publishes a post that was claimed as processing by the scheduler.
+func (s *PostService) ExecuteScheduled(ctx context.Context, userID, postID uint) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_, _, err := s.executePublish(ctx, userID, postID, []string{"processing"}, "scheduler")
+	return err
+}
+
+func (s *PostService) executePublish(ctx context.Context, userID, postID uint, allowedStatuses []string, source string) (*dto.PostItem, string, error) {
+	rid := requestid.FromContext(ctx)
+	if rid == "" {
+		rid = source
+	}
+	now := time.Now().UTC()
+	base := []zap.Field{
+		zap.String("request_id", rid),
+		zap.String("source", source),
+		zap.Uint("user_id", userID),
+		zap.Uint("post_id", postID),
+	}
+
+	p, err := s.postRepo.GetByUserAndID(userID, postID)
+	if err != nil {
+		zap.L().Warn("post execute: load post failed", append(base, zap.Error(err))...)
+		return nil, "", err
+	}
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		zap.L().Warn("post execute: load user failed", append(base, zap.Error(err))...)
+		return nil, "", err
+	}
+	if err := subscription.AssertUserMayProduceContent(u, now); err != nil {
+		if source == "scheduler" {
+			_ = s.postRepo.RevertProcessingToScheduled(userID, postID, now.Add(time.Hour))
+			zap.L().Info("post execute: deferred (subscription)", append(base, zap.Error(err))...)
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	st := strings.ToLower(strings.TrimSpace(p.Status))
+	base = append(base, zap.Uint("x_account_id", p.XAccountID), zap.String("post_status", st))
+	if !statusInList(st, allowedStatuses) {
+		zap.L().Warn("post execute: rejected (invalid status)", base...)
+		return nil, "", errors.New("post cannot be executed in current status")
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, p.XAccountID)
+	if err != nil {
+		zap.L().Warn("post execute: load x account failed", append(base, zap.Error(err))...)
+		return nil, "", err
+	}
+	if strings.TrimSpace(acc.AccessToken) == "" {
+		zap.L().Warn("post execute: rejected (missing access token)", append(base,
+			zap.String("account_handle", formatXAccountHandle(acc.Username)))...)
+		return nil, "", errors.New("x account has no access token; reconnect the account")
+	}
+
+	if source == "scheduler" {
+		if hit, why := s.schedulerLimitsExceeded(userID, now); hit {
+			_ = s.postRepo.RevertProcessingToScheduled(userID, postID, now.Add(time.Minute))
+			zap.L().Info("post execute: deferred by automation limits", append(base, zap.String("reason", why))...)
+			return nil, "", nil
+		}
+	}
+
+	handle := formatXAccountHandle(acc.Username)
+	zap.L().Info("post execute: calling x api",
+		append(base,
+			zap.String("account_handle", handle),
+			zap.String("content_preview", previewForExecuteLog(p.Content, 160)),
+		)...)
+
+	tweetID, apiErr := twitter.CreateTweet(ctx, acc.AccessToken, p.Content)
+	at := time.Now().UTC()
+
+	if apiErr != nil {
+		var pub *twitter.PublishError
+		if errors.As(apiErr, &pub) && pub.RateLimited {
+			delay := effectiveRateLimitDelay(pub)
+			next := at.Add(delay)
+			msg := truncateErrMsg(pub.Error())
+			if err := s.persistRateLimitReschedule(postID, userID, handle, at, next, msg); err != nil {
+				zap.L().Error("post execute: persist rate-limit reschedule failed", append(base, zap.Error(err))...)
+				return nil, "", err
+			}
+			zap.L().Warn("post execute: rate limited, rescheduled", append(base,
+				zap.Time("next_scheduled_at", next),
+				zap.Duration("delay", delay),
+			)...)
+			if source == "scheduler" {
+				return nil, "", nil
+			}
+			return nil, "", ErrExecuteRateLimited(
+				fmt.Sprintf("Rate limited by X. Next attempt at %s. %s", next.UTC().Format(time.RFC3339), msg))
+		}
+
+		failMsg := truncateErrMsg(apiErr.Error())
+		var p2 *twitter.PublishError
+		if errors.As(apiErr, &p2) {
+			failMsg = truncateErrMsg(p2.Error())
+		}
+		if err := s.persistExecuteFailure(postID, userID, handle, at, failMsg); err != nil {
+			zap.L().Error("post execute: persist failure after x api error", append(base,
+				zap.String("account_handle", handle),
+				zap.String("x_api_detail", failMsg),
+				zap.Error(err))...)
+			return nil, "", err
+		}
+		zap.L().Warn("post execute: x api rejected (post marked failed)", append(base,
+			zap.String("account_handle", handle),
+			zap.String("x_api_detail", failMsg),
+		)...)
+		return nil, "", ErrExecuteUpstream(failMsg)
+	}
+
+	if err := s.persistExecuteSuccess(postID, userID, handle, at); err != nil {
+		zap.L().Error("post execute: persist success state failed", append(base,
+			zap.String("tweet_id", tweetID),
+			zap.String("account_handle", handle),
+			zap.Error(err))...)
+		return nil, "", err
+	}
+	out, err := s.postRepo.GetByUserAndID(userID, postID)
+	if err != nil {
+		zap.L().Error("post execute: reload post after publish failed", append(base,
+			zap.String("tweet_id", tweetID),
+			zap.Error(err))...)
+		return nil, "", err
+	}
+	item := postModelToDTO(*out)
+	zap.L().Info("post execute: published", append(base,
+		zap.String("tweet_id", tweetID),
+		zap.String("account_handle", handle),
+	)...)
+	return &item, tweetID, nil
+}
+
+func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {
+	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypePost)
+	if err != nil {
+		return false, ""
+	}
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	nDay, err := s.activityRepo.CountPostPublishSuccessBetween(userID, dayStart, now)
+	if err != nil {
+		zap.L().Warn("post scheduler: count daily successes failed", zap.Uint("user_id", userID), zap.Error(err))
+		return false, ""
+	}
+	if cfg.FrequencyDailyLimit > 0 && int(nDay) >= cfg.FrequencyDailyLimit {
+		return true, "daily_limit"
+	}
+	hourAgo := now.Add(-time.Hour)
+	nHour, err := s.activityRepo.CountPostPublishSuccessBetween(userID, hourAgo, now)
+	if err != nil {
+		zap.L().Warn("post scheduler: count hourly successes failed", zap.Uint("user_id", userID), zap.Error(err))
+		return false, ""
+	}
+	if cfg.SafetyMaxPerHour > 0 && int(nHour) >= cfg.SafetyMaxPerHour {
+		return true, "hourly_limit"
+	}
+	return false, ""
+}
+
+func effectiveRateLimitDelay(pub *twitter.PublishError) time.Duration {
+	d := time.Duration(0)
+	if pub != nil {
+		d = pub.RetryAfter
+	}
+	if d < time.Minute {
+		d = defaultRateLimitBackoff
+	}
+	if d > maxRateLimitBackoff {
+		d = maxRateLimitBackoff
+	}
+	return d
+}
+
+func truncateErrMsg(s string) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) <= errMsgMaxRunes {
+		return s
+	}
+	return string(r[:errMsgMaxRunes]) + "…"
+}
+
+func (s *PostService) persistRateLimitReschedule(postID, userID uint, handle string, at, nextRun time.Time, errDetail string) error {
+	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
+			"status":       "scheduled",
+			"scheduled_at": nextRun.UTC(),
+			"updated_at":   at,
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		log := &model.ActivityLog{
+			UserID:        userID,
+			Type:          "post",
+			Status:        "failed",
+			PreviewKey:    "activity.preview.postRateLimited",
+			AccountHandle: handle,
+			ExecutedAt:    at,
+			ErrorMessage:  errDetail,
+		}
+		return tx.Create(log).Error
+	})
+}
+
+func statusInList(st string, allowed []string) bool {
+	for _, a := range allowed {
+		if st == a {
+			return true
+		}
+	}
+	return false
+}
+
+func previewForExecuteLog(s string, maxRunes int) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return string(r)
+	}
+	return string(r[:maxRunes]) + "…"
+}
+
+func formatXAccountHandle(username string) string {
+	u := strings.TrimSpace(strings.TrimPrefix(username, "@"))
+	if u == "" {
+		return "@unknown"
+	}
+	return "@" + u
+}
+
+func (s *PostService) persistExecuteFailure(postID, userID uint, handle string, at time.Time, errMsg string) error {
+	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
+			"status":     "failed",
+			"updated_at": at,
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		log := &model.ActivityLog{
+			UserID:        userID,
+			Type:          "post",
+			Status:        "failed",
+			PreviewKey:    "activity.preview.postExecuteFailed",
+			AccountHandle: handle,
+			ExecutedAt:    at,
+			ErrorMessage:  errMsg,
+		}
+		return tx.Create(log).Error
+	})
+}
+
+func (s *PostService) persistExecuteSuccess(postID, userID uint, handle string, at time.Time) error {
+	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
+			"status":       "published",
+			"published_at": at,
+			"updated_at":   at,
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		log := &model.ActivityLog{
+			UserID:        userID,
+			Type:          "post",
+			Status:        "success",
+			PreviewKey:    "activity.preview.postExecuteSuccess",
+			AccountHandle: handle,
+			ExecutedAt:    at,
+		}
+		return tx.Create(log).Error
+	})
+}
+
+func (s *PostService) assertSubscriptionAllowsContentProduction(userID uint) error {
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	return subscription.AssertUserMayProduceContent(u, time.Now())
+}
+
+func postModelToDTO(p model.Post) dto.PostItem {
+	item := dto.PostItem{
+		ID:         p.ID,
+		UserID:     p.UserID,
+		XAccountID: p.XAccountID,
+		Content:    p.Content,
+		Status:     p.Status,
+		CreatedAt:  p.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:  p.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if p.ScheduledAt != nil {
+		s := p.ScheduledAt.UTC().Format(time.RFC3339)
+		item.ScheduledAt = &s
+	}
+	if p.PublishedAt != nil {
+		s := p.PublishedAt.UTC().Format(time.RFC3339)
+		item.PublishedAt = &s
+	}
+	return item
+}
+
+func validatePostContent(content string) error {
+	n := utf8.RuneCountInString(content)
+	if n < minPostContentRunes {
+		return errors.New("content is required")
+	}
+	if n > maxPostContentRunes {
+		return errors.New("content exceeds maximum length")
+	}
+	return nil
+}
+
+// isUserSettablePostStatus is for API create/update (not processing; scheduler uses processing internally).
+func isUserSettablePostStatus(s string) bool {
+	switch s {
+	case "draft", "scheduled", "published", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseCreateTimes(status string, scheduledRaw, publishedRaw *string) (sched, pub *time.Time, err error) {
+	if scheduledRaw != nil && strings.TrimSpace(*scheduledRaw) != "" {
+		t, e := time.Parse(time.RFC3339, strings.TrimSpace(*scheduledRaw))
+		if e != nil {
+			return nil, nil, errors.New("invalid scheduled_at (use RFC3339)")
+		}
+		u := t.UTC()
+		sched = &u
+	}
+	if publishedRaw != nil && strings.TrimSpace(*publishedRaw) != "" {
+		t, e := time.Parse(time.RFC3339, strings.TrimSpace(*publishedRaw))
+		if e != nil {
+			return nil, nil, errors.New("invalid published_at (use RFC3339)")
+		}
+		u := t.UTC()
+		pub = &u
+	}
+	return sched, pub, nil
+}

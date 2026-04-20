@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import axios from "axios";
 import { Link2 } from "lucide-react";
 
 import { Dialog } from "@/components/ui/dialog";
@@ -10,16 +11,31 @@ import { useT } from "@/i18n/use-t";
 type BindAccountDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAuthorize: () => Promise<void>;
 };
 
-export function BindAccountDialog({ open, onOpenChange }: BindAccountDialogProps) {
+export function BindAccountDialog({ open, onOpenChange, onAuthorize }: BindAccountDialogProps) {
   const { t } = useT();
-  const [status, setStatus] = useState<"idle" | "binding" | "done">("idle");
+  const [status, setStatus] = useState<"idle" | "binding" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const bind = async () => {
     setStatus("binding");
-    await new Promise((r) => setTimeout(r, 900));
-    setStatus("done");
+    setErrorMessage(null);
+    try {
+      await onAuthorize();
+    } catch (error) {
+      let message = "Failed to start OAuth.";
+      if (axios.isAxiosError(error)) {
+        const body = error.response?.data as { message?: string } | undefined;
+        const fromApi = typeof body?.message === "string" ? body.message.trim() : "";
+        message = fromApi || error.message || message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      setErrorMessage(message);
+      setStatus("error");
+    }
   };
 
   return (
@@ -27,7 +43,10 @@ export function BindAccountDialog({ open, onOpenChange }: BindAccountDialogProps
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next);
-        if (!next) setStatus("idle");
+        if (!next) {
+          setStatus("idle");
+          setErrorMessage(null);
+        }
       }}
       title={t("accounts.bind.title")}
       description={t("accounts.bind.description")}
@@ -38,13 +57,9 @@ export function BindAccountDialog({ open, onOpenChange }: BindAccountDialogProps
         </div>
         <Button onClick={bind} disabled={status === "binding"} className="w-full">
           <Link2 className="size-4" />
-          {status === "binding"
-            ? t("accounts.bind.cta.redirecting")
-            : status === "done"
-              ? t("accounts.bind.cta.authorizedMock")
-              : t("accounts.bind.cta.authorize")}
+          {status === "binding" ? t("accounts.bind.cta.redirecting") : t("accounts.bind.cta.authorize")}
         </Button>
-        <p className="text-xs text-white/55">{t("accounts.bind.mockHint")}</p>
+        {errorMessage ? <p className="text-xs text-rose-300">{errorMessage}</p> : null}
       </div>
     </Dialog>
   );

@@ -19,3 +19,41 @@ log:
   max_backups: 30
   max_age: 7
   compress: true
+email:
+  provider: "ses"
+  ses:
+    region: "ap-southeast-1"
+    access_key_id: "AKIATO6YHJKQHG3DWMNA"
+    secret_access_key: "Ahb/bGkLUWjLZ+PNa8N0kltAQp5ASQmkIFPX5Zru"
+    from_email: "no-reply@mail.octo-agent.com"
+
+app:
+  frontend_base_url: "https://your-frontend.example.com"
+
+x_oauth:
+  client_id: ""
+  client_secret: ""
+  redirect_uri: "https://your-api.example.com/api/v1/accounts/oauth/x/callback"
+  state_secret: ""
+
+billing:
+  order_ttl_minutes: 30
+  webhook_secret: ""
+  rpc_urls:
+    "56": "https://bsc-dataseed.binance.org"
+  payment_methods:
+    - method: "USDT"
+      network: "BEP20"
+      chain_id: 56
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 18
+      is_default: true
+      note: "Replace token_address and receiver_address with production USDT treasury."
+  plans:
+    basic_monthly:
+      name: "Basic"
+      amount: "10"
+      currency: "USDT"
+      period_days: 30
+      description: "Full automation for one month."

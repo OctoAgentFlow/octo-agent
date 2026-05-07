@@ -30,14 +30,15 @@ export type PaymentMethodOption = {
   isDefault: boolean;
 };
 
-export type PaymentStatus = "paid" | "pending" | "failed";
+export type PaymentStatus = "paid" | "pending" | "failed" | "expired";
 
 export type PaymentRecord = {
+  id: string;
   date: string;
   planKey: string;
   amount: string;
   methodKey: string;
+  network: string;
   status: PaymentStatus;
   txHash: string;
 };
-

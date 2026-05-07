@@ -8,7 +8,15 @@ import type { PaymentRecord, PaymentStatus } from "@/types/billing";
 function statusVariant(status: PaymentStatus) {
   if (status === "paid") return "success";
   if (status === "pending") return "warning";
+  if (status === "expired") return "default";
   return "danger";
+}
+
+function maskHash(hash: string) {
+  const s = hash.trim();
+  if (!s) return "—";
+  if (s.length <= 18) return s;
+  return `${s.slice(0, 10)}…${s.slice(-8)}`;
 }
 
 export function PaymentHistoryTable({ paymentRecords }: { paymentRecords: PaymentRecord[] }) {
@@ -31,19 +39,19 @@ export function PaymentHistoryTable({ paymentRecords }: { paymentRecords: Paymen
             {paymentRecords.length === 0 ? (
               <tr>
                 <td className="px-3 py-6 text-center text-sm text-white/60" colSpan={6}>
-                  No payment history yet.
+                  {t("billing.history.empty")}
                 </td>
               </tr>
             ) : paymentRecords.map((record) => (
-              <tr key={record.txHash} className="border-b border-white/8 hover:bg-white/5">
+              <tr key={record.id} className="border-b border-white/8 hover:bg-white/5">
                 <td className="px-3 py-3">{record.date}</td>
                 <td className="px-3 py-3">{t(record.planKey)}</td>
                 <td className="px-3 py-3">{record.amount}</td>
-                <td className="px-3 py-3">{t(record.methodKey)}</td>
+                <td className="px-3 py-3">{t(record.methodKey)} / {record.network}</td>
                 <td className="px-3 py-3">
                   <Badge variant={statusVariant(record.status)}>{t(`billing.history.status.${record.status}`)}</Badge>
                 </td>
-                <td className="px-3 py-3 font-mono text-xs text-white/65">{record.txHash}</td>
+                <td className="px-3 py-3 font-mono text-xs text-white/65">{maskHash(record.txHash)}</td>
               </tr>
             ))}
           </tbody>

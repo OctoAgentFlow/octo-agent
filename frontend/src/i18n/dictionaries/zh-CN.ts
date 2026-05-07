@@ -352,9 +352,11 @@ export const dict: I18nDict = {
   "billing.history.columns.method": "方式",
   "billing.history.columns.status": "状态",
   "billing.history.columns.txHash": "交易哈希",
+  "billing.history.empty": "暂无支付记录。",
   "billing.history.status.paid": "已支付",
   "billing.history.status.pending": "待确认",
   "billing.history.status.failed": "失败",
+  "billing.history.status.expired": "已过期",
 
   // accounts
   "accounts.page.title": "已连接账号",

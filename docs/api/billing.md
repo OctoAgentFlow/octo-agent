@@ -31,6 +31,12 @@ Base path: `/api/v1`
 - **Body**：`{ "plan_code": "basic_monthly", "method": "USDT", "network": "BEP20" }`（`method`/`network` 须与配置中的支付方式匹配）
 - **响应**：`order_id`（数值订单主键的十进制字符串）、`amount`、`currency`、`network`、`token_address`、`receiver_address`、`expired_at`、`status`
 
+## GET /api/v1/billing/orders
+
+- **用途**：返回当前用户最近 20 笔支付订单，用于 Billing 页支付记录。
+- **响应**：`data.items` 为数组，元素含 `order_id`、`plan_code`、`amount`、`currency`、`method`、`network`、`status`、`tx_hash`、`created_at`、`expired_at`、`paid_at`。
+- **状态**：常见值为 `pending`、`paid`、`expired`、`failed`。
+
 ## GET /api/v1/billing/orders/{id}
 
 - **用途**：轮询单笔订单状态（仅当前用户自己的订单）。

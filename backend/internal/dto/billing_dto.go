@@ -70,6 +70,24 @@ type BillingOrderDetailResponse struct {
 	PaidAt          string `json:"paid_at,omitempty"`
 }
 
+type BillingOrderListItem struct {
+	OrderID   string `json:"order_id"`
+	PlanCode  string `json:"plan_code"`
+	Amount    string `json:"amount"`
+	Currency  string `json:"currency"`
+	Method    string `json:"method"`
+	Network   string `json:"network"`
+	Status    string `json:"status"`
+	TxHash    string `json:"tx_hash,omitempty"`
+	CreatedAt string `json:"created_at"`
+	ExpiredAt string `json:"expired_at"`
+	PaidAt    string `json:"paid_at,omitempty"`
+}
+
+type BillingOrderListResponse struct {
+	Items []BillingOrderListItem `json:"items"`
+}
+
 type BillingWebhookOnchainRequest struct {
 	OrderID string `json:"order_id" binding:"required"`
 	Network string `json:"network" binding:"required"`

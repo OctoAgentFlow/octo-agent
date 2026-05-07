@@ -351,9 +351,11 @@ export const dict: I18nDict = {
   "billing.history.columns.method": "방식",
   "billing.history.columns.status": "상태",
   "billing.history.columns.txHash": "Tx 해시",
+  "billing.history.empty": "아직 결제 내역이 없습니다.",
   "billing.history.status.paid": "결제 완료",
   "billing.history.status.pending": "대기",
   "billing.history.status.failed": "실패",
+  "billing.history.status.expired": "만료됨",
 
   // accounts
   "accounts.page.title": "연결된 계정",

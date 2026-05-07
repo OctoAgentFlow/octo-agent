@@ -351,9 +351,11 @@ export const dict: I18nDict = {
   "billing.history.columns.method": "Метод",
   "billing.history.columns.status": "Статус",
   "billing.history.columns.txHash": "Tx Hash",
+  "billing.history.empty": "Истории платежей пока нет.",
   "billing.history.status.paid": "Оплачено",
   "billing.history.status.pending": "Ожидает",
   "billing.history.status.failed": "Ошибка",
+  "billing.history.status.expired": "Истекло",
 
   // accounts
   "accounts.page.title": "Подключенные аккаунты",

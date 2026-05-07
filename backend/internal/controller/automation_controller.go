@@ -136,7 +136,12 @@ func (ctl *AutomationController) ListDMRecipientRules(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoDMService.ListRecipientRules(userID)
+	var query dto.AutoDMRecipientRuleQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.ListRecipientRules(userID, query)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -170,6 +175,49 @@ func (ctl *AutomationController) ImportDMRecipientRules(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoDMService.ImportRecipientRules(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateDMRecipientRule(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	ruleID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid recipient rule id")
+		return
+	}
+	var req dto.AutoDMRecipientRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.UpdateRecipientRule(userID, ruleID, req.Status, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) BulkUpdateDMRecipientRules(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoDMRecipientRuleBulkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.BulkUpdateRecipientRules(userID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

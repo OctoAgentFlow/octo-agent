@@ -323,11 +323,16 @@ func (s *AutoDMService) ListTasks(userID uint) (*dto.AutoDMTasksResponse, error)
 	return &dto.AutoDMTasksResponse{Items: items}, nil
 }
 
-func (s *AutoDMService) ListRecipientRules(userID uint) (*dto.AutoDMRecipientRulesResponse, error) {
+func (s *AutoDMService) ListRecipientRules(userID uint, query dto.AutoDMRecipientRuleQuery) (*dto.AutoDMRecipientRulesResponse, error) {
 	if s.ruleRepo == nil {
 		return &dto.AutoDMRecipientRulesResponse{Items: []dto.AutoDMRecipientRuleItem{}}, nil
 	}
-	rows, err := s.ruleRepo.ListByUser(userID, 50)
+	rows, total, err := s.ruleRepo.ListByUser(userID, repository.AutoDMRecipientRuleListQuery{
+		Search:     query.Search,
+		Status:     query.Status,
+		XAccountID: query.XAccountID,
+		Limit:      query.Limit,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +340,7 @@ func (s *AutoDMService) ListRecipientRules(userID uint) (*dto.AutoDMRecipientRul
 	for i := range rows {
 		items = append(items, s.autoDMRecipientRuleToDTO(&rows[i]))
 	}
-	return &dto.AutoDMRecipientRulesResponse{Items: items}, nil
+	return &dto.AutoDMRecipientRulesResponse{Items: items, Total: total}, nil
 }
 
 func (s *AutoDMService) ListRecipientImports(userID uint) (*dto.AutoDMRecipientImportsResponse, error) {
@@ -453,6 +458,61 @@ func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, re
 	}
 	out := s.autoDMRecipientRuleToDTO(rule)
 	return &out, nil
+}
+
+func (s *AutoDMService) UpdateRecipientRule(userID, ruleID uint, status, reason string) (*dto.AutoDMRecipientRuleItem, error) {
+	status = strings.TrimSpace(status)
+	if !repository.IsAutoDMRecipientRuleStatus(status) {
+		return nil, errors.New("invalid auto dm recipient rule status")
+	}
+	now := time.Now().UTC()
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "Updated from Auto DM recipient manager."
+	}
+	rule, err := s.ruleRepo.UpdateStatusByID(userID, ruleID, status, reason, "manual", now)
+	if err != nil {
+		return nil, err
+	}
+	activityReason := fmt.Sprintf("Recipient %s marked %s. %s", rule.RecipientUserID, status, reason)
+	if err := s.createRecipientRuleActivity(userID, rule.XAccountID, "", "activity.preview.dmRecipientRuleUpdated", status, activityReason, now); err != nil {
+		return nil, err
+	}
+	out := s.autoDMRecipientRuleToDTO(rule)
+	return &out, nil
+}
+
+func (s *AutoDMService) BulkUpdateRecipientRules(userID uint, req dto.AutoDMRecipientRuleBulkRequest) (*dto.AutoDMRecipientRuleBulkResponse, error) {
+	status := strings.TrimSpace(req.Status)
+	if !repository.IsAutoDMRecipientRuleStatus(status) {
+		return nil, errors.New("invalid auto dm recipient rule status")
+	}
+	ids := uniqueAutoDMRuleIDs(req.IDs)
+	if len(ids) == 0 {
+		return nil, errors.New("auto dm recipient rule ids are required")
+	}
+	if len(ids) > 100 {
+		return nil, errors.New("auto dm recipient rule bulk update is limited to 100 items")
+	}
+	now := time.Now().UTC()
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		reason = "Bulk updated from Auto DM recipient manager."
+	}
+	rows, err := s.ruleRepo.UpdateStatusByIDs(userID, ids, status, reason, "manual_bulk", now)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AutoDMRecipientRuleItem, 0, len(rows))
+	for i := range rows {
+		row := &rows[i]
+		activityReason := fmt.Sprintf("Recipient %s marked %s in bulk update. %s", row.RecipientUserID, status, reason)
+		if err := s.createRecipientRuleActivity(userID, row.XAccountID, "", "activity.preview.dmRecipientRuleUpdated", status, activityReason, now); err != nil {
+			return nil, err
+		}
+		items = append(items, s.autoDMRecipientRuleToDTO(row))
+	}
+	return &dto.AutoDMRecipientRuleBulkResponse{Updated: len(items), Items: items}, nil
 }
 
 func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipientImportRequest) (*dto.AutoDMRecipientImportResponse, error) {
@@ -840,6 +900,22 @@ func isAutoDMRecipientID(value string) bool {
 		}
 	}
 	return true
+}
+
+func uniqueAutoDMRuleIDs(ids []uint) []uint {
+	seen := map[uint]struct{}{}
+	out := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func (s *AutoDMService) createRecipientRuleActivity(userID, accountID uint, accountHandle, previewKey, status, reason string, at time.Time) error {

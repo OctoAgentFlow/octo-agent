@@ -111,8 +111,10 @@ Base path: `/api/v1`
 ## GET /api/v1/auto-dm/recipients
 
 - **鉴权**：需要
-- **用途**：返回当前用户最近的 Auto DM 收件人规则。
+- **Query**：`search`、`status=allowlisted|blocked|unsubscribed`、`x_account_id`、`limit`（默认 100，最大 200）。
+- **用途**：返回当前用户的 Auto DM 收件人规则，可按收件人、状态、账号筛选。
 - **响应字段**：`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`unsubscribe_token`、`unsubscribe_url`、`source`、`reason`、`last_matched_at`。
+- **分页说明**：当前为轻量名单管理，响应含 `items` 与 `total`，`limit` 控制最多返回条数。
 
 ## POST /api/v1/auto-dm/recipients/import
 
@@ -132,6 +134,18 @@ Base path: `/api/v1`
 - **鉴权**：需要
 - **Body**：`{ "status": "allowlisted|blocked|unsubscribed", "reason": "..." }`
 - **用途**：从某个 Auto DM task 写入收件人名单规则，并写入 `activity_logs type=dm`。写入 `blocked` 或 `unsubscribed` 时，会同时拦截该 task，避免后续发送。
+
+## PATCH /api/v1/auto-dm/recipient-rules/{id}
+
+- **鉴权**：需要
+- **Body**：`{ "status": "allowlisted|blocked|unsubscribed", "reason": "..." }`
+- **用途**：从名单管理页更新某个已有收件人规则，并写入 `activity_logs type=dm`。
+
+## POST /api/v1/auto-dm/recipient-rules/bulk
+
+- **鉴权**：需要
+- **Body**：`{ "ids": [1, 2], "status": "allowlisted|blocked|unsubscribed", "reason": "..." }`
+- **用途**：批量更新最多 100 个 Auto DM 收件人规则，并逐条写入名单变更 Activity。
 
 ## GET /api/v1/auto-dm/unsubscribe/{token}
 

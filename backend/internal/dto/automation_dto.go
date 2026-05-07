@@ -63,7 +63,12 @@ type AutoDMTaskItem struct {
 	MessagePreview    string `json:"message_preview,omitempty"`
 	Status            string `json:"status"`
 	CapabilityStatus  string `json:"capability_status"`
+	FailureCategory   string `json:"failure_category,omitempty"`
 	FailureReason     string `json:"failure_reason,omitempty"`
+	Retryable         bool   `json:"retryable"`
+	RetryAfterAt      string `json:"retry_after_at,omitempty"`
+	AttemptCount      int    `json:"attempt_count"`
+	LastAttemptAt     string `json:"last_attempt_at,omitempty"`
 	ApprovalRequired  bool   `json:"approval_required"`
 	ActivityLogID     uint   `json:"activity_log_id,omitempty"`
 	DMConversationID  string `json:"dm_conversation_id,omitempty"`

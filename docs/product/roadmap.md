@@ -21,11 +21,11 @@
 | --- | --- |
 | Auto Post（定时发推） | 已实现（scheduler + X API） |
 | Auto Reply（模板回复评论） | 已实现（scheduler + X API；`reply_reservations` 防并发重复） |
-| Auto DM | 真实发送 MVP 已实现（近期互动候选生成、`auto_dm_tasks` 审批、X DM API 发送、成功/失败 Activity） |
+| Auto DM | 真实发送 + 安全重试 MVP 已实现（近期互动候选、审批、X DM API 发送、失败分类、retry queue、手动重试、成功/失败 Activity） |
 
 ## Next API Integration Priorities
 
-1. **Auto DM 安全增强**：补充更明确的收件人白名单/黑名单、退订记录、发送频率可视化和重试队列。
+1. **Auto DM 退订/名单管理**：补充可配置的收件人白名单、黑名单、退订记录和导入来源。
 2. **Analytics**：继续扩展转化指标与更细的内容表现指标。
 3. **Billing**：继续产品化对账、退款/人工审核与支付筛选。
 4. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。

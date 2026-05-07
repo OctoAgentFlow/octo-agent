@@ -55,7 +55,12 @@ export type AutoDMTaskApi = {
   message_preview?: string;
   status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
   capability_status: string;
+  failure_category?: string;
   failure_reason?: string;
+  retryable: boolean;
+  retry_after_at?: string;
+  attempt_count: number;
+  last_attempt_at?: string;
   approval_required: boolean;
   activity_log_id?: number;
   dm_conversation_id?: string;
@@ -111,6 +116,10 @@ export const automationService = {
   },
   async blockDMTask(id: number, reason: string) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/block`, { reason });
+    return res.data.data;
+  },
+  async retryDMTask(id: number) {
+    const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/retry`);
     return res.data.data;
   },
 };

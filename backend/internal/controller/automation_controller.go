@@ -172,3 +172,22 @@ func (ctl *AutomationController) BlockDMTask(c *gin.Context) {
 	}
 	response.OK(c, data)
 }
+
+func (ctl *AutomationController) RetryDMTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	data, err := ctl.autoDMService.RetryTask(userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}

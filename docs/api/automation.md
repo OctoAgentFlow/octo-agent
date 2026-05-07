@@ -84,13 +84,13 @@ Base path: `/api/v1`
 
 - **Auto Post**：调度器每分钟扫描 `scheduled` 且到期帖子（需 `post` 模块 `enabled`）。
 - **Auto Reply**：调度器每分钟对开启 `reply` 的用户拉取评论并回复（固定模板，无 AI）。
-- **Auto DM**：调度器每分钟先消费已审批的发送任务，再扫描到期 `dm` 配置生成候选；候选来自近期明确互动用户，写入 `auto_dm_tasks` 与 `activity_logs type=dm`，审批后通过 X DM API 真实发送，并回写 `sent` / `failed`。
+- **Auto DM**：调度器每分钟先消费已审批或到期重试的发送任务，再扫描到期 `dm` 配置生成候选；候选来自近期明确互动用户，写入 `auto_dm_tasks` 与 `activity_logs type=dm`，审批后通过 X DM API 真实发送，并回写 `sent` / `failed`。rate limit、X 5xx、网络类失败会进入 retry queue；权限、scope、收件人规则、屏蔽词类失败会归类为不可重试。
 
 ## GET /api/v1/auto-dm/tasks
 
 - **鉴权**：需要
 - **用途**：返回当前用户最近的 Auto DM 发送前审计任务。
-- **响应字段**：`status`（`review` / `approved` / `sending` / `blocked` / `failed` / `sent`）、`recipient_source`、`recipient_user_id`、`recipient_username`、`capability_status`、`failure_reason`、`message_preview`、`dm_conversation_id`、`dm_event_id`、`activity_log_id` 等。
+- **响应字段**：`status`（`review` / `approved` / `sending` / `blocked` / `failed` / `sent`）、`recipient_source`、`recipient_user_id`、`recipient_username`、`capability_status`、`failure_category`、`failure_reason`、`retryable`、`retry_after_at`、`attempt_count`、`last_attempt_at`、`message_preview`、`dm_conversation_id`、`dm_event_id`、`activity_log_id` 等。
 
 ## POST /api/v1/auto-dm/tasks/{id}/approve
 
@@ -102,3 +102,8 @@ Base path: `/api/v1`
 - **鉴权**：需要
 - **Body**：`{ "reason": "..." }`
 - **用途**：在真实发送前拦截任务，写入阻断原因。
+
+## POST /api/v1/auto-dm/tasks/{id}/retry
+
+- **鉴权**：需要
+- **用途**：将 `failed + retryable=true` 且未超过重试上限的任务重新放回 approved 队列。后台 scheduler 随后会再次按真实发送校验执行。

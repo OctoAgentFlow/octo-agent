@@ -262,6 +262,16 @@ export default function AgentsPage() {
     }
   };
 
+  const retryDMTask = async (id: number) => {
+    try {
+      const updated = await automationService.retryDMTask(id);
+      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto DM task queued for retry.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to retry DM task." : "Failed to retry DM task.");
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -289,7 +299,7 @@ export default function AgentsPage() {
 
       <AutomationStatusPanel status={runtimeStatus} />
 
-      <AutoDMReviewPanel tasks={dmTasks} onApprove={approveDMTask} onBlock={blockDMTask} />
+      <AutoDMReviewPanel tasks={dmTasks} onApprove={approveDMTask} onBlock={blockDMTask} onRetry={retryDMTask} />
 
       <AutomationEditDialog
         module={editing}
@@ -305,10 +315,12 @@ function AutoDMReviewPanel({
   tasks,
   onApprove,
   onBlock,
+  onRetry,
 }: {
   tasks: AutoDMTaskApi[];
   onApprove: (id: number) => void;
   onBlock: (id: number) => void;
+  onRetry: (id: number) => void;
 }) {
   const { t } = useT();
   return (
@@ -322,6 +334,8 @@ function AutoDMReviewPanel({
         <div className="space-y-2">
           {tasks.slice(0, 5).map((task) => {
             const canAct = task.status === "review";
+            const canRetry = task.status === "failed" && task.retryable && (task.attempt_count ?? 0) < 3;
+            const canBlock = canAct || canRetry;
             return (
               <div key={task.id} className="rounded-md border border-white/8 bg-white/[0.03] p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -341,6 +355,16 @@ function AutoDMReviewPanel({
                         {t("automation.dmReview.sentEvent")}: {task.dm_event_id}
                       </p>
                     ) : null}
+                    {task.failure_category || task.retry_after_at ? (
+                      <p className="text-xs text-white/55">
+                        {task.failure_category ? `${t("automation.dmReview.failure")}: ${task.failure_category}` : ""}
+                        {task.failure_category && task.retry_after_at ? " · " : ""}
+                        {task.retry_after_at ? `${t("automation.dmReview.retryAfter")}: ${new Date(task.retry_after_at).toLocaleString()}` : ""}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-white/45">
+                      {t("automation.dmReview.attempts")}: {task.attempt_count ?? 0}
+                    </p>
                     {task.failure_reason ? (
                       <p className="line-clamp-2 text-xs text-amber-100/85">{task.failure_reason}</p>
                     ) : null}
@@ -349,15 +373,22 @@ function AutoDMReviewPanel({
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
                       {task.status}
                     </span>
+                    {canBlock ? (
+                      <Button size="sm" variant="outline" onClick={() => onBlock(task.id)}>
+                        {t("automation.dmReview.block")}
+                      </Button>
+                    ) : null}
                     {canAct ? (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => onBlock(task.id)}>
-                          {t("automation.dmReview.block")}
-                        </Button>
                         <Button size="sm" onClick={() => onApprove(task.id)}>
                           {t("automation.dmReview.approve")}
                         </Button>
                       </>
+                    ) : null}
+                    {canRetry ? (
+                      <Button size="sm" onClick={() => onRetry(task.id)}>
+                        {t("automation.dmReview.retry")}
+                      </Button>
                     ) : null}
                   </div>
                 </div>

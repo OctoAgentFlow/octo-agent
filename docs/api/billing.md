@@ -33,9 +33,14 @@ Base path: `/api/v1`
 
 ## GET /api/v1/billing/orders
 
-- **用途**：返回当前用户最近 20 笔支付订单，用于 Billing 页支付记录。
-- **响应**：`data.items` 为数组，元素含 `order_id`、`plan_code`、`amount`、`currency`、`method`、`network`、`status`、`tx_hash`、`created_at`、`expired_at`、`paid_at`、`failure_reason`、`last_checked_at`、`can_retry`、`next_action`。
+- **用途**：返回当前用户最近支付订单，用于 Billing 页支付记录、对账筛选和退款/人工审核处理。
+- **Query**：支持 `status`、`reconciliation_status`、`review_status`、`refund_status`、`limit`（默认 20，最大 100）。
+- **响应**：`data.items` 为数组，元素含 `order_id`、`plan_code`、`amount`、`currency`、`method`、`network`、`status`、`tx_hash`、`created_at`、`expired_at`、`paid_at`、`failure_reason`、`last_checked_at`、`can_retry`、`next_action`，以及 `reconciliation_status`、`review_status`、`refund_status`、`refund_reason`、`reviewed_at`、`refund_marked_at`、`ops_note`。
+- **运营摘要**：`data.ops_summary` 返回当前用户全部订单的状态计数，包含支付状态、对账异常、待审核与退款状态计数；`data.total` 为当前筛选结果总数。
 - **状态**：常见值为 `pending`、`paid`、`expired`、`failed`。
+- **对账状态**：`unchecked`、`matched`、`mismatch`、`needs_review`。
+- **审核状态**：`unreviewed`、`review_needed`、`reviewed`。
+- **退款状态**：`none`、`requested`、`refunded`、`rejected`。
 - **过期处理**：读取列表时会把已超过 `expired_at` 的 `pending`/`failed` 订单自动标记为 `expired`。
 
 ## GET /api/v1/billing/orders/{id}
@@ -44,6 +49,21 @@ Base path: `/api/v1`
 - **Path**：`id` 为 **数字主键**（与 `order_id` 字符串一致）。
 - **响应**：含 `chain_id`、`tx_hash`、`paid_at`（已支付时）、`failure_reason`、`last_checked_at`、`can_retry`、`next_action` 等。
 - **过期处理**：读取单笔订单时也会自动落库过期状态。
+
+## POST /api/v1/billing/orders/{id}/ops-action
+
+- **用途**：Billing 运营处理入口，用于对账异常、人工审核和退款状态标记。当前 MVP 作用域为「当前登录用户自己的订单」，后续如引入后台角色可迁移到 admin 路由。
+- **Body**：
+  - `action`：必填，支持 `mark_reviewed`、`mark_review_needed`、`request_refund`、`mark_refunded`、`reject_refund`
+  - `ops_note`：可选，运营备注
+  - `refund_reason`：可选，退款原因或拒绝退款原因
+- **成功响应**：返回更新后的订单详情。
+- **状态联动**：
+  - `mark_reviewed`：审核置为 `reviewed`，对账置为 `matched`
+  - `mark_review_needed`：审核置为 `review_needed`，对账置为 `needs_review`
+  - `request_refund`：退款置为 `requested`，审核置为 `review_needed`
+  - `mark_refunded`：退款置为 `refunded`，审核置为 `reviewed`
+  - `reject_refund`：退款置为 `rejected`，审核置为 `reviewed`
 
 ## POST /api/v1/billing/orders/{id}/confirm
 

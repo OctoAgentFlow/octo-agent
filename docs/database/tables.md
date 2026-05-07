@@ -74,6 +74,8 @@
 ### billing_orders
 
 - 用途：链上 USDT 支付订单（`pending`/`paid`/`failed`/`expired`）；与 `users` 关联；记录最近一次校验失败原因和检查时间，支持用户补交 tx hash 恢复异常订单
+- 运营字段：`reconciliation_status`（`unchecked`/`matched`/`mismatch`/`needs_review`）、`review_status`（`unreviewed`/`review_needed`/`reviewed`）、`refund_status`（`none`/`requested`/`refunded`/`rejected`）、`refund_reason`、`reviewed_at`、`refund_marked_at`、`ops_note`
+- 状态联动：支付成功自动标记对账匹配且已审核；链上校验失败标记为对账不匹配且待人工审核；订单过期标记为需复核且待人工审核
 
 ### billing_chain_txs
 

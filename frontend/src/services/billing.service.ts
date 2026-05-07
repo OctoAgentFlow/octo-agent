@@ -68,6 +68,13 @@ export type BillingOrderDetailApi = {
   last_checked_at?: string;
   can_retry: boolean;
   next_action: string;
+  reconciliation_status: string;
+  review_status: string;
+  refund_status: string;
+  refund_reason?: string;
+  reviewed_at?: string;
+  refund_marked_at?: string;
+  ops_note?: string;
 };
 
 export type BillingOrderListItemApi = {
@@ -86,6 +93,45 @@ export type BillingOrderListItemApi = {
   last_checked_at?: string;
   can_retry: boolean;
   next_action: string;
+  reconciliation_status: string;
+  review_status: string;
+  refund_status: string;
+  refund_reason?: string;
+  reviewed_at?: string;
+  refund_marked_at?: string;
+  ops_note?: string;
+};
+
+export type BillingOrderQueryApi = {
+  status?: string;
+  reconciliation_status?: string;
+  review_status?: string;
+  refund_status?: string;
+  limit?: number;
+};
+
+export type BillingOpsSummaryApi = {
+  total: number;
+  pending: number;
+  paid: number;
+  failed: number;
+  expired: number;
+  unchecked: number;
+  matched: number;
+  mismatch: number;
+  needs_review: number;
+  review_needed: number;
+  reviewed: number;
+  refund_none: number;
+  refund_requested: number;
+  refunded: number;
+  refund_rejected: number;
+};
+
+export type BillingOrderOpsActionRequest = {
+  action: string;
+  refund_reason?: string;
+  ops_note?: string;
 };
 
 type BillingPlansData = {
@@ -98,6 +144,8 @@ type BillingPaymentMethodsData = {
 
 type BillingOrdersData = {
   items: BillingOrderListItemApi[];
+  total: number;
+  ops_summary: BillingOpsSummaryApi;
 };
 
 export const billingService = {
@@ -127,8 +175,12 @@ export const billingService = {
     });
     return res.data.data;
   },
-  async orders() {
-    const res = await request.get<ApiResponse<BillingOrdersData>>("/billing/orders");
+  async orders(params?: BillingOrderQueryApi) {
+    const res = await request.get<ApiResponse<BillingOrdersData>>("/billing/orders", { params });
+    return res.data.data;
+  },
+  async orderOpsAction(orderId: string, body: BillingOrderOpsActionRequest) {
+    const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/billing/orders/${orderId}/ops-action`, body);
     return res.data.data;
   },
 };

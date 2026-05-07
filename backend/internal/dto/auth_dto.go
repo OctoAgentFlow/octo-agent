@@ -64,3 +64,7 @@ type MeResponse struct {
 	Status        string `json:"status"`
 	WalletAddress string `json:"wallet_address,omitempty"`
 }
+
+type UpdateMeRequest struct {
+	Name string `json:"name" binding:"required,min=1,max=64"`
+}

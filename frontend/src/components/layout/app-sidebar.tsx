@@ -10,6 +10,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Settings,
   UserCircle,
   Users,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const navItems = [
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
+  { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
   { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
 

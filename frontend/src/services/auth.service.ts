@@ -53,4 +53,8 @@ export const authService = {
     const res = await request.get<ApiResponse<MeData>>("/users/me");
     return res.data.data;
   },
+  async updateMe(payload: { name: string }) {
+    const res = await request.patch<ApiResponse<MeData>>("/users/me", payload);
+    return res.data.data;
+  },
 };

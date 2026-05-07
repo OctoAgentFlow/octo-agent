@@ -17,4 +17,5 @@ func RegisterAuth(rg *gin.RouterGroup, c *controller.AuthController) {
 	user := rg.Group("/users")
 	user.Use(middleware.Auth())
 	user.GET("/me", c.Me)
+	user.PATCH("/me", c.UpdateMe)
 }

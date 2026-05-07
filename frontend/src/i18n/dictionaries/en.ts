@@ -501,6 +501,8 @@ export const dict: I18nDict = {
   "automation.dmReview.blacklist": "Block user",
   "automation.dmReview.unsubscribe": "Unsubscribe",
   "automation.dmReview.rules": "Recipient rules",
+  "automation.dmReview.import": "Import allowlist",
+  "automation.dmReview.importCta": "Import",
   "automation.dmReview.approve": "Approve",
   "automation.dmReview.block": "Block",
   "automation.runtime.title": "Runtime Status",

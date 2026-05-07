@@ -56,7 +56,7 @@
 ### auto_dm_recipient_rules
 
 - 用途：Auto DM 收件人准入/退出规则；候选生成和真实发送都会检查
-- 核心字段：`user_id`、`x_account_id`、`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`source`、`reason`、`last_matched_at`
+- 核心字段：`user_id`、`x_account_id`、`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`unsubscribe_token`、`source`、`reason`、`last_matched_at`
 
 ### posts
 

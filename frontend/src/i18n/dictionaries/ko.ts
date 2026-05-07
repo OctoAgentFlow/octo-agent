@@ -477,6 +477,8 @@ export const dict: I18nDict = {
   "automation.dmReview.blacklist": "차단",
   "automation.dmReview.unsubscribe": "수신 거부",
   "automation.dmReview.rules": "수신자 규칙",
+  "automation.dmReview.import": "허용 목록 가져오기",
+  "automation.dmReview.importCta": "가져오기",
   "automation.dmReview.approve": "승인",
   "automation.dmReview.block": "차단",
   "automation.runtime.title": "런타임 상태",

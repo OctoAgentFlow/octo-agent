@@ -2,8 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,12 +33,13 @@ const (
 )
 
 type AutoDMService struct {
-	accountRepo    *repository.TwitterAccountRepository
-	automationRepo *repository.AutomationRepository
-	activityRepo   *repository.ActivityRepository
-	taskRepo       *repository.AutoDMTaskRepository
-	ruleRepo       *repository.AutoDMRecipientRuleRepository
-	userRepo       *repository.UserRepository
+	accountRepo     *repository.TwitterAccountRepository
+	automationRepo  *repository.AutomationRepository
+	activityRepo    *repository.ActivityRepository
+	taskRepo        *repository.AutoDMTaskRepository
+	ruleRepo        *repository.AutoDMRecipientRuleRepository
+	userRepo        *repository.UserRepository
+	frontendBaseURL string
 }
 
 func NewAutoDMService(
@@ -42,14 +49,16 @@ func NewAutoDMService(
 	taskRepo *repository.AutoDMTaskRepository,
 	ruleRepo *repository.AutoDMRecipientRuleRepository,
 	userRepo *repository.UserRepository,
+	frontendBaseURL string,
 ) *AutoDMService {
 	return &AutoDMService{
-		accountRepo:    accountRepo,
-		automationRepo: automationRepo,
-		activityRepo:   activityRepo,
-		taskRepo:       taskRepo,
-		ruleRepo:       ruleRepo,
-		userRepo:       userRepo,
+		accountRepo:     accountRepo,
+		automationRepo:  automationRepo,
+		activityRepo:    activityRepo,
+		taskRepo:        taskRepo,
+		ruleRepo:        ruleRepo,
+		userRepo:        userRepo,
+		frontendBaseURL: strings.TrimRight(strings.TrimSpace(frontendBaseURL), "/"),
 	}
 }
 
@@ -321,7 +330,7 @@ func (s *AutoDMService) ListRecipientRules(userID uint) (*dto.AutoDMRecipientRul
 	}
 	items := make([]dto.AutoDMRecipientRuleItem, 0, len(rows))
 	for i := range rows {
-		items = append(items, autoDMRecipientRuleToDTO(&rows[i]))
+		items = append(items, s.autoDMRecipientRuleToDTO(&rows[i]))
 	}
 	return &dto.AutoDMRecipientRulesResponse{Items: items}, nil
 }
@@ -408,6 +417,7 @@ func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, re
 		status,
 		"task",
 		reason,
+		mustAutoDMUnsubscribeToken(),
 		now,
 	)
 	if err != nil {
@@ -420,8 +430,86 @@ func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, re
 		}
 		_ = s.taskRepo.Block(task, truncateErrMsg(blockReason), now)
 	}
-	out := autoDMRecipientRuleToDTO(rule)
+	out := s.autoDMRecipientRuleToDTO(rule)
 	return &out, nil
+}
+
+func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipientImportRequest) (*dto.AutoDMRecipientImportResponse, error) {
+	if s.ruleRepo == nil {
+		return nil, errors.New("auto dm recipient rules are not configured")
+	}
+	accountID := req.XAccountID
+	if accountID == 0 {
+		account, err := s.firstConnectedAccountForUser(userID)
+		if err != nil {
+			return nil, err
+		}
+		accountID = account.ID
+	}
+	reader := csv.NewReader(strings.NewReader(req.CSV))
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	now := time.Now().UTC()
+	out := &dto.AutoDMRecipientImportResponse{Items: []dto.AutoDMRecipientRuleItem{}}
+	line := 0
+	for {
+		row, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		line++
+		if err != nil {
+			out.Skipped++
+			out.Errors = append(out.Errors, fmt.Sprintf("line %d: %v", line, err))
+			continue
+		}
+		recipientID, username, ok := parseAutoDMImportRow(row)
+		if !ok {
+			out.Skipped++
+			continue
+		}
+		rule, err := s.ruleRepo.Upsert(
+			userID,
+			accountID,
+			recipientID,
+			username,
+			repository.AutoDMRecipientAllowlisted,
+			"csv_import",
+			"Imported from Auto DM allowlist CSV.",
+			mustAutoDMUnsubscribeToken(),
+			now,
+		)
+		if err != nil {
+			out.Skipped++
+			out.Errors = append(out.Errors, fmt.Sprintf("line %d: %v", line, err))
+			continue
+		}
+		out.Imported++
+		out.Items = append(out.Items, s.autoDMRecipientRuleToDTO(rule))
+	}
+	return out, nil
+}
+
+func (s *AutoDMService) GetPreference(token string) (*dto.AutoDMPreferenceResponse, error) {
+	rule, err := s.ruleRepo.GetByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AutoDMPreferenceResponse{
+		RecipientUsername: rule.RecipientUsername,
+		Status:            rule.Status,
+	}, nil
+}
+
+func (s *AutoDMService) PublicUnsubscribe(token string) (*dto.AutoDMPreferenceResponse, error) {
+	rule, err := s.ruleRepo.MarkUnsubscribedByToken(token, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AutoDMPreferenceResponse{
+		RecipientUsername: rule.RecipientUsername,
+		Status:            rule.Status,
+	}, nil
 }
 
 func (s *AutoDMService) sendApprovedTasks(ctx context.Context, now time.Time) error {
@@ -657,6 +745,54 @@ func (s *AutoDMService) autoDMRecipientAllowed(userID, accountID uint, recipient
 	return autoDMRecipientDecision{Allowed: true}, nil
 }
 
+func (s *AutoDMService) firstConnectedAccountForUser(userID uint) (*model.TwitterAccount, error) {
+	accounts, err := s.accountRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	account := firstAutoDMAccount(accounts)
+	if account == nil {
+		return nil, errors.New(autoDMNoAccountReason)
+	}
+	return account, nil
+}
+
+func parseAutoDMImportRow(row []string) (recipientID, username string, ok bool) {
+	if len(row) == 0 {
+		return "", "", false
+	}
+	recipientID = strings.TrimSpace(row[0])
+	if strings.EqualFold(recipientID, "recipient_user_id") || strings.EqualFold(recipientID, "user_id") {
+		return "", "", false
+	}
+	if recipientID == "" {
+		return "", "", false
+	}
+	if len(row) > 1 {
+		rawUsername := strings.TrimSpace(row[1])
+		if rawUsername != "" {
+			username = replyAuthorDisplay(rawUsername)
+		}
+	}
+	return recipientID, username, true
+}
+
+func mustAutoDMUnsubscribeToken() string {
+	token, err := newAutoDMUnsubscribeToken()
+	if err != nil {
+		return hex.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	}
+	return token
+}
+
+func newAutoDMUnsubscribeToken() (string, error) {
+	var buf [24]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
+}
+
 func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	if cfg != nil && cfg.FrequencyDailyLimit > 0 {
@@ -787,13 +923,15 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 	return out
 }
 
-func autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule) dto.AutoDMRecipientRuleItem {
+func (s *AutoDMService) autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule) dto.AutoDMRecipientRuleItem {
 	out := dto.AutoDMRecipientRuleItem{
 		ID:                rule.ID,
 		XAccountID:        rule.XAccountID,
 		RecipientUserID:   rule.RecipientUserID,
 		RecipientUsername: rule.RecipientUsername,
 		Status:            rule.Status,
+		UnsubscribeToken:  rule.UnsubscribeToken,
+		UnsubscribeURL:    s.autoDMUnsubscribeURL(rule.UnsubscribeToken),
 		Source:            rule.Source,
 		Reason:            rule.Reason,
 	}
@@ -804,4 +942,16 @@ func autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule) dto.AutoDMRecipie
 		out.UpdatedAt = rule.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	return out
+}
+
+func (s *AutoDMService) autoDMUnsubscribeURL(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	path := "/unsubscribe/" + url.PathEscape(token)
+	if strings.TrimSpace(s.frontendBaseURL) == "" {
+		return path
+	}
+	return strings.TrimRight(s.frontendBaseURL, "/") + path
 }

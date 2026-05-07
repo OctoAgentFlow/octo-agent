@@ -478,6 +478,8 @@ export const dict: I18nDict = {
   "automation.dmReview.blacklist": "拉黑用户",
   "automation.dmReview.unsubscribe": "标记退订",
   "automation.dmReview.rules": "收件人名单规则",
+  "automation.dmReview.import": "导入白名单",
+  "automation.dmReview.importCta": "导入",
   "automation.dmReview.approve": "批准",
   "automation.dmReview.block": "拦截",
   "automation.runtime.title": "运行状态",

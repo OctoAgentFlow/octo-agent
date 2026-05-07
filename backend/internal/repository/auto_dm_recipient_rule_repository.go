@@ -47,6 +47,19 @@ func (r *AutoDMRecipientRuleRepository) GetByRecipient(userID, accountID uint, r
 	return &row, nil
 }
 
+func (r *AutoDMRecipientRuleRepository) GetByToken(token string) (*model.AutoDMRecipientRule, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var row model.AutoDMRecipientRule
+	err := r.DB.Where("unsubscribe_token = ?", token).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *AutoDMRecipientRuleRepository) CountAllowlisted(userID, accountID uint) (int64, error) {
 	var n int64
 	err := r.DB.Model(&model.AutoDMRecipientRule{}).
@@ -55,13 +68,14 @@ func (r *AutoDMRecipientRuleRepository) CountAllowlisted(userID, accountID uint)
 	return n, err
 }
 
-func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipientUserID, username, status, source, reason string, at time.Time) (*model.AutoDMRecipientRule, error) {
+func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipientUserID, username, status, source, reason, unsubscribeToken string, at time.Time) (*model.AutoDMRecipientRule, error) {
 	rule := &model.AutoDMRecipientRule{
 		UserID:            userID,
 		XAccountID:        accountID,
 		RecipientUserID:   strings.TrimSpace(recipientUserID),
 		RecipientUsername: strings.TrimSpace(username),
 		Status:            strings.TrimSpace(status),
+		UnsubscribeToken:  strings.TrimSpace(unsubscribeToken),
 		Source:            strings.TrimSpace(source),
 		Reason:            strings.TrimSpace(reason),
 		LastMatchedAt:     &at,
@@ -71,6 +85,7 @@ func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipient
 		DoUpdates: clause.Assignments(map[string]any{
 			"recipient_username": rule.RecipientUsername,
 			"status":             rule.Status,
+			"unsubscribe_token":  gorm.Expr("CASE WHEN unsubscribe_token = '' OR unsubscribe_token IS NULL THEN ? ELSE unsubscribe_token END", rule.UnsubscribeToken),
 			"source":             rule.Source,
 			"reason":             rule.Reason,
 			"last_matched_at":    at,
@@ -81,6 +96,22 @@ func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipient
 		return nil, err
 	}
 	return r.GetByRecipient(userID, accountID, recipientUserID)
+}
+
+func (r *AutoDMRecipientRuleRepository) MarkUnsubscribedByToken(token string, at time.Time) (*model.AutoDMRecipientRule, error) {
+	row, err := r.GetByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.DB.Model(&model.AutoDMRecipientRule{}).Where("id = ?", row.ID).Updates(map[string]any{
+		"status":          AutoDMRecipientUnsubscribed,
+		"source":          "preference_center",
+		"reason":          "Recipient unsubscribed from public preference center.",
+		"last_matched_at": at,
+	}).Error; err != nil {
+		return nil, err
+	}
+	return r.GetByToken(token)
 }
 
 func IsAutoDMRecipientRuleStatus(status string) bool {

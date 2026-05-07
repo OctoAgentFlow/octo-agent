@@ -93,6 +93,8 @@ type AutoDMRecipientRuleItem struct {
 	RecipientUserID   string `json:"recipient_user_id"`
 	RecipientUsername string `json:"recipient_username,omitempty"`
 	Status            string `json:"status"`
+	UnsubscribeToken  string `json:"unsubscribe_token,omitempty"`
+	UnsubscribeURL    string `json:"unsubscribe_url,omitempty"`
 	Source            string `json:"source,omitempty"`
 	Reason            string `json:"reason,omitempty"`
 	LastMatchedAt     string `json:"last_matched_at,omitempty"`
@@ -106,4 +108,21 @@ type AutoDMRecipientRulesResponse struct {
 type AutoDMRecipientRuleRequest struct {
 	Status string `json:"status" binding:"required"`
 	Reason string `json:"reason"`
+}
+
+type AutoDMRecipientImportRequest struct {
+	XAccountID uint   `json:"x_account_id"`
+	CSV        string `json:"csv" binding:"required"`
+}
+
+type AutoDMRecipientImportResponse struct {
+	Imported int                       `json:"imported"`
+	Skipped  int                       `json:"skipped"`
+	Items    []AutoDMRecipientRuleItem `json:"items"`
+	Errors   []string                  `json:"errors,omitempty"`
+}
+
+type AutoDMPreferenceResponse struct {
+	RecipientUsername string `json:"recipient_username,omitempty"`
+	Status            string `json:"status"`
 }

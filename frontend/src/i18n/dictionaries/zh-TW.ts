@@ -302,6 +302,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "觸發 X 頻率限制，已延後重試。",
   "activity.preview.replySuccess": "已在 X 上自動回覆了一則留言。",
   "activity.preview.replyFailed": "在 X 上自動回覆留言失敗。",
+  "activity.preview.dmDryRunReview": "自動私訊已建立一筆待審核記錄，尚未送出真實私訊。",
+  "activity.preview.dmCapabilityMissing": "自動私訊未送出，因為尚未確認 X 私訊權限。",
+  "activity.preview.dmSkipped": "自動私訊本次已略過，因為帳號設定不完整。",
   "activity.reply.story": "{account} 回覆了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功發布一則內容。",
 

@@ -18,7 +18,7 @@ Base path: `/api/v1`
 | `account_id` | 可选：按当前用户已连接的 X 账号过滤；非法账号返回 `400` |
 | `error_reason` | 可选：按失败原因精确过滤；主要用于从 Analytics 的 Top Failure Reasons 跳转排查 |
 
-- **数据来源**：数据库表 `activity_logs`（发帖/自动回复等写入的真实记录）。失败类记录可含 **`error_message`**。`type=reply` 且成功时可能含 **`reply_*`** 字段（被回复用户、原文与回复预览），供前端拼叙事文案。新活动日志使用 `x_account_id`，旧活动日志仍可通过 `account_handle` 兼容账号筛选。
+- **数据来源**：数据库表 `activity_logs`（发帖/自动回复/Auto DM dry-run 等写入的真实记录）。失败类记录可含 **`error_message`**。`type=reply` 且成功时可能含 **`reply_*`** 字段（被回复用户、原文与回复预览），供前端拼叙事文案。`type=dm` 当前由 Auto DM dry-run / capability-check 写入 `review` 或 `failed` 记录，用于观测权限、账号配置和人工审核状态。新活动日志使用 `x_account_id`，旧活动日志仍可通过 `account_handle` 兼容账号筛选。
 
 ### 示例响应
 

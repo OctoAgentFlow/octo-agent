@@ -84,4 +84,4 @@ Base path: `/api/v1`
 
 - **Auto Post**：调度器每分钟扫描 `scheduled` 且到期帖子（需 `post` 模块 `enabled`）。
 - **Auto Reply**：调度器每分钟对开启 `reply` 的用户拉取评论并回复（固定模板，无 AI）。
-- **Auto DM**：仅有配置行与开关，**尚无调度执行器**（未实现自动发私信）。
+- **Auto DM**：调度器每分钟扫描到期 `dm` 配置；当前为 **dry-run / capability-check** 阶段，会写入 `activity_logs type=dm` 的 `review` 或 `failed` 记录并推进 `last_run_at` / `next_run_at`，尚不会发送真实私信。

@@ -302,6 +302,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "X のレート制限のため、公開を後ろにずらしました。",
   "activity.preview.replySuccess": "X のコメントに自動返信しました。",
   "activity.preview.replyFailed": "X のコメントへの自動返信に失敗しました。",
+  "activity.preview.dmDryRunReview": "Auto DM のドライランで、実送信前のレビュー項目を作成しました。",
+  "activity.preview.dmCapabilityMissing": "X の DM 権限が未確認のため、Auto DM は送信できませんでした。",
+  "activity.preview.dmSkipped": "アカウント設定が不完全なため、今回の Auto DM はスキップされました。",
   "activity.reply.story": "{account} が {them} に返信: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} が投稿を公開しました。",
 

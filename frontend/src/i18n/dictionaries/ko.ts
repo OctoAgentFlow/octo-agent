@@ -302,6 +302,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "X 속도 제한으로 게시가 나중으로 연기되었습니다.",
   "activity.preview.replySuccess": "X 댓글에 자동 답글을 보냈습니다.",
   "activity.preview.replyFailed": "X 댓글 자동 답글에 실패했습니다.",
+  "activity.preview.dmDryRunReview": "Auto DM 드라이런이 실제 전송 전 검토 항목을 만들었습니다.",
+  "activity.preview.dmCapabilityMissing": "X DM 권한이 확인되지 않아 Auto DM을 보낼 수 없습니다.",
+  "activity.preview.dmSkipped": "계정 설정이 불완전해 이번 Auto DM 실행을 건너뛰었습니다.",
   "activity.reply.story": "{account} 계정이 {them}에 답글: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 계정이 게시물을 발행했습니다.",
 

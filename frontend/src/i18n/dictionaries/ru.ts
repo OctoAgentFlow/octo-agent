@@ -302,6 +302,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "Лимит X: публикация отложена.",
   "activity.preview.replySuccess": "Автоответ на комментарий в X отправлен.",
   "activity.preview.replyFailed": "Не удалось автоответить на комментарий в X.",
+  "activity.preview.dmDryRunReview": "Dry-run Auto DM создал запись на проверку до реальной отправки.",
+  "activity.preview.dmCapabilityMissing": "Auto DM не отправлен: право на X DM не подтверждено.",
+  "activity.preview.dmSkipped": "Auto DM пропустил запуск из-за неполной настройки аккаунта.",
   "activity.reply.story": "{account} ответил(а) {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} успешно опубликовал(а) пост.",
 

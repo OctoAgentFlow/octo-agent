@@ -10,7 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func Start(authService *service.AuthService, postService *service.PostService, postRepo *repository.PostRepository, autoReply *service.AutoReplyService) {
+func Start(
+	authService *service.AuthService,
+	postService *service.PostService,
+	postRepo *repository.PostRepository,
+	autoReply *service.AutoReplyService,
+	autoDM *service.AutoDMService,
+) {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -24,10 +30,12 @@ func Start(authService *service.AuthService, postService *service.PostService, p
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
+		RunAutoDMOnce(context.Background(), autoDM)
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
 			RunAutoReplyOnce(context.Background(), autoReply)
+			RunAutoDMOnce(context.Background(), autoDM)
 		}
 	}()
 }

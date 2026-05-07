@@ -22,14 +22,27 @@ type AnalyticsService struct {
 	activityRepo *repository.ActivityRepository
 	postRepo     *repository.PostRepository
 	accountRepo  *repository.TwitterAccountRepository
+	dmRuleRepo   *repository.AutoDMRecipientRuleRepository
+	dmImportRepo *repository.AutoDMRecipientImportRepository
+	dmTaskRepo   *repository.AutoDMTaskRepository
 }
 
 func NewAnalyticsService(
 	activityRepo *repository.ActivityRepository,
 	postRepo *repository.PostRepository,
 	accountRepo *repository.TwitterAccountRepository,
+	dmRuleRepo *repository.AutoDMRecipientRuleRepository,
+	dmImportRepo *repository.AutoDMRecipientImportRepository,
+	dmTaskRepo *repository.AutoDMTaskRepository,
 ) *AnalyticsService {
-	return &AnalyticsService{activityRepo: activityRepo, postRepo: postRepo, accountRepo: accountRepo}
+	return &AnalyticsService{
+		activityRepo: activityRepo,
+		postRepo:     postRepo,
+		accountRepo:  accountRepo,
+		dmRuleRepo:   dmRuleRepo,
+		dmImportRepo: dmImportRepo,
+		dmTaskRepo:   dmTaskRepo,
+	}
 }
 
 func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuery) (*dto.AnalyticsOverviewResponse, error) {
@@ -92,6 +105,10 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
+	autoDMOps, err := s.autoDMOperations(userID, start, now, accountID, accountHandle)
+	if err != nil {
+		return nil, err
+	}
 
 	statusMap := make(map[string]int64, len(statusCounts))
 	var total int64
@@ -146,7 +163,48 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 		FailureReasons:      buildFailureReasons(failureRows),
 		AttentionItems:      buildAttentionItems(attentionRows),
 		AccountBreakdown:    buildAccountBreakdown(accounts, accountActivityRows, accountPostRows, accountID),
+		AutoDMOperations:    autoDMOps,
 	}, nil
+}
+
+func (s *AnalyticsService) autoDMOperations(userID uint, start, now time.Time, accountID uint, accountHandle string) (dto.AnalyticsAutoDMOperations, error) {
+	var out dto.AnalyticsAutoDMOperations
+	if s.dmRuleRepo != nil {
+		rows, err := s.dmRuleRepo.CountByStatus(userID, accountID)
+		if err != nil {
+			return out, err
+		}
+		out.Recipients = buildAutoDMRecipientSummary(rows)
+	}
+	if s.dmImportRepo != nil {
+		summary, err := s.dmImportRepo.SummaryBetween(userID, start, now, accountID)
+		if err != nil {
+			return out, err
+		}
+		errorRows, err := s.dmImportRepo.ListRecentErrorsBetween(userID, start, now, accountID, 5)
+		if err != nil {
+			return out, err
+		}
+		out.Imports = buildAutoDMImportSummary(summary, errorRows)
+	}
+	if s.dmTaskRepo != nil {
+		statusRows, retryable, err := s.dmTaskRepo.CountByStatusBetween(userID, start, now, accountID)
+		if err != nil {
+			return out, err
+		}
+		failureRows, err := s.dmTaskRepo.CountFailureCategoriesBetween(userID, start, now, accountID, 5)
+		if err != nil {
+			return out, err
+		}
+		out.Tasks = buildAutoDMTaskSummary(statusRows, retryable)
+		out.FailureCategories = buildAutoDMFailureCategories(failureRows)
+	}
+	recentRows, err := s.activityRepo.ListDMOperationEventsBetween(userID, start, now, accountID, accountHandle, 6)
+	if err != nil {
+		return out, err
+	}
+	out.RecentEvents = buildAutoDMEvents(recentRows)
+	return out, nil
 }
 
 func normalizeAnalyticsRange(value string) (int, error) {
@@ -248,6 +306,93 @@ func buildAttentionItems(rows []model.ActivityLog) []dto.AnalyticsAttentionItem 
 			PreviewKey:    row.PreviewKey,
 			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
 			ErrorMessage:  row.ErrorMessage,
+		})
+	}
+	return out
+}
+
+func buildAutoDMRecipientSummary(rows []repository.AutoDMRecipientRuleStatusCount) dto.AnalyticsAutoDMRecipientSummary {
+	var out dto.AnalyticsAutoDMRecipientSummary
+	for _, row := range rows {
+		out.Total += row.Count
+		switch row.Status {
+		case repository.AutoDMRecipientAllowlisted:
+			out.Allowlisted += row.Count
+		case repository.AutoDMRecipientBlocked:
+			out.Blocked += row.Count
+		case repository.AutoDMRecipientUnsubscribed:
+			out.Unsubscribed += row.Count
+		}
+	}
+	return out
+}
+
+func buildAutoDMImportSummary(summary repository.AutoDMRecipientImportSummary, rows []model.AutoDMRecipientImport) dto.AnalyticsAutoDMImportSummary {
+	out := dto.AnalyticsAutoDMImportSummary{
+		Batches:      summary.Batches,
+		Imported:     summary.Imported,
+		Skipped:      summary.Skipped,
+		ErrorBatches: summary.ErrorBatches,
+		RecentErrors: []dto.AnalyticsAutoDMImportError{},
+	}
+	for _, row := range rows {
+		out.RecentErrors = append(out.RecentErrors, dto.AnalyticsAutoDMImportError{
+			ID:         row.ID,
+			XAccountID: row.XAccountID,
+			Errors:     parseAutoDMImportErrors(row.ErrorSummary),
+			ImportedAt: row.ImportedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return out
+}
+
+func buildAutoDMTaskSummary(rows []repository.AutoDMTaskStatusCount, retryable int64) dto.AnalyticsAutoDMTaskSummary {
+	var out dto.AnalyticsAutoDMTaskSummary
+	out.Retryable = retryable
+	for _, row := range rows {
+		out.Total += row.Count
+		switch row.Status {
+		case "review":
+			out.Review += row.Count
+		case "approved":
+			out.Approved += row.Count
+		case "sending":
+			out.Sending += row.Count
+		case "sent":
+			out.Sent += row.Count
+		case "failed":
+			out.Failed += row.Count
+		case "blocked":
+			out.Blocked += row.Count
+		}
+	}
+	out.NeedsAttention = out.Review + out.Failed + out.Blocked + out.Retryable
+	return out
+}
+
+func buildAutoDMFailureCategories(rows []repository.AutoDMTaskFailureCategoryCount) []dto.AnalyticsAutoDMFailureCategory {
+	out := make([]dto.AnalyticsAutoDMFailureCategory, 0, len(rows))
+	for _, row := range rows {
+		item := dto.AnalyticsAutoDMFailureCategory{Category: row.Category, Count: row.Count}
+		if row.LastAt != nil {
+			item.LastAt = row.LastAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func buildAutoDMEvents(rows []model.ActivityLog) []dto.AnalyticsAutoDMEvent {
+	out := make([]dto.AnalyticsAutoDMEvent, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, dto.AnalyticsAutoDMEvent{
+			ID:            row.ID,
+			XAccountID:    row.XAccountID,
+			Status:        row.Status,
+			AccountHandle: row.AccountHandle,
+			PreviewKey:    row.PreviewKey,
+			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
+			Message:       row.ErrorMessage,
 		})
 	}
 	return out

@@ -25,6 +25,11 @@ type AutoDMRecipientRuleListQuery struct {
 	Limit      int
 }
 
+type AutoDMRecipientRuleStatusCount struct {
+	Status string
+	Count  int64
+}
+
 func NewAutoDMRecipientRuleRepository(db *gorm.DB) *AutoDMRecipientRuleRepository {
 	return &AutoDMRecipientRuleRepository{DB: db}
 }
@@ -89,6 +94,18 @@ func (r *AutoDMRecipientRuleRepository) CountAllowlisted(userID, accountID uint)
 		Where("user_id = ? AND x_account_id = ? AND status = ?", userID, accountID, AutoDMRecipientAllowlisted).
 		Count(&n).Error
 	return n, err
+}
+
+func (r *AutoDMRecipientRuleRepository) CountByStatus(userID, accountID uint) ([]AutoDMRecipientRuleStatusCount, error) {
+	var rows []AutoDMRecipientRuleStatusCount
+	q := r.DB.Model(&model.AutoDMRecipientRule{}).
+		Select("status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	err := q.Group("status").Scan(&rows).Error
+	return rows, err
 }
 
 func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipientUserID, username, status, source, reason, unsubscribeToken string, at time.Time) (*model.AutoDMRecipientRule, error) {

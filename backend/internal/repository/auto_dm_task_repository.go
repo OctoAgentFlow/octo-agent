@@ -12,6 +12,17 @@ import (
 
 type AutoDMTaskRepository struct{ DB *gorm.DB }
 
+type AutoDMTaskStatusCount struct {
+	Status string
+	Count  int64
+}
+
+type AutoDMTaskFailureCategoryCount struct {
+	Category string
+	Count    int64
+	LastAt   *time.Time
+}
+
 func NewAutoDMTaskRepository(db *gorm.DB) *AutoDMTaskRepository {
 	return &AutoDMTaskRepository{DB: db}
 }
@@ -84,6 +95,63 @@ func (r *AutoDMTaskRepository) HasTaskForRecipient(userID, accountID uint, recip
 		return false, err
 	}
 	return n > 0, nil
+}
+
+func (r *AutoDMTaskRepository) CountByStatusBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMTaskStatusCount, int64, error) {
+	var rows []AutoDMTaskStatusCount
+	q := r.DB.Model(&model.AutoDMTask{}).
+		Select("status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("generated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("generated_at < ?", to)
+	}
+	err := q.Group("status").Scan(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	var retryable int64
+	retryQ := r.DB.Model(&model.AutoDMTask{}).
+		Where("user_id = ? AND retryable = ?", userID, true)
+	if accountID > 0 {
+		retryQ = retryQ.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		retryQ = retryQ.Where("generated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		retryQ = retryQ.Where("generated_at < ?", to)
+	}
+	err = retryQ.Count(&retryable).Error
+	return rows, retryable, err
+}
+
+func (r *AutoDMTaskRepository) CountFailureCategoriesBetween(userID uint, from, to time.Time, accountID uint, limit int) ([]AutoDMTaskFailureCategoryCount, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 5
+	}
+	var rows []AutoDMTaskFailureCategoryCount
+	categoryExpr := "COALESCE(NULLIF(TRIM(failure_category), ''), 'unknown')"
+	q := r.DB.Model(&model.AutoDMTask{}).
+		Select(categoryExpr+" AS category, COUNT(*) AS count, MAX(COALESCE(last_attempt_at, generated_at)) AS last_at").
+		Where("user_id = ? AND status IN ?", userID, []string{"failed", "blocked"}).
+		Where("(failure_category <> '' OR failure_reason <> '')")
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("generated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("generated_at < ?", to)
+	}
+	err := q.Group(categoryExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
 }
 
 func (r *AutoDMTaskRepository) Approve(task *model.AutoDMTask, at time.Time) error {

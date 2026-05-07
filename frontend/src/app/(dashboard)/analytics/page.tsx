@@ -57,6 +57,11 @@ function compactText(value: string, max = 130) {
   return `${trimmed.slice(0, max - 1)}…`;
 }
 
+function percent(value: number, total: number) {
+  if (total <= 0) return 0;
+  return Math.round((value / total) * 100);
+}
+
 function attentionRecord(item: AnalyticsOverview["attention_items"][number]): ActivityRecord {
   return {
     id: String(item.id),
@@ -380,6 +385,137 @@ export default function AnalyticsPage() {
             );
           })}
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title={t("analytics.autoDMOps.title")}
+          description={t("analytics.autoDMOps.description")}
+          right={
+            <Link
+              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              href="/agents"
+            >
+              {t("analytics.autoDMOps.manage")}
+            </Link>
+          }
+        />
+        <div className="grid gap-3 xl:grid-cols-3">
+          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.recipients")}</p>
+                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.recipientsDetail")}</p>
+              </div>
+              <p className="text-2xl font-semibold text-white">{overview.auto_dm_operations.recipients.total}</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              {[
+                ["allowlisted", overview.auto_dm_operations.recipients.allowlisted, "bg-emerald-300/80"],
+                ["blocked", overview.auto_dm_operations.recipients.blocked, "bg-rose-300/80"],
+                ["unsubscribed", overview.auto_dm_operations.recipients.unsubscribed, "bg-amber-300/80"],
+              ].map(([key, value, color]) => {
+                const n = Number(value);
+                return (
+                  <div key={key}>
+                    <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-white/65">{t(`analytics.autoDMOps.${key}`)}</span>
+                      <span className="font-semibold text-white">{n}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className={`h-full rounded-full ${color}`} style={{ width: `${percent(n, overview.auto_dm_operations.recipients.total)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.taskRisk")}</p>
+                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.taskRiskDetail")}</p>
+              </div>
+              <p className="text-2xl font-semibold text-amber-100">{overview.auto_dm_operations.tasks.needs_attention}</p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <AccountMetric label={t("analytics.status.review")} value={overview.auto_dm_operations.tasks.review} tone="amber" />
+              <AccountMetric label={t("analytics.status.failed")} value={overview.auto_dm_operations.tasks.failed} tone="rose" />
+              <AccountMetric label={t("analytics.autoDMOps.retryable")} value={overview.auto_dm_operations.tasks.retryable} tone="amber" />
+              <AccountMetric label={t("analytics.autoDMOps.sent")} value={overview.auto_dm_operations.tasks.sent} />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.importQuality")}</p>
+                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.importQualityDetail")}</p>
+              </div>
+              <p className="text-2xl font-semibold text-white">{overview.auto_dm_operations.imports.batches}</p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <AccountMetric label={t("analytics.autoDMOps.imported")} value={overview.auto_dm_operations.imports.imported} />
+              <AccountMetric label={t("analytics.autoDMOps.skipped")} value={overview.auto_dm_operations.imports.skipped} tone="amber" />
+              <AccountMetric label={t("analytics.autoDMOps.errorBatches")} value={overview.auto_dm_operations.imports.error_batches} tone="rose" />
+              <AccountMetric label={t("analytics.autoDMOps.batches")} value={overview.auto_dm_operations.imports.batches} />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-4">
+            <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.failureCategories")}</p>
+            {overview.auto_dm_operations.failure_categories.length === 0 ? (
+              <p className="text-sm text-white/50">{t("analytics.autoDMOps.noFailures")}</p>
+            ) : (
+              <div className="space-y-2">
+                {overview.auto_dm_operations.failure_categories.map((item) => (
+                  <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-md bg-white/[0.03] px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-medium text-white">{item.category || t("analytics.failureReasons.unknown")}</p>
+                      {item.last_at ? <p className="mt-1 text-xs text-white/45">{formatDateTime(item.last_at)}</p> : null}
+                    </div>
+                    <span className="shrink-0 rounded-md bg-rose-400/10 px-2 py-1 text-xs font-semibold text-rose-100">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-4">
+            <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.recentEvents")}</p>
+            {overview.auto_dm_operations.recent_events.length === 0 ? (
+              <p className="text-sm text-white/50">{t("analytics.autoDMOps.noEvents")}</p>
+            ) : (
+              <div className="space-y-2">
+                {overview.auto_dm_operations.recent_events.map((item) => (
+                  <div key={item.id} className="rounded-md bg-white/[0.03] px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
+                      <span className="text-xs text-white/45">{formatDateTime(item.executed_at)}</span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 break-words text-xs text-white/55">{item.message || item.account_handle || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {overview.auto_dm_operations.imports.recent_errors.length > 0 ? (
+          <div className="mt-4 rounded-md border border-amber-300/15 bg-amber-300/[0.04] p-4">
+            <p className="mb-3 text-sm font-semibold text-amber-100">{t("analytics.autoDMOps.recentImportErrors")}</p>
+            <div className="space-y-2">
+              {overview.auto_dm_operations.imports.recent_errors.map((item) => (
+                <div key={item.id} className="text-xs text-amber-100/80">
+                  {formatDateTime(item.imported_at)} · {compactText(item.errors.join(" · "), 180)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Card>

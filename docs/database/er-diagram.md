@@ -19,7 +19,7 @@ flowchart TD
   User -->|1:N| Task
 ```
 
-> `Post` 已有完整 CRUD、手动执行与调度发推链路；`BillingOrder` 配合 `BillingChainTx` 做链上确认；`Agent` / `Task` 与对外 `GET /agents` 仍在演进中。
+> `Post` 已有完整 CRUD、手动执行与调度发推链路；`BillingOrder` 配合 `BillingChainTx` 做链上确认；当前 `GET /agents` 作为兼容列表读取 `automation_configs` 状态，独立 `Agent` / `Task` 实体仍供后续执行器演进。
 
 ## 规划中目标关系（后续迭代）
 

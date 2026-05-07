@@ -49,7 +49,7 @@
 
 ### agents / tasks
 
-- 用途：历史 scaffold 实体；**`GET /agents` 仍为占位**；任务表供后续执行器使用
+- 用途：历史 scaffold 实体；当前 `GET /agents` 已作为兼容接口读取 `automation_configs` 的真实状态，尚未使用独立 `agents` 表；任务表供后续执行器使用
 
 ### billing_orders
 

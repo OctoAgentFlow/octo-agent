@@ -12,6 +12,6 @@
 | [analytics.md](./analytics.md) | 分析概览（7 日活动、自动化拆分、内容状态统计） |
 | [billing.md](./billing.md) | 订阅/套餐/支付方式（YAML）、下单与订单查询、BEP20 Webhook |
 | [post.md](./post.md) | 帖子 CRUD（真实持久化） |
-| [agent.md](./agent.md) | Agent 列表（**占位实现**；与 `automations` 无关） |
+| [agent.md](./agent.md) | Agent 兼容列表（读取自动化配置的真实状态） |
 
 环境与 OAuth、邮件：见 [deployment/env.md](../deployment/env.md)。

@@ -171,9 +171,7 @@ Base path: `/api/v1`
 - **Activities**：`GET /activities`（分页 query）
 - **Billing**：`GET /billing/subscription`、`/plans`、`/payment-methods`、`POST /billing/orders`、`GET /billing/orders/{id}`；链上确认见 `POST /billing/webhooks/onchain`（[billing.md](./billing.md)）
 
-仍为 **后端占位** 的接口：
-
-- `GET /agents`（见 [agent.md](./agent.md)）
+Agent 兼容列表见 [agent.md](./agent.md)。
 
 帖子接口见 [post.md](./post.md)（CRUD、execute 与定时调度均已实现）。
 

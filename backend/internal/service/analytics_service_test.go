@@ -1,11 +1,44 @@
 package service
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"octo-agent/backend/internal/repository"
 )
+
+func TestNormalizeAnalyticsRange(t *testing.T) {
+	cases := []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{name: "default", value: "", want: 7},
+		{name: "seven days", value: "7d", want: 7},
+		{name: "thirty days", value: "30d", want: 30},
+		{name: "invalid", value: "14d", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeAnalyticsRange(tc.value)
+			if tc.wantErr {
+				if !errors.Is(err, ErrInvalidAnalyticsRange) {
+					t.Fatalf("expected ErrInvalidAnalyticsRange, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
 
 func TestBuildAutomationBreakdownIncludesDefaultTypes(t *testing.T) {
 	got := buildAutomationBreakdown([]repository.ActivityTypeStatusCount{

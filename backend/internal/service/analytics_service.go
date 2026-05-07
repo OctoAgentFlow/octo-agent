@@ -1,13 +1,16 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/repository"
 )
 
-const analyticsRangeDays = 7
+const defaultAnalyticsRangeDays = 7
+
+var ErrInvalidAnalyticsRange = errors.New("analytics range must be 7d or 30d")
 
 type AnalyticsService struct {
 	activityRepo *repository.ActivityRepository
@@ -18,9 +21,13 @@ func NewAnalyticsService(activityRepo *repository.ActivityRepository, postRepo *
 	return &AnalyticsService{activityRepo: activityRepo, postRepo: postRepo}
 }
 
-func (s *AnalyticsService) Overview(userID uint) (*dto.AnalyticsOverviewResponse, error) {
+func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuery) (*dto.AnalyticsOverviewResponse, error) {
+	rangeDays, err := normalizeAnalyticsRange(query.Range)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
-	start := startOfUTCDay(now).AddDate(0, 0, -(analyticsRangeDays - 1))
+	start := startOfUTCDay(now).AddDate(0, 0, -(rangeDays - 1))
 
 	statusCounts, err := s.activityRepo.CountByStatusBetween(userID, start, now)
 	if err != nil {
@@ -69,9 +76,13 @@ func (s *AnalyticsService) Overview(userID uint) (*dto.AnalyticsOverviewResponse
 	}
 
 	return &dto.AnalyticsOverviewResponse{
-		RangeDays:   analyticsRangeDays,
+		RangeDays:   rangeDays,
 		GeneratedAt: now.Format(time.RFC3339),
 		ActivitySummary: dto.AnalyticsActivitySummary{
+			Total:          total,
+			Success:        success,
+			Failed:         failed,
+			Review:         review,
 			Total7d:        total,
 			Success7d:      success,
 			Failed7d:       failed,
@@ -88,8 +99,19 @@ func (s *AnalyticsService) Overview(userID uint) (*dto.AnalyticsOverviewResponse
 			Failed:     postMap["failed"],
 		},
 		AutomationBreakdown: buildAutomationBreakdown(typeStatusCounts),
-		DailyActivity:       buildDailyActivity(start, analyticsRangeDays, dailyCounts),
+		DailyActivity:       buildDailyActivity(start, rangeDays, dailyCounts),
 	}, nil
+}
+
+func normalizeAnalyticsRange(value string) (int, error) {
+	switch value {
+	case "", "7d":
+		return defaultAnalyticsRangeDays, nil
+	case "30d":
+		return 30, nil
+	default:
+		return 0, ErrInvalidAnalyticsRange
+	}
 }
 
 func startOfUTCDay(t time.Time) time.Time {

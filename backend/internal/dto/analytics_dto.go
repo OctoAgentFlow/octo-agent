@@ -14,6 +14,7 @@ type AnalyticsOverviewResponse struct {
 	DailyActivity       []AnalyticsDailyActivity    `json:"daily_activity"`
 	FailureReasons      []AnalyticsFailureReason    `json:"failure_reasons"`
 	AttentionItems      []AnalyticsAttentionItem    `json:"attention_items"`
+	AccountBreakdown    []AnalyticsAccountMetric    `json:"account_breakdown"`
 }
 
 type AnalyticsActivitySummary struct {
@@ -69,4 +70,19 @@ type AnalyticsAttentionItem struct {
 	PreviewKey    string `json:"preview_key"`
 	ExecutedAt    string `json:"executed_at"`
 	ErrorMessage  string `json:"error_message,omitempty"`
+}
+
+type AnalyticsAccountMetric struct {
+	AccountID      uint   `json:"account_id"`
+	Username       string `json:"username"`
+	DisplayName    string `json:"display_name"`
+	AvatarURL      string `json:"avatar_url,omitempty"`
+	Followers      string `json:"followers,omitempty"`
+	ActivityTotal  int64  `json:"activity_total"`
+	Success        int64  `json:"success"`
+	Failed         int64  `json:"failed"`
+	Review         int64  `json:"review"`
+	SuccessRatePct int    `json:"success_rate_pct"`
+	PostTotal      int64  `json:"post_total"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
 }

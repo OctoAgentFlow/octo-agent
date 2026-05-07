@@ -80,6 +80,18 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
+	accounts, err := s.accountRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	accountActivityRows, err := s.activityRepo.CountByAccountAndStatusBetween(userID, start, now)
+	if err != nil {
+		return nil, err
+	}
+	accountPostRows, err := s.postRepo.CountByAccount(userID)
+	if err != nil {
+		return nil, err
+	}
 
 	statusMap := make(map[string]int64, len(statusCounts))
 	var total int64
@@ -133,6 +145,7 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 		DailyActivity:       buildDailyActivity(start, rangeDays, dailyCounts),
 		FailureReasons:      buildFailureReasons(failureRows),
 		AttentionItems:      buildAttentionItems(attentionRows),
+		AccountBreakdown:    buildAccountBreakdown(accounts, accountActivityRows, accountPostRows, accountID),
 	}, nil
 }
 
@@ -236,6 +249,102 @@ func buildAttentionItems(rows []model.ActivityLog) []dto.AnalyticsAttentionItem 
 			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
 			ErrorMessage:  row.ErrorMessage,
 		})
+	}
+	return out
+}
+
+func buildAccountBreakdown(
+	accounts []model.TwitterAccount,
+	activityRows []repository.ActivityAccountStatusCount,
+	postRows []repository.PostAccountCount,
+	filterAccountID uint,
+) []dto.AnalyticsAccountMetric {
+	type bucket struct {
+		total  int64
+		succ   int64
+		fail   int64
+		review int64
+		last   *time.Time
+	}
+	activityByID := make(map[uint]*bucket)
+	activityByHandle := make(map[string]*bucket)
+	for _, row := range activityRows {
+		var b *bucket
+		if row.AccountID > 0 {
+			b = activityByID[row.AccountID]
+			if b == nil {
+				b = &bucket{}
+				activityByID[row.AccountID] = b
+			}
+		} else {
+			handle := row.Handle
+			b = activityByHandle[handle]
+			if b == nil {
+				b = &bucket{}
+				activityByHandle[handle] = b
+			}
+		}
+		b.total += row.Count
+		switch row.Status {
+		case "success":
+			b.succ += row.Count
+		case "failed":
+			b.fail += row.Count
+		case "review":
+			b.review += row.Count
+		}
+		if row.LastAt != nil && (b.last == nil || row.LastAt.After(*b.last)) {
+			t := *row.LastAt
+			b.last = &t
+		}
+	}
+
+	postsByID := make(map[uint]int64, len(postRows))
+	for _, row := range postRows {
+		postsByID[row.AccountID] = row.Count
+	}
+
+	out := make([]dto.AnalyticsAccountMetric, 0, len(accounts))
+	for _, account := range accounts {
+		if filterAccountID > 0 && account.ID != filterAccountID {
+			continue
+		}
+		handle := formatXAccountHandle(account.Username)
+		b := &bucket{}
+		if byID := activityByID[account.ID]; byID != nil {
+			*b = *byID
+		}
+		if byHandle := activityByHandle[handle]; byHandle != nil {
+			b.total += byHandle.total
+			b.succ += byHandle.succ
+			b.fail += byHandle.fail
+			b.review += byHandle.review
+			if byHandle.last != nil && (b.last == nil || byHandle.last.After(*b.last)) {
+				t := *byHandle.last
+				b.last = &t
+			}
+		}
+		successRate := 0
+		if denom := b.succ + b.fail; denom > 0 {
+			successRate = int((b.succ*100 + denom/2) / denom)
+		}
+		item := dto.AnalyticsAccountMetric{
+			AccountID:      account.ID,
+			Username:       account.Username,
+			DisplayName:    account.DisplayName,
+			AvatarURL:      account.AvatarURL,
+			Followers:      account.Followers,
+			ActivityTotal:  b.total,
+			Success:        b.succ,
+			Failed:         b.fail,
+			Review:         b.review,
+			SuccessRatePct: successRate,
+			PostTotal:      postsByID[account.ID],
+		}
+		if b.last != nil {
+			item.LastActivityAt = b.last.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
 	}
 	return out
 }

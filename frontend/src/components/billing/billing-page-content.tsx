@@ -1,4 +1,12 @@
-import type { CurrentSubscription, PaymentMethodOption, PaymentRecord, Plan } from "@/types/billing";
+import type {
+  BillingOpsAction,
+  BillingOpsSummary,
+  BillingOrderFilterState,
+  CurrentSubscription,
+  PaymentMethodOption,
+  PaymentRecord,
+  Plan,
+} from "@/types/billing";
 
 import { PaymentHistoryTable } from "./payment-history-table";
 import { PaymentMethodPanel } from "./payment-method-panel";
@@ -10,7 +18,15 @@ type BillingPageContentProps = {
   plans: Plan[];
   paymentMethods: PaymentMethodOption[];
   paymentRecords: PaymentRecord[];
+  opsSummary: BillingOpsSummary;
+  filters: BillingOrderFilterState;
+  onFiltersChange: (filters: BillingOrderFilterState) => void;
   onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
+  onOpsAction?: (
+    orderId: string,
+    action: BillingOpsAction,
+    payload?: { refundReason?: string; opsNote?: string }
+  ) => Promise<void>;
   onPaymentConfirmed?: () => void;
 };
 
@@ -19,7 +35,11 @@ export function BillingPageContent({
   plans,
   paymentMethods,
   paymentRecords,
+  opsSummary,
+  filters,
+  onFiltersChange,
   onConfirmTx,
+  onOpsAction,
   onPaymentConfirmed,
 }: BillingPageContentProps) {
   return (
@@ -27,7 +47,14 @@ export function BillingPageContent({
       <SubscriptionStatusCard subscription={subscription} />
       <PlanComparison plans={plans} />
       <PaymentMethodPanel paymentMethods={paymentMethods} onPaid={onPaymentConfirmed} />
-      <PaymentHistoryTable paymentRecords={paymentRecords} onConfirmTx={onConfirmTx} />
+      <PaymentHistoryTable
+        paymentRecords={paymentRecords}
+        opsSummary={opsSummary}
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+        onConfirmTx={onConfirmTx}
+        onOpsAction={onOpsAction}
+      />
     </div>
   );
 }

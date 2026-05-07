@@ -28,6 +28,22 @@ type BillingService struct {
 	cfg       *config.Config
 }
 
+const (
+	billingReconUnchecked   = "unchecked"
+	billingReconMatched     = "matched"
+	billingReconMismatch    = "mismatch"
+	billingReconNeedsReview = "needs_review"
+
+	billingReviewUnreviewed = "unreviewed"
+	billingReviewNeeded     = "review_needed"
+	billingReviewReviewed   = "reviewed"
+
+	billingRefundNone      = "none"
+	billingRefundRequested = "requested"
+	billingRefundRefunded  = "refunded"
+	billingRefundRejected  = "rejected"
+)
+
 func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, cfg *config.Config) *BillingService {
 	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, cfg: cfg}
 }
@@ -140,18 +156,21 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	exp := time.Now().UTC().Add(time.Duration(ttl) * time.Minute)
 
 	o := &model.BillingOrder{
-		UserID:          userID,
-		PlanCode:        req.PlanCode,
-		Amount:          plan.Amount,
-		Currency:        plan.Currency,
-		Method:          strings.ToUpper(strings.TrimSpace(req.Method)),
-		Network:         strings.ToUpper(strings.TrimSpace(pm.Network)),
-		TokenAddress:    strings.TrimSpace(pm.TokenAddress),
-		ReceiverAddress: strings.TrimSpace(pm.ReceiverAddress),
-		Status:          "pending",
-		ExpiredAt:       exp,
-		ChainID:         pm.ChainID,
-		TokenDecimals:   pm.Decimals,
+		UserID:               userID,
+		PlanCode:             req.PlanCode,
+		Amount:               plan.Amount,
+		Currency:             plan.Currency,
+		Method:               strings.ToUpper(strings.TrimSpace(req.Method)),
+		Network:              strings.ToUpper(strings.TrimSpace(pm.Network)),
+		TokenAddress:         strings.TrimSpace(pm.TokenAddress),
+		ReceiverAddress:      strings.TrimSpace(pm.ReceiverAddress),
+		Status:               "pending",
+		ExpiredAt:            exp,
+		ChainID:              pm.ChainID,
+		TokenDecimals:        pm.Decimals,
+		ReconciliationStatus: billingReconUnchecked,
+		ReviewStatus:         billingReviewUnreviewed,
+		RefundStatus:         billingRefundNone,
 	}
 	if o.Currency == "" {
 		o.Currency = "USDT"
@@ -187,11 +206,21 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 	return orderToDetailDTO(o), nil
 }
 
-func (s *BillingService) ListOrders(userID uint) (*dto.BillingOrderListResponse, error) {
+func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) (*dto.BillingOrderListResponse, error) {
 	if err := s.orderRepo.ExpireStaleByUser(userID, time.Now().UTC()); err != nil {
 		return nil, err
 	}
-	orders, err := s.orderRepo.ListByUser(userID, 20)
+	orders, total, err := s.orderRepo.ListByUser(userID, repository.BillingOrderListQuery{
+		Status:               req.Status,
+		ReconciliationStatus: req.ReconciliationStatus,
+		ReviewStatus:         req.ReviewStatus,
+		RefundStatus:         req.RefundStatus,
+		Limit:                req.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	summary, err := s.orderRepo.OpsSummaryByUser(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,24 +228,29 @@ func (s *BillingService) ListOrders(userID uint) (*dto.BillingOrderListResponse,
 	for i := range orders {
 		items = append(items, orderToListItemDTO(&orders[i]))
 	}
-	return &dto.BillingOrderListResponse{Items: items}, nil
+	return &dto.BillingOrderListResponse{Items: items, Total: total, OpsSummary: orderOpsSummaryToDTO(summary)}, nil
 }
 
 func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	out := &dto.BillingOrderDetailResponse{
-		OrderID:         strconv.FormatUint(uint64(o.ID), 10),
-		Amount:          o.Amount,
-		Currency:        o.Currency,
-		Network:         o.Network,
-		TokenAddress:    o.TokenAddress,
-		ReceiverAddress: o.ReceiverAddress,
-		ChainID:         o.ChainID,
-		ExpiredAt:       o.ExpiredAt.UTC().Format(time.RFC3339),
-		Status:          o.Status,
-		TxHash:          o.TxHash,
-		FailureReason:   o.FailureReason,
-		CanRetry:        canRetryBillingOrder(o, time.Now().UTC()),
-		NextAction:      billingOrderNextAction(o, time.Now().UTC()),
+		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
+		Amount:               o.Amount,
+		Currency:             o.Currency,
+		Network:              o.Network,
+		TokenAddress:         o.TokenAddress,
+		ReceiverAddress:      o.ReceiverAddress,
+		ChainID:              o.ChainID,
+		ExpiredAt:            o.ExpiredAt.UTC().Format(time.RFC3339),
+		Status:               o.Status,
+		TxHash:               o.TxHash,
+		FailureReason:        o.FailureReason,
+		CanRetry:             canRetryBillingOrder(o, time.Now().UTC()),
+		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
+		ReconciliationStatus: billingOrderReconStatus(o),
+		ReviewStatus:         billingOrderReviewStatus(o),
+		RefundStatus:         billingOrderRefundStatus(o),
+		RefundReason:         o.RefundReason,
+		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
 		s := o.PaidAt.UTC().Format(time.RFC3339)
@@ -225,24 +259,35 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
 	}
+	if o.ReviewedAt != nil {
+		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
+	}
+	if o.RefundMarkedAt != nil {
+		out.RefundMarkedAt = o.RefundMarkedAt.UTC().Format(time.RFC3339)
+	}
 	return out
 }
 
 func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	out := dto.BillingOrderListItem{
-		OrderID:       strconv.FormatUint(uint64(o.ID), 10),
-		PlanCode:      o.PlanCode,
-		Amount:        o.Amount,
-		Currency:      o.Currency,
-		Method:        o.Method,
-		Network:       o.Network,
-		Status:        o.Status,
-		TxHash:        o.TxHash,
-		CreatedAt:     o.CreatedAt.UTC().Format(time.RFC3339),
-		ExpiredAt:     o.ExpiredAt.UTC().Format(time.RFC3339),
-		FailureReason: o.FailureReason,
-		CanRetry:      canRetryBillingOrder(o, time.Now().UTC()),
-		NextAction:    billingOrderNextAction(o, time.Now().UTC()),
+		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
+		PlanCode:             o.PlanCode,
+		Amount:               o.Amount,
+		Currency:             o.Currency,
+		Method:               o.Method,
+		Network:              o.Network,
+		Status:               o.Status,
+		TxHash:               o.TxHash,
+		CreatedAt:            o.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiredAt:            o.ExpiredAt.UTC().Format(time.RFC3339),
+		FailureReason:        o.FailureReason,
+		CanRetry:             canRetryBillingOrder(o, time.Now().UTC()),
+		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
+		ReconciliationStatus: billingOrderReconStatus(o),
+		ReviewStatus:         billingOrderReviewStatus(o),
+		RefundStatus:         billingOrderRefundStatus(o),
+		RefundReason:         o.RefundReason,
+		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
 		out.PaidAt = o.PaidAt.UTC().Format(time.RFC3339)
@@ -250,7 +295,54 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
 	}
+	if o.ReviewedAt != nil {
+		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
+	}
+	if o.RefundMarkedAt != nil {
+		out.RefundMarkedAt = o.RefundMarkedAt.UTC().Format(time.RFC3339)
+	}
 	return out
+}
+
+func orderOpsSummaryToDTO(s repository.BillingOrderOpsSummary) dto.BillingOrderOpsSummary {
+	return dto.BillingOrderOpsSummary{
+		Total:           s.Total,
+		Pending:         s.Pending,
+		Paid:            s.Paid,
+		Failed:          s.Failed,
+		Expired:         s.Expired,
+		Unchecked:       s.Unchecked,
+		Matched:         s.Matched,
+		Mismatch:        s.Mismatch,
+		NeedsReview:     s.NeedsReview,
+		ReviewNeeded:    s.ReviewNeeded,
+		Reviewed:        s.Reviewed,
+		RefundNone:      s.RefundNone,
+		RefundRequested: s.RefundRequested,
+		Refunded:        s.Refunded,
+		RefundRejected:  s.RefundRejected,
+	}
+}
+
+func billingOrderReconStatus(o *model.BillingOrder) string {
+	if o == nil || strings.TrimSpace(o.ReconciliationStatus) == "" {
+		return billingReconUnchecked
+	}
+	return strings.ToLower(strings.TrimSpace(o.ReconciliationStatus))
+}
+
+func billingOrderReviewStatus(o *model.BillingOrder) string {
+	if o == nil || strings.TrimSpace(o.ReviewStatus) == "" {
+		return billingReviewUnreviewed
+	}
+	return strings.ToLower(strings.TrimSpace(o.ReviewStatus))
+}
+
+func billingOrderRefundStatus(o *model.BillingOrder) string {
+	if o == nil || strings.TrimSpace(o.RefundStatus) == "" {
+		return billingRefundNone
+	}
+	return strings.ToLower(strings.TrimSpace(o.RefundStatus))
 }
 
 func canRetryBillingOrder(o *model.BillingOrder, now time.Time) bool {
@@ -321,6 +413,57 @@ func (s *BillingService) ConfirmOrderTx(userID, orderID uint, req dto.BillingCon
 	}
 	updated, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
+		return nil, err
+	}
+	return orderToDetailDTO(updated), nil
+}
+
+func (s *BillingService) UpdateOrderOpsAction(userID, orderID uint, req dto.BillingOrderOpsActionRequest) (*dto.BillingOrderDetailResponse, error) {
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	note := sanitizeBillingOpsNote(req.OpsNote)
+	refundReason := sanitizeBillingOpsNote(req.RefundReason)
+	now := time.Now().UTC()
+	updates := map[string]any{}
+	if note != "" {
+		updates["ops_note"] = note
+	}
+
+	switch action {
+	case "mark_reviewed":
+		updates["review_status"] = billingReviewReviewed
+		updates["reviewed_at"] = now
+		updates["reconciliation_status"] = billingReconMatched
+	case "mark_review_needed":
+		updates["review_status"] = billingReviewNeeded
+		updates["reconciliation_status"] = billingReconNeedsReview
+	case "request_refund":
+		updates["refund_status"] = billingRefundRequested
+		updates["refund_reason"] = refundReason
+		updates["refund_marked_at"] = now
+		updates["review_status"] = billingReviewNeeded
+		updates["reconciliation_status"] = billingReconNeedsReview
+	case "mark_refunded":
+		updates["refund_status"] = billingRefundRefunded
+		updates["refund_reason"] = refundReason
+		updates["refund_marked_at"] = now
+		updates["review_status"] = billingReviewReviewed
+		updates["reviewed_at"] = now
+		updates["reconciliation_status"] = billingReconMatched
+	case "reject_refund":
+		updates["refund_status"] = billingRefundRejected
+		updates["refund_reason"] = refundReason
+		updates["refund_marked_at"] = now
+		updates["review_status"] = billingReviewReviewed
+		updates["reviewed_at"] = now
+	default:
+		return nil, fmt.Errorf("unsupported billing ops action")
+	}
+
+	updated, err := s.orderRepo.UpdateOpsState(userID, orderID, updates)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBillingOrderNotFound
+		}
 		return nil, err
 	}
 	return orderToDetailDTO(updated), nil
@@ -436,9 +579,12 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		tnow := time.Now().UTC()
 		if tnow.After(ord.ExpiredAt) {
 			_ = tx.Model(&model.BillingOrder{}).Where("id = ?", ord.ID).Updates(map[string]any{
-				"status":          "expired",
-				"failure_reason":  "order expired before payment confirmation",
-				"last_checked_at": tnow,
+				"status":                "expired",
+				"failure_reason":        "order expired before payment confirmation",
+				"last_checked_at":       tnow,
+				"reconciliation_status": billingReconNeedsReview,
+				"review_status":         billingReviewNeeded,
+				"ops_note":              "Order expired before payment confirmation.",
 			})
 			return ErrBillingOrderExpired
 		}
@@ -462,11 +608,14 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 
 		paidAt := time.Now().UTC()
 		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, []string{"pending", "failed"}).Updates(map[string]any{
-			"status":          "paid",
-			"tx_hash":         normHash,
-			"paid_at":         paidAt,
-			"failure_reason":  "",
-			"last_checked_at": paidAt,
+			"status":                "paid",
+			"tx_hash":               normHash,
+			"paid_at":               paidAt,
+			"failure_reason":        "",
+			"last_checked_at":       paidAt,
+			"reconciliation_status": billingReconMatched,
+			"review_status":         billingReviewReviewed,
+			"reviewed_at":           paidAt,
 		})
 		if res.Error != nil {
 			return res.Error
@@ -508,6 +657,14 @@ func sanitizeBillingFailureReason(reason string) string {
 		return r[:480]
 	}
 	return r
+}
+
+func sanitizeBillingOpsNote(note string) string {
+	n := strings.TrimSpace(note)
+	if len(n) > 480 {
+		return n[:480]
+	}
+	return n
 }
 
 func normalizeEVMTxHash(hex string) (string, error) {

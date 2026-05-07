@@ -19,4 +19,5 @@ func RegisterBilling(rg *gin.RouterGroup, c *controller.BillingController) {
 	g.GET("/orders", c.ListOrders)
 	g.GET("/orders/:id", c.GetOrder)
 	g.POST("/orders/:id/confirm", c.ConfirmOrder)
+	g.POST("/orders/:id/ops-action", c.UpdateOrderOpsAction)
 }

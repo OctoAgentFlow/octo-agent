@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Activity, CheckCircle2, Clock3, FileText, RefreshCw, Send } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, RefreshCw, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
+import { activityNarrativeLine } from "@/lib/activity-narrative";
 import {
   broadcastDataSynced,
   broadcastPageRefreshComplete,
@@ -19,6 +20,7 @@ import {
   type AnalyticsRange,
 } from "@/services/analytics.service";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import type { ActivityRecord } from "@/types/activity";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -46,6 +48,24 @@ function formatDateTime(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function compactText(value: string, max = 130) {
+  const trimmed = value.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
+}
+
+function attentionRecord(item: AnalyticsOverview["attention_items"][number]): ActivityRecord {
+  return {
+    id: String(item.id),
+    type: item.type,
+    status: item.status,
+    previewKey: item.preview_key,
+    accountHandle: item.account_handle,
+    executedAt: item.executed_at,
+    errorMessage: item.error_message,
+  };
 }
 
 function MetricCard({
@@ -344,6 +364,98 @@ export default function AnalyticsPage() {
           })}
         </div>
       </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+        <Card>
+          <CardHeader
+            title={t("analytics.failureReasons.title")}
+            description={t("analytics.failureReasons.description")}
+            right={
+              <span className="grid h-9 w-9 place-items-center rounded-md bg-rose-400/10 text-rose-100">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+            }
+          />
+          {overview.failure_reasons.length === 0 ? (
+            <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+              {t("analytics.failureReasons.empty")}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {overview.failure_reasons.map((item) => (
+                <div key={`${item.reason}-${item.last_at ?? ""}`} className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 break-words text-sm font-medium text-white">
+                      {compactText(item.reason || t("analytics.failureReasons.unknown"))}
+                    </p>
+                    <span className="shrink-0 rounded-md bg-rose-400/10 px-2 py-1 text-xs font-semibold text-rose-100">
+                      {t("analytics.failureReasons.count", { count: item.count })}
+                    </span>
+                  </div>
+                  {item.last_at ? (
+                    <p className="mt-2 text-xs text-white/45">
+                      {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader
+            title={t("analytics.attention.title")}
+            description={t("analytics.attention.description")}
+            right={
+              <span className="grid h-9 w-9 place-items-center rounded-md bg-amber-400/10 text-amber-100">
+                <ListChecks className="h-4 w-4" />
+              </span>
+            }
+          />
+          {overview.attention_items.length === 0 ? (
+            <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+              {t("analytics.attention.empty")}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {overview.attention_items.map((item) => {
+                const record = attentionRecord(item);
+                return (
+                  <div key={item.id} className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-white">
+                            {t(`automation.module.${item.type}.name`)}
+                          </span>
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                              item.status === "failed"
+                                ? "bg-rose-400/10 text-rose-100"
+                                : "bg-amber-400/10 text-amber-100"
+                            }`}
+                          >
+                            {t(`analytics.status.${item.status}`)}
+                          </span>
+                        </div>
+                        <p className="line-clamp-2 break-words text-sm text-white/72">{activityNarrativeLine(record, t)}</p>
+                        {item.error_message ? (
+                          <p className="line-clamp-2 break-words text-xs text-rose-100/80">{compactText(item.error_message, 160)}</p>
+                        ) : null}
+                        <div className="flex flex-wrap gap-3 text-xs text-white/45">
+                          <span>{item.account_handle}</span>
+                          <span>{formatDateTime(item.executed_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

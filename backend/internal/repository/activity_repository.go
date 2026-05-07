@@ -30,6 +30,12 @@ type ActivityDailyStatusCount struct {
 	Count  int64
 }
 
+type ActivityFailureReasonCount struct {
+	Reason string
+	Count  int64
+	LastAt *time.Time
+}
+
 func NewActivityRepository(db *gorm.DB) *ActivityRepository {
 	return &ActivityRepository{DB: db}
 }
@@ -154,6 +160,28 @@ func (r *ActivityRepository) LatestExecutedAt(userID uint) (*time.Time, error) {
 	return &t, nil
 }
 
+// LatestExecutedAtBetween returns the most recent executed_at in the filtered window, or nil if none.
+func (r *ActivityRepository) LatestExecutedAtBetween(userID uint, from, to time.Time, accountID uint, accountHandle string) (*time.Time, error) {
+	var row model.ActivityLog
+	q := r.DB.Where("user_id = ?", userID)
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Order("executed_at DESC").Limit(1).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t := row.ExecutedAt
+	return &t, nil
+}
+
 // CountSuccessByTypeBetween counts successful activities of a type in [from, to] (inclusive bounds, UTC).
 func (r *ActivityRepository) CountSuccessByTypeBetween(userID uint, typ string, from, to time.Time) (int64, error) {
 	var n int64
@@ -240,6 +268,46 @@ func (r *ActivityRepository) CountDailyByStatusBetween(userID uint, from, to tim
 	}
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group("DATE(executed_at), status").Order("day ASC").Scan(&rows).Error
+	return rows, err
+}
+
+// CountFailureReasonsBetween aggregates failed activities by error message in [from, to).
+func (r *ActivityRepository) CountFailureReasonsBetween(userID uint, from, to time.Time, accountID uint, accountHandle string, limit int) ([]ActivityFailureReasonCount, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	var rows []ActivityFailureReasonCount
+	reasonExpr := "COALESCE(NULLIF(TRIM(error_message), ''), 'Unknown error')"
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select(reasonExpr+" AS reason, COUNT(*) AS count, MAX(executed_at) AS last_at").
+		Where("user_id = ? AND status = ?", userID, "failed")
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Group(reasonExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+// ListAttentionBetween returns recent failed or review activities in [from, to).
+func (r *ActivityRepository) ListAttentionBetween(userID uint, from, to time.Time, accountID uint, accountHandle string, limit int) ([]model.ActivityLog, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	var rows []model.ActivityLog
+	q := r.DB.Model(&model.ActivityLog{}).
+		Where("user_id = ? AND status IN ?", userID, []string{"failed", "review"})
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Order("executed_at DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 

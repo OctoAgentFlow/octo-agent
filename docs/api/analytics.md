@@ -22,6 +22,8 @@ The MVP aggregates:
 - automation breakdown by `post` / `reply` / `dm`
 - daily activity buckets for the selected range
 - current post counts by workflow status
+- top failed execution reasons
+- recent failed or review items that need attention
 
 ### Response
 
@@ -59,6 +61,20 @@ The MVP aggregates:
     ],
     "daily_activity": [
       { "date": "2026-05-01", "total": 0, "success": 0, "failed": 0, "review": 0 }
+    ],
+    "failure_reasons": [
+      { "reason": "Rate limited by X", "count": 2, "last_at": "2026-05-07T05:15:00Z" }
+    ],
+    "attention_items": [
+      {
+        "id": 42,
+        "type": "post",
+        "status": "failed",
+        "account_handle": "@octo_agent_flow",
+        "preview_key": "activity.preview.postExecuteFailed",
+        "executed_at": "2026-05-07T05:15:00Z",
+        "error_message": "Rate limited by X"
+      }
     ]
   }
 }
@@ -68,6 +84,8 @@ The MVP aggregates:
 
 - `daily_activity` always returns one bucket per selected day, including empty days.
 - `automation_breakdown` always includes `post`, `reply`, and `dm`.
+- `failure_reasons` returns up to 5 failed-execution groups for the selected window.
+- `attention_items` returns up to 6 recent `failed` or `review` activity rows for the selected window.
 - `account_id` filters `posts.x_account_id` directly. For activity rows, new logs use `activity_logs.x_account_id`; older rows are also matched by `account_handle` for compatibility.
 - `success_rate_pct` uses successful and failed rows only; review rows do not count in the denominator.
 - `total_7d`, `success_7d`, `failed_7d`, and `review_7d` are retained as compatibility fields. New UI code should use the range-neutral `total`, `success`, `failed`, and `review` fields.

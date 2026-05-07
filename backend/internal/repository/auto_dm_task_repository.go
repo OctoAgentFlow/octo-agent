@@ -32,12 +32,18 @@ func (r *AutoDMTaskRepository) ListByUser(userID uint, limit int) ([]model.AutoD
 	return rows, err
 }
 
-func (r *AutoDMTaskRepository) ListApprovedForSending(limit int) ([]model.AutoDMTask, error) {
+func (r *AutoDMTaskRepository) ListReadyForSending(limit int, now time.Time, maxAttempts int) ([]model.AutoDMTask, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
 	var rows []model.AutoDMTask
-	err := r.DB.Where("status = ? AND capability_status = ?", "approved", "approved_pending_real_send").
+	err := r.DB.Where(
+		"(status = ? AND capability_status = ?) OR (status = ? AND retryable = ? AND attempt_count < ? AND retry_after_at IS NOT NULL AND retry_after_at <= ?)",
+		"approved", "approved_pending_real_send", "failed", true, maxAttempts, now,
+	).
 		Order("approved_at ASC, id ASC").
 		Limit(limit).
 		Find(&rows).Error
@@ -95,13 +101,23 @@ func (r *AutoDMTaskRepository) Approve(task *model.AutoDMTask, at time.Time) err
 	return nil
 }
 
-func (r *AutoDMTaskRepository) ReserveForSending(task *model.AutoDMTask) (bool, error) {
+func (r *AutoDMTaskRepository) ReserveForSending(task *model.AutoDMTask, at time.Time, maxAttempts int) (bool, error) {
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
 	tx := r.DB.Model(&model.AutoDMTask{}).
-		Where("id = ? AND status = ? AND capability_status = ?", task.ID, "approved", "approved_pending_real_send").
+		Where("id = ?", task.ID).
+		Where("(status = ? AND capability_status = ?) OR (status = ? AND retryable = ? AND attempt_count < ? AND retry_after_at IS NOT NULL AND retry_after_at <= ?)",
+			"approved", "approved_pending_real_send", "failed", true, maxAttempts, at).
 		Updates(map[string]any{
 			"status":            "sending",
 			"capability_status": "real_send_in_progress",
+			"failure_category":  "",
 			"failure_reason":    "",
+			"retryable":         false,
+			"retry_after_at":    nil,
+			"attempt_count":     gorm.Expr("attempt_count + ?", 1),
+			"last_attempt_at":   at,
 		})
 	if tx.Error != nil {
 		return false, tx.Error
@@ -113,26 +129,56 @@ func (r *AutoDMTaskRepository) MarkSent(task *model.AutoDMTask, conversationID, 
 	return r.DB.Model(&model.AutoDMTask{}).Where("id = ?", task.ID).Updates(map[string]any{
 		"status":             "sent",
 		"capability_status":  "real_send_success",
+		"failure_category":   "",
 		"failure_reason":     "",
+		"retryable":          false,
+		"retry_after_at":     nil,
 		"dm_conversation_id": strings.TrimSpace(conversationID),
 		"dm_event_id":        strings.TrimSpace(eventID),
 		"sent_at":            at,
 	}).Error
 }
 
-func (r *AutoDMTaskRepository) MarkFailed(task *model.AutoDMTask, reason string) error {
+func (r *AutoDMTaskRepository) MarkFailed(task *model.AutoDMTask, reason, category string, retryable bool, retryAfterAt *time.Time) error {
 	return r.DB.Model(&model.AutoDMTask{}).Where("id = ?", task.ID).Updates(map[string]any{
 		"status":            "failed",
-		"capability_status": "real_send_failed",
+		"capability_status": failureCapabilityStatus(retryable),
+		"failure_category":  strings.TrimSpace(category),
 		"failure_reason":    strings.TrimSpace(reason),
+		"retryable":         retryable,
+		"retry_after_at":    retryAfterAt,
 	}).Error
 }
 
+func (r *AutoDMTaskRepository) Requeue(task *model.AutoDMTask, at time.Time) error {
+	tx := r.DB.Model(&model.AutoDMTask{}).
+		Where("id = ? AND status = ? AND retryable = ?", task.ID, "failed", true).
+		Updates(map[string]any{
+			"status":            "approved",
+			"capability_status": "approved_pending_real_send",
+			"failure_category":  "",
+			"failure_reason":    "",
+			"retryable":         false,
+			"retry_after_at":    nil,
+			"approved_at":       at,
+		})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return errors.New("auto dm task is not retryable")
+	}
+	return nil
+}
+
 func (r *AutoDMTaskRepository) Block(task *model.AutoDMTask, reason string, at time.Time) error {
-	tx := r.DB.Model(&model.AutoDMTask{}).Where("id = ? AND status IN ?", task.ID, []string{"review", "approved"}).Updates(map[string]any{
-		"status":         "blocked",
-		"failure_reason": reason,
-		"blocked_at":     at,
+	tx := r.DB.Model(&model.AutoDMTask{}).Where("id = ? AND status IN ?", task.ID, []string{"review", "approved", "failed"}).Updates(map[string]any{
+		"status":           "blocked",
+		"failure_category": "user_blocked",
+		"failure_reason":   reason,
+		"retryable":        false,
+		"retry_after_at":   nil,
+		"blocked_at":       at,
 	})
 	if tx.Error != nil {
 		return tx.Error
@@ -141,4 +187,11 @@ func (r *AutoDMTaskRepository) Block(task *model.AutoDMTask, reason string, at t
 		return errors.New("auto dm task cannot be blocked")
 	}
 	return nil
+}
+
+func failureCapabilityStatus(retryable bool) string {
+	if retryable {
+		return "real_send_retry_wait"
+	}
+	return "real_send_failed"
 }

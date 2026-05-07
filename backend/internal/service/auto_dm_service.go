@@ -19,6 +19,7 @@ import (
 
 const (
 	autoDMDefaultIntervalMinutes = 60
+	autoDMMaxSendAttempts        = 3
 	autoDMNoAccountReason        = "Auto DM skipped: no connected X account is available."
 	autoDMNoTokenReason          = "Auto DM skipped: connected X account is missing an access token."
 	autoDMNoRecipientReason      = "Auto DM skipped: no eligible recent interaction recipient was found."
@@ -53,6 +54,20 @@ type autoDMCandidate struct {
 	Username string
 	Message  string
 }
+
+type autoDMFailure struct {
+	Category     string
+	Reason       string
+	Retryable    bool
+	RetryAfterAt *time.Time
+}
+
+type autoDMFailureError struct {
+	category string
+	message  string
+}
+
+func (e *autoDMFailureError) Error() string { return e.message }
 
 // RunTick advances Auto DM candidate generation and sends approved tasks.
 func (s *AutoDMService) RunTick(ctx context.Context) {
@@ -318,11 +333,34 @@ func (s *AutoDMService) BlockTask(userID, taskID uint, reason string) (*dto.Auto
 	return &out, nil
 }
 
+func (s *AutoDMService) RetryTask(userID, taskID uint) (*dto.AutoDMTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if !task.Retryable || strings.TrimSpace(task.Status) != "failed" {
+		return nil, errors.New("auto dm task is not retryable")
+	}
+	if task.AttemptCount >= autoDMMaxSendAttempts {
+		return nil, errors.New("auto dm task reached retry limit")
+	}
+	now := time.Now().UTC()
+	if err := s.taskRepo.Requeue(task, now); err != nil {
+		return nil, err
+	}
+	updated, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	out := autoDMTaskToDTO(updated)
+	return &out, nil
+}
+
 func (s *AutoDMService) sendApprovedTasks(ctx context.Context, now time.Time) error {
 	if s.taskRepo == nil {
 		return nil
 	}
-	tasks, err := s.taskRepo.ListApprovedForSending(20)
+	tasks, err := s.taskRepo.ListReadyForSending(20, now, autoDMMaxSendAttempts)
 	if err != nil {
 		return err
 	}
@@ -344,7 +382,7 @@ func (s *AutoDMService) sendOneApprovedTask(ctx context.Context, task *model.Aut
 	}
 	account, cfg, skip, err := s.validateApprovedSend(task, now)
 	if err != nil {
-		if markErr := s.failDMTask(task, err.Error(), now); markErr != nil {
+		if markErr := s.failDMTask(task, classifyAutoDMFailure(err, now), now); markErr != nil {
 			return markErr
 		}
 		return err
@@ -352,7 +390,7 @@ func (s *AutoDMService) sendOneApprovedTask(ctx context.Context, task *model.Aut
 	if skip {
 		return nil
 	}
-	reserved, err := s.taskRepo.ReserveForSending(task)
+	reserved, err := s.taskRepo.ReserveForSending(task, now, autoDMMaxSendAttempts)
 	if err != nil {
 		return err
 	}
@@ -361,12 +399,8 @@ func (s *AutoDMService) sendOneApprovedTask(ctx context.Context, task *model.Aut
 	}
 	conversationID, eventID, apiErr := twitter.SendDirectMessage(ctx, account.AccessToken, task.RecipientUserID, task.MessagePreview)
 	if apiErr != nil {
-		msg := truncateErrMsg(apiErr.Error())
-		var pub *twitter.PublishError
-		if errors.As(apiErr, &pub) {
-			msg = truncateErrMsg(pub.Error())
-		}
-		if err := s.failDMTask(task, msg, now); err != nil {
+		failure := classifyAutoDMFailure(apiErr, now)
+		if err := s.failDMTask(task, failure, now); err != nil {
 			return err
 		}
 		return apiErr
@@ -397,13 +431,13 @@ func (s *AutoDMService) sendOneApprovedTask(ctx context.Context, task *model.Aut
 
 func (s *AutoDMService) validateApprovedSend(task *model.AutoDMTask, now time.Time) (*model.TwitterAccount, *model.AutomationConfig, bool, error) {
 	if strings.TrimSpace(task.RecipientUserID) == "" {
-		return nil, nil, false, errors.New("auto dm task is missing recipient_user_id")
+		return nil, nil, false, newAutoDMFailureError("missing_recipient", "auto dm task is missing recipient_user_id")
 	}
 	if strings.TrimSpace(task.MessagePreview) == "" {
-		return nil, nil, false, errors.New("auto dm task is missing message text")
+		return nil, nil, false, newAutoDMFailureError("empty_message", "auto dm task is missing message text")
 	}
 	if strings.TrimSpace(task.RecipientSource) != "interaction_only" {
-		return nil, nil, false, errors.New("auto dm task recipient rule is not allowed for real send")
+		return nil, nil, false, newAutoDMFailureError("unsafe_recipient_rule", "auto dm task recipient rule is not allowed for real send")
 	}
 	user, err := s.userRepo.GetByID(task.UserID)
 	if err != nil {
@@ -417,13 +451,13 @@ func (s *AutoDMService) validateApprovedSend(task *model.AutoDMTask, now time.Ti
 		return nil, nil, false, err
 	}
 	if strings.TrimSpace(account.AccessToken) == "" {
-		return nil, nil, false, errors.New(autoDMNoTokenReason)
+		return nil, nil, false, newAutoDMFailureError("token_missing", autoDMNoTokenReason)
 	}
 	if strings.TrimSpace(account.TwitterUserID) == strings.TrimSpace(task.RecipientUserID) {
-		return nil, nil, false, errors.New("auto dm task cannot send to the connected account itself")
+		return nil, nil, false, newAutoDMFailureError("self_recipient", "auto dm task cannot send to the connected account itself")
 	}
 	if missing := missingDMSendScopes(account.OAuthScopes); len(missing) > 0 {
-		return nil, nil, false, errors.New("reconnect this X account with OAuth scopes " + strings.Join(missing, ", "))
+		return nil, nil, false, newAutoDMFailureError("missing_oauth_scope", "reconnect this X account with OAuth scopes "+strings.Join(missing, ", "))
 	}
 	cfg, err := s.automationRepo.GetByUserAndType(task.UserID, repository.AutomationTypeDM)
 	if err != nil {
@@ -437,14 +471,14 @@ func (s *AutoDMService) validateApprovedSend(task *model.AutoDMTask, now time.Ti
 		return account, cfg, true, nil
 	}
 	if blocked := blockedKeywordInMessage(cfg.SafetyBlockedKeywords, task.MessagePreview); blocked != "" {
-		return nil, nil, false, errors.New("auto dm message contains blocked keyword: " + blocked)
+		return nil, nil, false, newAutoDMFailureError("blocked_keyword", "auto dm message contains blocked keyword: "+blocked)
 	}
 	return account, cfg, false, nil
 }
 
-func (s *AutoDMService) failDMTask(task *model.AutoDMTask, reason string, at time.Time) error {
-	reason = truncateErrMsg(reason)
-	if err := s.taskRepo.MarkFailed(task, reason); err != nil {
+func (s *AutoDMService) failDMTask(task *model.AutoDMTask, failure autoDMFailure, at time.Time) error {
+	reason := truncateErrMsg(failure.Reason)
+	if err := s.taskRepo.MarkFailed(task, reason, failure.Category, failure.Retryable, failure.RetryAfterAt); err != nil {
 		return err
 	}
 	log := &model.ActivityLog{
@@ -458,6 +492,59 @@ func (s *AutoDMService) failDMTask(task *model.AutoDMTask, reason string, at tim
 		ErrorMessage:  reason,
 	}
 	return s.activityRepo.DB.Create(log).Error
+}
+
+func classifyAutoDMFailure(err error, now time.Time) autoDMFailure {
+	if err == nil {
+		return autoDMFailure{Category: "unknown", Reason: "unknown auto dm failure"}
+	}
+	var known *autoDMFailureError
+	if errors.As(err, &known) {
+		return autoDMFailure{Category: known.category, Reason: known.Error()}
+	}
+	var pub *twitter.PublishError
+	if errors.As(err, &pub) {
+		if pub.RateLimited {
+			delay := pub.RetryAfter
+			if delay <= 0 {
+				delay = 30 * time.Minute
+			}
+			retryAt := now.Add(delay)
+			return autoDMFailure{
+				Category:     "rate_limited",
+				Reason:       pub.Error(),
+				Retryable:    true,
+				RetryAfterAt: &retryAt,
+			}
+		}
+		if pub.StatusCode >= 500 {
+			retryAt := now.Add(15 * time.Minute)
+			return autoDMFailure{
+				Category:     "x_server_error",
+				Reason:       pub.Error(),
+				Retryable:    true,
+				RetryAfterAt: &retryAt,
+			}
+		}
+		if pub.StatusCode == 401 || pub.StatusCode == 403 {
+			return autoDMFailure{Category: "x_permission_denied", Reason: pub.Error()}
+		}
+		if pub.StatusCode == 404 {
+			return autoDMFailure{Category: "recipient_unavailable", Reason: pub.Error()}
+		}
+		return autoDMFailure{Category: "x_api_rejected", Reason: pub.Error()}
+	}
+	retryAt := now.Add(10 * time.Minute)
+	return autoDMFailure{
+		Category:     "network_or_unknown",
+		Reason:       err.Error(),
+		Retryable:    true,
+		RetryAfterAt: &retryAt,
+	}
+}
+
+func newAutoDMFailureError(category, message string) error {
+	return &autoDMFailureError{category: strings.TrimSpace(category), message: strings.TrimSpace(message)}
 }
 
 func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
@@ -562,7 +649,10 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 		MessagePreview:    task.MessagePreview,
 		Status:            task.Status,
 		CapabilityStatus:  task.CapabilityStatus,
+		FailureCategory:   task.FailureCategory,
 		FailureReason:     task.FailureReason,
+		Retryable:         task.Retryable,
+		AttemptCount:      task.AttemptCount,
 		ApprovalRequired:  task.ApprovalRequired,
 		ActivityLogID:     task.ActivityLogID,
 		DMConversationID:  task.DMConversationID,
@@ -571,6 +661,12 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 	}
 	if task.ApprovedAt != nil {
 		out.ApprovedAt = task.ApprovedAt.UTC().Format(time.RFC3339)
+	}
+	if task.RetryAfterAt != nil {
+		out.RetryAfterAt = task.RetryAfterAt.UTC().Format(time.RFC3339)
+	}
+	if task.LastAttemptAt != nil {
+		out.LastAttemptAt = task.LastAttemptAt.UTC().Format(time.RFC3339)
 	}
 	if task.BlockedAt != nil {
 		out.BlockedAt = task.BlockedAt.UTC().Format(time.RFC3339)

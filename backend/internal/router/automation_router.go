@@ -20,4 +20,5 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	dm.GET("/tasks", c.ListDMTasks)
 	dm.POST("/tasks/:id/approve", c.ApproveDMTask)
 	dm.POST("/tasks/:id/block", c.BlockDMTask)
+	dm.POST("/tasks/:id/retry", c.RetryDMTask)
 }

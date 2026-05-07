@@ -25,9 +25,9 @@
 
 ## Next API Integration Priorities
 
-1. **Analytics 内容效果扩展**：补内容表现、发帖结果和自动化转化指标。
-2. **Billing**：继续产品化对账、退款/人工审核与支付筛选。
-3. **Settings 安全增强**：补会话、安全提醒和工作区级配置。
+1. **Billing 对账与退款/人工审核**：继续产品化支付异常、对账和运营处理。
+2. **Settings 安全增强**：补会话、安全提醒和工作区级配置。
+3. **Analytics 深度指标**：后续再接真实 X impressions / engagement 等外部表现指标。
 4. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。
 
 ## Milestones

@@ -188,6 +188,10 @@ export default function AnalyticsPage() {
     return Math.max(1, ...(overview?.daily_activity.map((item) => item.total) ?? [0]));
   }, [overview]);
 
+  const maxContentDailyTotal = useMemo(() => {
+    return Math.max(1, ...(overview?.content_effect.daily.map((item) => item.total) ?? [0]));
+  }, [overview]);
+
   if (loadState === "loading") {
     return (
       <div className="space-y-4 md:space-y-5">
@@ -350,6 +354,111 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader
+          title={t("analytics.contentEffect.title")}
+          description={t("analytics.contentEffect.description")}
+          right={
+            <Link
+              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              href="/posts"
+            >
+              {t("analytics.contentEffect.manage")}
+            </Link>
+          }
+        />
+        <div className="grid gap-3 xl:grid-cols-[1.05fr_1.2fr]">
+          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">{t("analytics.contentEffect.conversion")}</p>
+                <p className="mt-1 text-xs text-white/50">{t("analytics.contentEffect.conversionDetail")}</p>
+              </div>
+              <p className="text-2xl font-semibold text-white">{overview.content_effect.conversion.publish_rate_pct}%</p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-3">
+              <AccountMetric label={t("analytics.contentEffect.ready")} value={overview.content_effect.conversion.ready} />
+              <AccountMetric label={t("analytics.contentEffect.active")} value={overview.content_effect.conversion.active} tone="amber" />
+              <AccountMetric label={t("analytics.posts.published")} value={overview.content_effect.conversion.published} />
+              <AccountMetric label={t("analytics.posts.failed")} value={overview.content_effect.conversion.failed} tone="rose" />
+              <AccountMetric label={t("analytics.contentEffect.postSuccess")} value={overview.content_effect.post_activity.success} />
+              <AccountMetric label={t("analytics.contentEffect.postFailed")} value={overview.content_effect.post_activity.failed} tone="rose" />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+            <p className="mb-3 text-sm font-semibold text-white">{t("analytics.contentEffect.dailyTitle")}</p>
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+              <div
+                className="grid min-w-[520px] items-end gap-2"
+                style={{ gridTemplateColumns: `repeat(${overview.content_effect.daily.length}, minmax(0, 1fr))` }}
+              >
+                {overview.content_effect.daily.map((item) => {
+                  const publishedHeight = Math.max(2, Math.round((item.published / maxContentDailyTotal) * 120));
+                  const scheduledHeight = Math.max(2, Math.round((item.scheduled / maxContentDailyTotal) * 120));
+                  const failedHeight = Math.max(2, Math.round((item.failed / maxContentDailyTotal) * 120));
+                  return (
+                    <div key={item.date} className="min-w-0">
+                      <div className="flex h-32 items-end gap-0.5 rounded-md border border-white/8 bg-white/[0.025] px-1 py-2">
+                        <div className="w-full rounded-sm bg-emerald-300/75" style={{ height: item.published ? publishedHeight : 0 }} title={`${formatDate(item.date)} published: ${item.published}`} />
+                        <div className="w-full rounded-sm bg-cyan-300/55" style={{ height: item.scheduled ? scheduledHeight : 0 }} title={`${formatDate(item.date)} scheduled: ${item.scheduled}`} />
+                        <div className="w-full rounded-sm bg-rose-300/70" style={{ height: item.failed ? failedHeight : 0 }} title={`${formatDate(item.date)} failed: ${item.failed}`} />
+                      </div>
+                      <p className="mt-2 truncate text-center text-xs text-white/55">{formatDate(item.date)}</p>
+                      <p className="text-center text-xs font-semibold text-white">{item.total}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/55">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-300/75" />{t("analytics.posts.published")}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-cyan-300/55" />{t("analytics.posts.scheduled")}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-300/70" />{t("analytics.posts.failed")}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border border-white/8 bg-white/[0.02] p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white">{t("analytics.contentEffect.recentPosts")}</p>
+            <Link
+              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              href={activityHref({ range, type: "post", accountID: selectedAccountID })}
+            >
+              {t("analytics.viewInActivity")}
+            </Link>
+          </div>
+          {overview.content_effect.recent_posts.length === 0 ? (
+            <p className="text-sm text-white/50">{t("analytics.contentEffect.noRecentPosts")}</p>
+          ) : (
+            <div className="grid gap-2 lg:grid-cols-2">
+              {overview.content_effect.recent_posts.map((post) => (
+                <Link key={post.id} href={`/posts/${post.id}`} className="rounded-md border border-white/8 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.06]">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="line-clamp-2 min-w-0 text-sm text-white/82">{post.content}</p>
+                    <span
+                      className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold ${
+                        post.status === "failed"
+                          ? "bg-rose-400/10 text-rose-100"
+                          : post.status === "published"
+                            ? "bg-emerald-400/10 text-emerald-100"
+                            : "bg-white/[0.06] text-white/70"
+                      }`}
+                    >
+                      {t(`analytics.posts.${post.status}`)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-white/45">
+                    {t("analytics.contentEffect.updatedAt", { time: formatDateTime(post.updated_at) })}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card>
         <CardHeader title={t("analytics.automation.title")} description={t("analytics.automation.description")} />

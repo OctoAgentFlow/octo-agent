@@ -85,6 +85,14 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
+	postDailyRows, err := s.postRepo.CountDailyByStatusBetween(userID, start, now, accountID)
+	if err != nil {
+		return nil, err
+	}
+	recentPosts, err := s.postRepo.ListRecentForAnalytics(userID, start, now, accountID, 6)
+	if err != nil {
+		return nil, err
+	}
 	failureRows, err := s.activityRepo.CountFailureReasonsBetween(userID, start, now, accountID, accountHandle, analyticsFailureReasonLimit)
 	if err != nil {
 		return nil, err
@@ -134,6 +142,7 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 		postMap[row.Status] = row.Count
 		postTotal += row.Count
 	}
+	automationBreakdown := buildAutomationBreakdown(typeStatusCounts)
 
 	return &dto.AnalyticsOverviewResponse{
 		RangeDays:   rangeDays,
@@ -158,12 +167,13 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 			Published:  postMap["published"],
 			Failed:     postMap["failed"],
 		},
-		AutomationBreakdown: buildAutomationBreakdown(typeStatusCounts),
+		AutomationBreakdown: automationBreakdown,
 		DailyActivity:       buildDailyActivity(start, rangeDays, dailyCounts),
 		FailureReasons:      buildFailureReasons(failureRows),
 		AttentionItems:      buildAttentionItems(attentionRows),
 		AccountBreakdown:    buildAccountBreakdown(accounts, accountActivityRows, accountPostRows, accountID),
 		AutoDMOperations:    autoDMOps,
+		ContentEffect:       buildContentEffect(start, rangeDays, postMap, postDailyRows, recentPosts, automationBreakdown),
 	}, nil
 }
 
@@ -394,6 +404,101 @@ func buildAutoDMEvents(rows []model.ActivityLog) []dto.AnalyticsAutoDMEvent {
 			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
 			Message:       row.ErrorMessage,
 		})
+	}
+	return out
+}
+
+func buildContentEffect(
+	start time.Time,
+	days int,
+	statusMap map[string]int64,
+	dailyRows []repository.PostDailyStatusCount,
+	recentPosts []model.Post,
+	automationRows []dto.AnalyticsAutomationMetric,
+) dto.AnalyticsContentEffect {
+	conversion := dto.AnalyticsContentConversion{
+		Draft:      statusMap["draft"],
+		Scheduled:  statusMap["scheduled"],
+		Processing: statusMap["processing"],
+		Published:  statusMap["published"],
+		Failed:     statusMap["failed"],
+	}
+	conversion.Total = conversion.Draft + conversion.Scheduled + conversion.Processing + conversion.Published + conversion.Failed
+	conversion.Ready = conversion.Draft + conversion.Scheduled
+	conversion.Active = conversion.Scheduled + conversion.Processing
+	if conversion.Total > 0 {
+		conversion.PublishRatePct = int((conversion.Published*100 + conversion.Total/2) / conversion.Total)
+	}
+	return dto.AnalyticsContentEffect{
+		Conversion:   conversion,
+		Daily:        buildContentDaily(start, days, dailyRows),
+		RecentPosts:  buildContentPosts(recentPosts),
+		PostActivity: buildPostActivity(automationRows),
+	}
+}
+
+func buildContentDaily(start time.Time, days int, rows []repository.PostDailyStatusCount) []dto.AnalyticsContentDaily {
+	buckets := make(map[string]*dto.AnalyticsContentDaily, days)
+	out := make([]dto.AnalyticsContentDaily, 0, days)
+	for i := 0; i < days; i++ {
+		date := start.AddDate(0, 0, i).Format("2006-01-02")
+		out = append(out, dto.AnalyticsContentDaily{Date: date})
+		buckets[date] = &out[i]
+	}
+	for _, row := range rows {
+		item, ok := buckets[row.Day]
+		if !ok {
+			continue
+		}
+		item.Total += row.Count
+		switch row.Status {
+		case "draft":
+			item.Draft += row.Count
+		case "scheduled":
+			item.Scheduled += row.Count
+		case "processing":
+			item.Processing += row.Count
+		case "published":
+			item.Published += row.Count
+		case "failed":
+			item.Failed += row.Count
+		}
+	}
+	return out
+}
+
+func buildContentPosts(rows []model.Post) []dto.AnalyticsContentPost {
+	out := make([]dto.AnalyticsContentPost, 0, len(rows))
+	for _, row := range rows {
+		item := dto.AnalyticsContentPost{
+			ID:         row.ID,
+			XAccountID: row.XAccountID,
+			Content:    row.Content,
+			Status:     row.Status,
+			UpdatedAt:  row.UpdatedAt.UTC().Format(time.RFC3339),
+		}
+		if row.ScheduledAt != nil {
+			item.ScheduledAt = row.ScheduledAt.UTC().Format(time.RFC3339)
+		}
+		if row.PublishedAt != nil {
+			item.PublishedAt = row.PublishedAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func buildPostActivity(rows []dto.AnalyticsAutomationMetric) dto.AnalyticsContentActivity {
+	var out dto.AnalyticsContentActivity
+	for _, row := range rows {
+		if row.Type != "post" {
+			continue
+		}
+		out.Success = row.Success
+		out.Failed = row.Failed
+		out.Review = row.Review
+		out.Total = row.Total
+		return out
 	}
 	return out
 }

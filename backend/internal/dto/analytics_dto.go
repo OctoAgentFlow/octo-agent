@@ -16,6 +16,7 @@ type AnalyticsOverviewResponse struct {
 	AttentionItems      []AnalyticsAttentionItem    `json:"attention_items"`
 	AccountBreakdown    []AnalyticsAccountMetric    `json:"account_breakdown"`
 	AutoDMOperations    AnalyticsAutoDMOperations   `json:"auto_dm_operations"`
+	ContentEffect       AnalyticsContentEffect      `json:"content_effect"`
 }
 
 type AnalyticsActivitySummary struct {
@@ -144,4 +145,50 @@ type AnalyticsAutoDMEvent struct {
 	PreviewKey    string `json:"preview_key"`
 	ExecutedAt    string `json:"executed_at"`
 	Message       string `json:"message,omitempty"`
+}
+
+type AnalyticsContentEffect struct {
+	Conversion   AnalyticsContentConversion `json:"conversion"`
+	Daily        []AnalyticsContentDaily    `json:"daily"`
+	RecentPosts  []AnalyticsContentPost     `json:"recent_posts"`
+	PostActivity AnalyticsContentActivity   `json:"post_activity"`
+}
+
+type AnalyticsContentConversion struct {
+	Total          int64 `json:"total"`
+	Draft          int64 `json:"draft"`
+	Scheduled      int64 `json:"scheduled"`
+	Processing     int64 `json:"processing"`
+	Published      int64 `json:"published"`
+	Failed         int64 `json:"failed"`
+	Ready          int64 `json:"ready"`
+	Active         int64 `json:"active"`
+	PublishRatePct int   `json:"publish_rate_pct"`
+}
+
+type AnalyticsContentDaily struct {
+	Date       string `json:"date"`
+	Draft      int64  `json:"draft"`
+	Scheduled  int64  `json:"scheduled"`
+	Processing int64  `json:"processing"`
+	Published  int64  `json:"published"`
+	Failed     int64  `json:"failed"`
+	Total      int64  `json:"total"`
+}
+
+type AnalyticsContentPost struct {
+	ID          uint   `json:"id"`
+	XAccountID  uint   `json:"x_account_id"`
+	Content     string `json:"content"`
+	Status      string `json:"status"`
+	ScheduledAt string `json:"scheduled_at,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type AnalyticsContentActivity struct {
+	Success int64 `json:"success"`
+	Failed  int64 `json:"failed"`
+	Review  int64 `json:"review"`
+	Total   int64 `json:"total"`
 }

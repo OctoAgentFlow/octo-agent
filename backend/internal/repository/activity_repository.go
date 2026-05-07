@@ -13,6 +13,23 @@ type ActivityRepository struct {
 	DB *gorm.DB
 }
 
+type ActivityStatusCount struct {
+	Status string
+	Count  int64
+}
+
+type ActivityTypeStatusCount struct {
+	Type   string
+	Status string
+	Count  int64
+}
+
+type ActivityDailyStatusCount struct {
+	Day    string
+	Status string
+	Count  int64
+}
+
 func NewActivityRepository(db *gorm.DB) *ActivityRepository {
 	return &ActivityRepository{DB: db}
 }
@@ -173,4 +190,52 @@ func (r *ActivityRepository) LatestSuccessExecutedAt(userID uint) (*time.Time, e
 	}
 	t := row.ExecutedAt
 	return &t, nil
+}
+
+// CountByStatusBetween aggregates activity rows by status with executed_at in [from, to).
+func (r *ActivityRepository) CountByStatusBetween(userID uint, from, to time.Time) ([]ActivityStatusCount, error) {
+	var rows []ActivityStatusCount
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select("status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	err := q.Group("status").Scan(&rows).Error
+	return rows, err
+}
+
+// CountByTypeAndStatusBetween aggregates activity rows by automation type and status with executed_at in [from, to).
+func (r *ActivityRepository) CountByTypeAndStatusBetween(userID uint, from, to time.Time) ([]ActivityTypeStatusCount, error) {
+	var rows []ActivityTypeStatusCount
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select("type, status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	err := q.Group("type, status").Scan(&rows).Error
+	return rows, err
+}
+
+// CountDailyByStatusBetween aggregates activity rows by UTC date and status with executed_at in [from, to).
+func (r *ActivityRepository) CountDailyByStatusBetween(userID uint, from, to time.Time) ([]ActivityDailyStatusCount, error) {
+	var rows []ActivityDailyStatusCount
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select("DATE(executed_at) AS day, status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	err := q.Group("DATE(executed_at), status").Order("day ASC").Scan(&rows).Error
+	return rows, err
 }

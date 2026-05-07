@@ -14,6 +14,11 @@ type PostRepository struct {
 	DB *gorm.DB
 }
 
+type PostStatusCount struct {
+	Status string
+	Count  int64
+}
+
 func NewPostRepository(db *gorm.DB) *PostRepository {
 	return &PostRepository{DB: db}
 }
@@ -142,4 +147,15 @@ func (r *PostRepository) CountByUserAndStatuses(userID uint, statuses []string) 
 		return 0, err
 	}
 	return n, nil
+}
+
+// CountByStatus aggregates all posts for a user by status.
+func (r *PostRepository) CountByStatus(userID uint) ([]PostStatusCount, error) {
+	var rows []PostStatusCount
+	err := r.DB.Model(&model.Post{}).
+		Select("status, COUNT(*) AS count").
+		Where("user_id = ?", userID).
+		Group("status").
+		Scan(&rows).Error
+	return rows, err
 }

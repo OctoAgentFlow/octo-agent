@@ -30,32 +30,34 @@ export function BillingCheckoutDialog({
 }: BillingCheckoutDialogProps) {
   const { t } = useT();
   const { pushToast } = useToast();
-  const [selectedNetwork, setSelectedNetwork] = useState(() => {
+  const defaultNetwork = useMemo(() => {
     const d = paymentMethods.find((m) => m.isDefault);
     return (d ?? paymentMethods[0])?.networkCode ?? "BEP20";
-  });
+  }, [paymentMethods]);
+  const [selectedNetwork, setSelectedNetwork] = useState("");
   const [phase, setPhase] = useState<"pick" | "pay">("pick");
   const [created, setCreated] = useState<BillingCreateOrderResponse | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
 
   const options = useMemo(() => paymentMethods.filter((m) => m.networkCode !== "TRC20"), [paymentMethods]);
+  const selectedNetworkValue = selectedNetwork || defaultNetwork;
 
   const reset = useCallback(() => {
+    setSelectedNetwork("");
     setPhase("pick");
     setCreated(null);
     setOrderId(null);
   }, []);
 
-  useEffect(() => {
-    if (!open) {
-      reset();
-    }
-  }, [open, reset]);
-
-  useEffect(() => {
-    const d = paymentMethods.find((m) => m.isDefault);
-    setSelectedNetwork((d ?? paymentMethods[0])?.networkCode ?? "BEP20");
-  }, [paymentMethods]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        reset();
+      }
+      onOpenChange(nextOpen);
+    },
+    [onOpenChange, reset]
+  );
 
   useEffect(() => {
     if (!open || !orderId || phase !== "pay") return;
@@ -89,7 +91,7 @@ export function BillingCheckoutDialog({
       const order = await billingService.createOrder({
         plan_code: planCode,
         method: "USDT",
-        network: selectedNetwork,
+        network: selectedNetworkValue,
       });
       setCreated(order);
       setOrderId(order.order_id);
@@ -103,7 +105,7 @@ export function BillingCheckoutDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title={t("billing.checkout.title")}
       description={phase === "pick" ? t("billing.checkout.pickNetwork") : t("billing.checkout.sendUsdt")}
       className="max-w-lg"
@@ -113,7 +115,7 @@ export function BillingCheckoutDialog({
           <label className="block text-xs text-white/60">{t("billing.checkout.networkLabel")}</label>
           <select
             className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white"
-            value={selectedNetwork}
+            value={selectedNetworkValue}
             onChange={(e) => setSelectedNetwork(e.target.value)}
           >
             {options.map((m) => (

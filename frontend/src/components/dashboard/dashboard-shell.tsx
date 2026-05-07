@@ -18,6 +18,7 @@ const PATHS_WITH_DATA_REFRESH = new Set([
   "/accounts",
   "/agents",
   "/activity",
+  "/analytics",
   "/billing",
   "/profile",
   "/posts",

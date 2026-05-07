@@ -9,6 +9,7 @@
 | [dashboard.md](./dashboard.md) | Dashboard 概览 |
 | [automation.md](./automation.md) | 自动化模块配置、`runtime-status`（DB 真实统计）、Auto Post/Reply 调度说明 |
 | [activity.md](./activity.md) | 活动日志分页列表（含 reply 扩展字段） |
+| [analytics.md](./analytics.md) | 分析概览（7 日活动、自动化拆分、内容状态统计） |
 | [billing.md](./billing.md) | 订阅/套餐/支付方式（YAML）、下单与订单查询、BEP20 Webhook |
 | [post.md](./post.md) | 帖子 CRUD（真实持久化） |
 | [agent.md](./agent.md) | Agent 列表（**占位实现**；与 `automations` 无关） |

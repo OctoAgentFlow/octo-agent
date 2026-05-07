@@ -1,0 +1,154 @@
+package service
+
+import (
+	"time"
+
+	"octo-agent/backend/internal/dto"
+	"octo-agent/backend/internal/repository"
+)
+
+const analyticsRangeDays = 7
+
+type AnalyticsService struct {
+	activityRepo *repository.ActivityRepository
+	postRepo     *repository.PostRepository
+}
+
+func NewAnalyticsService(activityRepo *repository.ActivityRepository, postRepo *repository.PostRepository) *AnalyticsService {
+	return &AnalyticsService{activityRepo: activityRepo, postRepo: postRepo}
+}
+
+func (s *AnalyticsService) Overview(userID uint) (*dto.AnalyticsOverviewResponse, error) {
+	now := time.Now().UTC()
+	start := startOfUTCDay(now).AddDate(0, 0, -(analyticsRangeDays - 1))
+
+	statusCounts, err := s.activityRepo.CountByStatusBetween(userID, start, now)
+	if err != nil {
+		return nil, err
+	}
+	typeStatusCounts, err := s.activityRepo.CountByTypeAndStatusBetween(userID, start, now)
+	if err != nil {
+		return nil, err
+	}
+	dailyCounts, err := s.activityRepo.CountDailyByStatusBetween(userID, start, now)
+	if err != nil {
+		return nil, err
+	}
+	lastAt, err := s.activityRepo.LatestExecutedAt(userID)
+	if err != nil {
+		return nil, err
+	}
+	postCounts, err := s.postRepo.CountByStatus(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	statusMap := make(map[string]int64, len(statusCounts))
+	var total int64
+	for _, row := range statusCounts {
+		statusMap[row.Status] = row.Count
+		total += row.Count
+	}
+	success := statusMap["success"]
+	failed := statusMap["failed"]
+	review := statusMap["review"]
+	successRate := 0
+	if denom := success + failed; denom > 0 {
+		successRate = int((success*100 + denom/2) / denom)
+	}
+	lastAtStr := ""
+	if lastAt != nil {
+		lastAtStr = lastAt.UTC().Format(time.RFC3339)
+	}
+
+	postMap := make(map[string]int64, len(postCounts))
+	var postTotal int64
+	for _, row := range postCounts {
+		postMap[row.Status] = row.Count
+		postTotal += row.Count
+	}
+
+	return &dto.AnalyticsOverviewResponse{
+		RangeDays:   analyticsRangeDays,
+		GeneratedAt: now.Format(time.RFC3339),
+		ActivitySummary: dto.AnalyticsActivitySummary{
+			Total7d:        total,
+			Success7d:      success,
+			Failed7d:       failed,
+			Review7d:       review,
+			SuccessRatePct: successRate,
+			LastActivityAt: lastAtStr,
+		},
+		PostSummary: dto.AnalyticsPostSummary{
+			Total:      postTotal,
+			Draft:      postMap["draft"],
+			Scheduled:  postMap["scheduled"],
+			Processing: postMap["processing"],
+			Published:  postMap["published"],
+			Failed:     postMap["failed"],
+		},
+		AutomationBreakdown: buildAutomationBreakdown(typeStatusCounts),
+		DailyActivity:       buildDailyActivity(start, analyticsRangeDays, dailyCounts),
+	}, nil
+}
+
+func startOfUTCDay(t time.Time) time.Time {
+	u := t.UTC()
+	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func buildAutomationBreakdown(rows []repository.ActivityTypeStatusCount) []dto.AnalyticsAutomationMetric {
+	order := []string{"post", "reply", "dm"}
+	metrics := map[string]*dto.AnalyticsAutomationMetric{}
+	for _, typ := range order {
+		metrics[typ] = &dto.AnalyticsAutomationMetric{Type: typ}
+	}
+	for _, row := range rows {
+		item, ok := metrics[row.Type]
+		if !ok {
+			item = &dto.AnalyticsAutomationMetric{Type: row.Type}
+			metrics[row.Type] = item
+			order = append(order, row.Type)
+		}
+		item.Total += row.Count
+		switch row.Status {
+		case "success":
+			item.Success += row.Count
+		case "failed":
+			item.Failed += row.Count
+		case "review":
+			item.Review += row.Count
+		}
+	}
+	out := make([]dto.AnalyticsAutomationMetric, 0, len(order))
+	for _, typ := range order {
+		out = append(out, *metrics[typ])
+	}
+	return out
+}
+
+func buildDailyActivity(start time.Time, days int, rows []repository.ActivityDailyStatusCount) []dto.AnalyticsDailyActivity {
+	buckets := make(map[string]*dto.AnalyticsDailyActivity, days)
+	out := make([]dto.AnalyticsDailyActivity, 0, days)
+	for i := 0; i < days; i++ {
+		date := start.AddDate(0, 0, i).Format("2006-01-02")
+		out = append(out, dto.AnalyticsDailyActivity{Date: date})
+		buckets[date] = &out[i]
+	}
+	for _, row := range rows {
+		item, ok := buckets[row.Day]
+		if !ok {
+			continue
+		}
+		item.Total += row.Count
+		switch row.Status {
+		case "success":
+			item.Success += row.Count
+		case "failed":
+			item.Failed += row.Count
+		case "review":
+			item.Review += row.Count
+		}
+	}
+	return out
+}

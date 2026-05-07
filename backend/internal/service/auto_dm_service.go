@@ -15,6 +15,7 @@ import (
 	"octo-agent/backend/internal/repository"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 const (
@@ -30,6 +31,7 @@ type AutoDMService struct {
 	automationRepo *repository.AutomationRepository
 	activityRepo   *repository.ActivityRepository
 	taskRepo       *repository.AutoDMTaskRepository
+	ruleRepo       *repository.AutoDMRecipientRuleRepository
 	userRepo       *repository.UserRepository
 }
 
@@ -38,6 +40,7 @@ func NewAutoDMService(
 	automationRepo *repository.AutomationRepository,
 	activityRepo *repository.ActivityRepository,
 	taskRepo *repository.AutoDMTaskRepository,
+	ruleRepo *repository.AutoDMRecipientRuleRepository,
 	userRepo *repository.UserRepository,
 ) *AutoDMService {
 	return &AutoDMService{
@@ -45,6 +48,7 @@ func NewAutoDMService(
 		automationRepo: automationRepo,
 		activityRepo:   activityRepo,
 		taskRepo:       taskRepo,
+		ruleRepo:       ruleRepo,
 		userRepo:       userRepo,
 	}
 }
@@ -68,6 +72,11 @@ type autoDMFailureError struct {
 }
 
 func (e *autoDMFailureError) Error() string { return e.message }
+
+type autoDMRecipientDecision struct {
+	Allowed bool
+	Reason  string
+}
 
 // RunTick advances Auto DM candidate generation and sends approved tasks.
 func (s *AutoDMService) RunTick(ctx context.Context) {
@@ -273,6 +282,13 @@ func (s *AutoDMService) findAutoDMCandidate(ctx context.Context, userID uint, ac
 			if exists {
 				continue
 			}
+			decision, err := s.autoDMRecipientAllowed(userID, account.ID, reply.AuthorID, true)
+			if err != nil {
+				return nil, err
+			}
+			if !decision.Allowed {
+				continue
+			}
 			return &autoDMCandidate{
 				UserID:   reply.AuthorID,
 				Username: replyAuthorDisplay(reply.AuthorUsername),
@@ -293,6 +309,21 @@ func (s *AutoDMService) ListTasks(userID uint) (*dto.AutoDMTasksResponse, error)
 		items = append(items, autoDMTaskToDTO(&rows[i]))
 	}
 	return &dto.AutoDMTasksResponse{Items: items}, nil
+}
+
+func (s *AutoDMService) ListRecipientRules(userID uint) (*dto.AutoDMRecipientRulesResponse, error) {
+	if s.ruleRepo == nil {
+		return &dto.AutoDMRecipientRulesResponse{Items: []dto.AutoDMRecipientRuleItem{}}, nil
+	}
+	rows, err := s.ruleRepo.ListByUser(userID, 50)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AutoDMRecipientRuleItem, 0, len(rows))
+	for i := range rows {
+		items = append(items, autoDMRecipientRuleToDTO(&rows[i]))
+	}
+	return &dto.AutoDMRecipientRulesResponse{Items: items}, nil
 }
 
 func (s *AutoDMService) ApproveTask(userID, taskID uint) (*dto.AutoDMTaskItem, error) {
@@ -353,6 +384,43 @@ func (s *AutoDMService) RetryTask(userID, taskID uint) (*dto.AutoDMTaskItem, err
 		return nil, err
 	}
 	out := autoDMTaskToDTO(updated)
+	return &out, nil
+}
+
+func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, reason string) (*dto.AutoDMRecipientRuleItem, error) {
+	status = strings.TrimSpace(status)
+	if !repository.IsAutoDMRecipientRuleStatus(status) {
+		return nil, errors.New("invalid auto dm recipient rule status")
+	}
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(task.RecipientUserID) == "" {
+		return nil, errors.New("auto dm task is missing recipient_user_id")
+	}
+	now := time.Now().UTC()
+	rule, err := s.ruleRepo.Upsert(
+		userID,
+		task.XAccountID,
+		task.RecipientUserID,
+		task.RecipientUsername,
+		status,
+		"task",
+		reason,
+		now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if status == repository.AutoDMRecipientBlocked || status == repository.AutoDMRecipientUnsubscribed {
+		blockReason := "Auto DM recipient marked as " + status
+		if strings.TrimSpace(reason) != "" {
+			blockReason += ": " + strings.TrimSpace(reason)
+		}
+		_ = s.taskRepo.Block(task, truncateErrMsg(blockReason), now)
+	}
+	out := autoDMRecipientRuleToDTO(rule)
 	return &out, nil
 }
 
@@ -456,6 +524,13 @@ func (s *AutoDMService) validateApprovedSend(task *model.AutoDMTask, now time.Ti
 	if strings.TrimSpace(account.TwitterUserID) == strings.TrimSpace(task.RecipientUserID) {
 		return nil, nil, false, newAutoDMFailureError("self_recipient", "auto dm task cannot send to the connected account itself")
 	}
+	decision, err := s.autoDMRecipientAllowed(task.UserID, task.XAccountID, task.RecipientUserID, false)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if !decision.Allowed {
+		return nil, nil, false, newAutoDMFailureError("recipient_rule_blocked", decision.Reason)
+	}
 	if missing := missingDMSendScopes(account.OAuthScopes); len(missing) > 0 {
 		return nil, nil, false, newAutoDMFailureError("missing_oauth_scope", "reconnect this X account with OAuth scopes "+strings.Join(missing, ", "))
 	}
@@ -545,6 +620,41 @@ func classifyAutoDMFailure(err error, now time.Time) autoDMFailure {
 
 func newAutoDMFailureError(category, message string) error {
 	return &autoDMFailureError{category: strings.TrimSpace(category), message: strings.TrimSpace(message)}
+}
+
+func (s *AutoDMService) autoDMRecipientAllowed(userID, accountID uint, recipientUserID string, candidateLookup bool) (autoDMRecipientDecision, error) {
+	if s.ruleRepo == nil {
+		return autoDMRecipientDecision{Allowed: true}, nil
+	}
+	recipientUserID = strings.TrimSpace(recipientUserID)
+	if recipientUserID == "" {
+		return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is missing"}, nil
+	}
+	rule, err := s.ruleRepo.GetByRecipient(userID, accountID, recipientUserID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return autoDMRecipientDecision{}, err
+	}
+	if rule != nil {
+		switch strings.TrimSpace(rule.Status) {
+		case repository.AutoDMRecipientBlocked:
+			return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is blocked"}, nil
+		case repository.AutoDMRecipientUnsubscribed:
+			return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is unsubscribed"}, nil
+		case repository.AutoDMRecipientAllowlisted:
+			return autoDMRecipientDecision{Allowed: true}, nil
+		}
+	}
+	allowlistCount, err := s.ruleRepo.CountAllowlisted(userID, accountID)
+	if err != nil {
+		return autoDMRecipientDecision{}, err
+	}
+	if allowlistCount > 0 {
+		return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is not allowlisted"}, nil
+	}
+	if candidateLookup {
+		return autoDMRecipientDecision{Allowed: true}, nil
+	}
+	return autoDMRecipientDecision{Allowed: true}, nil
 }
 
 func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
@@ -673,6 +783,25 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 	}
 	if task.SentAt != nil {
 		out.SentAt = task.SentAt.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+func autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule) dto.AutoDMRecipientRuleItem {
+	out := dto.AutoDMRecipientRuleItem{
+		ID:                rule.ID,
+		XAccountID:        rule.XAccountID,
+		RecipientUserID:   rule.RecipientUserID,
+		RecipientUsername: rule.RecipientUsername,
+		Status:            rule.Status,
+		Source:            rule.Source,
+		Reason:            rule.Reason,
+	}
+	if rule.LastMatchedAt != nil {
+		out.LastMatchedAt = rule.LastMatchedAt.UTC().Format(time.RFC3339)
+	}
+	if !rule.UpdatedAt.IsZero() {
+		out.UpdatedAt = rule.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	return out
 }

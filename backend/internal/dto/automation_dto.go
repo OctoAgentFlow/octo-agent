@@ -86,3 +86,24 @@ type AutoDMTasksResponse struct {
 type AutoDMTaskBlockRequest struct {
 	Reason string `json:"reason"`
 }
+
+type AutoDMRecipientRuleItem struct {
+	ID                uint   `json:"id"`
+	XAccountID        uint   `json:"x_account_id"`
+	RecipientUserID   string `json:"recipient_user_id"`
+	RecipientUsername string `json:"recipient_username,omitempty"`
+	Status            string `json:"status"`
+	Source            string `json:"source,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	LastMatchedAt     string `json:"last_matched_at,omitempty"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
+}
+
+type AutoDMRecipientRulesResponse struct {
+	Items []AutoDMRecipientRuleItem `json:"items"`
+}
+
+type AutoDMRecipientRuleRequest struct {
+	Status string `json:"status" binding:"required"`
+	Reason string `json:"reason"`
+}

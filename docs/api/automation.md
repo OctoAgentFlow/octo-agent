@@ -84,7 +84,7 @@ Base path: `/api/v1`
 
 - **Auto Post**：调度器每分钟扫描 `scheduled` 且到期帖子（需 `post` 模块 `enabled`）。
 - **Auto Reply**：调度器每分钟对开启 `reply` 的用户拉取评论并回复（固定模板，无 AI）。
-- **Auto DM**：调度器每分钟先消费已审批或到期重试的发送任务，再扫描到期 `dm` 配置生成候选；候选来自近期明确互动用户，写入 `auto_dm_tasks` 与 `activity_logs type=dm`，审批后通过 X DM API 真实发送，并回写 `sent` / `failed`。rate limit、X 5xx、网络类失败会进入 retry queue；权限、scope、收件人规则、屏蔽词类失败会归类为不可重试。
+- **Auto DM**：调度器每分钟先消费已审批或到期重试的发送任务，再扫描到期 `dm` 配置生成候选；候选来自近期明确互动用户，写入 `auto_dm_tasks` 与 `activity_logs type=dm`，审批后通过 X DM API 真实发送，并回写 `sent` / `failed`。rate limit、X 5xx、网络类失败会进入 retry queue；权限、scope、收件人规则、屏蔽词类失败会归类为不可重试。候选与真实发送都会检查 `auto_dm_recipient_rules`：`blocked` / `unsubscribed` 永不发送；若账号已有 allowlist，则仅允许 `allowlisted` 收件人。
 
 ## GET /api/v1/auto-dm/tasks
 
@@ -107,3 +107,15 @@ Base path: `/api/v1`
 
 - **鉴权**：需要
 - **用途**：将 `failed + retryable=true` 且未超过重试上限的任务重新放回 approved 队列。后台 scheduler 随后会再次按真实发送校验执行。
+
+## GET /api/v1/auto-dm/recipients
+
+- **鉴权**：需要
+- **用途**：返回当前用户最近的 Auto DM 收件人规则。
+- **响应字段**：`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`source`、`reason`、`last_matched_at`。
+
+## POST /api/v1/auto-dm/tasks/{id}/recipient-rule
+
+- **鉴权**：需要
+- **Body**：`{ "status": "allowlisted|blocked|unsubscribed", "reason": "..." }`
+- **用途**：从某个 Auto DM task 写入收件人名单规则。写入 `blocked` 或 `unsubscribed` 时，会同时拦截该 task，避免后续发送。

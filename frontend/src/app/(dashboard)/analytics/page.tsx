@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, RefreshCw, Send } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, RefreshCw, Send, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -382,6 +382,61 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
+      <Card>
+        <CardHeader
+          title={t("analytics.accounts.title")}
+          description={t("analytics.accounts.description")}
+          right={
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-cyan-400/10 text-cyan-100">
+              <Users className="h-4 w-4" />
+            </span>
+          }
+        />
+        {overview.account_breakdown.length === 0 ? (
+          <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+            {t("analytics.accounts.empty")}
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {overview.account_breakdown.map((account) => (
+              <div key={account.account_id} className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {account.display_name || account.username || `#${account.account_id}`}
+                    </p>
+                    <p className="mt-1 text-xs text-white/50">@{account.username || account.account_id}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold text-white">{account.success_rate_pct}%</p>
+                    <p className="text-xs text-white/45">{t("analytics.accounts.successRate")}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <AccountMetric label={t("analytics.accounts.activity")} value={account.activity_total} />
+                  <AccountMetric label={t("analytics.status.failed")} value={account.failed} tone="rose" />
+                  <AccountMetric label={t("analytics.status.review")} value={account.review} tone="amber" />
+                  <AccountMetric label={t("analytics.accounts.posts")} value={account.post_total} />
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-white/45">
+                    {t("analytics.accounts.lastActivity", { time: formatDateTime(account.last_activity_at) })}
+                  </p>
+                  <Link
+                    className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                    href={activityHref({ range, accountID: account.account_id })}
+                  >
+                    {t("analytics.viewInActivity")}
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
         <Card>
           <CardHeader
@@ -497,6 +552,29 @@ export default function AnalyticsPage() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AccountMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  tone?: "default" | "rose" | "amber";
+}) {
+  const toneClass =
+    tone === "rose"
+      ? "bg-rose-400/10 text-rose-100"
+      : tone === "amber"
+        ? "bg-amber-400/10 text-amber-100"
+        : "bg-white/[0.05] text-white";
+  return (
+    <div className={`rounded-md px-3 py-2 ${toneClass}`}>
+      <p className="text-xs opacity-70">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
   );
 }

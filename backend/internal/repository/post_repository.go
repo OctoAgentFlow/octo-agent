@@ -19,6 +19,11 @@ type PostStatusCount struct {
 	Count  int64
 }
 
+type PostAccountCount struct {
+	AccountID uint
+	Count     int64
+}
+
 func NewPostRepository(db *gorm.DB) *PostRepository {
 	return &PostRepository{DB: db}
 }
@@ -159,5 +164,16 @@ func (r *PostRepository) CountByStatus(userID uint, accountID uint) ([]PostStatu
 		q = q.Where("x_account_id = ?", accountID)
 	}
 	err := q.Group("status").Scan(&rows).Error
+	return rows, err
+}
+
+// CountByAccount aggregates posts by X account for a user.
+func (r *PostRepository) CountByAccount(userID uint) ([]PostAccountCount, error) {
+	var rows []PostAccountCount
+	err := r.DB.Model(&model.Post{}).
+		Select("x_account_id AS account_id, COUNT(*) AS count").
+		Where("user_id = ?", userID).
+		Group("x_account_id").
+		Scan(&rows).Error
 	return rows, err
 }

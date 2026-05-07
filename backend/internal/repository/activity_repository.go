@@ -36,6 +36,14 @@ type ActivityFailureReasonCount struct {
 	LastAt *time.Time
 }
 
+type ActivityAccountStatusCount struct {
+	AccountID uint
+	Handle    string
+	Status    string
+	Count     int64
+	LastAt    *time.Time
+}
+
 func NewActivityRepository(db *gorm.DB) *ActivityRepository {
 	return &ActivityRepository{DB: db}
 }
@@ -318,6 +326,22 @@ func (r *ActivityRepository) ListAttentionBetween(userID uint, from, to time.Tim
 	}
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Order("executed_at DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+// CountByAccountAndStatusBetween aggregates activities by X account and status in [from, to).
+func (r *ActivityRepository) CountByAccountAndStatusBetween(userID uint, from, to time.Time) ([]ActivityAccountStatusCount, error) {
+	var rows []ActivityAccountStatusCount
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select("x_account_id AS account_id, account_handle AS handle, status, COUNT(*) AS count, MAX(executed_at) AS last_at").
+		Where("user_id = ?", userID)
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	err := q.Group("x_account_id, account_handle, status").Scan(&rows).Error
 	return rows, err
 }
 

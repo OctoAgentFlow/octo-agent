@@ -60,6 +60,20 @@ export type AnalyticsOverview = {
     executed_at: string;
     error_message?: string;
   }>;
+  account_breakdown: Array<{
+    account_id: number;
+    username: string;
+    display_name: string;
+    avatar_url?: string;
+    followers?: string;
+    activity_total: number;
+    success: number;
+    failed: number;
+    review: number;
+    success_rate_pct: number;
+    post_total: number;
+    last_activity_at?: string;
+  }>;
 };
 
 export type AnalyticsRange = "7d" | "30d";

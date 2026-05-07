@@ -330,7 +330,17 @@ function AutoDMReviewPanel({
                     <p className="text-xs text-white/55">
                       {t("automation.dmReview.source")}: {task.recipient_source} · {t("automation.dmReview.capability")}: {task.capability_status}
                     </p>
+                    {task.recipient_username || task.recipient_user_id ? (
+                      <p className="text-xs text-white/55">
+                        {t("automation.dmReview.recipient")}: {task.recipient_username || task.recipient_user_id}
+                      </p>
+                    ) : null}
                     <p className="line-clamp-2 text-sm text-white/72">{task.message_preview || "—"}</p>
+                    {task.dm_event_id ? (
+                      <p className="text-xs text-emerald-100/80">
+                        {t("automation.dmReview.sentEvent")}: {task.dm_event_id}
+                      </p>
+                    ) : null}
                     {task.failure_reason ? (
                       <p className="line-clamp-2 text-xs text-amber-100/85">{task.failure_reason}</p>
                     ) : null}

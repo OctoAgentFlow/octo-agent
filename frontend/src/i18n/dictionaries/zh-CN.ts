@@ -306,6 +306,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "自动私信已生成一条待审核记录，尚未发送真实私信。",
   "activity.preview.dmCapabilityMissing": "自动私信未发送，因为尚未确认 X 私信权限。",
   "activity.preview.dmSkipped": "自动私信本次已跳过，因为账号配置不完整。",
+  "activity.preview.dmSendSuccess": "自动私信已成功发送到 X。",
+  "activity.preview.dmSendFailed": "自动私信真实发送到 X 失败。",
   "activity.reply.story": "{account} 回复了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功发布一条内容。",
 
@@ -466,6 +468,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "暂无自动私信审核任务。",
   "automation.dmReview.source": "来源",
   "automation.dmReview.capability": "能力",
+  "automation.dmReview.recipient": "收件人",
+  "automation.dmReview.sentEvent": "发送事件",
   "automation.dmReview.approve": "批准",
   "automation.dmReview.block": "拦截",
   "automation.runtime.title": "运行状态",

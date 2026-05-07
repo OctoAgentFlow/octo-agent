@@ -53,11 +53,13 @@ export type AutoDMTaskApi = {
   recipient_user_id?: string;
   recipient_username?: string;
   message_preview?: string;
-  status: "review" | "approved" | "blocked" | "failed" | "sent";
+  status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
   capability_status: string;
   failure_reason?: string;
   approval_required: boolean;
   activity_log_id?: number;
+  dm_conversation_id?: string;
+  dm_event_id?: string;
   generated_at: string;
   approved_at?: string;
   blocked_at?: string;

@@ -305,6 +305,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "Dry-run Auto DM создал запись на проверку до реальной отправки.",
   "activity.preview.dmCapabilityMissing": "Auto DM не отправлен: право на X DM не подтверждено.",
   "activity.preview.dmSkipped": "Auto DM пропустил запуск из-за неполной настройки аккаунта.",
+  "activity.preview.dmSendSuccess": "Auto DM успешно отправлен в X.",
+  "activity.preview.dmSendFailed": "Реальная отправка Auto DM в X завершилась ошибкой.",
   "activity.reply.story": "{account} ответил(а) {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} успешно опубликовал(а) пост.",
 
@@ -465,6 +467,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "Задач проверки Auto DM пока нет.",
   "automation.dmReview.source": "Источник",
   "automation.dmReview.capability": "Право",
+  "automation.dmReview.recipient": "Получатель",
+  "automation.dmReview.sentEvent": "Событие отправки",
   "automation.dmReview.approve": "Одобрить",
   "automation.dmReview.block": "Блокировать",
   "automation.runtime.title": "Статус выполнения",

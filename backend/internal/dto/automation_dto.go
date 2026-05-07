@@ -66,6 +66,8 @@ type AutoDMTaskItem struct {
 	FailureReason     string `json:"failure_reason,omitempty"`
 	ApprovalRequired  bool   `json:"approval_required"`
 	ActivityLogID     uint   `json:"activity_log_id,omitempty"`
+	DMConversationID  string `json:"dm_conversation_id,omitempty"`
+	DMEventID         string `json:"dm_event_id,omitempty"`
 	GeneratedAt       string `json:"generated_at"`
 	ApprovedAt        string `json:"approved_at,omitempty"`
 	BlockedAt         string `json:"blocked_at,omitempty"`

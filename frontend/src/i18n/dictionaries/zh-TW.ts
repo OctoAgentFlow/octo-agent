@@ -305,6 +305,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "自動私訊已建立一筆待審核記錄，尚未送出真實私訊。",
   "activity.preview.dmCapabilityMissing": "自動私訊未送出，因為尚未確認 X 私訊權限。",
   "activity.preview.dmSkipped": "自動私訊本次已略過，因為帳號設定不完整。",
+  "activity.preview.dmSendSuccess": "自動私訊已成功送到 X。",
+  "activity.preview.dmSendFailed": "自動私訊真實送出到 X 失敗。",
   "activity.reply.story": "{account} 回覆了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功發布一則內容。",
 
@@ -465,6 +467,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "暫無自動私訊審核任務。",
   "automation.dmReview.source": "來源",
   "automation.dmReview.capability": "能力",
+  "automation.dmReview.recipient": "收件人",
+  "automation.dmReview.sentEvent": "送出事件",
   "automation.dmReview.approve": "核准",
   "automation.dmReview.block": "攔截",
   "automation.runtime.title": "運行狀態",

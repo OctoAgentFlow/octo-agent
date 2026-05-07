@@ -305,6 +305,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "Auto DM のドライランで、実送信前のレビュー項目を作成しました。",
   "activity.preview.dmCapabilityMissing": "X の DM 権限が未確認のため、Auto DM は送信できませんでした。",
   "activity.preview.dmSkipped": "アカウント設定が不完全なため、今回の Auto DM はスキップされました。",
+  "activity.preview.dmSendSuccess": "Auto DM は X で正常に送信されました。",
+  "activity.preview.dmSendFailed": "Auto DM の X への実送信に失敗しました。",
   "activity.reply.story": "{account} が {them} に返信: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} が投稿を公開しました。",
 
@@ -465,6 +467,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "Auto DM のレビュータスクはまだありません。",
   "automation.dmReview.source": "ソース",
   "automation.dmReview.capability": "権限",
+  "automation.dmReview.recipient": "受信者",
+  "automation.dmReview.sentEvent": "送信イベント",
   "automation.dmReview.approve": "承認",
   "automation.dmReview.block": "ブロック",
   "automation.runtime.title": "実行状態",

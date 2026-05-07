@@ -84,18 +84,18 @@ Base path: `/api/v1`
 
 - **Auto Post**：调度器每分钟扫描 `scheduled` 且到期帖子（需 `post` 模块 `enabled`）。
 - **Auto Reply**：调度器每分钟对开启 `reply` 的用户拉取评论并回复（固定模板，无 AI）。
-- **Auto DM**：调度器每分钟扫描到期 `dm` 配置；当前为 **pre-send / audit** 阶段，会写入 `auto_dm_tasks` 审计任务与 `activity_logs type=dm` 的 `review` 或 `failed` 记录，并推进 `last_run_at` / `next_run_at`，尚不会发送真实私信。
+- **Auto DM**：调度器每分钟先消费已审批的发送任务，再扫描到期 `dm` 配置生成候选；候选来自近期明确互动用户，写入 `auto_dm_tasks` 与 `activity_logs type=dm`，审批后通过 X DM API 真实发送，并回写 `sent` / `failed`。
 
 ## GET /api/v1/auto-dm/tasks
 
 - **鉴权**：需要
 - **用途**：返回当前用户最近的 Auto DM 发送前审计任务。
-- **响应字段**：`status`（`review` / `approved` / `blocked` / `failed` / `sent`）、`recipient_source`、`capability_status`、`failure_reason`、`message_preview`、`activity_log_id` 等。
+- **响应字段**：`status`（`review` / `approved` / `sending` / `blocked` / `failed` / `sent`）、`recipient_source`、`recipient_user_id`、`recipient_username`、`capability_status`、`failure_reason`、`message_preview`、`dm_conversation_id`、`dm_event_id`、`activity_log_id` 等。
 
 ## POST /api/v1/auto-dm/tasks/{id}/approve
 
 - **鉴权**：需要
-- **用途**：将 `review` 状态的 DM 审计任务标记为 `approved`。当前仍不会发送真实私信，后续真实发送器会只消费已批准且能力满足的任务。
+- **用途**：将 `review` 状态的 DM 审计任务标记为 `approved`。后台真实发送器只消费已批准、具备 `recipient_user_id`、OAuth DM scope 满足、收件人来源为 `interaction_only` 且未触发限流/屏蔽词的任务。
 
 ## POST /api/v1/auto-dm/tasks/{id}/block
 

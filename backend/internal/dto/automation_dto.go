@@ -101,13 +101,32 @@ type AutoDMRecipientRuleItem struct {
 	UpdatedAt         string `json:"updated_at,omitempty"`
 }
 
+type AutoDMRecipientRuleQuery struct {
+	Search     string `form:"search"`
+	Status     string `form:"status"`
+	XAccountID uint   `form:"x_account_id"`
+	Limit      int    `form:"limit"`
+}
+
 type AutoDMRecipientRulesResponse struct {
 	Items []AutoDMRecipientRuleItem `json:"items"`
+	Total int64                     `json:"total"`
 }
 
 type AutoDMRecipientRuleRequest struct {
 	Status string `json:"status" binding:"required"`
 	Reason string `json:"reason"`
+}
+
+type AutoDMRecipientRuleBulkRequest struct {
+	IDs    []uint `json:"ids" binding:"required"`
+	Status string `json:"status" binding:"required"`
+	Reason string `json:"reason"`
+}
+
+type AutoDMRecipientRuleBulkResponse struct {
+	Updated int                       `json:"updated"`
+	Items   []AutoDMRecipientRuleItem `json:"items"`
 }
 
 type AutoDMRecipientImportRequest struct {

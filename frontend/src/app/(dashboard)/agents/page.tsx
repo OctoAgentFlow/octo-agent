@@ -297,6 +297,28 @@ export default function AgentsPage() {
     }
   };
 
+  const updateDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
+    try {
+      const rule = await automationService.updateDMRecipientRule(id, status, `Marked ${status} from Auto DM recipient manager.`);
+      setDMRecipients((items) => items.map((item) => (item.id === id ? rule : item)));
+      pushToast(`Auto DM recipient marked ${status}.`);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
+    }
+  };
+
+  const bulkUpdateDMRecipientRules = async (ids: number[], status: AutoDMRecipientRuleApi["status"]) => {
+    try {
+      const data = await automationService.bulkUpdateDMRecipientRules(ids, status, `Marked ${status} from Auto DM recipient manager bulk action.`);
+      setDMRecipients((items) =>
+        items.map((item) => data.items.find((next) => next.id === item.id) ?? item)
+      );
+      pushToast(`Updated ${data.updated} Auto DM recipients.`);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to bulk update recipient rules." : "Failed to bulk update recipient rules.");
+    }
+  };
+
   const importDMRecipients = async () => {
     try {
       const data = await automationService.importDMRecipients(dmImportCSV);
@@ -346,6 +368,8 @@ export default function AgentsPage() {
         onBlock={blockDMTask}
         onRetry={retryDMTask}
         onRule={setDMRecipientRule}
+        onUpdateRule={updateDMRecipientRule}
+        onBulkRule={bulkUpdateDMRecipientRules}
         importCSV={dmImportCSV}
         onImportCSVChange={setDMImportCSV}
         onImport={importDMRecipients}
@@ -369,6 +393,8 @@ function AutoDMReviewPanel({
   onBlock,
   onRetry,
   onRule,
+  onUpdateRule,
+  onBulkRule,
   importCSV,
   onImportCSVChange,
   onImport,
@@ -380,11 +406,50 @@ function AutoDMReviewPanel({
   onBlock: (id: number) => void;
   onRetry: (id: number) => void;
   onRule: (id: number, status: AutoDMRecipientRuleApi["status"]) => void;
+  onUpdateRule: (id: number, status: AutoDMRecipientRuleApi["status"]) => void;
+  onBulkRule: (ids: number[], status: AutoDMRecipientRuleApi["status"]) => void;
   importCSV: string;
   onImportCSVChange: (value: string) => void;
   onImport: () => void;
 }) {
   const { t } = useT();
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipientStatus, setRecipientStatus] = useState<AutoDMRecipientRuleApi["status"] | "">("");
+  const [selectedRecipientIDs, setSelectedRecipientIDs] = useState<number[]>([]);
+  const filteredRecipients = useMemo(() => {
+    const needle = recipientSearch.trim().toLowerCase();
+    return recipients.filter((rule) => {
+      if (recipientStatus && rule.status !== recipientStatus) return false;
+      if (!needle) return true;
+      return [rule.recipient_user_id, rule.recipient_username, rule.reason, rule.source]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(needle));
+    });
+  }, [recipientSearch, recipientStatus, recipients]);
+  const visibleRecipients = filteredRecipients.slice(0, 50);
+  const visibleIDs = useMemo(() => new Set(visibleRecipients.map((rule) => rule.id)), [visibleRecipients]);
+  const visibleSelectedCount = selectedRecipientIDs.filter((id) => visibleIDs.has(id)).length;
+  const allVisibleSelected = visibleRecipients.length > 0 && visibleSelectedCount === visibleRecipients.length;
+
+  const toggleRecipient = (id: number) => {
+    setSelectedRecipientIDs((items) => (items.includes(id) ? items.filter((item) => item !== id) : [...items, id]));
+  };
+
+  const toggleVisibleRecipients = () => {
+    if (allVisibleSelected) {
+      setSelectedRecipientIDs((items) => items.filter((id) => !visibleIDs.has(id)));
+      return;
+    }
+    setSelectedRecipientIDs((items) => Array.from(new Set([...items, ...visibleRecipients.map((rule) => rule.id)])));
+  };
+
+  const bulkRule = (status: AutoDMRecipientRuleApi["status"]) => {
+    const ids = selectedRecipientIDs.filter((id) => visibleIDs.has(id));
+    if (ids.length === 0) return;
+    onBulkRule(ids, status);
+    setSelectedRecipientIDs((items) => items.filter((id) => !visibleIDs.has(id)));
+  };
+
   return (
     <Card>
       <CardHeader title={t("automation.dmReview.title")} description={t("automation.dmReview.description")} />
@@ -471,19 +536,90 @@ function AutoDMReviewPanel({
             );
           })
         )}
-        {recipients.length > 0 ? (
-          <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
-            <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.rules")}</p>
-            <div className="flex flex-wrap gap-2">
-              {recipients.slice(0, 8).map((rule) => (
-                <span key={rule.id} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
-                  {rule.recipient_username || rule.recipient_user_id}: {rule.status}
-                  {rule.unsubscribe_url ? ` · ${rule.unsubscribe_url}` : ""}
-                </span>
-              ))}
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-xs font-semibold text-white/70">{t("automation.dmReview.rules")}</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={recipientSearch}
+                onChange={(event) => setRecipientSearch(event.target.value)}
+                placeholder={t("automation.dmReview.searchPlaceholder")}
+                className="h-8 w-full rounded-md border border-white/10 bg-black/20 px-3 text-xs text-white outline-none placeholder:text-white/35 sm:w-56"
+              />
+              <select
+                value={recipientStatus}
+                onChange={(event) => setRecipientStatus(event.target.value as AutoDMRecipientRuleApi["status"] | "")}
+                className="h-8 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white outline-none"
+              >
+                <option value="">{t("automation.dmReview.statusAll")}</option>
+                <option value="allowlisted">{t("automation.dmReview.allowlist")}</option>
+                <option value="blocked">{t("automation.dmReview.blacklist")}</option>
+                <option value="unsubscribed">{t("automation.dmReview.unsubscribe")}</option>
+              </select>
             </div>
           </div>
-        ) : null}
+          {visibleRecipients.length > 0 ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <label className="flex h-7 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2.5 text-xs text-white/65">
+                  <input type="checkbox" className="accent-blue-400" checked={allVisibleSelected} onChange={toggleVisibleRecipients} />
+                  {t("automation.dmReview.selectVisible")}
+                </label>
+                <span className="text-xs text-white/45">{t("automation.dmReview.selectedCount", { count: visibleSelectedCount })}</span>
+                <Button size="sm" variant="outline" disabled={visibleSelectedCount === 0} onClick={() => bulkRule("allowlisted")}>
+                  {t("automation.dmReview.bulkAllowlist")}
+                </Button>
+                <Button size="sm" variant="outline" disabled={visibleSelectedCount === 0} onClick={() => bulkRule("blocked")}>
+                  {t("automation.dmReview.bulkBlock")}
+                </Button>
+                <Button size="sm" variant="outline" disabled={visibleSelectedCount === 0} onClick={() => bulkRule("unsubscribed")}>
+                  {t("automation.dmReview.bulkUnsubscribe")}
+                </Button>
+              </div>
+              <div className="max-h-[420px] overflow-y-auto rounded-md border border-white/8">
+                {visibleRecipients.map((rule) => (
+                  <div key={rule.id} className="grid gap-3 border-b border-white/8 bg-black/10 p-3 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="flex min-w-0 gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 accent-blue-400"
+                        checked={selectedRecipientIDs.includes(rule.id)}
+                        onChange={() => toggleRecipient(rule.id)}
+                        aria-label={rule.recipient_username || rule.recipient_user_id}
+                      />
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="break-all text-sm font-semibold text-white">{rule.recipient_username || rule.recipient_user_id}</p>
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-white/65">{rule.status}</span>
+                        </div>
+                        <p className="break-all text-xs text-white/50">{rule.recipient_user_id}</p>
+                        <p className="text-xs text-white/45">
+                          {t("automation.dmReview.source")}: {rule.source || "—"} · {t("automation.dmReview.updatedAt")}: {rule.updated_at ? new Date(rule.updated_at).toLocaleString() : "—"}
+                        </p>
+                        {rule.reason ? <p className="line-clamp-2 text-xs text-white/55">{rule.reason}</p> : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <Button size="sm" variant="outline" onClick={() => onUpdateRule(rule.id, "allowlisted")} disabled={rule.status === "allowlisted"}>
+                        {t("automation.dmReview.allowlist")}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onUpdateRule(rule.id, "blocked")} disabled={rule.status === "blocked"}>
+                        {t("automation.dmReview.blacklist")}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onUpdateRule(rule.id, "unsubscribed")} disabled={rule.status === "unsubscribed"}>
+                        {t("automation.dmReview.unsubscribe")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+              {t("automation.dmReview.emptyRules")}
+            </p>
+          )}
+        </div>
         {imports.length > 0 ? (
           <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
             <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.importHistory")}</p>

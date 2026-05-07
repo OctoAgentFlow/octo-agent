@@ -91,6 +91,14 @@ export type AutoDMRecipientRuleApi = {
 
 export type AutoDMRecipientRulesData = {
   items: AutoDMRecipientRuleApi[];
+  total: number;
+};
+
+export type AutoDMRecipientRulesQuery = {
+  search?: string;
+  status?: AutoDMRecipientRuleApi["status"] | "";
+  xAccountID?: number;
+  limit?: number;
 };
 
 export type AutoDMRecipientImportData = {
@@ -113,6 +121,11 @@ export type AutoDMRecipientImportApi = {
 
 export type AutoDMRecipientImportsData = {
   items: AutoDMRecipientImportApi[];
+};
+
+export type AutoDMRecipientBulkUpdateData = {
+  updated: number;
+  items: AutoDMRecipientRuleApi[];
 };
 
 export type AutoDMPreferenceData = {
@@ -155,8 +168,14 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoDMTasksData>>("/auto-dm/tasks");
     return res.data.data;
   },
-  async dmRecipients() {
-    const res = await request.get<ApiResponse<AutoDMRecipientRulesData>>("/auto-dm/recipients");
+  async dmRecipients(query?: AutoDMRecipientRulesQuery) {
+    const params = {
+      search: query?.search || undefined,
+      status: query?.status || undefined,
+      x_account_id: query?.xAccountID || undefined,
+      limit: query?.limit || undefined,
+    };
+    const res = await request.get<ApiResponse<AutoDMRecipientRulesData>>("/auto-dm/recipients", { params });
     return res.data.data;
   },
   async dmRecipientImports() {
@@ -184,6 +203,14 @@ export const automationService = {
   },
   async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
     const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason });
+    return res.data.data;
+  },
+  async updateDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
+    const res = await request.patch<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/recipient-rules/${id}`, { status, reason });
+    return res.data.data;
+  },
+  async bulkUpdateDMRecipientRules(ids: number[], status: AutoDMRecipientRuleApi["status"], reason: string) {
+    const res = await request.post<ApiResponse<AutoDMRecipientBulkUpdateData>>("/auto-dm/recipient-rules/bulk", { ids, status, reason });
     return res.data.data;
   },
   async getDMPreference(token: string) {

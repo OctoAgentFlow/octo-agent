@@ -18,20 +18,43 @@ const (
 
 type AutoDMRecipientRuleRepository struct{ DB *gorm.DB }
 
+type AutoDMRecipientRuleListQuery struct {
+	Search     string
+	Status     string
+	XAccountID uint
+	Limit      int
+}
+
 func NewAutoDMRecipientRuleRepository(db *gorm.DB) *AutoDMRecipientRuleRepository {
 	return &AutoDMRecipientRuleRepository{DB: db}
 }
 
-func (r *AutoDMRecipientRuleRepository) ListByUser(userID uint, limit int) ([]model.AutoDMRecipientRule, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 50
+func (r *AutoDMRecipientRuleRepository) ListByUser(userID uint, query AutoDMRecipientRuleListQuery) ([]model.AutoDMRecipientRule, int64, error) {
+	if query.Limit <= 0 || query.Limit > 200 {
+		query.Limit = 100
+	}
+	q := r.DB.Model(&model.AutoDMRecipientRule{}).Where("user_id = ?", userID)
+	if query.XAccountID > 0 {
+		q = q.Where("x_account_id = ?", query.XAccountID)
+	}
+	if IsAutoDMRecipientRuleStatus(query.Status) {
+		q = q.Where("status = ?", strings.TrimSpace(query.Status))
+	}
+	search := strings.TrimSpace(query.Search)
+	if search != "" {
+		like := "%" + search + "%"
+		q = q.Where("(recipient_user_id LIKE ? OR recipient_username LIKE ? OR reason LIKE ?)", like, like, like)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
 	var rows []model.AutoDMRecipientRule
-	err := r.DB.Where("user_id = ?", userID).
+	err := q.
 		Order("updated_at DESC, id DESC").
-		Limit(limit).
+		Limit(query.Limit).
 		Find(&rows).Error
-	return rows, err
+	return rows, total, err
 }
 
 func (r *AutoDMRecipientRuleRepository) GetByRecipient(userID, accountID uint, recipientUserID string) (*model.AutoDMRecipientRule, error) {
@@ -112,6 +135,57 @@ func (r *AutoDMRecipientRuleRepository) MarkUnsubscribedByToken(token string, at
 		return nil, err
 	}
 	return r.GetByToken(token)
+}
+
+func (r *AutoDMRecipientRuleRepository) UpdateStatusByID(userID, ruleID uint, status, reason, source string, at time.Time) (*model.AutoDMRecipientRule, error) {
+	status = strings.TrimSpace(status)
+	if !IsAutoDMRecipientRuleStatus(status) {
+		return nil, gorm.ErrInvalidData
+	}
+	var row model.AutoDMRecipientRule
+	if err := r.DB.Where("id = ? AND user_id = ?", ruleID, userID).First(&row).Error; err != nil {
+		return nil, err
+	}
+	if err := r.DB.Model(&model.AutoDMRecipientRule{}).Where("id = ? AND user_id = ?", ruleID, userID).Updates(map[string]any{
+		"status":          status,
+		"source":          strings.TrimSpace(source),
+		"reason":          strings.TrimSpace(reason),
+		"last_matched_at": at,
+		"updated_at":      at,
+	}).Error; err != nil {
+		return nil, err
+	}
+	if err := r.DB.Where("id = ? AND user_id = ?", ruleID, userID).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *AutoDMRecipientRuleRepository) UpdateStatusByIDs(userID uint, ids []uint, status, reason, source string, at time.Time) ([]model.AutoDMRecipientRule, error) {
+	status = strings.TrimSpace(status)
+	if !IsAutoDMRecipientRuleStatus(status) {
+		return nil, gorm.ErrInvalidData
+	}
+	if len(ids) == 0 {
+		return []model.AutoDMRecipientRule{}, nil
+	}
+	err := r.DB.Model(&model.AutoDMRecipientRule{}).
+		Where("user_id = ? AND id IN ?", userID, ids).
+		Updates(map[string]any{
+			"status":          status,
+			"source":          strings.TrimSpace(source),
+			"reason":          strings.TrimSpace(reason),
+			"last_matched_at": at,
+			"updated_at":      at,
+		}).Error
+	if err != nil {
+		return nil, err
+	}
+	var rows []model.AutoDMRecipientRule
+	err = r.DB.Where("user_id = ? AND id IN ?", userID, ids).
+		Order("updated_at DESC, id DESC").
+		Find(&rows).Error
+	return rows, err
 }
 
 func IsAutoDMRecipientRuleStatus(status string) bool {

@@ -307,6 +307,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "계정 설정이 불완전해 이번 Auto DM 실행을 건너뛰었습니다.",
   "activity.preview.dmSendSuccess": "Auto DM이 X에서 성공적으로 전송되었습니다.",
   "activity.preview.dmSendFailed": "Auto DM 실제 전송이 X에서 실패했습니다.",
+  "activity.preview.dmRecipientRuleUpdated": "Auto DM 수신자 규칙이 업데이트되었습니다.",
+  "activity.preview.dmRecipientImport": "Auto DM 허용 목록 가져오기가 완료되었습니다.",
   "activity.reply.story": "{account} 계정이 {them}에 답글: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 계정이 게시물을 발행했습니다.",
 
@@ -479,6 +481,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "수신자 규칙",
   "automation.dmReview.import": "허용 목록 가져오기",
   "automation.dmReview.importCta": "가져오기",
+  "automation.dmReview.importHistory": "가져오기 기록",
+  "automation.dmReview.imported": "가져옴",
+  "automation.dmReview.skipped": "건너뜀",
   "automation.dmReview.approve": "승인",
   "automation.dmReview.block": "차단",
   "automation.runtime.title": "런타임 상태",

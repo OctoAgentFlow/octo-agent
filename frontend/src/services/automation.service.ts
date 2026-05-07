@@ -96,8 +96,23 @@ export type AutoDMRecipientRulesData = {
 export type AutoDMRecipientImportData = {
   imported: number;
   skipped: number;
+  batch?: AutoDMRecipientImportApi;
   items: AutoDMRecipientRuleApi[];
   errors?: string[];
+};
+
+export type AutoDMRecipientImportApi = {
+  id: number;
+  x_account_id: number;
+  source: string;
+  imported: number;
+  skipped: number;
+  errors?: string[];
+  imported_at: string;
+};
+
+export type AutoDMRecipientImportsData = {
+  items: AutoDMRecipientImportApi[];
 };
 
 export type AutoDMPreferenceData = {
@@ -142,6 +157,10 @@ export const automationService = {
   },
   async dmRecipients() {
     const res = await request.get<ApiResponse<AutoDMRecipientRulesData>>("/auto-dm/recipients");
+    return res.data.data;
+  },
+  async dmRecipientImports() {
+    const res = await request.get<ApiResponse<AutoDMRecipientImportsData>>("/auto-dm/recipients/imports");
     return res.data.data;
   },
   async importDMRecipients(csv: string, xAccountID?: number) {

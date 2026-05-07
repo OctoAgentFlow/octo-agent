@@ -307,6 +307,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "Auto DM пропустил запуск из-за неполной настройки аккаунта.",
   "activity.preview.dmSendSuccess": "Auto DM успешно отправлен в X.",
   "activity.preview.dmSendFailed": "Реальная отправка Auto DM в X завершилась ошибкой.",
+  "activity.preview.dmRecipientRuleUpdated": "Правило получателя Auto DM обновлено.",
+  "activity.preview.dmRecipientImport": "Импорт allowlist Auto DM завершен.",
   "activity.reply.story": "{account} ответил(а) {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} успешно опубликовал(а) пост.",
 
@@ -479,6 +481,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "Правила получателей",
   "automation.dmReview.import": "Импорт allowlist",
   "automation.dmReview.importCta": "Импорт",
+  "automation.dmReview.importHistory": "История импорта",
+  "automation.dmReview.imported": "импортировано",
+  "automation.dmReview.skipped": "пропущено",
   "automation.dmReview.approve": "Одобрить",
   "automation.dmReview.block": "Блокировать",
   "automation.runtime.title": "Статус выполнения",

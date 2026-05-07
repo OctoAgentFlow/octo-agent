@@ -144,6 +144,20 @@ func (ctl *AutomationController) ListDMRecipientRules(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) ListDMRecipientImports(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoDMService.ListRecipientImports(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ImportDMRecipientRules(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

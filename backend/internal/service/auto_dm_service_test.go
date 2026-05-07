@@ -42,3 +42,20 @@ func TestClassifyAutoDMFailureNetwork(t *testing.T) {
 		t.Fatalf("unexpected retry at: %#v", failure.RetryAfterAt)
 	}
 }
+
+func TestParseAutoDMImportRow(t *testing.T) {
+	recipientID, username, skip, rowErr := parseAutoDMImportRow([]string{"1234567890", "alice"})
+	if skip || rowErr != "" || recipientID != "1234567890" || username != "@alice" {
+		t.Fatalf("unexpected valid row parse: id=%q username=%q skip=%v err=%q", recipientID, username, skip, rowErr)
+	}
+
+	_, _, skip, rowErr = parseAutoDMImportRow([]string{"recipient_user_id", "username"})
+	if !skip || rowErr != "" {
+		t.Fatalf("header row should be silently skipped: skip=%v err=%q", skip, rowErr)
+	}
+
+	_, _, skip, rowErr = parseAutoDMImportRow([]string{"not-a-user", "alice"})
+	if !skip || rowErr == "" {
+		t.Fatalf("invalid recipient id should be reported: skip=%v err=%q", skip, rowErr)
+	}
+}

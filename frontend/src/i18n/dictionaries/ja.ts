@@ -307,6 +307,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "アカウント設定が不完全なため、今回の Auto DM はスキップされました。",
   "activity.preview.dmSendSuccess": "Auto DM は X で正常に送信されました。",
   "activity.preview.dmSendFailed": "Auto DM の X への実送信に失敗しました。",
+  "activity.preview.dmRecipientRuleUpdated": "Auto DM の受信者ルールを更新しました。",
+  "activity.preview.dmRecipientImport": "Auto DM の許可リストインポートが完了しました。",
   "activity.reply.story": "{account} が {them} に返信: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} が投稿を公開しました。",
 
@@ -479,6 +481,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "受信者ルール",
   "automation.dmReview.import": "許可リストをインポート",
   "automation.dmReview.importCta": "インポート",
+  "automation.dmReview.importHistory": "インポート履歴",
+  "automation.dmReview.imported": "インポート済み",
+  "automation.dmReview.skipped": "スキップ",
   "automation.dmReview.approve": "承認",
   "automation.dmReview.block": "ブロック",
   "automation.runtime.title": "実行状態",

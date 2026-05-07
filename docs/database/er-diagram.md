@@ -13,6 +13,9 @@ flowchart TD
   User -->|1:N| AutomationConfig
   User -->|1:N| ActivityLog
   User -->|1:N| ReplyReservation
+  User -->|1:N| AutoDMTask
+  User -->|1:N| AutoDMRecipientRule
+  User -->|1:N| AutoDMRecipientImport
   User -->|1:N| Post
   User -->|1:N| BillingOrder
   User -->|1:N| Agent

@@ -307,6 +307,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "自動私訊本次已略過，因為帳號設定不完整。",
   "activity.preview.dmSendSuccess": "自動私訊已成功送到 X。",
   "activity.preview.dmSendFailed": "自動私訊真實送出到 X 失敗。",
+  "activity.preview.dmRecipientRuleUpdated": "自動私訊收件人規則已更新。",
+  "activity.preview.dmRecipientImport": "自動私訊白名單匯入已完成。",
   "activity.reply.story": "{account} 回覆了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功發布一則內容。",
 
@@ -479,6 +481,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "收件人名單規則",
   "automation.dmReview.import": "匯入白名單",
   "automation.dmReview.importCta": "匯入",
+  "automation.dmReview.importHistory": "匯入歷史",
+  "automation.dmReview.imported": "已匯入",
+  "automation.dmReview.skipped": "已略過",
   "automation.dmReview.approve": "核准",
   "automation.dmReview.block": "攔截",
   "automation.runtime.title": "運行狀態",

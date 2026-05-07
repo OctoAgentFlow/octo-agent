@@ -78,6 +78,10 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     network: order.network,
     status: mapOrderStatus(order.status),
     txHash: order.tx_hash || "",
+    failureReason: order.failure_reason || "",
+    lastCheckedAt: order.last_checked_at || "",
+    canRetry: Boolean(order.can_retry),
+    nextAction: order.next_action || "",
   };
 }
 
@@ -223,6 +227,28 @@ export default function BillingPage() {
     });
   }, [fetchBilling]);
 
+  const confirmOrderTx = useCallback(
+    async (orderId: string, txHash: string) => {
+      try {
+        const updated = await billingService.confirmOrder(orderId, txHash);
+        if (updated.status === "paid") {
+          pushToast("Payment confirmed. Subscription is active.");
+        } else {
+          pushToast("Order check completed.");
+        }
+        await fetchBilling({ quiet: true });
+      } catch (error) {
+        const msg = axios.isAxiosError(error)
+          ? error.response?.data?.message || "Failed to confirm this transaction."
+          : "Failed to confirm this transaction.";
+        pushToast(msg);
+        await fetchBilling({ quiet: true });
+        throw new Error(msg);
+      }
+    },
+    [fetchBilling, pushToast]
+  );
+
   if (loadState === "loading") {
     return (
       <Card>
@@ -248,6 +274,7 @@ export default function BillingPage() {
       plans={plans}
       paymentMethods={paymentMethods}
       paymentRecords={paymentRecords}
+      onConfirmTx={confirmOrderTx}
       onPaymentConfirmed={() => void fetchBilling({ quiet: true })}
     />
   );

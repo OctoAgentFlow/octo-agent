@@ -17,6 +17,8 @@ type BillingOrder struct {
 	ExpiredAt       time.Time  `gorm:"index;not null;comment:订单过期时间" json:"expired_at"`
 	PaidAt          *time.Time `gorm:"comment:支付确认时间" json:"paid_at,omitempty"`
 	TxHash          string     `gorm:"size:128;index;comment:链上交易哈希" json:"tx_hash,omitempty"`
+	FailureReason   string     `gorm:"size:512;comment:最近一次确认失败原因" json:"failure_reason,omitempty"`
+	LastCheckedAt   *time.Time `gorm:"comment:最近一次链上确认检查时间" json:"last_checked_at,omitempty"`
 	ChainID         int64      `gorm:"not null;default:0;comment:链ID" json:"chain_id"`
 	TokenDecimals   int        `gorm:"not null;default:18;comment:代币精度" json:"token_decimals"`
 }

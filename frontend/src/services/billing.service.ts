@@ -64,6 +64,10 @@ export type BillingOrderDetailApi = {
   status: string;
   tx_hash?: string;
   paid_at?: string;
+  failure_reason?: string;
+  last_checked_at?: string;
+  can_retry: boolean;
+  next_action: string;
 };
 
 export type BillingOrderListItemApi = {
@@ -78,6 +82,10 @@ export type BillingOrderListItemApi = {
   created_at: string;
   expired_at: string;
   paid_at?: string;
+  failure_reason?: string;
+  last_checked_at?: string;
+  can_retry: boolean;
+  next_action: string;
 };
 
 type BillingPlansData = {
@@ -111,6 +119,12 @@ export const billingService = {
   },
   async getOrder(orderId: string) {
     const res = await request.get<ApiResponse<BillingOrderDetailApi>>(`/billing/orders/${orderId}`);
+    return res.data.data;
+  },
+  async confirmOrder(orderId: string, txHash: string) {
+    const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/billing/orders/${orderId}/confirm`, {
+      tx_hash: txHash,
+    });
     return res.data.data;
   },
   async orders() {

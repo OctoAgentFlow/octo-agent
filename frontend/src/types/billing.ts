@@ -41,4 +41,8 @@ export type PaymentRecord = {
   network: string;
   status: PaymentStatus;
   txHash: string;
+  failureReason: string;
+  lastCheckedAt: string;
+  canRetry: boolean;
+  nextAction: string;
 };

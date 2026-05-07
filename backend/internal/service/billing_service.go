@@ -173,6 +173,10 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 
 // GetOrder returns one order for the authenticated user (polling).
 func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetailResponse, error) {
+	now := time.Now().UTC()
+	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, now); err != nil {
+		return nil, err
+	}
 	o, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -184,6 +188,9 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 }
 
 func (s *BillingService) ListOrders(userID uint) (*dto.BillingOrderListResponse, error) {
+	if err := s.orderRepo.ExpireStaleByUser(userID, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	orders, err := s.orderRepo.ListByUser(userID, 20)
 	if err != nil {
 		return nil, err
@@ -207,31 +214,70 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		ExpiredAt:       o.ExpiredAt.UTC().Format(time.RFC3339),
 		Status:          o.Status,
 		TxHash:          o.TxHash,
+		FailureReason:   o.FailureReason,
+		CanRetry:        canRetryBillingOrder(o, time.Now().UTC()),
+		NextAction:      billingOrderNextAction(o, time.Now().UTC()),
 	}
 	if o.PaidAt != nil {
 		s := o.PaidAt.UTC().Format(time.RFC3339)
 		out.PaidAt = s
+	}
+	if o.LastCheckedAt != nil {
+		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
 	}
 	return out
 }
 
 func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	out := dto.BillingOrderListItem{
-		OrderID:   strconv.FormatUint(uint64(o.ID), 10),
-		PlanCode:  o.PlanCode,
-		Amount:    o.Amount,
-		Currency:  o.Currency,
-		Method:    o.Method,
-		Network:   o.Network,
-		Status:    o.Status,
-		TxHash:    o.TxHash,
-		CreatedAt: o.CreatedAt.UTC().Format(time.RFC3339),
-		ExpiredAt: o.ExpiredAt.UTC().Format(time.RFC3339),
+		OrderID:       strconv.FormatUint(uint64(o.ID), 10),
+		PlanCode:      o.PlanCode,
+		Amount:        o.Amount,
+		Currency:      o.Currency,
+		Method:        o.Method,
+		Network:       o.Network,
+		Status:        o.Status,
+		TxHash:        o.TxHash,
+		CreatedAt:     o.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiredAt:     o.ExpiredAt.UTC().Format(time.RFC3339),
+		FailureReason: o.FailureReason,
+		CanRetry:      canRetryBillingOrder(o, time.Now().UTC()),
+		NextAction:    billingOrderNextAction(o, time.Now().UTC()),
 	}
 	if o.PaidAt != nil {
 		out.PaidAt = o.PaidAt.UTC().Format(time.RFC3339)
 	}
+	if o.LastCheckedAt != nil {
+		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
+	}
 	return out
+}
+
+func canRetryBillingOrder(o *model.BillingOrder, now time.Time) bool {
+	if o == nil {
+		return false
+	}
+	st := strings.ToLower(strings.TrimSpace(o.Status))
+	return (st == "pending" || st == "failed") && now.Before(o.ExpiredAt)
+}
+
+func billingOrderNextAction(o *model.BillingOrder, now time.Time) string {
+	if o == nil {
+		return ""
+	}
+	st := strings.ToLower(strings.TrimSpace(o.Status))
+	switch {
+	case st == "paid":
+		return "subscription_active"
+	case st == "expired" || now.After(o.ExpiredAt):
+		return "create_new_order"
+	case st == "failed":
+		return "submit_correct_tx_hash"
+	case st == "pending":
+		return "submit_tx_hash_or_wait"
+	default:
+		return "contact_support"
+	}
 }
 
 func (s *BillingService) findPaymentMethod(method, network string) *config.PaymentMethodConfig {
@@ -248,6 +294,36 @@ func (s *BillingService) findPaymentMethod(method, network string) *config.Payme
 		return pm
 	}
 	return nil
+}
+
+// ConfirmOrderTx lets the authenticated user recover a pending/failed order when webhook delivery is missed.
+func (s *BillingService) ConfirmOrderTx(userID, orderID uint, req dto.BillingConfirmOrderRequest) (*dto.BillingOrderDetailResponse, error) {
+	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	order, err := s.orderRepo.GetByUserAndID(userID, orderID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBillingOrderNotFound
+		}
+		return nil, err
+	}
+
+	normHash, err := normalizeEVMTxHash(req.TxHash)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.confirmOnchainOrder(order, order.Network, normHash, true); err != nil {
+		return nil, err
+	}
+	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	updated, err := s.orderRepo.GetByUserAndID(userID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return orderToDetailDTO(updated), nil
 }
 
 // WebhookOnchain confirms payment from chain. Amount and receiver are enforced by VerifyERC20Transfer (ERC20 Transfer log).
@@ -272,6 +348,9 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		return err
 	}
 
+	if err := s.orderRepo.ExpireStaleByID(uint(orderID), time.Now().UTC()); err != nil {
+		return err
+	}
 	order, err := s.orderRepo.GetByID(uint(orderID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -279,6 +358,10 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		}
 		return err
 	}
+	return s.confirmOnchainOrder(order, net, normHash, false)
+}
+
+func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, normHash string, markFailure bool) error {
 	if strings.ToUpper(strings.TrimSpace(order.Network)) != net {
 		return fmt.Errorf("network does not match order")
 	}
@@ -287,12 +370,15 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	if order.Status == "paid" {
 		return nil
 	}
-	if order.Status != "pending" {
+	if order.Status == "expired" {
+		return ErrBillingOrderExpired
+	}
+	if order.Status != "pending" && order.Status != "failed" {
 		return fmt.Errorf("order not pending")
 	}
 	if now.After(order.ExpiredAt) {
-		_ = s.orderRepo.DB.Model(&model.BillingOrder{}).Where("id = ?", order.ID).Update("status", "expired").Error
-		return fmt.Errorf("order expired")
+		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
+		return ErrBillingOrderExpired
 	}
 
 	if net != "BEP20" {
@@ -318,7 +404,7 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		return err
 	}
 
-	txHash := common.HexToHash(strings.TrimSpace(req.TxHash))
+	txHash := common.HexToHash(normHash)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -330,6 +416,9 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		ExpectedChainID: big.NewInt(order.ChainID),
 	})
 	if verifyErr != nil {
+		if markFailure {
+			_ = s.orderRepo.MarkFailed(order.ID, normHash, sanitizeBillingFailureReason(fmt.Sprintf("transfer verification failed: %v", verifyErr)), time.Now().UTC())
+		}
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
 	}
 
@@ -341,13 +430,17 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		if ord.Status == "paid" {
 			return nil
 		}
-		if ord.Status != "pending" {
+		if ord.Status != "pending" && ord.Status != "failed" {
 			return fmt.Errorf("order not pending")
 		}
 		tnow := time.Now().UTC()
 		if tnow.After(ord.ExpiredAt) {
-			_ = tx.Model(&model.BillingOrder{}).Where("id = ?", ord.ID).Update("status", "expired")
-			return fmt.Errorf("order expired")
+			_ = tx.Model(&model.BillingOrder{}).Where("id = ?", ord.ID).Updates(map[string]any{
+				"status":          "expired",
+				"failure_reason":  "order expired before payment confirmation",
+				"last_checked_at": tnow,
+			})
+			return ErrBillingOrderExpired
 		}
 
 		var other int64
@@ -368,10 +461,12 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		}
 
 		paidAt := time.Now().UTC()
-		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status = ?", ord.ID, "pending").Updates(map[string]any{
-			"status":  "paid",
-			"tx_hash": normHash,
-			"paid_at": paidAt,
+		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, []string{"pending", "failed"}).Updates(map[string]any{
+			"status":          "paid",
+			"tx_hash":         normHash,
+			"paid_at":         paidAt,
+			"failure_reason":  "",
+			"last_checked_at": paidAt,
 		})
 		if res.Error != nil {
 			return res.Error
@@ -404,6 +499,17 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	})
 }
 
+func sanitizeBillingFailureReason(reason string) string {
+	r := strings.TrimSpace(reason)
+	if r == "" {
+		return "payment confirmation failed"
+	}
+	if len(r) > 480 {
+		return r[:480]
+	}
+	return r
+}
+
 func normalizeEVMTxHash(hex string) (string, error) {
 	h := strings.TrimSpace(hex)
 	txHash := common.HexToHash(h)
@@ -418,4 +524,5 @@ var (
 	ErrBillingWebhookForbidden = errors.New("invalid billing webhook secret")
 	ErrBillingOrderNotFound    = errors.New("order not found")
 	ErrBillingTxAlreadyUsed    = errors.New("transaction already used for another order")
+	ErrBillingOrderExpired     = errors.New("order expired")
 )

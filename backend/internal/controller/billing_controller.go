@@ -91,6 +91,40 @@ func (ctl *BillingController) GetOrder(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *BillingController) ConfirmOrder(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	idStr := c.Param("id")
+	oid, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 64)
+	if err != nil || oid == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid order id")
+		return
+	}
+	var req dto.BillingConfirmOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.billingService.ConfirmOrderTx(userID, uint(oid), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrBillingOrderNotFound):
+			response.Fail(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, service.ErrBillingTxAlreadyUsed):
+			response.Fail(c, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrBillingOrderExpired):
+			response.Fail(c, http.StatusGone, err.Error())
+		default:
+			response.Fail(c, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *BillingController) ListOrders(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -121,6 +155,8 @@ func (ctl *BillingController) WebhookOnchain(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, err.Error())
 		case errors.Is(err, service.ErrBillingTxAlreadyUsed):
 			response.Fail(c, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrBillingOrderExpired):
+			response.Fail(c, http.StatusGone, err.Error())
 		default:
 			response.Fail(c, http.StatusBadRequest, err.Error())
 		}

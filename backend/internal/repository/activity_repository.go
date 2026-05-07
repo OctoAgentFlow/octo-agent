@@ -329,6 +329,25 @@ func (r *ActivityRepository) ListAttentionBetween(userID uint, from, to time.Tim
 	return rows, err
 }
 
+func (r *ActivityRepository) ListDMOperationEventsBetween(userID uint, from, to time.Time, accountID uint, accountHandle string, limit int) ([]model.ActivityLog, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 6
+	}
+	var rows []model.ActivityLog
+	q := r.DB.Model(&model.ActivityLog{}).
+		Where("user_id = ? AND type = ?", userID, "dm").
+		Where("preview_key IN ?", []string{"activity.preview.dmRecipientImport", "activity.preview.dmRecipientRuleUpdated"})
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Order("executed_at DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 // CountByAccountAndStatusBetween aggregates activities by X account and status in [from, to).
 func (r *ActivityRepository) CountByAccountAndStatusBetween(userID uint, from, to time.Time) ([]ActivityAccountStatusCount, error) {
 	var rows []ActivityAccountStatusCount

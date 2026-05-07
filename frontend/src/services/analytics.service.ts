@@ -74,6 +74,51 @@ export type AnalyticsOverview = {
     post_total: number;
     last_activity_at?: string;
   }>;
+  auto_dm_operations: {
+    recipients: {
+      total: number;
+      allowlisted: number;
+      blocked: number;
+      unsubscribed: number;
+    };
+    imports: {
+      batches: number;
+      imported: number;
+      skipped: number;
+      error_batches: number;
+      recent_errors: Array<{
+        id: number;
+        x_account_id: number;
+        errors: string[];
+        imported_at: string;
+      }>;
+    };
+    tasks: {
+      total: number;
+      review: number;
+      approved: number;
+      sending: number;
+      sent: number;
+      failed: number;
+      blocked: number;
+      retryable: number;
+      needs_attention: number;
+    };
+    failure_categories: Array<{
+      category: string;
+      count: number;
+      last_at?: string;
+    }>;
+    recent_events: Array<{
+      id: number;
+      x_account_id?: number;
+      status: string;
+      account_handle: string;
+      preview_key: string;
+      executed_at: string;
+      message?: string;
+    }>;
+  };
 };
 
 export type AnalyticsRange = "7d" | "30d";

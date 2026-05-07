@@ -25,6 +25,7 @@ The MVP aggregates:
 - account comparison metrics for connected X accounts
 - top failed execution reasons
 - recent failed or review items that need attention
+- Auto DM recipient operations summary: list health, import quality, send risk, failure categories, and recent list events
 
 ### Response
 
@@ -93,7 +94,54 @@ The MVP aggregates:
         "post_total": 8,
         "last_activity_at": "2026-05-07T05:20:00Z"
       }
-    ]
+    ],
+    "auto_dm_operations": {
+      "recipients": {
+        "total": 12,
+        "allowlisted": 8,
+        "blocked": 2,
+        "unsubscribed": 2
+      },
+      "imports": {
+        "batches": 3,
+        "imported": 24,
+        "skipped": 2,
+        "error_batches": 1,
+        "recent_errors": [
+          {
+            "id": 7,
+            "x_account_id": 1,
+            "errors": ["line 3: recipient_user_id must be numeric"],
+            "imported_at": "2026-05-07T05:10:00Z"
+          }
+        ]
+      },
+      "tasks": {
+        "total": 9,
+        "review": 2,
+        "approved": 1,
+        "sending": 0,
+        "sent": 4,
+        "failed": 1,
+        "blocked": 1,
+        "retryable": 1,
+        "needs_attention": 5
+      },
+      "failure_categories": [
+        { "category": "recipient_rule_blocked", "count": 2, "last_at": "2026-05-07T05:15:00Z" }
+      ],
+      "recent_events": [
+        {
+          "id": 50,
+          "x_account_id": 1,
+          "status": "success",
+          "account_handle": "@octo_agent_flow",
+          "preview_key": "activity.preview.dmRecipientRuleUpdated",
+          "executed_at": "2026-05-07T05:20:00Z",
+          "message": "Recipient 123 marked blocked."
+        }
+      ]
+    }
   }
 }
 ```
@@ -105,6 +153,8 @@ The MVP aggregates:
 - `failure_reasons` returns up to 5 failed-execution groups for the selected window.
 - `attention_items` returns up to 6 recent `failed` or `review` activity rows for the selected window.
 - `account_breakdown` returns one row per connected account, or the selected account when `account_id` is provided.
+- `auto_dm_operations.recipients` reflects current recipient rule state and is filtered by `account_id` when provided.
+- `auto_dm_operations.imports`, `tasks`, `failure_categories`, and `recent_events` use the selected time window.
 - `account_id` filters `posts.x_account_id` directly. For activity rows, new logs use `activity_logs.x_account_id`; older rows are also matched by `account_handle` for compatibility.
 - `success_rate_pct` uses successful and failed rows only; review rows do not count in the denominator.
 - `total_7d`, `success_7d`, `failed_7d`, and `review_7d` are retained as compatibility fields. New UI code should use the range-neutral `total`, `success`, `failed`, and `review` fields.

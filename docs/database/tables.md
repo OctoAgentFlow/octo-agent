@@ -53,6 +53,11 @@
 - 用途：Auto DM 候选、能力检查、审批、真实发送结果和审计记录；真实发送器只能消费已通过权限与审批的任务
 - 核心字段：`user_id`、`x_account_id`、`recipient_source`、`recipient_user_id`、`recipient_username`、`status`、`capability_status`、`failure_category`、`failure_reason`、`retryable`、`retry_after_at`、`attempt_count`、`last_attempt_at`、`approval_required`、`activity_log_id`、`dm_conversation_id`、`dm_event_id`
 
+### auto_dm_recipient_rules
+
+- 用途：Auto DM 收件人准入/退出规则；候选生成和真实发送都会检查
+- 核心字段：`user_id`、`x_account_id`、`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`source`、`reason`、`last_matched_at`
+
 ### posts
 
 - 用途：用户待发/已计划/已发布等内容；字段含 `x_account_id`、`content`、`status`、`scheduled_at`、`published_at` 等（见 `model.Post`）

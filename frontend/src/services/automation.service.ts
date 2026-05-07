@@ -75,6 +75,22 @@ export type AutoDMTasksData = {
   items: AutoDMTaskApi[];
 };
 
+export type AutoDMRecipientRuleApi = {
+  id: number;
+  x_account_id: number;
+  recipient_user_id: string;
+  recipient_username?: string;
+  status: "allowlisted" | "blocked" | "unsubscribed";
+  source?: string;
+  reason?: string;
+  last_matched_at?: string;
+  updated_at?: string;
+};
+
+export type AutoDMRecipientRulesData = {
+  items: AutoDMRecipientRuleApi[];
+};
+
 export type AutomationSavePayload = {
   enabled: boolean;
   frequency: {
@@ -110,6 +126,10 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoDMTasksData>>("/auto-dm/tasks");
     return res.data.data;
   },
+  async dmRecipients() {
+    const res = await request.get<ApiResponse<AutoDMRecipientRulesData>>("/auto-dm/recipients");
+    return res.data.data;
+  },
   async approveDMTask(id: number) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/approve`);
     return res.data.data;
@@ -120,6 +140,10 @@ export const automationService = {
   },
   async retryDMTask(id: number) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/retry`);
+    return res.data.data;
+  },
+  async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
+    const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason });
     return res.data.data;
   },
 };

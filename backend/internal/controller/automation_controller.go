@@ -130,6 +130,20 @@ func (ctl *AutomationController) ListDMTasks(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) ListDMRecipientRules(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoDMService.ListRecipientRules(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ApproveDMTask(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -185,6 +199,30 @@ func (ctl *AutomationController) RetryDMTask(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoDMService.RetryTask(userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) SetDMRecipientRule(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	var req dto.AutoDMRecipientRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.SetRecipientRuleFromTask(userID, taskID, req.Status, req.Reason)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

@@ -14,6 +14,7 @@ import {
 import { useT } from "@/i18n/use-t";
 import {
   automationService,
+  type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
   type AutomationModuleApi,
   type AutomationRuntimeStatusApi,
@@ -102,6 +103,7 @@ export default function AgentsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [modules, setModules] = useState<AutomationModule[]>([]);
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
+  const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -130,14 +132,16 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
+          automationService.dmRecipients(),
         ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
+        setDMRecipients(dmRecipientData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -157,12 +161,13 @@ export default function AgentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks()])
-      .then(([mod, runtime, dmTaskData]) => {
+    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks(), automationService.dmRecipients()])
+      .then(([mod, runtime, dmTaskData, dmRecipientData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
+        setDMRecipients(dmRecipientData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -272,6 +277,20 @@ export default function AgentsPage() {
     }
   };
 
+  const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
+    try {
+      const rule = await automationService.setDMRecipientRule(id, status, `Marked ${status} from Auto DM queue.`);
+      setDMRecipients((items) => [rule, ...items.filter((item) => item.id !== rule.id)]);
+      if (status === "blocked" || status === "unsubscribed") {
+        const dmTaskData = await automationService.dmTasks();
+        setDMTasks(dmTaskData.items);
+      }
+      pushToast(`Auto DM recipient marked ${status}.`);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -299,7 +318,14 @@ export default function AgentsPage() {
 
       <AutomationStatusPanel status={runtimeStatus} />
 
-      <AutoDMReviewPanel tasks={dmTasks} onApprove={approveDMTask} onBlock={blockDMTask} onRetry={retryDMTask} />
+      <AutoDMReviewPanel
+        tasks={dmTasks}
+        recipients={dmRecipients}
+        onApprove={approveDMTask}
+        onBlock={blockDMTask}
+        onRetry={retryDMTask}
+        onRule={setDMRecipientRule}
+      />
 
       <AutomationEditDialog
         module={editing}
@@ -313,14 +339,18 @@ export default function AgentsPage() {
 
 function AutoDMReviewPanel({
   tasks,
+  recipients,
   onApprove,
   onBlock,
   onRetry,
+  onRule,
 }: {
   tasks: AutoDMTaskApi[];
+  recipients: AutoDMRecipientRuleApi[];
   onApprove: (id: number) => void;
   onBlock: (id: number) => void;
   onRetry: (id: number) => void;
+  onRule: (id: number, status: AutoDMRecipientRuleApi["status"]) => void;
 }) {
   const { t } = useT();
   return (
@@ -390,11 +420,36 @@ function AutoDMReviewPanel({
                         {t("automation.dmReview.retry")}
                       </Button>
                     ) : null}
+                    {task.recipient_user_id ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => onRule(task.id, "allowlisted")}>
+                          {t("automation.dmReview.allowlist")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onRule(task.id, "blocked")}>
+                          {t("automation.dmReview.blacklist")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onRule(task.id, "unsubscribed")}>
+                          {t("automation.dmReview.unsubscribe")}
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </div>
             );
           })}
+          {recipients.length > 0 ? (
+            <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+              <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.rules")}</p>
+              <div className="flex flex-wrap gap-2">
+                {recipients.slice(0, 8).map((rule) => (
+                  <span key={rule.id} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
+                    {rule.recipient_username || rule.recipient_user_id}: {rule.status}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>

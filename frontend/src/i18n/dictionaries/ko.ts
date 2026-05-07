@@ -305,6 +305,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "Auto DM 드라이런이 실제 전송 전 검토 항목을 만들었습니다.",
   "activity.preview.dmCapabilityMissing": "X DM 권한이 확인되지 않아 Auto DM을 보낼 수 없습니다.",
   "activity.preview.dmSkipped": "계정 설정이 불완전해 이번 Auto DM 실행을 건너뛰었습니다.",
+  "activity.preview.dmSendSuccess": "Auto DM이 X에서 성공적으로 전송되었습니다.",
+  "activity.preview.dmSendFailed": "Auto DM 실제 전송이 X에서 실패했습니다.",
   "activity.reply.story": "{account} 계정이 {them}에 답글: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 계정이 게시물을 발행했습니다.",
 
@@ -465,6 +467,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "아직 Auto DM 검토 작업이 없습니다.",
   "automation.dmReview.source": "출처",
   "automation.dmReview.capability": "권한",
+  "automation.dmReview.recipient": "수신자",
+  "automation.dmReview.sentEvent": "전송 이벤트",
   "automation.dmReview.approve": "승인",
   "automation.dmReview.block": "차단",
   "automation.runtime.title": "런타임 상태",

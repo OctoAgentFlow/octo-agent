@@ -327,6 +327,8 @@ export const dict: I18nDict = {
   "activity.preview.dmDryRunReview": "Auto DM dry-run created a review item before any real message is sent.",
   "activity.preview.dmCapabilityMissing": "Auto DM could not send because X DM capability is not confirmed.",
   "activity.preview.dmSkipped": "Auto DM skipped this run because the account setup is incomplete.",
+  "activity.preview.dmSendSuccess": "Auto DM was sent successfully on X.",
+  "activity.preview.dmSendFailed": "Auto DM real send failed on X.",
   "activity.reply.story": "{account} replied to {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} published a post successfully.",
 
@@ -489,6 +491,8 @@ export const dict: I18nDict = {
   "automation.dmReview.empty": "No Auto DM review tasks yet.",
   "automation.dmReview.source": "Source",
   "automation.dmReview.capability": "Capability",
+  "automation.dmReview.recipient": "Recipient",
+  "automation.dmReview.sentEvent": "Sent event",
   "automation.dmReview.approve": "Approve",
   "automation.dmReview.block": "Block",
   "automation.runtime.title": "Runtime Status",

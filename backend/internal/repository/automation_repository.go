@@ -97,7 +97,10 @@ func (r *AutomationRepository) Save(cfg *model.AutomationConfig) error {
 	return r.DB.Save(cfg).Error
 }
 
-const AutomationTypeReply = "reply"
+const (
+	AutomationTypeReply = "reply"
+	AutomationTypeDM    = "dm"
+)
 
 // ListUserIDsWithReplyAutomationEnabled returns user ids with reply automation on and an active subscription.
 func (r *AutomationRepository) ListUserIDsWithReplyAutomationEnabled(limit int) ([]uint, error) {
@@ -114,4 +117,21 @@ func (r *AutomationRepository) ListUserIDsWithReplyAutomationEnabled(limit int) 
 		Limit(limit).
 		Pluck("automation_configs.user_id", &ids).Error
 	return ids, err
+}
+
+// ListDueDMAutomationConfigs returns due Auto DM configs for active subscribers.
+func (r *AutomationRepository) ListDueDMAutomationConfigs(limit int, now time.Time) ([]model.AutomationConfig, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var rows []model.AutomationConfig
+	err := r.DB.Model(&model.AutomationConfig{}).
+		Joins(`INNER JOIN users ON users.id = automation_configs.user_id AND users.subscription_status = ? AND users.subscription_expires_at IS NOT NULL AND users.subscription_expires_at > ?`,
+			"active", now).
+		Where("automation_configs.type = ? AND automation_configs.enabled = ?", AutomationTypeDM, true).
+		Where("(automation_configs.next_run_at IS NULL OR automation_configs.next_run_at <= ?)", now).
+		Order("automation_configs.next_run_at ASC, automation_configs.id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
 }

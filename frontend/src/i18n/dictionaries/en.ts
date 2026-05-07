@@ -324,6 +324,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "X rate limit hit; publish deferred to a later time.",
   "activity.preview.replySuccess": "Auto-replied to a comment on X.",
   "activity.preview.replyFailed": "Auto-reply to a comment on X failed.",
+  "activity.preview.dmDryRunReview": "Auto DM dry-run created a review item before any real message is sent.",
+  "activity.preview.dmCapabilityMissing": "Auto DM could not send because X DM capability is not confirmed.",
+  "activity.preview.dmSkipped": "Auto DM skipped this run because the account setup is incomplete.",
   "activity.reply.story": "{account} replied to {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} published a post successfully.",
 

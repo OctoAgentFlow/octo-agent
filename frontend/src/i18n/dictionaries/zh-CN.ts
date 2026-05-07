@@ -303,6 +303,9 @@ export const dict: I18nDict = {
   "activity.preview.postRateLimited": "触发 X 频率限制，已推迟到稍后重试。",
   "activity.preview.replySuccess": "已在 X 上自动回复了一条评论。",
   "activity.preview.replyFailed": "在 X 上自动回复评论失败。",
+  "activity.preview.dmDryRunReview": "自动私信已生成一条待审核记录，尚未发送真实私信。",
+  "activity.preview.dmCapabilityMissing": "自动私信未发送，因为尚未确认 X 私信权限。",
+  "activity.preview.dmSkipped": "自动私信本次已跳过，因为账号配置不完整。",
   "activity.reply.story": "{account} 回复了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功发布一条内容。",
 

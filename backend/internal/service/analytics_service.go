@@ -5,12 +5,15 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/dto"
+	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/repository"
 
 	"gorm.io/gorm"
 )
 
 const defaultAnalyticsRangeDays = 7
+const analyticsFailureReasonLimit = 5
+const analyticsAttentionItemLimit = 6
 
 var ErrInvalidAnalyticsRange = errors.New("analytics range must be 7d or 30d")
 var ErrAnalyticsAccountNotFound = errors.New("analytics account not found")
@@ -61,11 +64,19 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
-	lastAt, err := s.activityRepo.LatestExecutedAt(userID)
+	lastAt, err := s.activityRepo.LatestExecutedAtBetween(userID, start, now, accountID, accountHandle)
 	if err != nil {
 		return nil, err
 	}
 	postCounts, err := s.postRepo.CountByStatus(userID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	failureRows, err := s.activityRepo.CountFailureReasonsBetween(userID, start, now, accountID, accountHandle, analyticsFailureReasonLimit)
+	if err != nil {
+		return nil, err
+	}
+	attentionRows, err := s.activityRepo.ListAttentionBetween(userID, start, now, accountID, accountHandle, analyticsAttentionItemLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +131,8 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 		},
 		AutomationBreakdown: buildAutomationBreakdown(typeStatusCounts),
 		DailyActivity:       buildDailyActivity(start, rangeDays, dailyCounts),
+		FailureReasons:      buildFailureReasons(failureRows),
+		AttentionItems:      buildAttentionItems(attentionRows),
 	}, nil
 }
 
@@ -191,6 +204,37 @@ func buildDailyActivity(start time.Time, days int, rows []repository.ActivityDai
 		case "review":
 			item.Review += row.Count
 		}
+	}
+	return out
+}
+
+func buildFailureReasons(rows []repository.ActivityFailureReasonCount) []dto.AnalyticsFailureReason {
+	out := make([]dto.AnalyticsFailureReason, 0, len(rows))
+	for _, row := range rows {
+		item := dto.AnalyticsFailureReason{
+			Reason: row.Reason,
+			Count:  row.Count,
+		}
+		if row.LastAt != nil {
+			item.LastAt = row.LastAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func buildAttentionItems(rows []model.ActivityLog) []dto.AnalyticsAttentionItem {
+	out := make([]dto.AnalyticsAttentionItem, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, dto.AnalyticsAttentionItem{
+			ID:            row.ID,
+			Type:          row.Type,
+			Status:        row.Status,
+			AccountHandle: row.AccountHandle,
+			PreviewKey:    row.PreviewKey,
+			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
+			ErrorMessage:  row.ErrorMessage,
+		})
 	}
 	return out
 }

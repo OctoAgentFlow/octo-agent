@@ -45,6 +45,20 @@ export type AnalyticsOverview = {
     failed: number;
     review: number;
   }>;
+  failure_reasons: Array<{
+    reason: string;
+    count: number;
+    last_at?: string;
+  }>;
+  attention_items: Array<{
+    id: number;
+    type: AnalyticsAutomationType;
+    status: "failed" | "review";
+    account_handle: string;
+    preview_key: string;
+    executed_at: string;
+    error_message?: string;
+  }>;
 };
 
 export type AnalyticsRange = "7d" | "30d";

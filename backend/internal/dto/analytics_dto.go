@@ -12,6 +12,8 @@ type AnalyticsOverviewResponse struct {
 	PostSummary         AnalyticsPostSummary        `json:"post_summary"`
 	AutomationBreakdown []AnalyticsAutomationMetric `json:"automation_breakdown"`
 	DailyActivity       []AnalyticsDailyActivity    `json:"daily_activity"`
+	FailureReasons      []AnalyticsFailureReason    `json:"failure_reasons"`
+	AttentionItems      []AnalyticsAttentionItem    `json:"attention_items"`
 }
 
 type AnalyticsActivitySummary struct {
@@ -50,4 +52,20 @@ type AnalyticsDailyActivity struct {
 	Success int64  `json:"success"`
 	Failed  int64  `json:"failed"`
 	Review  int64  `json:"review"`
+}
+
+type AnalyticsFailureReason struct {
+	Reason string `json:"reason"`
+	Count  int64  `json:"count"`
+	LastAt string `json:"last_at,omitempty"`
+}
+
+type AnalyticsAttentionItem struct {
+	ID            uint   `json:"id"`
+	Type          string `json:"type"`
+	Status        string `json:"status"`
+	AccountHandle string `json:"account_handle"`
+	PreviewKey    string `json:"preview_key"`
+	ExecutedAt    string `json:"executed_at"`
+	ErrorMessage  string `json:"error_message,omitempty"`
 }

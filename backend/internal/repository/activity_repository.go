@@ -91,7 +91,7 @@ func (r *ActivityRepository) LatestReplyExecutedAt(userID uint) (*time.Time, err
 	return &t, nil
 }
 
-func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, status string) ([]model.ActivityLog, int64, error) {
+func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string) ([]model.ActivityLog, int64, error) {
 	q := r.DB.Model(&model.ActivityLog{}).Where("user_id = ?", userID)
 	if typ != "" {
 		q = q.Where("type = ?", typ)
@@ -99,6 +99,16 @@ func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ strin
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	if errorReason != "" {
+		q = q.Where("COALESCE(NULLIF(TRIM(error_message), ''), 'Unknown error') = ?", errorReason)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err

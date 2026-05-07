@@ -52,6 +52,7 @@ export type AnalyticsOverview = {
   }>;
   attention_items: Array<{
     id: number;
+    x_account_id?: number;
     type: AnalyticsAutomationType;
     status: "failed" | "review";
     account_handle: string;

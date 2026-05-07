@@ -4,6 +4,7 @@ export type ActivityRange = "24h" | "7d" | "30d";
 
 export type ActivityRecord = {
   id: string;
+  xAccountId?: number;
   type: ActivityType;
   status: ActivityStatus;
   previewKey: string;
@@ -17,4 +18,3 @@ export type ActivityRecord = {
   replyToTextPreview?: string;
   replyTextPreview?: string;
 };
-

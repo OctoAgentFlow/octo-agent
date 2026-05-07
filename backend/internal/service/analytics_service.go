@@ -228,6 +228,7 @@ func buildAttentionItems(rows []model.ActivityLog) []dto.AnalyticsAttentionItem 
 	for _, row := range rows {
 		out = append(out, dto.AnalyticsAttentionItem{
 			ID:            row.ID,
+			XAccountID:    row.XAccountID,
 			Type:          row.Type,
 			Status:        row.Status,
 			AccountHandle: row.AccountHandle,

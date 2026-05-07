@@ -8,7 +8,7 @@
 | [account.md](./account.md) | X 账号列表、OAuth 起止、解绑 |
 | [dashboard.md](./dashboard.md) | Dashboard 概览 |
 | [automation.md](./automation.md) | 自动化模块配置、`runtime-status`（DB 真实统计）、Auto Post/Reply 调度说明 |
-| [activity.md](./activity.md) | 活动日志分页列表（含 reply 扩展字段） |
+| [activity.md](./activity.md) | 活动日志分页列表（含时间范围、账号筛选与 reply 扩展字段） |
 | [analytics.md](./analytics.md) | 分析概览（7/30 日活动、账号筛选、自动化拆分、内容状态统计） |
 | [billing.md](./billing.md) | 订阅/套餐/支付方式（YAML）、下单与订单查询、BEP20 Webhook |
 | [post.md](./post.md) | 帖子 CRUD（真实持久化） |

@@ -52,3 +52,30 @@ type AutomationRuntimeStatusData struct {
 	RetriesLast24 int    `json:"retries_last_24h"`
 	NeedsReview   int    `json:"needs_review"`
 }
+
+type AutoDMTaskItem struct {
+	ID                uint   `json:"id"`
+	XAccountID        uint   `json:"x_account_id,omitempty"`
+	AccountHandle     string `json:"account_handle"`
+	RecipientSource   string `json:"recipient_source"`
+	RecipientUserID   string `json:"recipient_user_id,omitempty"`
+	RecipientUsername string `json:"recipient_username,omitempty"`
+	MessagePreview    string `json:"message_preview,omitempty"`
+	Status            string `json:"status"`
+	CapabilityStatus  string `json:"capability_status"`
+	FailureReason     string `json:"failure_reason,omitempty"`
+	ApprovalRequired  bool   `json:"approval_required"`
+	ActivityLogID     uint   `json:"activity_log_id,omitempty"`
+	GeneratedAt       string `json:"generated_at"`
+	ApprovedAt        string `json:"approved_at,omitempty"`
+	BlockedAt         string `json:"blocked_at,omitempty"`
+	SentAt            string `json:"sent_at,omitempty"`
+}
+
+type AutoDMTasksResponse struct {
+	Items []AutoDMTaskItem `json:"items"`
+}
+
+type AutoDMTaskBlockRequest struct {
+	Reason string `json:"reason"`
+}

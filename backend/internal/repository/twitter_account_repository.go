@@ -44,6 +44,7 @@ func (r *TwitterAccountRepository) UpsertByUser(userID uint, account *model.Twit
 		existed.LastSyncedAt = &now
 		existed.AccessToken = account.AccessToken
 		existed.RefreshToken = account.RefreshToken
+		existed.OAuthScopes = account.OAuthScopes
 		if saveErr := r.DB.Save(&existed).Error; saveErr != nil {
 			return nil, saveErr
 		}
@@ -77,8 +78,8 @@ func (r *TwitterAccountRepository) DeleteByUserAndID(userID, id uint) error {
 	return r.DB.Model(&model.TwitterAccount{}).
 		Where("id = ? AND user_id = ?", id, userID).
 		Updates(map[string]any{
-			"status":       "disconnected",
-			"access_token": "",
+			"status":        "disconnected",
+			"access_token":  "",
 			"refresh_token": "",
 		}).Error
 }

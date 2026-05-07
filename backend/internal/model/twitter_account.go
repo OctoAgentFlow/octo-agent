@@ -15,4 +15,5 @@ type TwitterAccount struct {
 	LastSyncedAt  *time.Time `gorm:"comment:最近同步时间" json:"last_synced_at,omitempty"`
 	AccessToken   string     `gorm:"size:1024;comment:OAuth访问令牌" json:"-"`
 	RefreshToken  string     `gorm:"size:1024;comment:OAuth刷新令牌" json:"-"`
+	OAuthScopes   string     `gorm:"column:oauth_scopes;size:512;comment:OAuth授权scope列表" json:"-"`
 }

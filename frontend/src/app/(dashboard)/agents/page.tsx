@@ -11,7 +11,13 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { automationService, type AutomationModuleApi, type AutomationRuntimeStatusApi } from "@/services/automation.service";
+import { useT } from "@/i18n/use-t";
+import {
+  automationService,
+  type AutoDMTaskApi,
+  type AutomationModuleApi,
+  type AutomationRuntimeStatusApi,
+} from "@/services/automation.service";
 import type { AutomationModule, AutomationModuleConfig, AutomationRuntimeStatus } from "@/types/automation";
 
 import { AutomationEditDialog } from "@/components/automation/automation-edit-dialog";
@@ -95,6 +101,7 @@ export default function AgentsPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [modules, setModules] = useState<AutomationModule[]>([]);
+  const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -123,9 +130,14 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime] = await Promise.all([automationService.list(), automationService.runtimeStatus()]);
+        const [mod, runtime, dmTaskData] = await Promise.all([
+          automationService.list(),
+          automationService.runtimeStatus(),
+          automationService.dmTasks(),
+        ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
+        setDMTasks(dmTaskData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -145,11 +157,12 @@ export default function AgentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([automationService.list(), automationService.runtimeStatus()])
-      .then(([mod, runtime]) => {
+    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks()])
+      .then(([mod, runtime, dmTaskData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
+        setDMTasks(dmTaskData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -229,6 +242,26 @@ export default function AgentsPage() {
     }
   };
 
+  const approveDMTask = async (id: number) => {
+    try {
+      const updated = await automationService.approveDMTask(id);
+      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto DM task approved.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to approve DM task." : "Failed to approve DM task.");
+    }
+  };
+
+  const blockDMTask = async (id: number) => {
+    try {
+      const updated = await automationService.blockDMTask(id, "Blocked from Auto DM review queue.");
+      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto DM task blocked.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to block DM task." : "Failed to block DM task.");
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -256,6 +289,8 @@ export default function AgentsPage() {
 
       <AutomationStatusPanel status={runtimeStatus} />
 
+      <AutoDMReviewPanel tasks={dmTasks} onApprove={approveDMTask} onBlock={blockDMTask} />
+
       <AutomationEditDialog
         module={editing}
         open={editOpen}
@@ -263,5 +298,64 @@ export default function AgentsPage() {
         onSave={onSave}
       />
     </div>
+  );
+}
+
+function AutoDMReviewPanel({
+  tasks,
+  onApprove,
+  onBlock,
+}: {
+  tasks: AutoDMTaskApi[];
+  onApprove: (id: number) => void;
+  onBlock: (id: number) => void;
+}) {
+  const { t } = useT();
+  return (
+    <Card>
+      <CardHeader title={t("automation.dmReview.title")} description={t("automation.dmReview.description")} />
+      {tasks.length === 0 ? (
+        <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+          {t("automation.dmReview.empty")}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {tasks.slice(0, 5).map((task) => {
+            const canAct = task.status === "review";
+            return (
+              <div key={task.id} className="rounded-md border border-white/8 bg-white/[0.03] p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-white">{task.account_handle || "—"}</p>
+                    <p className="text-xs text-white/55">
+                      {t("automation.dmReview.source")}: {task.recipient_source} · {t("automation.dmReview.capability")}: {task.capability_status}
+                    </p>
+                    <p className="line-clamp-2 text-sm text-white/72">{task.message_preview || "—"}</p>
+                    {task.failure_reason ? (
+                      <p className="line-clamp-2 text-xs text-amber-100/85">{task.failure_reason}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
+                      {task.status}
+                    </span>
+                    {canAct ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => onBlock(task.id)}>
+                          {t("automation.dmReview.block")}
+                        </Button>
+                        <Button size="sm" onClick={() => onApprove(task.id)}>
+                          {t("automation.dmReview.approve")}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }

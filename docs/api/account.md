@@ -44,6 +44,7 @@ Base path: `/api/v1`
 - 鉴权：需要（Bearer Token）
 - 用途：发起 X OAuth 绑定，返回授权地址（服务端生成 state + PKCE challenge）
 - 请求体：无
+- Scope：当前请求 `tweet.read tweet.write users.read offline.access dm.read dm.write`；其中 DM scope 用于后续 Auto DM 真实发送前的能力检测。若旧账号未带 DM scope，Auto DM 会要求重新授权。
 
 示例响应：
 

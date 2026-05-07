@@ -21,7 +21,7 @@
 | --- | --- |
 | Auto Post（定时发推） | 已实现（scheduler + X API） |
 | Auto Reply（模板回复评论） | 已实现（scheduler + X API；`reply_reservations` 防并发重复） |
-| Auto DM | dry-run / capability-check 已实现（scheduler 写入 Activity，真实私信发送待 X DM 权限与风控确认） |
+| Auto DM | pre-send / audit 已实现（scheduler 写入 `auto_dm_tasks` + Activity，支持审核/拦截；真实私信发送待 X DM 权限与风控确认） |
 
 ## Next API Integration Priorities
 

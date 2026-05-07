@@ -49,6 +49,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	automationService := service.NewAutomationService(automationRepo, userRepo, activityRepo, postRepo)
 	activityService := service.NewActivityService(activityRepo)
 	analyticsService := service.NewAnalyticsService(activityRepo, postRepo)
+	agentService := service.NewAgentService(automationRepo)
 	billingOrderRepo := repository.NewBillingOrderRepository(db)
 	billingService := service.NewBillingService(userRepo, billingOrderRepo, cfg)
 	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo)
@@ -62,7 +63,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	an := controller.NewAnalyticsController(analyticsService)
 	bill := controller.NewBillingController(billingService)
 	p := controller.NewPostController(postService)
-	ag := controller.NewAgentController()
+	ag := controller.NewAgentController(agentService)
 
 	r.GET("/health", h.Ping)
 

@@ -5,7 +5,7 @@
 | `/login` | 登录/注册、邮箱验证码 | **真实**：Auth 全套接口 |
 | `/dashboard` | 概览、钱包连接、最近活动 | **真实**：`GET /dashboard/overview`、`GET /activities`（近期条目）、Wallet；自动化概览来自 `/automations` |
 | `/accounts` | 已连接 X 账号、OAuth | **真实**：Accounts + OAuth |
-| `/agents` | 自动化模块卡片与编辑 | **真实**：`/automations*`（非 `GET /agents` 占位接口） |
+| `/agents` | 自动化模块卡片与编辑 | **真实**：页面使用 `/automations*`；`GET /agents` 已对齐自动化配置状态 |
 | `/activity` | 活动日志 | **真实**：`GET /activities` |
 | `/billing` | 订阅与套餐、下单 | **真实**：`/billing/*`（含 BEP20 支付配置与订单接口，见 [billing.md](../api/billing.md)） |
 | `/posts` | 帖子列表 / 创建 / 详情 | **真实**：`GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；定时调度见 [post.md](../api/post.md) |
@@ -15,6 +15,6 @@
 
 说明：
 
-- **`GET /api/v1/agents`** 仍为 **硬编码占位**；控制台「自动化」依赖 **`/automations`**。
+- **`GET /api/v1/agents`** 为兼容列表，读取自动化配置状态；控制台「自动化」编辑仍依赖 **`/automations`**。
 - **`GET /api/v1/posts`** 为 **真实 CRUD + execute**，不是占位。
 - Dashboard / Agents 上 **`/automations/runtime-status`** 的 `queue_depth` / `last_success_at` 等为 **真实统计**（定义见 [automation.md](../api/automation.md)）。

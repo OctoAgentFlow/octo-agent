@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { ActivityRange, ActivityRecord, ActivityStatus, ActivityType } from "@/types/activity";
 import { activityService } from "@/services/activity.service";
+import { accountService, type AccountListItem } from "@/services/account.service";
 import {
   broadcastDataSynced,
   broadcastPageRefreshComplete,
@@ -23,23 +25,57 @@ type Filters = {
   type: ActivityType | "all";
   status: ActivityStatus | "all";
   range: ActivityRange;
+  accountID: string;
+  errorReason: string;
 };
 
-function rangeMs(range: ActivityRange) {
-  if (range === "24h") return 24 * 60 * 60 * 1000;
-  if (range === "7d") return 7 * 24 * 60 * 60 * 1000;
-  return 30 * 24 * 60 * 60 * 1000;
+function readType(value: string | null): Filters["type"] {
+  return value === "post" || value === "reply" || value === "dm" ? value : "all";
+}
+
+function readStatus(value: string | null): Filters["status"] {
+  return value === "success" || value === "review" || value === "failed" ? value : "all";
+}
+
+function readRange(value: string | null): ActivityRange {
+  return value === "7d" || value === "30d" || value === "24h" ? value : "24h";
+}
+
+function readAccountID(value: string | null) {
+  if (!value) return "all";
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? String(n) : "all";
+}
+
+function readPage(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
 }
 
 export default function ActivityPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recordsRaw, setRecordsRaw] = useState<ActivityRecord[]>([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => readPage(searchParams.get("page")));
   const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
-  const [now] = useState(() => Date.now());
-  const [filters, setFilters] = useState<Filters>({ type: "all", status: "all", range: "24h" });
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  const [filters, setFilters] = useState<Filters>(() => ({
+    type: readType(searchParams.get("type")),
+    status: readStatus(searchParams.get("status")),
+    range: readRange(searchParams.get("range")),
+    accountID: readAccountID(searchParams.get("account_id")),
+    errorReason: searchParams.get("error_reason")?.trim() ?? "",
+  }));
+
+  const selectedAccountID = useMemo(() => {
+    if (filters.accountID === "all") return undefined;
+    const n = Number(filters.accountID);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }, [filters.accountID]);
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -50,10 +86,14 @@ export default function ActivityPage() {
         page_size: pageSize,
         type: filters.type === "all" ? undefined : filters.type,
         status: filters.status === "all" ? undefined : filters.status,
+        range: filters.range,
+        account_id: selectedAccountID,
+        error_reason: filters.errorReason || undefined,
       });
       setRecordsRaw(
         data.items.map((item) => ({
           id: String(item.id),
+          xAccountId: item.x_account_id,
           type: item.type,
           status: item.status,
           previewKey: item.preview_key,
@@ -77,11 +117,45 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.type, page, pageSize]);
+  }, [filters.errorReason, filters.range, filters.status, filters.type, page, pageSize, selectedAccountID]);
 
   useEffect(() => {
     void fetchActivities();
   }, [fetchActivities]);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const data = await accountService.list();
+        if (active) {
+          setAccounts(data.items);
+        }
+      } catch {
+        if (active) {
+          setAccounts([]);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (filters.type !== "all") next.set("type", filters.type);
+    if (filters.status !== "all") next.set("status", filters.status);
+    if (filters.range !== "24h") next.set("range", filters.range);
+    if (selectedAccountID) next.set("account_id", String(selectedAccountID));
+    if (filters.errorReason) next.set("error_reason", filters.errorReason);
+    if (page > 1) next.set("page", String(page));
+    const nextQuery = next.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [filters.accountID, filters.errorReason, filters.range, filters.status, filters.type, page, pathname, router, searchParams, selectedAccountID]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -97,21 +171,18 @@ export default function ActivityPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters.type, filters.status]);
+  }, [filters.accountID, filters.errorReason, filters.range, filters.type, filters.status]);
 
   const records = useMemo(() => {
-    const maxAge = rangeMs(filters.range);
-    return recordsRaw
-      .filter((r) => now - new Date(r.executedAt).getTime() <= maxAge)
-      .sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
-  }, [filters.range, now, recordsRaw]);
+    return [...recordsRaw].sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
+  }, [recordsRaw]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <ActivityPageHeader count={records.length} />
-      <ActivityFilters value={filters} onChange={setFilters} />
+      <ActivityPageHeader count={total} />
+      <ActivityFilters value={filters} onChange={setFilters} accounts={accounts} />
       {loading ? (
         <ActivityLoading />
       ) : errorMessage ? (
@@ -146,4 +217,3 @@ export default function ActivityPage() {
     </div>
   );
 }
-

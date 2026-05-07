@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, RefreshCw, Send } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -66,6 +67,22 @@ function attentionRecord(item: AnalyticsOverview["attention_items"][number]): Ac
     executedAt: item.executed_at,
     errorMessage: item.error_message,
   };
+}
+
+function activityHref(params: {
+  range: AnalyticsRange;
+  status?: string;
+  type?: string;
+  accountID?: number;
+  errorReason?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params.status) query.set("status", params.status);
+  if (params.type) query.set("type", params.type);
+  query.set("range", params.range);
+  if (params.accountID) query.set("account_id", String(params.accountID));
+  if (params.errorReason) query.set("error_reason", params.errorReason);
+  return `/activity?${query.toString()}`;
 }
 
 function MetricCard({
@@ -397,6 +414,19 @@ export default function AnalyticsPage() {
                       {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
                     </p>
                   ) : null}
+                  <div className="mt-3 flex justify-end">
+                    <Link
+                      className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      href={activityHref({
+                        range,
+                        status: "failed",
+                        accountID: selectedAccountID,
+                        errorReason: item.reason || t("analytics.failureReasons.unknown"),
+                      })}
+                    >
+                      {t("analytics.viewInActivity")}
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>
@@ -448,6 +478,17 @@ export default function AnalyticsPage() {
                           <span>{formatDateTime(item.executed_at)}</span>
                         </div>
                       </div>
+                      <Link
+                        className="shrink-0 rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                        href={activityHref({
+                          range,
+                          status: item.status,
+                          type: item.type,
+                          accountID: item.x_account_id || selectedAccountID,
+                        })}
+                      >
+                        {t("analytics.viewInActivity")}
+                      </Link>
                     </div>
                   </div>
                 );

@@ -7,14 +7,19 @@ import (
 
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/repository"
+
+	"gorm.io/gorm"
 )
 
+var ErrActivityAccountNotFound = errors.New("activity account not found")
+
 type ActivityService struct {
-	repo *repository.ActivityRepository
+	repo        *repository.ActivityRepository
+	accountRepo *repository.TwitterAccountRepository
 }
 
-func NewActivityService(repo *repository.ActivityRepository) *ActivityService {
-	return &ActivityService{repo: repo}
+func NewActivityService(repo *repository.ActivityRepository, accountRepo *repository.TwitterAccountRepository) *ActivityService {
+	return &ActivityService{repo: repo, accountRepo: accountRepo}
 }
 
 func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.ActivityListResponse, error) {
@@ -39,7 +44,29 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 		return nil, errors.New("invalid activity status")
 	}
 
-	items, total, err := s.repo.List(userID, page, pageSize, typ, status)
+	from, to, err := activityRangeBounds(query.Range, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+
+	accountID := query.AccountID
+	accountHandle := ""
+	if accountID > 0 {
+		account, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, accountID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrActivityAccountNotFound
+			}
+			return nil, err
+		}
+		accountHandle = formatXAccountHandle(account.Username)
+	}
+	errorReason := strings.TrimSpace(query.ErrorReason)
+	if len([]rune(errorReason)) > 512 {
+		return nil, errors.New("invalid error reason")
+	}
+
+	items, total, err := s.repo.List(userID, page, pageSize, typ, status, from, to, accountID, accountHandle, errorReason)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +75,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	for _, item := range items {
 		data = append(data, dto.ActivityItemData{
 			ID:                  item.ID,
+			XAccountID:          item.XAccountID,
 			Type:                item.Type,
 			Status:              item.Status,
 			PreviewKey:          item.PreviewKey,
@@ -69,4 +97,19 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 			Total:    total,
 		},
 	}, nil
+}
+
+func activityRangeBounds(value string, now time.Time) (time.Time, time.Time, error) {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "":
+		return time.Time{}, time.Time{}, nil
+	case "24h":
+		return now.Add(-24 * time.Hour), now, nil
+	case "7d":
+		return now.AddDate(0, 0, -7), now, nil
+	case "30d":
+		return now.AddDate(0, 0, -30), now, nil
+	default:
+		return time.Time{}, time.Time{}, errors.New("invalid activity range")
+	}
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ActivityRange, ActivityStatus, ActivityType } from "@/types/activity";
+import type { AccountListItem } from "@/services/account.service";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,15 +11,23 @@ type Filters = {
   type: ActivityType | "all";
   status: ActivityStatus | "all";
   range: ActivityRange;
+  accountID: string;
+  errorReason: string;
 };
 
 type Props = {
   value: Filters;
   onChange: (next: Filters) => void;
+  accounts: AccountListItem[];
 };
 
-export function ActivityFilters({ value, onChange }: Props) {
-  const hasActive = value.type !== "all" || value.status !== "all" || value.range !== "24h";
+export function ActivityFilters({ value, onChange, accounts }: Props) {
+  const hasActive =
+    value.type !== "all" ||
+    value.status !== "all" ||
+    value.range !== "24h" ||
+    value.accountID !== "all" ||
+    value.errorReason !== "";
   const { t } = useT();
 
   return (
@@ -28,7 +37,7 @@ export function ActivityFilters({ value, onChange }: Props) {
           <select
             className="form-input w-[180px]"
             value={value.type}
-            onChange={(e) => onChange({ ...value, type: e.target.value as Filters["type"] })}
+            onChange={(e) => onChange({ ...value, type: e.target.value as Filters["type"], errorReason: "" })}
           >
             <option value="all">{t("activity.filters.allTypes")}</option>
             <option value="post">{t("activity.type.post")}</option>
@@ -38,7 +47,7 @@ export function ActivityFilters({ value, onChange }: Props) {
           <select
             className="form-input w-[160px]"
             value={value.status}
-            onChange={(e) => onChange({ ...value, status: e.target.value as Filters["status"] })}
+            onChange={(e) => onChange({ ...value, status: e.target.value as Filters["status"], errorReason: "" })}
           >
             <option value="all">{t("activity.filters.allStatus")}</option>
             <option value="success">{t("activity.status.success")}</option>
@@ -48,17 +57,29 @@ export function ActivityFilters({ value, onChange }: Props) {
           <select
             className="form-input w-[160px]"
             value={value.range}
-            onChange={(e) => onChange({ ...value, range: e.target.value as ActivityRange })}
+            onChange={(e) => onChange({ ...value, range: e.target.value as ActivityRange, errorReason: "" })}
           >
             <option value="24h">{t("activity.filters.range.24h")}</option>
             <option value="7d">{t("activity.filters.range.7d")}</option>
             <option value="30d">{t("activity.filters.range.30d")}</option>
           </select>
+          <select
+            className="form-input w-[190px]"
+            value={value.accountID}
+            onChange={(e) => onChange({ ...value, accountID: e.target.value, errorReason: "" })}
+          >
+            <option value="all">{t("activity.filters.allAccounts")}</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                @{account.username || account.display_name || account.id}
+              </option>
+            ))}
+          </select>
         </div>
         {hasActive ? (
           <Button
             variant="ghost"
-            onClick={() => onChange({ type: "all", status: "all", range: "24h" })}
+            onClick={() => onChange({ type: "all", status: "all", range: "24h", accountID: "all", errorReason: "" })}
           >
             {t("activity.filters.clear")}
           </Button>
@@ -67,4 +88,3 @@ export function ActivityFilters({ value, onChange }: Props) {
     </Card>
   );
 }
-

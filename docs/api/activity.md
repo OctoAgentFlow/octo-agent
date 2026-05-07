@@ -14,8 +14,11 @@ Base path: `/api/v1`
 | `page_size` | 每页条数，默认 `20`，最大 `100` |
 | `type` | 可选：`post` \| `reply` \| `dm` |
 | `status` | 可选：`success` \| `review` \| `failed` |
+| `range` | 可选：`24h` \| `7d` \| `30d`；不传则不限制时间 |
+| `account_id` | 可选：按当前用户已连接的 X 账号过滤；非法账号返回 `400` |
+| `error_reason` | 可选：按失败原因精确过滤；主要用于从 Analytics 的 Top Failure Reasons 跳转排查 |
 
-- **数据来源**：数据库表 `activity_logs`（发帖/自动回复等写入的真实记录）。失败类记录可含 **`error_message`**。`type=reply` 且成功时可能含 **`reply_*`** 字段（被回复用户、原文与回复预览），供前端拼叙事文案。
+- **数据来源**：数据库表 `activity_logs`（发帖/自动回复等写入的真实记录）。失败类记录可含 **`error_message`**。`type=reply` 且成功时可能含 **`reply_*`** 字段（被回复用户、原文与回复预览），供前端拼叙事文案。新活动日志使用 `x_account_id`，旧活动日志仍可通过 `account_handle` 兼容账号筛选。
 
 ### 示例响应
 
@@ -27,6 +30,7 @@ Base path: `/api/v1`
     "items": [
       {
         "id": 1,
+        "x_account_id": 1,
         "type": "post",
         "status": "success",
         "preview_key": "activity.preview.postQueued",
@@ -55,4 +59,4 @@ Base path: `/api/v1`
 }
 ```
 
-非法 `type` / `status` 会返回 **400** 及错误信息。
+非法 `type` / `status` / `range` / `account_id` / `error_reason` 会返回 **400** 及错误信息。

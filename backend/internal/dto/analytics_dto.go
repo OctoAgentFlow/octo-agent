@@ -62,6 +62,7 @@ type AnalyticsFailureReason struct {
 
 type AnalyticsAttentionItem struct {
 	ID            uint   `json:"id"`
+	XAccountID    uint   `json:"x_account_id,omitempty"`
 	Type          string `json:"type"`
 	Status        string `json:"status"`
 	AccountHandle string `json:"account_handle"`

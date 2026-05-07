@@ -1,14 +1,18 @@
 package dto
 
 type ActivityQuery struct {
-	Page     int    `form:"page"`
-	PageSize int    `form:"page_size"`
-	Type     string `form:"type"`
-	Status   string `form:"status"`
+	Page        int    `form:"page"`
+	PageSize    int    `form:"page_size"`
+	Type        string `form:"type"`
+	Status      string `form:"status"`
+	Range       string `form:"range"`
+	AccountID   uint   `form:"account_id"`
+	ErrorReason string `form:"error_reason"`
 }
 
 type ActivityItemData struct {
 	ID            uint   `json:"id"`
+	XAccountID    uint   `json:"x_account_id,omitempty"`
 	Type          string `json:"type"`
 	Status        string `json:"status"`
 	PreviewKey    string `json:"preview_key"`

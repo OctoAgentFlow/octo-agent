@@ -8,6 +8,7 @@ type ApiResponse<T> = {
 
 export type ActivityItemApi = {
   id: number;
+  x_account_id?: number;
   type: "post" | "reply" | "dm";
   status: "success" | "review" | "failed";
   preview_key: string;
@@ -34,6 +35,9 @@ export type ActivityListQuery = {
   page_size?: number;
   type?: "post" | "reply" | "dm";
   status?: "success" | "review" | "failed";
+  range?: "24h" | "7d" | "30d";
+  account_id?: number;
+  error_reason?: string;
 };
 
 export const activityService = {

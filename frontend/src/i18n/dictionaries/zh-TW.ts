@@ -459,6 +459,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "載入分析總覽失敗。",
   "analytics.retry": "重試",
   "analytics.generatedAt": "更新於 {time}",
+  "analytics.accountFilter.label": "X 帳號",
+  "analytics.accountFilter.all": "全部帳號",
   "analytics.range.7d": "7 天",
   "analytics.range.30d": "30 天",
   "analytics.metric.activity": "活動",

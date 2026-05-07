@@ -483,6 +483,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "Failed to load analytics overview.",
   "analytics.retry": "Retry",
   "analytics.generatedAt": "Updated {time}",
+  "analytics.accountFilter.label": "X account",
+  "analytics.accountFilter.all": "All accounts",
   "analytics.range.7d": "7D",
   "analytics.range.30d": "30D",
   "analytics.metric.activity": "Activity",

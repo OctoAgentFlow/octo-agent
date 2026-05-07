@@ -32,7 +32,7 @@ func (ctl *AnalyticsController) Overview(c *gin.Context) {
 	}
 	data, err := ctl.analyticsService.Overview(userID, query)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidAnalyticsRange) {
+		if errors.Is(err, service.ErrInvalidAnalyticsRange) || errors.Is(err, service.ErrAnalyticsAccountNotFound) {
 			response.Fail(c, http.StatusBadRequest, err.Error())
 			return
 		}

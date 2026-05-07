@@ -18,6 +18,7 @@ import {
   type AnalyticsOverview,
   type AnalyticsRange,
 } from "@/services/analytics.service";
+import { accountService, type AccountListItem } from "@/services/account.service";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -80,12 +81,20 @@ export default function AnalyticsPage() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [range, setRange] = useState<AnalyticsRange>("7d");
+  const [accountID, setAccountID] = useState<string>("all");
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+
+  const selectedAccountID = useMemo(() => {
+    if (accountID === "all") return undefined;
+    const n = Number(accountID);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }, [accountID]);
 
   const fetchAnalytics = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
     try {
-      const data = await analyticsService.overview(range);
+      const data = await analyticsService.overview({ range, accountId: selectedAccountID });
       setOverview(data);
       setLoadState("ready");
       broadcastDataSynced(Date.now());
@@ -96,11 +105,30 @@ export default function AnalyticsPage() {
       setErrorMessage(msg);
       setLoadState("error");
     }
-  }, [range, t]);
+  }, [range, selectedAccountID, t]);
 
   useEffect(() => {
     void fetchAnalytics();
   }, [fetchAnalytics]);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const data = await accountService.list();
+        if (active) {
+          setAccounts(data.items);
+        }
+      } catch {
+        if (active) {
+          setAccounts([]);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -157,6 +185,24 @@ export default function AnalyticsPage() {
           <p className="text-subtitle mt-2">{t("analytics.page.subtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <label className="sr-only" htmlFor="analytics-account-filter">
+            {t("analytics.accountFilter.label")}
+          </label>
+          <select
+            id="analytics-account-filter"
+            className="h-10 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-white/[0.08] focus:border-cyan-300/50"
+            value={accountID}
+            onChange={(event) => setAccountID(event.target.value)}
+          >
+            <option className="bg-[#0b1020] text-white" value="all">
+              {t("analytics.accountFilter.all")}
+            </option>
+            {accounts.map((account) => (
+              <option className="bg-[#0b1020] text-white" key={account.id} value={account.id}>
+                @{account.username || account.display_name || account.id}
+              </option>
+            ))}
+          </select>
           <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1">
             {analyticsRanges.map((item) => (
               <button

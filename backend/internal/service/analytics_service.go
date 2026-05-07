@@ -6,19 +6,27 @@ import (
 
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 const defaultAnalyticsRangeDays = 7
 
 var ErrInvalidAnalyticsRange = errors.New("analytics range must be 7d or 30d")
+var ErrAnalyticsAccountNotFound = errors.New("analytics account not found")
 
 type AnalyticsService struct {
 	activityRepo *repository.ActivityRepository
 	postRepo     *repository.PostRepository
+	accountRepo  *repository.TwitterAccountRepository
 }
 
-func NewAnalyticsService(activityRepo *repository.ActivityRepository, postRepo *repository.PostRepository) *AnalyticsService {
-	return &AnalyticsService{activityRepo: activityRepo, postRepo: postRepo}
+func NewAnalyticsService(
+	activityRepo *repository.ActivityRepository,
+	postRepo *repository.PostRepository,
+	accountRepo *repository.TwitterAccountRepository,
+) *AnalyticsService {
+	return &AnalyticsService{activityRepo: activityRepo, postRepo: postRepo, accountRepo: accountRepo}
 }
 
 func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuery) (*dto.AnalyticsOverviewResponse, error) {
@@ -26,18 +34,30 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
+	accountID := query.AccountID
+	accountHandle := ""
+	if accountID > 0 {
+		account, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, accountID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrAnalyticsAccountNotFound
+			}
+			return nil, err
+		}
+		accountHandle = formatXAccountHandle(account.Username)
+	}
 	now := time.Now().UTC()
 	start := startOfUTCDay(now).AddDate(0, 0, -(rangeDays - 1))
 
-	statusCounts, err := s.activityRepo.CountByStatusBetween(userID, start, now)
+	statusCounts, err := s.activityRepo.CountByStatusBetween(userID, start, now, accountID, accountHandle)
 	if err != nil {
 		return nil, err
 	}
-	typeStatusCounts, err := s.activityRepo.CountByTypeAndStatusBetween(userID, start, now)
+	typeStatusCounts, err := s.activityRepo.CountByTypeAndStatusBetween(userID, start, now, accountID, accountHandle)
 	if err != nil {
 		return nil, err
 	}
-	dailyCounts, err := s.activityRepo.CountDailyByStatusBetween(userID, start, now)
+	dailyCounts, err := s.activityRepo.CountDailyByStatusBetween(userID, start, now, accountID, accountHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +65,7 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
-	postCounts, err := s.postRepo.CountByStatus(userID)
+	postCounts, err := s.postRepo.CountByStatus(userID, accountID)
 	if err != nil {
 		return nil, err
 	}

@@ -49,10 +49,18 @@ export type AnalyticsOverview = {
 
 export type AnalyticsRange = "7d" | "30d";
 
+export type AnalyticsOverviewParams = {
+  range?: AnalyticsRange;
+  accountId?: number;
+};
+
 export const analyticsService = {
-  async overview(range: AnalyticsRange = "7d") {
+  async overview(params: AnalyticsOverviewParams = {}) {
     const res = await request.get<ApiResponse<AnalyticsOverview>>("/analytics/overview", {
-      params: { range },
+      params: {
+        range: params.range ?? "7d",
+        account_id: params.accountId,
+      },
     });
     return res.data.data;
   },

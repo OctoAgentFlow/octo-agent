@@ -13,6 +13,7 @@ Analytics endpoints require `Authorization: Bearer <access_token>` and use the c
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `range` | string | no | `7d` | Supported values: `7d`, `30d`. Invalid values return `400`. |
+| `account_id` | number | no | all accounts | Filters activity and post counts to one connected X account owned by the current user. Invalid account ids return `400`. |
 
 The MVP aggregates:
 
@@ -67,5 +68,6 @@ The MVP aggregates:
 
 - `daily_activity` always returns one bucket per selected day, including empty days.
 - `automation_breakdown` always includes `post`, `reply`, and `dm`.
+- `account_id` filters `posts.x_account_id` directly. For activity rows, new logs use `activity_logs.x_account_id`; older rows are also matched by `account_handle` for compatibility.
 - `success_rate_pct` uses successful and failed rows only; review rows do not count in the denominator.
 - `total_7d`, `success_7d`, `failed_7d`, and `review_7d` are retained as compatibility fields. New UI code should use the range-neutral `total`, `success`, `failed`, and `review` fields.

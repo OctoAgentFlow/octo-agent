@@ -459,6 +459,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "分析概要の読み込みに失敗しました。",
   "analytics.retry": "再試行",
   "analytics.generatedAt": "{time} 更新",
+  "analytics.accountFilter.label": "X アカウント",
+  "analytics.accountFilter.all": "すべてのアカウント",
   "analytics.range.7d": "7日",
   "analytics.range.30d": "30日",
   "analytics.metric.activity": "アクティビティ",

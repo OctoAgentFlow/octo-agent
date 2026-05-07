@@ -192,6 +192,7 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 					}
 					log := &model.ActivityLog{
 						UserID:              userID,
+						XAccountID:          acc.ID,
 						Type:                "reply",
 						Status:              "failed",
 						PreviewKey:          "activity.preview.replyFailed",
@@ -215,6 +216,7 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 				ref := c.TweetID
 				log := &model.ActivityLog{
 					UserID:              userID,
+					XAccountID:          acc.ID,
 					Type:                "reply",
 					Status:              "success",
 					PreviewKey:          "activity.preview.replySuccess",

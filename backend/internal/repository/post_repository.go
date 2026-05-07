@@ -149,13 +149,15 @@ func (r *PostRepository) CountByUserAndStatuses(userID uint, statuses []string) 
 	return n, nil
 }
 
-// CountByStatus aggregates all posts for a user by status.
-func (r *PostRepository) CountByStatus(userID uint) ([]PostStatusCount, error) {
+// CountByStatus aggregates posts for a user by status, optionally filtered by X account.
+func (r *PostRepository) CountByStatus(userID uint, accountID uint) ([]PostStatusCount, error) {
 	var rows []PostStatusCount
-	err := r.DB.Model(&model.Post{}).
+	q := r.DB.Model(&model.Post{}).
 		Select("status, COUNT(*) AS count").
-		Where("user_id = ?", userID).
-		Group("status").
-		Scan(&rows).Error
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	err := q.Group("status").Scan(&rows).Error
 	return rows, err
 }

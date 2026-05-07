@@ -24,6 +24,12 @@ type PostAccountCount struct {
 	Count     int64
 }
 
+type PostDailyStatusCount struct {
+	Day    string
+	Status string
+	Count  int64
+}
+
 func NewPostRepository(db *gorm.DB) *PostRepository {
 	return &PostRepository{DB: db}
 }
@@ -175,5 +181,47 @@ func (r *PostRepository) CountByAccount(userID uint) ([]PostAccountCount, error)
 		Where("user_id = ?", userID).
 		Group("x_account_id").
 		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *PostRepository) CountDailyByStatusBetween(userID uint, from, to time.Time, accountID uint) ([]PostDailyStatusCount, error) {
+	var rows []PostDailyStatusCount
+	timeExpr := `CASE
+		WHEN status = 'published' AND published_at IS NOT NULL THEN published_at
+		WHEN status = 'scheduled' AND scheduled_at IS NOT NULL THEN scheduled_at
+		ELSE updated_at
+	END`
+	q := r.DB.Model(&model.Post{}).
+		Select("DATE("+timeExpr+") AS day, status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where(timeExpr+" >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where(timeExpr+" < ?", to)
+	}
+	err := q.Group("DATE(" + timeExpr + "), status").Order("day ASC").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *PostRepository) ListRecentForAnalytics(userID uint, from, to time.Time, accountID uint, limit int) ([]model.Post, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 6
+	}
+	var rows []model.Post
+	q := r.DB.Model(&model.Post{}).Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("(updated_at >= ? OR published_at >= ? OR scheduled_at >= ?)", from, from, from)
+	}
+	if !to.IsZero() {
+		q = q.Where("(updated_at < ? OR published_at < ? OR scheduled_at < ?)", to, to, to)
+	}
+	err := q.Order("updated_at DESC, id DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }

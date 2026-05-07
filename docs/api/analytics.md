@@ -26,6 +26,7 @@ The MVP aggregates:
 - top failed execution reasons
 - recent failed or review items that need attention
 - Auto DM recipient operations summary: list health, import quality, send risk, failure categories, and recent list events
+- content effect summary: post state conversion, daily publishing trend, recent posts, and post automation outcomes
 
 ### Response
 
@@ -141,6 +142,46 @@ The MVP aggregates:
           "message": "Recipient 123 marked blocked."
         }
       ]
+    },
+    "content_effect": {
+      "conversion": {
+        "total": 8,
+        "draft": 2,
+        "scheduled": 3,
+        "processing": 0,
+        "published": 3,
+        "failed": 0,
+        "ready": 5,
+        "active": 3,
+        "publish_rate_pct": 38
+      },
+      "daily": [
+        {
+          "date": "2026-05-07",
+          "draft": 1,
+          "scheduled": 1,
+          "processing": 0,
+          "published": 2,
+          "failed": 0,
+          "total": 4
+        }
+      ],
+      "recent_posts": [
+        {
+          "id": 10,
+          "x_account_id": 1,
+          "content": "GM builders...",
+          "status": "published",
+          "published_at": "2026-05-07T05:18:00Z",
+          "updated_at": "2026-05-07T05:18:00Z"
+        }
+      ],
+      "post_activity": {
+        "success": 5,
+        "failed": 1,
+        "review": 0,
+        "total": 6
+      }
     }
   }
 }
@@ -155,6 +196,8 @@ The MVP aggregates:
 - `account_breakdown` returns one row per connected account, or the selected account when `account_id` is provided.
 - `auto_dm_operations.recipients` reflects current recipient rule state and is filtered by `account_id` when provided.
 - `auto_dm_operations.imports`, `tasks`, `failure_categories`, and `recent_events` use the selected time window.
+- `content_effect.conversion` reflects current post workflow state; `content_effect.daily` and `recent_posts` use the selected time window.
+- `content_effect.post_activity` is derived from `activity_logs type=post` in the selected window.
 - `account_id` filters `posts.x_account_id` directly. For activity rows, new logs use `activity_logs.x_account_id`; older rows are also matched by `account_handle` for compatibility.
 - `success_rate_pct` uses successful and failed rows only; review rows do not count in the denominator.
 - `total_7d`, `success_7d`, `failed_7d`, and `review_7d` are retained as compatibility fields. New UI code should use the range-neutral `total`, `success`, `failed`, and `review` fields.

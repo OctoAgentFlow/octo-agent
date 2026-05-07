@@ -119,6 +119,43 @@ export type AnalyticsOverview = {
       message?: string;
     }>;
   };
+  content_effect: {
+    conversion: {
+      total: number;
+      draft: number;
+      scheduled: number;
+      processing: number;
+      published: number;
+      failed: number;
+      ready: number;
+      active: number;
+      publish_rate_pct: number;
+    };
+    daily: Array<{
+      date: string;
+      draft: number;
+      scheduled: number;
+      processing: number;
+      published: number;
+      failed: number;
+      total: number;
+    }>;
+    recent_posts: Array<{
+      id: number;
+      x_account_id: number;
+      content: string;
+      status: "draft" | "scheduled" | "processing" | "published" | "failed";
+      scheduled_at?: string;
+      published_at?: string;
+      updated_at: string;
+    }>;
+    post_activity: {
+      success: number;
+      failed: number;
+      review: number;
+      total: number;
+    };
+  };
 };
 
 export type AnalyticsRange = "7d" | "30d";

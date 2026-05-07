@@ -183,6 +183,18 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 	return orderToDetailDTO(o), nil
 }
 
+func (s *BillingService) ListOrders(userID uint) (*dto.BillingOrderListResponse, error) {
+	orders, err := s.orderRepo.ListByUser(userID, 20)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.BillingOrderListItem, 0, len(orders))
+	for i := range orders {
+		items = append(items, orderToListItemDTO(&orders[i]))
+	}
+	return &dto.BillingOrderListResponse{Items: items}, nil
+}
+
 func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	out := &dto.BillingOrderDetailResponse{
 		OrderID:         strconv.FormatUint(uint64(o.ID), 10),
@@ -199,6 +211,25 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	if o.PaidAt != nil {
 		s := o.PaidAt.UTC().Format(time.RFC3339)
 		out.PaidAt = s
+	}
+	return out
+}
+
+func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
+	out := dto.BillingOrderListItem{
+		OrderID:   strconv.FormatUint(uint64(o.ID), 10),
+		PlanCode:  o.PlanCode,
+		Amount:    o.Amount,
+		Currency:  o.Currency,
+		Method:    o.Method,
+		Network:   o.Network,
+		Status:    o.Status,
+		TxHash:    o.TxHash,
+		CreatedAt: o.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiredAt: o.ExpiredAt.UTC().Format(time.RFC3339),
+	}
+	if o.PaidAt != nil {
+		out.PaidAt = o.PaidAt.UTC().Format(time.RFC3339)
 	}
 	return out
 }
@@ -292,11 +323,11 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	defer cancel()
 
 	verifyErr := billingevm.VerifyERC20Transfer(ctx, rpcURL, billingevm.VerifyParams{
-		TxHash:            txHash,
-		TokenAddress:      order.TokenAddress,
-		ReceiverAddress:   order.ReceiverAddress,
-		ExpectedMinUnit:   expected,
-		ExpectedChainID:   big.NewInt(order.ChainID),
+		TxHash:          txHash,
+		TokenAddress:    order.TokenAddress,
+		ReceiverAddress: order.ReceiverAddress,
+		ExpectedMinUnit: expected,
+		ExpectedChainID: big.NewInt(order.ChainID),
 	})
 	if verifyErr != nil {
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
@@ -384,7 +415,7 @@ func normalizeEVMTxHash(hex string) (string, error) {
 
 // Exported for HTTP mapping in controllers.
 var (
-	ErrBillingWebhookForbidden    = errors.New("invalid billing webhook secret")
-	ErrBillingOrderNotFound       = errors.New("order not found")
-	ErrBillingTxAlreadyUsed       = errors.New("transaction already used for another order")
+	ErrBillingWebhookForbidden = errors.New("invalid billing webhook secret")
+	ErrBillingOrderNotFound    = errors.New("order not found")
+	ErrBillingTxAlreadyUsed    = errors.New("transaction already used for another order")
 )

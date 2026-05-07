@@ -351,9 +351,11 @@ export const dict: I18nDict = {
   "billing.history.columns.method": "方法",
   "billing.history.columns.status": "状態",
   "billing.history.columns.txHash": "Tx ハッシュ",
+  "billing.history.empty": "支払い履歴はまだありません。",
   "billing.history.status.paid": "支払い済み",
   "billing.history.status.pending": "保留",
   "billing.history.status.failed": "失敗",
+  "billing.history.status.expired": "期限切れ",
 
   // accounts
   "accounts.page.title": "接続済みアカウント",

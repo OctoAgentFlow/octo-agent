@@ -66,12 +66,30 @@ export type BillingOrderDetailApi = {
   paid_at?: string;
 };
 
+export type BillingOrderListItemApi = {
+  order_id: string;
+  plan_code: string;
+  amount: string;
+  currency: string;
+  method: string;
+  network: string;
+  status: string;
+  tx_hash?: string;
+  created_at: string;
+  expired_at: string;
+  paid_at?: string;
+};
+
 type BillingPlansData = {
   items: BillingPlanApi[];
 };
 
 type BillingPaymentMethodsData = {
   items: BillingPaymentMethodApi[];
+};
+
+type BillingOrdersData = {
+  items: BillingOrderListItemApi[];
 };
 
 export const billingService = {
@@ -93,6 +111,10 @@ export const billingService = {
   },
   async getOrder(orderId: string) {
     const res = await request.get<ApiResponse<BillingOrderDetailApi>>(`/billing/orders/${orderId}`);
+    return res.data.data;
+  },
+  async orders() {
+    const res = await request.get<ApiResponse<BillingOrdersData>>("/billing/orders");
     return res.data.data;
   },
 };

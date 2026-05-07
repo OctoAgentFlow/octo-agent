@@ -34,6 +34,18 @@ func (r *BillingOrderRepository) GetByUserAndID(userID, id uint) (*model.Billing
 	return &o, nil
 }
 
+func (r *BillingOrderRepository) ListByUser(userID uint, limit int) ([]model.BillingOrder, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var orders []model.BillingOrder
+	err := r.DB.Where("user_id = ?", userID).
+		Order("id DESC").
+		Limit(limit).
+		Find(&orders).Error
+	return orders, err
+}
+
 func (r *BillingOrderRepository) MarkPaid(id uint, txHash string, paidAt time.Time) error {
 	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
 		"status":  "paid",

@@ -12,8 +12,8 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { billingService, type BillingPaymentMethodApi } from "@/services/billing.service";
-import type { CurrentSubscription, PaymentMethodOption, Plan } from "@/types/billing";
+import { billingService, type BillingOrderListItemApi, type BillingPaymentMethodApi } from "@/services/billing.service";
+import type { CurrentSubscription, PaymentMethodOption, PaymentRecord, PaymentStatus, Plan } from "@/types/billing";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -55,6 +55,32 @@ function mapPaymentMethods(items: BillingPaymentMethodApi[]): PaymentMethodOptio
   }));
 }
 
+function mapOrderStatus(status: string): PaymentStatus {
+  const s = status.trim().toLowerCase();
+  if (s === "paid" || s === "pending" || s === "expired") return s;
+  return "failed";
+}
+
+function formatOrderDate(order: BillingOrderListItemApi) {
+  const raw = order.paid_at || order.created_at;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw || "—";
+  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
+  return {
+    id: order.order_id,
+    date: formatOrderDate(order),
+    planKey: mapPlanKey(order.plan_code),
+    amount: `${order.amount} ${order.currency}`,
+    methodKey: "billing.payment.method.usdt",
+    network: order.network,
+    status: mapOrderStatus(order.status),
+    txHash: order.tx_hash || "",
+  };
+}
+
 export default function BillingPage() {
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -62,6 +88,7 @@ export default function BillingPage() {
   const [subscription, setSubscription] = useState<CurrentSubscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
 
   const fetchBilling = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -71,10 +98,11 @@ export default function BillingPage() {
     }
     setErrorMessage(null);
     try {
-      const [subscriptionData, plansData, methodsData] = await Promise.all([
+      const [subscriptionData, plansData, methodsData, ordersData] = await Promise.all([
         billingService.subscription(),
         billingService.plans(),
         billingService.paymentMethods(),
+        billingService.orders(),
       ]);
 
       setSubscription({
@@ -110,6 +138,7 @@ export default function BillingPage() {
       );
 
       setPaymentMethods(mapPaymentMethods(methodsData.items));
+      setPaymentRecords(ordersData.items.map(mapPaymentRecord));
       setLoadState("ready");
       broadcastDataSynced(Date.now());
     } catch (error) {
@@ -129,8 +158,8 @@ export default function BillingPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([billingService.subscription(), billingService.plans(), billingService.paymentMethods()])
-      .then(([subscriptionData, plansData, methodsData]) => {
+    Promise.all([billingService.subscription(), billingService.plans(), billingService.paymentMethods(), billingService.orders()])
+      .then(([subscriptionData, plansData, methodsData, ordersData]) => {
         if (cancelled) return;
         setSubscription({
           planKey: mapPlanKey(subscriptionData.plan),
@@ -163,6 +192,7 @@ export default function BillingPage() {
           }))
         );
         setPaymentMethods(mapPaymentMethods(methodsData.items));
+        setPaymentRecords(ordersData.items.map(mapPaymentRecord));
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -217,7 +247,7 @@ export default function BillingPage() {
       subscription={subscription}
       plans={plans}
       paymentMethods={paymentMethods}
-      paymentRecords={[]}
+      paymentRecords={paymentRecords}
       onPaymentConfirmed={() => void fetchBilling({ quiet: true })}
     />
   );

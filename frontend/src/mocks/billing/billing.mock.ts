@@ -51,28 +51,33 @@ export const paymentMethods: PaymentMethodOption[] = [
 
 export const paymentRecords: PaymentRecord[] = [
   {
+    id: "mock-1",
     date: "2026-04-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
     methodKey: "billing.payment.method.usdt",
+    network: "BEP20",
     status: "paid",
     txHash: "0x8f2c...9ab1",
   },
   {
+    id: "mock-2",
     date: "2026-03-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
     methodKey: "billing.payment.method.usdt",
+    network: "BEP20",
     status: "paid",
     txHash: "0xa312...e2c9",
   },
   {
+    id: "mock-3",
     date: "2026-02-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
     methodKey: "billing.payment.method.usdt",
+    network: "BEP20",
     status: "pending",
     txHash: "0xc73d...1fa3",
   },
 ];
-

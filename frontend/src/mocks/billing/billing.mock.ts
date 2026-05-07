@@ -59,6 +59,10 @@ export const paymentRecords: PaymentRecord[] = [
     network: "BEP20",
     status: "paid",
     txHash: "0x8f2c...9ab1",
+    failureReason: "",
+    lastCheckedAt: "2026-04-10T08:00:00Z",
+    canRetry: false,
+    nextAction: "subscription_active",
   },
   {
     id: "mock-2",
@@ -69,6 +73,10 @@ export const paymentRecords: PaymentRecord[] = [
     network: "BEP20",
     status: "paid",
     txHash: "0xa312...e2c9",
+    failureReason: "",
+    lastCheckedAt: "2026-03-10T08:00:00Z",
+    canRetry: false,
+    nextAction: "subscription_active",
   },
   {
     id: "mock-3",
@@ -79,5 +87,9 @@ export const paymentRecords: PaymentRecord[] = [
     network: "BEP20",
     status: "pending",
     txHash: "0xc73d...1fa3",
+    failureReason: "",
+    lastCheckedAt: "",
+    canRetry: true,
+    nextAction: "submit_tx_hash_or_wait",
   },
 ];

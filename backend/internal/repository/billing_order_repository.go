@@ -46,10 +46,51 @@ func (r *BillingOrderRepository) ListByUser(userID uint, limit int) ([]model.Bil
 	return orders, err
 }
 
+func (r *BillingOrderRepository) ExpireStaleByUser(userID uint, now time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).
+		Where("user_id = ? AND status IN ? AND expired_at < ?", userID, []string{"pending", "failed"}, now).
+		Updates(map[string]any{
+			"status":          "expired",
+			"failure_reason":  "order expired before payment confirmation",
+			"last_checked_at": now,
+		}).Error
+}
+
+func (r *BillingOrderRepository) ExpireStaleByID(id uint, now time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).
+		Where("id = ? AND status IN ? AND expired_at < ?", id, []string{"pending", "failed"}, now).
+		Updates(map[string]any{
+			"status":          "expired",
+			"failure_reason":  "order expired before payment confirmation",
+			"last_checked_at": now,
+		}).Error
+}
+
+func (r *BillingOrderRepository) ExpireStaleByUserAndID(userID, id uint, now time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).
+		Where("user_id = ? AND id = ? AND status IN ? AND expired_at < ?", userID, id, []string{"pending", "failed"}, now).
+		Updates(map[string]any{
+			"status":          "expired",
+			"failure_reason":  "order expired before payment confirmation",
+			"last_checked_at": now,
+		}).Error
+}
+
+func (r *BillingOrderRepository) MarkFailed(id uint, txHash, reason string, checkedAt time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
+		"status":          "failed",
+		"tx_hash":         txHash,
+		"failure_reason":  reason,
+		"last_checked_at": checkedAt,
+	}).Error
+}
+
 func (r *BillingOrderRepository) MarkPaid(id uint, txHash string, paidAt time.Time) error {
 	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
-		"status":  "paid",
-		"tx_hash": txHash,
-		"paid_at": paidAt,
+		"status":          "paid",
+		"tx_hash":         txHash,
+		"paid_at":         paidAt,
+		"failure_reason":  "",
+		"last_checked_at": paidAt,
 	}).Error
 }

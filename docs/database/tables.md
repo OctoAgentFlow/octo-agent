@@ -53,7 +53,7 @@
 
 ### billing_orders
 
-- 用途：链上 USDT 支付订单（pending/paid 等）；与 `users` 关联
+- 用途：链上 USDT 支付订单（`pending`/`paid`/`failed`/`expired`）；与 `users` 关联；记录最近一次校验失败原因和检查时间，支持用户补交 tx hash 恢复异常订单
 
 ### billing_chain_txs
 

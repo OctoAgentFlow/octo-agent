@@ -10,6 +10,7 @@ type BillingPageContentProps = {
   plans: Plan[];
   paymentMethods: PaymentMethodOption[];
   paymentRecords: PaymentRecord[];
+  onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
   onPaymentConfirmed?: () => void;
 };
 
@@ -18,6 +19,7 @@ export function BillingPageContent({
   plans,
   paymentMethods,
   paymentRecords,
+  onConfirmTx,
   onPaymentConfirmed,
 }: BillingPageContentProps) {
   return (
@@ -25,7 +27,7 @@ export function BillingPageContent({
       <SubscriptionStatusCard subscription={subscription} />
       <PlanComparison plans={plans} />
       <PaymentMethodPanel paymentMethods={paymentMethods} onPaid={onPaymentConfirmed} />
-      <PaymentHistoryTable paymentRecords={paymentRecords} />
+      <PaymentHistoryTable paymentRecords={paymentRecords} onConfirmTx={onConfirmTx} />
     </div>
   );
 }

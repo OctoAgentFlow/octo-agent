@@ -9,7 +9,7 @@
 | Dashboard Data | `/dashboard` | real | `GET /dashboard/overview`；`runtime-status` 指标为 **DB 真实统计**（见 [automation.md](../api/automation.md)）。 |
 | Accounts | `/accounts` | real | 列表、OAuth、解绑。 |
 | Activity | `/activity` | real | `GET /activities` 支持类型、状态、时间范围、账号与失败原因筛选；可从 Analytics 跳转排查。 |
-| Billing | `/billing` | real（MVP） | `GET /billing/subscription|plans|payment-methods`；**BEP20** 下单 `POST /billing/orders`、轮询 `GET /billing/orders/:id`；链上确认 `POST /billing/webhooks/onchain`（Header 密钥）。 |
+| Billing | `/billing` | real（MVP+） | `GET /billing/subscription|plans|payment-methods`；**BEP20** 下单、轮询、用户补交 tx hash、自动过期、失败原因记录；链上确认 `POST /billing/webhooks/onchain`（Header 密钥）。 |
 | Posts | `/posts` | real | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启），见 [post.md](../api/post.md)。 |
 | Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**；`GET /agents` 已作为兼容列表读取自动化配置。 |
 | Analytics | `/analytics` | real（MVP+） | `GET /analytics/overview?range=7d|30d&account_id=...` 聚合账号对比、账号级活动趋势、自动化拆分、失败原因、待处理项与内容状态，并跳转 Activity 排查。 |
@@ -27,7 +27,7 @@
 
 1. **Auto DM**：若产品需要，补齐私信 API 与调度任务。
 2. **Analytics**：继续扩展转化指标与更细的内容表现指标。
-3. **Billing**：继续产品化对账、异常订单处理与支付筛选。
+3. **Billing**：继续产品化对账、退款/人工审核与支付筛选。
 4. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。
 
 ## Milestones

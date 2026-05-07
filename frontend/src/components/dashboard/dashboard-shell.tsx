@@ -21,6 +21,7 @@ const PATHS_WITH_DATA_REFRESH = new Set([
   "/analytics",
   "/billing",
   "/profile",
+  "/settings",
   "/posts",
 ]);
 

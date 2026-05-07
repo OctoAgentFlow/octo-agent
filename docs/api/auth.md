@@ -133,7 +133,14 @@ Base path: `/api/v1`
   - `POST /auth/refresh`
 - Protected：
   - `GET /users/me`
+  - `PATCH /users/me`
   - `/wallet/*`
+
+## PATCH /api/v1/users/me
+
+- **用途**：更新当前用户资料（MVP：显示名）。
+- **Body**：`{ "name": "Display Name" }`
+- **响应**：同 `GET /users/me`，包含 `id`、`email`、`name`、`status`、`wallet_address`（若已绑定）。
 
 ## 邮件发送说明
 
@@ -156,7 +163,7 @@ Base path: `/api/v1`
 
 以下模块在前端已对接 **真实 API**（具体页面以代码为准；未列出的接口可能仍为占位或未接）：
 
-- **Auth**：`POST /auth/email-code/send`、`/verify`、`/register`、`/login`、`/refresh`；`GET /users/me`
+- **Auth**：`POST /auth/email-code/send`、`/verify`、`/register`、`/login`、`/refresh`；`GET/PATCH /users/me`
 - **Wallet**：`POST /wallet/challenge`、`POST /wallet/bind`、`DELETE /wallet/bind`
 - **Accounts**：`GET /accounts`、`POST /accounts/oauth/x/start`、`GET /accounts/oauth/x/callback`（浏览器跳转）、`DELETE /accounts/{id}`
 - **Dashboard**：`GET /dashboard/overview`

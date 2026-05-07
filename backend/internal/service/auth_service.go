@@ -218,6 +218,25 @@ func (s *AuthService) Me(userID uint) (*dto.MeResponse, error) {
 	return me, nil
 }
 
+func (s *AuthService) UpdateMe(userID uint, req dto.UpdateMeRequest) (*dto.MeResponse, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+	if len([]rune(name)) > 64 {
+		return nil, errors.New("name must be 64 characters or less")
+	}
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	user.Name = name
+	if err := s.userRepo.Save(user); err != nil {
+		return nil, err
+	}
+	return s.Me(userID)
+}
+
 func (s *AuthService) issueAuth(user *model.User) (*dto.AuthResponse, error) {
 	accessToken, exp, err := appjwt.SignAccessToken(user.ID)
 	if err != nil {

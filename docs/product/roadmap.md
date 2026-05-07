@@ -13,7 +13,7 @@
 | Posts | `/posts` | real | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启），见 [post.md](../api/post.md)。 |
 | Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**，非 `GET /agents` 占位接口。 |
 | Analytics | `/analytics` | real（MVP） | `GET /analytics/overview` 聚合 7 日活动、自动化拆分与内容状态。 |
-| Settings / Profile | `/settings`, `/profile` | partial | 视页面；资料常见为 `GET /users/me`。 |
+| Settings / Profile | `/settings`, `/profile` | real（MVP） | `GET/PATCH /users/me`；语言偏好保存在浏览器本地。 |
 
 ## Automation execution (backend)
 
@@ -28,7 +28,7 @@
 1. **Auto DM**：若产品需要，补齐私信 API 与调度任务。
 2. **Agents（可选）**：若产品需要与 `GET /agents` 对齐，则改为读库或废弃占位。
 3. **Analytics**：继续扩展趋势维度、账号维度与转化指标。
-4. **Billing**：产品化对账、支付记录列表（若需要独立 `GET /billing/payments` 类接口）。
+4. **Billing**：继续产品化对账、异常订单处理与支付筛选。
 
 ## Milestones
 

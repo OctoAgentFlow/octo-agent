@@ -1,5 +1,9 @@
 package dto
 
+type AnalyticsOverviewQuery struct {
+	Range string `form:"range"`
+}
+
 type AnalyticsOverviewResponse struct {
 	RangeDays           int                         `json:"range_days"`
 	GeneratedAt         string                      `json:"generated_at"`
@@ -10,6 +14,10 @@ type AnalyticsOverviewResponse struct {
 }
 
 type AnalyticsActivitySummary struct {
+	Total          int64  `json:"total"`
+	Success        int64  `json:"success"`
+	Failed         int64  `json:"failed"`
+	Review         int64  `json:"review"`
 	Total7d        int64  `json:"total_7d"`
 	Success7d      int64  `json:"success_7d"`
 	Failed7d       int64  `json:"failed_7d"`

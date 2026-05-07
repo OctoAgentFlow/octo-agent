@@ -12,6 +12,10 @@ export type AnalyticsOverview = {
   range_days: number;
   generated_at: string;
   activity_summary: {
+    total: number;
+    success: number;
+    failed: number;
+    review: number;
     total_7d: number;
     success_7d: number;
     failed_7d: number;
@@ -43,9 +47,13 @@ export type AnalyticsOverview = {
   }>;
 };
 
+export type AnalyticsRange = "7d" | "30d";
+
 export const analyticsService = {
-  async overview() {
-    const res = await request.get<ApiResponse<AnalyticsOverview>>("/analytics/overview");
+  async overview(range: AnalyticsRange = "7d") {
+    const res = await request.get<ApiResponse<AnalyticsOverview>>("/analytics/overview", {
+      params: { range },
+    });
     return res.data.data;
   },
 };

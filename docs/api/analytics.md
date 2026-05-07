@@ -8,12 +8,18 @@ Analytics endpoints require `Authorization: Bearer <access_token>` and use the c
 - **Path**: `/api/v1/analytics/overview`
 - **Purpose**: Returns a small real-data analytics summary for the current user.
 
+### Query Parameters
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `range` | string | no | `7d` | Supported values: `7d`, `30d`. Invalid values return `400`. |
+
 The MVP aggregates:
 
-- activity totals for the current 7-day UTC window
+- activity totals for the selected UTC window
 - success / failed / review counts
 - automation breakdown by `post` / `reply` / `dm`
-- daily activity buckets
+- daily activity buckets for the selected range
 - current post counts by workflow status
 
 ### Response
@@ -26,6 +32,10 @@ The MVP aggregates:
     "range_days": 7,
     "generated_at": "2026-05-07T05:40:00Z",
     "activity_summary": {
+      "total": 12,
+      "success": 9,
+      "failed": 2,
+      "review": 1,
       "total_7d": 12,
       "success_7d": 9,
       "failed_7d": 2,
@@ -55,6 +65,7 @@ The MVP aggregates:
 
 ### Notes
 
-- `daily_activity` always returns 7 buckets, including empty days.
+- `daily_activity` always returns one bucket per selected day, including empty days.
 - `automation_breakdown` always includes `post`, `reply`, and `dm`.
 - `success_rate_pct` uses successful and failed rows only; review rows do not count in the denominator.
+- `total_7d`, `success_7d`, `failed_7d`, and `review_7d` are retained as compatibility fields. New UI code should use the range-neutral `total`, `success`, `failed`, and `review` fields.

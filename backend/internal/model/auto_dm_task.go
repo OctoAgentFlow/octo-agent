@@ -1,0 +1,24 @@
+package model
+
+import "time"
+
+// AutoDMTask is the audit record that must exist before any real DM send.
+type AutoDMTask struct {
+	Base
+	UserID            uint       `gorm:"index;not null;comment:所属用户ID" json:"user_id"`
+	XAccountID        uint       `gorm:"index;column:x_account_id;comment:X账号ID" json:"x_account_id,omitempty"`
+	AccountHandle     string     `gorm:"size:128;not null;comment:执行账号标识" json:"account_handle"`
+	RecipientSource   string     `gorm:"size:32;index;not null;comment:收件人来源规则" json:"recipient_source"`
+	RecipientUserID   string     `gorm:"size:64;index;comment:X收件人ID" json:"recipient_user_id,omitempty"`
+	RecipientUsername string     `gorm:"size:128;comment:X收件人用户名" json:"recipient_username,omitempty"`
+	MessagePreview    string     `gorm:"size:512;comment:待发送私信预览" json:"message_preview,omitempty"`
+	Status            string     `gorm:"size:32;index;not null;comment:任务状态（review/approved/blocked/failed/sent）" json:"status"`
+	CapabilityStatus  string     `gorm:"size:64;index;not null;comment:发送能力状态" json:"capability_status"`
+	FailureReason     string     `gorm:"size:1024;comment:失败或阻断原因" json:"failure_reason,omitempty"`
+	ApprovalRequired  bool       `gorm:"not null;default:true;comment:是否需要人工审批" json:"approval_required"`
+	ActivityLogID     uint       `gorm:"index;comment:关联活动日志ID" json:"activity_log_id,omitempty"`
+	GeneratedAt       time.Time  `gorm:"index;not null;comment:生成时间" json:"generated_at"`
+	ApprovedAt        *time.Time `gorm:"comment:审批通过时间" json:"approved_at,omitempty"`
+	BlockedAt         *time.Time `gorm:"comment:阻断时间" json:"blocked_at,omitempty"`
+	SentAt            *time.Time `gorm:"comment:真实发送时间" json:"sent_at,omitempty"`
+}

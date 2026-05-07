@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"octo-agent/backend/internal/dto"
@@ -15,10 +16,20 @@ import (
 
 type AutomationController struct {
 	automationService *service.AutomationService
+	autoDMService     *service.AutoDMService
 }
 
-func NewAutomationController(automationService *service.AutomationService) *AutomationController {
-	return &AutomationController{automationService: automationService}
+func getUintParam(c *gin.Context, name string) (uint, bool) {
+	raw := strings.TrimSpace(c.Param(name))
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || value == 0 {
+		return 0, false
+	}
+	return uint(value), true
+}
+
+func NewAutomationController(automationService *service.AutomationService, autoDMService *service.AutoDMService) *AutomationController {
+	return &AutomationController{automationService: automationService, autoDMService: autoDMService}
 }
 
 func (ctl *AutomationController) List(c *gin.Context) {
@@ -100,6 +111,63 @@ func (ctl *AutomationController) RuntimeStatus(c *gin.Context) {
 	data, err := ctl.automationService.RuntimeStatus(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListDMTasks(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoDMService.ListTasks(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ApproveDMTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	data, err := ctl.autoDMService.ApproveTask(userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) BlockDMTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	var req dto.AutoDMTaskBlockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.BlockTask(userID, taskID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.OK(c, data)

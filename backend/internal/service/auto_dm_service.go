@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/requestid"
 	"octo-agent/backend/internal/pkg/subscription"
@@ -24,6 +25,7 @@ type AutoDMService struct {
 	accountRepo    *repository.TwitterAccountRepository
 	automationRepo *repository.AutomationRepository
 	activityRepo   *repository.ActivityRepository
+	taskRepo       *repository.AutoDMTaskRepository
 	userRepo       *repository.UserRepository
 }
 
@@ -31,12 +33,14 @@ func NewAutoDMService(
 	accountRepo *repository.TwitterAccountRepository,
 	automationRepo *repository.AutomationRepository,
 	activityRepo *repository.ActivityRepository,
+	taskRepo *repository.AutoDMTaskRepository,
 	userRepo *repository.UserRepository,
 ) *AutoDMService {
 	return &AutoDMService{
 		accountRepo:    accountRepo,
 		automationRepo: automationRepo,
 		activityRepo:   activityRepo,
+		taskRepo:       taskRepo,
 		userRepo:       userRepo,
 	}
 }
@@ -84,21 +88,28 @@ func (s *AutoDMService) runOnce(ctx context.Context, cfg *model.AutomationConfig
 	}
 	account := firstAutoDMAccount(accounts)
 	if account == nil {
-		if err := s.createDMActivity(cfg.UserID, 0, "—", "failed", "activity.preview.dmSkipped", autoDMNoAccountReason, now); err != nil {
+		if err := s.createDMAudit(cfg.UserID, 0, "—", "capability_check", "failed", "account_missing", "activity.preview.dmSkipped", autoDMNoAccountReason, true, now); err != nil {
 			return err
 		}
 		return s.finishRun(cfg, now, "Needs Review")
 	}
 	handle := formatXAccountHandle(account.Username)
 	if strings.TrimSpace(account.AccessToken) == "" {
-		if err := s.createDMActivity(cfg.UserID, account.ID, handle, "failed", "activity.preview.dmSkipped", autoDMNoTokenReason, now); err != nil {
+		if err := s.createDMAudit(cfg.UserID, account.ID, handle, "capability_check", "failed", "token_missing", "activity.preview.dmSkipped", autoDMNoTokenReason, true, now); err != nil {
+			return err
+		}
+		return s.finishRun(cfg, now, "Needs Review")
+	}
+	if missing := missingDMSendScopes(account.OAuthScopes); len(missing) > 0 {
+		reason := "Auto DM blocked: reconnect this X account with OAuth scopes " + strings.Join(missing, ", ") + "."
+		if err := s.createDMAudit(cfg.UserID, account.ID, handle, "capability_check", "failed", "missing_oauth_scope", "activity.preview.dmCapabilityMissing", reason, true, now); err != nil {
 			return err
 		}
 		return s.finishRun(cfg, now, "Needs Review")
 	}
 
 	if cfg.SafetyRequireApproval {
-		if err := s.createDMActivity(cfg.UserID, account.ID, handle, "review", "activity.preview.dmDryRunReview", "", now); err != nil {
+		if err := s.createDMAudit(cfg.UserID, account.ID, handle, "interaction_only", "review", "recipient_rule_pending", "activity.preview.dmDryRunReview", "", true, now); err != nil {
 			return err
 		}
 		zap.L().Info("auto dm: dry-run review created",
@@ -108,7 +119,7 @@ func (s *AutoDMService) runOnce(ctx context.Context, cfg *model.AutomationConfig
 		return s.finishRun(cfg, now, "Needs Review")
 	}
 
-	if err := s.createDMActivity(cfg.UserID, account.ID, handle, "failed", "activity.preview.dmCapabilityMissing", autoDMPermissionReason, now); err != nil {
+	if err := s.createDMAudit(cfg.UserID, account.ID, handle, "interaction_only", "failed", "approval_required", "activity.preview.dmCapabilityMissing", autoDMPermissionReason, false, now); err != nil {
 		return err
 	}
 	return s.finishRun(cfg, now, "Needs Review")
@@ -124,7 +135,16 @@ func firstAutoDMAccount(accounts []model.TwitterAccount) *model.TwitterAccount {
 	return nil
 }
 
-func (s *AutoDMService) createDMActivity(userID, accountID uint, handle, status, previewKey, reason string, at time.Time) error {
+func (s *AutoDMService) createDMAudit(userID, accountID uint, handle, recipientSource, status, capabilityStatus, previewKey, reason string, approvalRequired bool, at time.Time) error {
+	if s.taskRepo != nil {
+		open, err := s.taskRepo.HasOpenCapabilityTask(userID, accountID, capabilityStatus)
+		if err != nil {
+			return err
+		}
+		if open {
+			return nil
+		}
+	}
 	log := &model.ActivityLog{
 		UserID:        userID,
 		XAccountID:    accountID,
@@ -135,7 +155,76 @@ func (s *AutoDMService) createDMActivity(userID, accountID uint, handle, status,
 		ExecutedAt:    at,
 		ErrorMessage:  truncateErrMsg(reason),
 	}
-	return s.activityRepo.DB.Create(log).Error
+	if err := s.activityRepo.DB.Create(log).Error; err != nil {
+		return err
+	}
+	if s.taskRepo == nil {
+		return nil
+	}
+	task := &model.AutoDMTask{
+		UserID:           userID,
+		XAccountID:       accountID,
+		AccountHandle:    handle,
+		RecipientSource:  recipientSource,
+		MessagePreview:   autoDMMessagePreview(recipientSource),
+		Status:           status,
+		CapabilityStatus: capabilityStatus,
+		FailureReason:    truncateErrMsg(reason),
+		ApprovalRequired: approvalRequired,
+		ActivityLogID:    log.ID,
+		GeneratedAt:      at,
+	}
+	return s.taskRepo.Create(task)
+}
+
+func (s *AutoDMService) ListTasks(userID uint) (*dto.AutoDMTasksResponse, error) {
+	rows, err := s.taskRepo.ListByUser(userID, 20)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AutoDMTaskItem, 0, len(rows))
+	for i := range rows {
+		items = append(items, autoDMTaskToDTO(&rows[i]))
+	}
+	return &dto.AutoDMTasksResponse{Items: items}, nil
+}
+
+func (s *AutoDMService) ApproveTask(userID, taskID uint) (*dto.AutoDMTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := s.taskRepo.Approve(task, now); err != nil {
+		return nil, err
+	}
+	updated, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	out := autoDMTaskToDTO(updated)
+	return &out, nil
+}
+
+func (s *AutoDMService) BlockTask(userID, taskID uint, reason string) (*dto.AutoDMTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "Blocked by user before real DM send."
+	}
+	now := time.Now().UTC()
+	if err := s.taskRepo.Block(task, truncateErrMsg(reason), now); err != nil {
+		return nil, err
+	}
+	updated, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	out := autoDMTaskToDTO(updated)
+	return &out, nil
 }
 
 func (s *AutoDMService) finishRun(cfg *model.AutomationConfig, now time.Time, state string) error {
@@ -153,4 +242,58 @@ func autoDMIntervalMinutes(cfg *model.AutomationConfig) int {
 		return autoDMDefaultIntervalMinutes
 	}
 	return cfg.FrequencyIntervalMinutes
+}
+
+func missingDMSendScopes(scopes string) []string {
+	have := map[string]bool{}
+	for _, s := range strings.Fields(strings.TrimSpace(scopes)) {
+		have[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+	required := []string{"dm.read", "dm.write", "users.read"}
+	missing := make([]string, 0, len(required))
+	for _, scope := range required {
+		if !have[scope] {
+			missing = append(missing, scope)
+		}
+	}
+	return missing
+}
+
+func autoDMMessagePreview(recipientSource string) string {
+	switch strings.TrimSpace(recipientSource) {
+	case "interaction_only":
+		return "Draft only: send a short opt-in follow-up to an explicitly engaged user."
+	case "capability_check":
+		return "Capability check only: no recipient selected and no message sent."
+	default:
+		return "Draft only: pending recipient rule and approval."
+	}
+}
+
+func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
+	out := dto.AutoDMTaskItem{
+		ID:                task.ID,
+		XAccountID:        task.XAccountID,
+		AccountHandle:     task.AccountHandle,
+		RecipientSource:   task.RecipientSource,
+		RecipientUserID:   task.RecipientUserID,
+		RecipientUsername: task.RecipientUsername,
+		MessagePreview:    task.MessagePreview,
+		Status:            task.Status,
+		CapabilityStatus:  task.CapabilityStatus,
+		FailureReason:     task.FailureReason,
+		ApprovalRequired:  task.ApprovalRequired,
+		ActivityLogID:     task.ActivityLogID,
+		GeneratedAt:       task.GeneratedAt.UTC().Format(time.RFC3339),
+	}
+	if task.ApprovedAt != nil {
+		out.ApprovedAt = task.ApprovedAt.UTC().Format(time.RFC3339)
+	}
+	if task.BlockedAt != nil {
+		out.BlockedAt = task.BlockedAt.UTC().Format(time.RFC3339)
+	}
+	if task.SentAt != nil {
+		out.SentAt = task.SentAt.UTC().Format(time.RFC3339)
+	}
+	return out
 }

@@ -14,4 +14,10 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	group.PUT("/:type", c.Update)
 	group.POST("/:type/toggle", c.Toggle)
 	group.GET("/runtime-status", c.RuntimeStatus)
+
+	dm := rg.Group("/auto-dm")
+	dm.Use(middleware.Auth())
+	dm.GET("/tasks", c.ListDMTasks)
+	dm.POST("/tasks/:id/approve", c.ApproveDMTask)
+	dm.POST("/tasks/:id/block", c.BlockDMTask)
 }

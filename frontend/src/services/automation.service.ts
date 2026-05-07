@@ -45,6 +45,29 @@ export type AutomationRuntimeStatusApi = {
   needs_review: number;
 };
 
+export type AutoDMTaskApi = {
+  id: number;
+  x_account_id?: number;
+  account_handle: string;
+  recipient_source: string;
+  recipient_user_id?: string;
+  recipient_username?: string;
+  message_preview?: string;
+  status: "review" | "approved" | "blocked" | "failed" | "sent";
+  capability_status: string;
+  failure_reason?: string;
+  approval_required: boolean;
+  activity_log_id?: number;
+  generated_at: string;
+  approved_at?: string;
+  blocked_at?: string;
+  sent_at?: string;
+};
+
+export type AutoDMTasksData = {
+  items: AutoDMTaskApi[];
+};
+
 export type AutomationSavePayload = {
   enabled: boolean;
   frequency: {
@@ -74,6 +97,18 @@ export const automationService = {
   },
   async runtimeStatus() {
     const res = await request.get<ApiResponse<AutomationRuntimeStatusApi>>("/automations/runtime-status");
+    return res.data.data;
+  },
+  async dmTasks() {
+    const res = await request.get<ApiResponse<AutoDMTasksData>>("/auto-dm/tasks");
+    return res.data.data;
+  },
+  async approveDMTask(id: number) {
+    const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/approve`);
+    return res.data.data;
+  },
+  async blockDMTask(id: number, reason: string) {
+    const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/block`, { reason });
     return res.data.data;
   },
 };

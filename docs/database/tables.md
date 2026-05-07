@@ -48,6 +48,11 @@
 
 - 用途：自动回复 **并发占位**（`user_id` + `comment_tweet_id`），防止重复回复同一评论
 
+### auto_dm_tasks
+
+- 用途：Auto DM 真实发送前的候选、能力检查、审批和审计记录；真实发送器只能消费已通过权限与审批的任务
+- 核心字段：`user_id`、`x_account_id`、`recipient_source`、`status`、`capability_status`、`failure_reason`、`approval_required`、`activity_log_id`
+
 ### posts
 
 - 用途：用户待发/已计划/已发布等内容；字段含 `x_account_id`、`content`、`status`、`scheduled_at`、`published_at` 等（见 `model.Post`）

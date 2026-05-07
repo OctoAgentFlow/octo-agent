@@ -31,6 +31,8 @@ type AccountService struct {
 	httpClient *http.Client
 }
 
+const xOAuthRequestedScopes = "tweet.read tweet.write users.read offline.access dm.read dm.write"
+
 func NewAccountService(repo *repository.TwitterAccountRepository, oauth config.XOAuthConfig) *AccountService {
 	return &AccountService{
 		repo:       repo,
@@ -91,7 +93,7 @@ func (s *AccountService) StartXOAuth(ctx context.Context, userID uint) (*dto.OAu
 	q.Set("response_type", "code")
 	q.Set("client_id", clientID)
 	q.Set("redirect_uri", redirectURI)
-	q.Set("scope", "tweet.read tweet.write users.read offline.access")
+	q.Set("scope", xOAuthRequestedScopes)
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
@@ -140,6 +142,7 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 		Followers:     "",
 		AccessToken:   tokens.AccessToken,
 		RefreshToken:  tokens.RefreshToken,
+		OAuthScopes:   normalizedOAuthScopes(tokens.Scope),
 	}
 	if account.Username == "" {
 		zap.L().Warn("x oauth: profile missing username",
@@ -175,6 +178,7 @@ func (s *AccountService) Delete(userID, accountID uint) error {
 type xTokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+	Scope        string `json:"scope"`
 }
 
 func (s *AccountService) exchangeXToken(ctx context.Context, code string, codeVerifier string) (*xTokenResponse, error) {
@@ -389,4 +393,12 @@ func truncateForLog(s string, max int) string {
 		return s
 	}
 	return s[:max] + "…(truncated)"
+}
+
+func normalizedOAuthScopes(scope string) string {
+	fields := strings.Fields(strings.TrimSpace(scope))
+	if len(fields) == 0 {
+		return xOAuthRequestedScopes
+	}
+	return strings.Join(fields, " ")
 }

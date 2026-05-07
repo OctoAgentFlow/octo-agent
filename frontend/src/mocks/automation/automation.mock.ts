@@ -16,6 +16,7 @@ export const automationModulesMock: AutomationModule[] = [
     lastRunParams: { time: "10:23" },
     nextRunKey: "automation.time.inMinutes",
     nextRunParams: { minutes: 42 },
+    executedToday: 3,
   },
   {
     type: "reply",
@@ -32,6 +33,7 @@ export const automationModulesMock: AutomationModule[] = [
     lastRunParams: { time: "10:11" },
     nextRunKey: "automation.time.inMinutes",
     nextRunParams: { minutes: 6 },
+    executedToday: 27,
   },
   {
     type: "dm",
@@ -47,6 +49,7 @@ export const automationModulesMock: AutomationModule[] = [
     lastRunKey: "automation.time.yesterdayAt",
     lastRunParams: { time: "18:02" },
     nextRunKey: "automation.time.paused",
+    executedToday: 0,
   },
 ];
 
@@ -57,4 +60,3 @@ export const automationRuntimeStatusMock: AutomationRuntimeStatus = {
   retriesLast24h: 3,
   needsReview: 7,
 };
-

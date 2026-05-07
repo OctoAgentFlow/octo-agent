@@ -9,7 +9,7 @@
 | `/activity` | 活动日志 | **真实**：`GET /activities` |
 | `/billing` | 订阅与套餐、下单 | **真实**：`/billing/*`（含 BEP20 支付配置与订单接口，见 [billing.md](../api/billing.md)） |
 | `/posts` | 帖子列表 / 创建 / 详情 | **真实**：`GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；定时调度见 [post.md](../api/post.md) |
-| `/analytics` | 分析 | 视前端实现；无独立 `analytics` API 前缀 |
+| `/analytics` | 分析 | **真实（MVP）**：`GET /analytics/overview` |
 | `/settings` | 工作区设置 | 视前端实现 |
 | `/profile` | 用户资料 | 视前端实现（常见为 `GET /users/me`） |
 

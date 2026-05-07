@@ -20,11 +20,15 @@ import { AutomationPageHeader } from "@/components/automation/automation-page-he
 import { AutomationStatusPanel } from "@/components/automation/automation-status-panel";
 
 type LoadState = "loading" | "ready" | "error";
+type RelativeTimeLabel = {
+  key: string;
+  params?: Record<string, string | number>;
+};
 
-function mapTimeToKey(iso?: string) {
-  if (!iso) return { key: "automation.time.paused", params: undefined };
+function mapTimeToKey(iso?: string): RelativeTimeLabel {
+  if (!iso) return { key: "automation.time.paused" };
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return { key: "automation.time.paused", params: undefined };
+  if (Number.isNaN(date.getTime())) return { key: "automation.time.paused" };
   const diffMin = Math.max(1, Math.floor((Date.now() - date.getTime()) / 60000));
   if (diffMin > 24*60) return { key: "automation.time.yesterdayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
   if (diffMin > 60) return { key: "automation.time.todayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
@@ -33,7 +37,7 @@ function mapTimeToKey(iso?: string) {
 
 function mapModule(item: AutomationModuleApi): AutomationModule {
   const last = mapTimeToKey(item.last_run_at);
-  const next = item.config.enabled ? mapTimeToKey(item.next_run_at) : { key: "automation.time.paused", params: undefined };
+  const next = item.config.enabled ? mapTimeToKey(item.next_run_at) : { key: "automation.time.paused" };
   const replyUsage = item.reply_usage
     ? {
         todayCount: item.reply_usage.today_count,

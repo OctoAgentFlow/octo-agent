@@ -1,0 +1,44 @@
+package dto
+
+type AnalyticsOverviewResponse struct {
+	RangeDays           int                         `json:"range_days"`
+	GeneratedAt         string                      `json:"generated_at"`
+	ActivitySummary     AnalyticsActivitySummary    `json:"activity_summary"`
+	PostSummary         AnalyticsPostSummary        `json:"post_summary"`
+	AutomationBreakdown []AnalyticsAutomationMetric `json:"automation_breakdown"`
+	DailyActivity       []AnalyticsDailyActivity    `json:"daily_activity"`
+}
+
+type AnalyticsActivitySummary struct {
+	Total7d        int64  `json:"total_7d"`
+	Success7d      int64  `json:"success_7d"`
+	Failed7d       int64  `json:"failed_7d"`
+	Review7d       int64  `json:"review_7d"`
+	SuccessRatePct int    `json:"success_rate_pct"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
+}
+
+type AnalyticsPostSummary struct {
+	Total      int64 `json:"total"`
+	Draft      int64 `json:"draft"`
+	Scheduled  int64 `json:"scheduled"`
+	Processing int64 `json:"processing"`
+	Published  int64 `json:"published"`
+	Failed     int64 `json:"failed"`
+}
+
+type AnalyticsAutomationMetric struct {
+	Type    string `json:"type"`
+	Total   int64  `json:"total"`
+	Success int64  `json:"success"`
+	Failed  int64  `json:"failed"`
+	Review  int64  `json:"review"`
+}
+
+type AnalyticsDailyActivity struct {
+	Date    string `json:"date"`
+	Total   int64  `json:"total"`
+	Success int64  `json:"success"`
+	Failed  int64  `json:"failed"`
+	Review  int64  `json:"review"`
+}

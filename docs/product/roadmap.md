@@ -12,7 +12,7 @@
 | Billing | `/billing` | real（MVP） | `GET /billing/subscription|plans|payment-methods`；**BEP20** 下单 `POST /billing/orders`、轮询 `GET /billing/orders/:id`；链上确认 `POST /billing/webhooks/onchain`（Header 密钥）。 |
 | Posts | `/posts` | real | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启），见 [post.md](../api/post.md)。 |
 | Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**，非 `GET /agents` 占位接口。 |
-| Analytics | `/analytics` | mock | 无独立聚合 API。 |
+| Analytics | `/analytics` | real（MVP） | `GET /analytics/overview` 聚合 7 日活动、自动化拆分与内容状态。 |
 | Settings / Profile | `/settings`, `/profile` | partial | 视页面；资料常见为 `GET /users/me`。 |
 
 ## Automation execution (backend)
@@ -27,7 +27,7 @@
 
 1. **Auto DM**：若产品需要，补齐私信 API 与调度任务。
 2. **Agents（可选）**：若产品需要与 `GET /agents` 对齐，则改为读库或废弃占位。
-3. **Analytics**：聚合接口与前端对接。
+3. **Analytics**：继续扩展趋势维度、账号维度与转化指标。
 4. **Billing**：产品化对账、支付记录列表（若需要独立 `GET /billing/payments` 类接口）。
 
 ## Milestones
@@ -36,4 +36,4 @@
 2. M2: Auth + wallet（done）
 3. M3: Accounts + dashboard overview + automations + activity + billing 读接口（done / 持续迭代）
 4. M4: Post scheduling、Auto Reply、计费下单与链上确认（done / 持续迭代）
-5. M5: Analytics + Auto DM + 计费扩展
+5. M5: Analytics 扩展 + Auto DM + 计费扩展

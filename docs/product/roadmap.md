@@ -13,7 +13,7 @@
 | Posts | `/posts` | real | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启），见 [post.md](../api/post.md)。 |
 | Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**；`GET /agents` 已作为兼容列表读取自动化配置。 |
 | Analytics | `/analytics` | real（MVP+） | `GET /analytics/overview?range=7d|30d&account_id=...` 聚合账号对比、账号级活动趋势、自动化拆分、失败原因、待处理项与内容状态，并跳转 Activity 排查。 |
-| Settings / Profile | `/settings`, `/profile` | real（MVP） | `GET/PATCH /users/me`；语言偏好保存在浏览器本地。 |
+| Settings / Profile | `/settings`, `/profile` | real（MVP+） | `GET/PATCH /users/me`；`GET/PATCH /users/me/notification-settings`；语言偏好保存在浏览器本地。 |
 
 ## Automation execution (backend)
 

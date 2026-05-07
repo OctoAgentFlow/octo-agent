@@ -12,6 +12,7 @@ import (
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.UserNotificationSetting{},
 		&model.EmailVerificationCode{},
 		&model.WalletChallenge{},
 		&model.UserWallet{},
@@ -40,6 +41,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		comment string
 	}{
 		{&model.User{}, "用户主表"},
+		{&model.UserNotificationSetting{}, "用户通知偏好设置"},
 		{&model.EmailVerificationCode{}, "邮箱验证码记录"},
 		{&model.WalletChallenge{}, "钱包签名挑战记录"},
 		{&model.UserWallet{}, "用户钱包绑定记录"},

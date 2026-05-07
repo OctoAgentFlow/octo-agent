@@ -26,6 +26,7 @@ type AuthService struct {
 	userRepo         *repository.UserRepository
 	walletRepo       *repository.WalletRepository
 	verificationRepo *repository.EmailVerificationRepository
+	notificationRepo *repository.UserNotificationSettingRepository
 	emailService     *email.Service
 }
 
@@ -40,12 +41,14 @@ func NewAuthService(
 	userRepo *repository.UserRepository,
 	walletRepo *repository.WalletRepository,
 	verificationRepo *repository.EmailVerificationRepository,
+	notificationRepo *repository.UserNotificationSettingRepository,
 	emailService *email.Service,
 ) *AuthService {
 	return &AuthService{
 		userRepo:         userRepo,
 		walletRepo:       walletRepo,
 		verificationRepo: verificationRepo,
+		notificationRepo: notificationRepo,
 		emailService:     emailService,
 	}
 }
@@ -235,6 +238,89 @@ func (s *AuthService) UpdateMe(userID uint, req dto.UpdateMeRequest) (*dto.MeRes
 		return nil, err
 	}
 	return s.Me(userID)
+}
+
+func (s *AuthService) NotificationSettings(userID uint) (*dto.NotificationSettingsResponse, error) {
+	setting, err := s.getOrCreateNotificationSettings(userID)
+	if err != nil {
+		return nil, err
+	}
+	return notificationSettingsToDTO(setting), nil
+}
+
+func (s *AuthService) UpdateNotificationSettings(userID uint, req dto.UpdateNotificationSettingsRequest) (*dto.NotificationSettingsResponse, error) {
+	setting, err := s.getOrCreateNotificationSettings(userID)
+	if err != nil {
+		return nil, err
+	}
+	if req.EmailEnabled != nil {
+		setting.EmailEnabled = *req.EmailEnabled
+	}
+	if req.InAppEnabled != nil {
+		setting.InAppEnabled = *req.InAppEnabled
+	}
+	if req.AutomationFailure != nil {
+		setting.AutomationFailure = *req.AutomationFailure
+	}
+	if req.BillingAlerts != nil {
+		setting.BillingAlerts = *req.BillingAlerts
+	}
+	if req.ReviewRequired != nil {
+		setting.ReviewRequired = *req.ReviewRequired
+	}
+	if req.SubscriptionAlerts != nil {
+		setting.SubscriptionAlerts = *req.SubscriptionAlerts
+	}
+	if req.WeeklySummary != nil {
+		setting.WeeklySummary = *req.WeeklySummary
+	}
+	if err := s.notificationRepo.Save(setting); err != nil {
+		return nil, err
+	}
+	return notificationSettingsToDTO(setting), nil
+}
+
+func (s *AuthService) getOrCreateNotificationSettings(userID uint) (*model.UserNotificationSetting, error) {
+	setting, err := s.notificationRepo.GetByUserID(userID)
+	if err == nil {
+		return setting, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	setting = defaultNotificationSettings(userID)
+	if err := s.notificationRepo.Create(setting); err != nil {
+		if existing, getErr := s.notificationRepo.GetByUserID(userID); getErr == nil {
+			return existing, nil
+		}
+		return nil, err
+	}
+	return setting, nil
+}
+
+func defaultNotificationSettings(userID uint) *model.UserNotificationSetting {
+	return &model.UserNotificationSetting{
+		UserID:             userID,
+		EmailEnabled:       true,
+		InAppEnabled:       true,
+		AutomationFailure:  true,
+		BillingAlerts:      true,
+		ReviewRequired:     true,
+		SubscriptionAlerts: true,
+		WeeklySummary:      false,
+	}
+}
+
+func notificationSettingsToDTO(setting *model.UserNotificationSetting) *dto.NotificationSettingsResponse {
+	return &dto.NotificationSettingsResponse{
+		EmailEnabled:       setting.EmailEnabled,
+		InAppEnabled:       setting.InAppEnabled,
+		AutomationFailure:  setting.AutomationFailure,
+		BillingAlerts:      setting.BillingAlerts,
+		ReviewRequired:     setting.ReviewRequired,
+		SubscriptionAlerts: setting.SubscriptionAlerts,
+		WeeklySummary:      setting.WeeklySummary,
+	}
 }
 
 func (s *AuthService) issueAuth(user *model.User) (*dto.AuthResponse, error) {

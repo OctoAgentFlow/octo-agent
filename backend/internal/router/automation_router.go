@@ -8,6 +8,10 @@ import (
 )
 
 func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController) {
+	publicDM := rg.Group("/auto-dm")
+	publicDM.GET("/unsubscribe/:token", c.GetDMPreference)
+	publicDM.POST("/unsubscribe/:token", c.PublicUnsubscribeDM)
+
 	group := rg.Group("/automations")
 	group.Use(middleware.Auth())
 	group.GET("", c.List)
@@ -19,6 +23,7 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	dm.Use(middleware.Auth())
 	dm.GET("/tasks", c.ListDMTasks)
 	dm.GET("/recipients", c.ListDMRecipientRules)
+	dm.POST("/recipients/import", c.ImportDMRecipientRules)
 	dm.POST("/tasks/:id/approve", c.ApproveDMTask)
 	dm.POST("/tasks/:id/block", c.BlockDMTask)
 	dm.POST("/tasks/:id/retry", c.RetryDMTask)

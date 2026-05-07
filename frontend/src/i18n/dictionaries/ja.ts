@@ -477,6 +477,8 @@ export const dict: I18nDict = {
   "automation.dmReview.blacklist": "ブロック",
   "automation.dmReview.unsubscribe": "配信停止",
   "automation.dmReview.rules": "受信者ルール",
+  "automation.dmReview.import": "許可リストをインポート",
+  "automation.dmReview.importCta": "インポート",
   "automation.dmReview.approve": "承認",
   "automation.dmReview.block": "ブロック",
   "automation.runtime.title": "実行状態",

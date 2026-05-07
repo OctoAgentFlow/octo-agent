@@ -144,6 +144,25 @@ func (ctl *AutomationController) ListDMRecipientRules(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) ImportDMRecipientRules(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoDMRecipientImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.ImportRecipientRules(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ApproveDMTask(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -225,6 +244,26 @@ func (ctl *AutomationController) SetDMRecipientRule(c *gin.Context) {
 	data, err := ctl.autoDMService.SetRecipientRuleFromTask(userID, taskID, req.Status, req.Reason)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) GetDMPreference(c *gin.Context) {
+	token := strings.TrimSpace(c.Param("token"))
+	data, err := ctl.autoDMService.GetPreference(token)
+	if err != nil {
+		response.Fail(c, http.StatusNotFound, "unsubscribe preference not found")
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) PublicUnsubscribeDM(c *gin.Context) {
+	token := strings.TrimSpace(c.Param("token"))
+	data, err := ctl.autoDMService.PublicUnsubscribe(token)
+	if err != nil {
+		response.Fail(c, http.StatusNotFound, "unsubscribe preference not found")
 		return
 	}
 	response.OK(c, data)

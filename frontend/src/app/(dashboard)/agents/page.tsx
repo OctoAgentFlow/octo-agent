@@ -104,6 +104,7 @@ export default function AgentsPage() {
   const [modules, setModules] = useState<AutomationModule[]>([]);
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
+  const [dmImportCSV, setDMImportCSV] = useState("");
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -291,6 +292,17 @@ export default function AgentsPage() {
     }
   };
 
+  const importDMRecipients = async () => {
+    try {
+      const data = await automationService.importDMRecipients(dmImportCSV);
+      setDMRecipients((items) => [...data.items, ...items.filter((item) => !data.items.some((next) => next.id === item.id))]);
+      setDMImportCSV("");
+      pushToast(`Imported ${data.imported} Auto DM recipients.`);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to import recipients." : "Failed to import recipients.");
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -325,6 +337,9 @@ export default function AgentsPage() {
         onBlock={blockDMTask}
         onRetry={retryDMTask}
         onRule={setDMRecipientRule}
+        importCSV={dmImportCSV}
+        onImportCSVChange={setDMImportCSV}
+        onImport={importDMRecipients}
       />
 
       <AutomationEditDialog
@@ -344,6 +359,9 @@ function AutoDMReviewPanel({
   onBlock,
   onRetry,
   onRule,
+  importCSV,
+  onImportCSVChange,
+  onImport,
 }: {
   tasks: AutoDMTaskApi[];
   recipients: AutoDMRecipientRuleApi[];
@@ -351,18 +369,21 @@ function AutoDMReviewPanel({
   onBlock: (id: number) => void;
   onRetry: (id: number) => void;
   onRule: (id: number, status: AutoDMRecipientRuleApi["status"]) => void;
+  importCSV: string;
+  onImportCSVChange: (value: string) => void;
+  onImport: () => void;
 }) {
   const { t } = useT();
   return (
     <Card>
       <CardHeader title={t("automation.dmReview.title")} description={t("automation.dmReview.description")} />
-      {tasks.length === 0 ? (
-        <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
-          {t("automation.dmReview.empty")}
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {tasks.slice(0, 5).map((task) => {
+      <div className="space-y-2">
+        {tasks.length === 0 ? (
+          <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+            {t("automation.dmReview.empty")}
+          </p>
+        ) : (
+          tasks.slice(0, 5).map((task) => {
             const canAct = task.status === "review";
             const canRetry = task.status === "failed" && task.retryable && (task.attempt_count ?? 0) < 3;
             const canBlock = canAct || canRetry;
@@ -437,21 +458,37 @@ function AutoDMReviewPanel({
                 </div>
               </div>
             );
-          })}
-          {recipients.length > 0 ? (
-            <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
-              <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.rules")}</p>
-              <div className="flex flex-wrap gap-2">
-                {recipients.slice(0, 8).map((rule) => (
-                  <span key={rule.id} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
-                    {rule.recipient_username || rule.recipient_user_id}: {rule.status}
-                  </span>
-                ))}
-              </div>
+          })
+        )}
+        {recipients.length > 0 ? (
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+            <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.rules")}</p>
+            <div className="flex flex-wrap gap-2">
+              {recipients.slice(0, 8).map((rule) => (
+                <span key={rule.id} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
+                  {rule.recipient_username || rule.recipient_user_id}: {rule.status}
+                  {rule.unsubscribe_url ? ` · ${rule.unsubscribe_url}` : ""}
+                </span>
+              ))}
             </div>
-          ) : null}
+          </div>
+        ) : null}
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-white/70">{t("automation.dmReview.import")}</p>
+            <Button size="sm" onClick={onImport} disabled={!importCSV.trim()}>
+              {t("automation.dmReview.importCta")}
+            </Button>
+          </div>
+          <textarea
+            value={importCSV}
+            onChange={(event) => onImportCSVChange(event.target.value)}
+            rows={3}
+            placeholder="123456789,@username"
+            className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35"
+          />
         </div>
-      )}
+      </div>
     </Card>
   );
 }

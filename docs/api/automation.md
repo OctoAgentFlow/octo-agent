@@ -112,10 +112,26 @@ Base path: `/api/v1`
 
 - **鉴权**：需要
 - **用途**：返回当前用户最近的 Auto DM 收件人规则。
-- **响应字段**：`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`source`、`reason`、`last_matched_at`。
+- **响应字段**：`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`unsubscribe_token`、`unsubscribe_url`、`source`、`reason`、`last_matched_at`。
+
+## POST /api/v1/auto-dm/recipients/import
+
+- **鉴权**：需要
+- **Body**：`{ "x_account_id": 0, "csv": "recipient_user_id,username\n123,@alice" }`
+- **用途**：批量导入 Auto DM allowlist。`x_account_id=0` 时使用当前用户第一个已连接 X 账号。每行格式为 `recipient_user_id,username`，首行 header 会自动跳过。
 
 ## POST /api/v1/auto-dm/tasks/{id}/recipient-rule
 
 - **鉴权**：需要
 - **Body**：`{ "status": "allowlisted|blocked|unsubscribed", "reason": "..." }`
 - **用途**：从某个 Auto DM task 写入收件人名单规则。写入 `blocked` 或 `unsubscribed` 时，会同时拦截该 task，避免后续发送。
+
+## GET /api/v1/auto-dm/unsubscribe/{token}
+
+- **鉴权**：不需要
+- **用途**：公开偏好中心读取当前 token 对应的 Auto DM 收件人状态。
+
+## POST /api/v1/auto-dm/unsubscribe/{token}
+
+- **鉴权**：不需要
+- **用途**：公开退订接口。调用后将对应收件人规则标记为 `unsubscribed`，后续候选生成和真实发送都会跳过该收件人。

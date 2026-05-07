@@ -34,6 +34,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	activityRepo := repository.NewActivityRepository(db)
 	replyReservationRepo := repository.NewReplyReservationRepository(db)
 	verificationRepo := repository.NewEmailVerificationRepository(db)
+	notificationSettingRepo := repository.NewUserNotificationSettingRepository(db)
 	if strings.ToLower(strings.TrimSpace(cfg.Email.Provider)) != "ses" {
 		zap.L().Fatal("unsupported email provider", zap.String("provider", cfg.Email.Provider))
 	}
@@ -42,7 +43,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		zap.L().Fatal("init ses sender failed", zap.Error(err))
 	}
 	emailService := email.NewService(sesSender)
-	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, emailService)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService)
 	walletService := service.NewWalletService(walletRepo)
 	accountService := service.NewAccountService(twitterAccountRepo, cfg.XOAuth)
 	dashboardService := service.NewDashboardService(userRepo, walletRepo, twitterAccountRepo, activityRepo)

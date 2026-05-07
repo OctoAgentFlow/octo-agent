@@ -24,6 +24,11 @@
 - 用途：用户钱包绑定
 - 约束：`unique(address, chain_id)`（全表）；`is_primary` 等见 model
 
+### user_notification_settings
+
+- 用途：用户通知偏好；字段含邮件/站内总开关、自动化失败、计费提醒、待审核、订阅提醒、每周摘要等
+- 约束：`user_id` 唯一；老用户首次读取 `/users/me/notification-settings` 时自动创建默认配置
+
 ### twitter_accounts
 
 - 用途：用户绑定的 X（Twitter）账号

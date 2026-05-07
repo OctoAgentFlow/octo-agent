@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { BadgeCheck, CreditCard, Languages, ShieldCheck, UserCog, Wallet } from "lucide-react";
+import { BadgeCheck, Bell, CreditCard, Languages, ShieldCheck, UserCog, Wallet } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -19,9 +19,19 @@ import {
 } from "@/lib/app-page-refresh";
 import { signOut } from "@/lib/auth-session";
 import { cn } from "@/lib/utils";
-import { authService, type MeData } from "@/services/auth.service";
+import { authService, type MeData, type NotificationSettingsData } from "@/services/auth.service";
 
 type LoadState = "loading" | "ready" | "error";
+
+const defaultNotificationSettings: NotificationSettingsData = {
+  email_enabled: true,
+  in_app_enabled: true,
+  automation_failure: true,
+  billing_alerts: true,
+  review_required: true,
+  subscription_alerts: true,
+  weekly_summary: false,
+};
 
 function maskWallet(address?: string) {
   const a = address?.trim() ?? "";
@@ -36,8 +46,11 @@ export default function SettingsPage() {
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [saving, setSaving] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [me, setMe] = useState<MeData | null>(null);
+  const [notifications, setNotifications] = useState<NotificationSettingsData>(defaultNotificationSettings);
+  const [savedNotifications, setSavedNotifications] = useState<NotificationSettingsData>(defaultNotificationSettings);
   const [name, setName] = useState("");
 
   const fetchMe = useCallback(
@@ -46,9 +59,14 @@ export default function SettingsPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const data = await authService.me();
+        const [data, notificationData] = await Promise.all([
+          authService.me(),
+          authService.notificationSettings(),
+        ]);
         setMe(data);
         setName(data.name || "");
+        setNotifications(notificationData);
+        setSavedNotifications(notificationData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -86,6 +104,14 @@ export default function SettingsPage() {
     return name.trim() !== (me?.name ?? "").trim();
   }, [me?.name, name]);
 
+  const notificationsDirty = useMemo(() => {
+    return JSON.stringify(notifications) !== JSON.stringify(savedNotifications);
+  }, [notifications, savedNotifications]);
+
+  const setNotificationValue = (key: keyof NotificationSettingsData, value: boolean) => {
+    setNotifications((current) => ({ ...current, [key]: value }));
+  };
+
   const saveProfile = async () => {
     const nextName = name.trim();
     if (!nextName) {
@@ -106,6 +132,24 @@ export default function SettingsPage() {
       pushToast(msg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveNotifications = async () => {
+    setSavingNotifications(true);
+    try {
+      const data = await authService.updateNotificationSettings(notifications);
+      setNotifications(data);
+      setSavedNotifications(data);
+      pushToast(t("settings.notifications.saved"));
+      broadcastDataSynced(Date.now());
+    } catch (error) {
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || t("settings.notifications.saveFailed")
+        : t("settings.notifications.saveFailed");
+      pushToast(msg);
+    } finally {
+      setSavingNotifications(false);
     }
   };
 
@@ -232,6 +276,60 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader
+            title={t("settings.notifications.title")}
+            description={t("settings.notifications.description")}
+            right={<Bell className="h-5 w-5 text-amber-200" />}
+          />
+          <div className="space-y-3">
+            <NotificationToggle
+              label={t("settings.notifications.email")}
+              checked={notifications.email_enabled}
+              onChange={(value) => setNotificationValue("email_enabled", value)}
+            />
+            <NotificationToggle
+              label={t("settings.notifications.inApp")}
+              checked={notifications.in_app_enabled}
+              onChange={(value) => setNotificationValue("in_app_enabled", value)}
+            />
+            <div className="grid gap-2 pt-1 md:grid-cols-2">
+              <NotificationToggle
+                label={t("settings.notifications.automationFailure")}
+                checked={notifications.automation_failure}
+                onChange={(value) => setNotificationValue("automation_failure", value)}
+              />
+              <NotificationToggle
+                label={t("settings.notifications.billingAlerts")}
+                checked={notifications.billing_alerts}
+                onChange={(value) => setNotificationValue("billing_alerts", value)}
+              />
+              <NotificationToggle
+                label={t("settings.notifications.reviewRequired")}
+                checked={notifications.review_required}
+                onChange={(value) => setNotificationValue("review_required", value)}
+              />
+              <NotificationToggle
+                label={t("settings.notifications.subscriptionAlerts")}
+                checked={notifications.subscription_alerts}
+                onChange={(value) => setNotificationValue("subscription_alerts", value)}
+              />
+              <NotificationToggle
+                label={t("settings.notifications.weeklySummary")}
+                checked={notifications.weekly_summary}
+                onChange={(value) => setNotificationValue("weekly_summary", value)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button disabled={!notificationsDirty || savingNotifications} onClick={() => void saveNotifications()}>
+                {savingNotifications ? t("settings.notifications.saving") : t("settings.notifications.save")}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4">
+        <Card>
+          <CardHeader
             title={t("settings.shortcuts.title")}
             description={t("settings.shortcuts.description")}
             right={<CreditCard className="h-5 w-5 text-violet-200" />}
@@ -250,5 +348,27 @@ export default function SettingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function NotificationToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-2">
+      <span className="text-sm font-medium text-white/75">{label}</span>
+      <input
+        type="checkbox"
+        className="h-5 w-5 accent-cyan-300"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
   );
 }

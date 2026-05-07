@@ -18,4 +18,6 @@ func RegisterAuth(rg *gin.RouterGroup, c *controller.AuthController) {
 	user.Use(middleware.Auth())
 	user.GET("/me", c.Me)
 	user.PATCH("/me", c.UpdateMe)
+	user.GET("/me/notification-settings", c.NotificationSettings)
+	user.PATCH("/me/notification-settings", c.UpdateNotificationSettings)
 }

@@ -36,6 +36,16 @@ export type MeData = {
   wallet_address?: string;
 };
 
+export type NotificationSettingsData = {
+  email_enabled: boolean;
+  in_app_enabled: boolean;
+  automation_failure: boolean;
+  billing_alerts: boolean;
+  review_required: boolean;
+  subscription_alerts: boolean;
+  weekly_summary: boolean;
+};
+
 export const authService = {
   async login(payload: { email: string; password: string }) {
     const res = await request.post<ApiResponse<AuthResponse>>("/auth/login", payload);
@@ -55,6 +65,14 @@ export const authService = {
   },
   async updateMe(payload: { name: string }) {
     const res = await request.patch<ApiResponse<MeData>>("/users/me", payload);
+    return res.data.data;
+  },
+  async notificationSettings() {
+    const res = await request.get<ApiResponse<NotificationSettingsData>>("/users/me/notification-settings");
+    return res.data.data;
+  },
+  async updateNotificationSettings(payload: Partial<NotificationSettingsData>) {
+    const res = await request.patch<ApiResponse<NotificationSettingsData>>("/users/me/notification-settings", payload);
     return res.data.data;
   },
 };

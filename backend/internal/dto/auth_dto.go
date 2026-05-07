@@ -68,3 +68,23 @@ type MeResponse struct {
 type UpdateMeRequest struct {
 	Name string `json:"name" binding:"required,min=1,max=64"`
 }
+
+type NotificationSettingsResponse struct {
+	EmailEnabled       bool `json:"email_enabled"`
+	InAppEnabled       bool `json:"in_app_enabled"`
+	AutomationFailure  bool `json:"automation_failure"`
+	BillingAlerts      bool `json:"billing_alerts"`
+	ReviewRequired     bool `json:"review_required"`
+	SubscriptionAlerts bool `json:"subscription_alerts"`
+	WeeklySummary      bool `json:"weekly_summary"`
+}
+
+type UpdateNotificationSettingsRequest struct {
+	EmailEnabled       *bool `json:"email_enabled"`
+	InAppEnabled       *bool `json:"in_app_enabled"`
+	AutomationFailure  *bool `json:"automation_failure"`
+	BillingAlerts      *bool `json:"billing_alerts"`
+	ReviewRequired     *bool `json:"review_required"`
+	SubscriptionAlerts *bool `json:"subscription_alerts"`
+	WeeklySummary      *bool `json:"weekly_summary"`
+}

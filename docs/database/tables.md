@@ -58,6 +58,11 @@
 - 用途：Auto DM 收件人准入/退出规则；候选生成和真实发送都会检查
 - 核心字段：`user_id`、`x_account_id`、`recipient_user_id`、`recipient_username`、`status`（`allowlisted` / `blocked` / `unsubscribed`）、`unsubscribe_token`、`source`、`reason`、`last_matched_at`
 
+### auto_dm_recipient_imports
+
+- 用途：Auto DM allowlist CSV 导入批次审计；用于追踪每次导入来源、成功/跳过数量和失败详情
+- 核心字段：`user_id`、`x_account_id`、`source`、`imported`、`skipped`、`error_summary`、`imported_at`
+
 ### posts
 
 - 用途：用户待发/已计划/已发布等内容；字段含 `x_account_id`、`content`、`status`、`scheduled_at`、`published_at` 等（见 `model.Post`）

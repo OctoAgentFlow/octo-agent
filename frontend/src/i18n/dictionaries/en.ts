@@ -329,6 +329,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "Auto DM skipped this run because the account setup is incomplete.",
   "activity.preview.dmSendSuccess": "Auto DM was sent successfully on X.",
   "activity.preview.dmSendFailed": "Auto DM real send failed on X.",
+  "activity.preview.dmRecipientRuleUpdated": "Auto DM recipient rule was updated.",
+  "activity.preview.dmRecipientImport": "Auto DM allowlist import completed.",
   "activity.reply.story": "{account} replied to {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} published a post successfully.",
 
@@ -503,6 +505,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "Recipient rules",
   "automation.dmReview.import": "Import allowlist",
   "automation.dmReview.importCta": "Import",
+  "automation.dmReview.importHistory": "Import history",
+  "automation.dmReview.imported": "imported",
+  "automation.dmReview.skipped": "skipped",
   "automation.dmReview.approve": "Approve",
   "automation.dmReview.block": "Block",
   "automation.runtime.title": "Runtime Status",

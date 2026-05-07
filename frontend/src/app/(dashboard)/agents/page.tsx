@@ -14,6 +14,7 @@ import {
 import { useT } from "@/i18n/use-t";
 import {
   automationService,
+  type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
   type AutomationModuleApi,
@@ -104,6 +105,7 @@ export default function AgentsPage() {
   const [modules, setModules] = useState<AutomationModule[]>([]);
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
+  const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
@@ -133,16 +135,18 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData, dmRecipientData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
           automationService.dmRecipients(),
+          automationService.dmRecipientImports(),
         ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
+        setDMImports(dmImportData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -162,13 +166,14 @@ export default function AgentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks(), automationService.dmRecipients()])
-      .then(([mod, runtime, dmTaskData, dmRecipientData]) => {
+    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks(), automationService.dmRecipients(), automationService.dmRecipientImports()])
+      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
+        setDMImports(dmImportData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -296,8 +301,11 @@ export default function AgentsPage() {
     try {
       const data = await automationService.importDMRecipients(dmImportCSV);
       setDMRecipients((items) => [...data.items, ...items.filter((item) => !data.items.some((next) => next.id === item.id))]);
+      if (data.batch) {
+        setDMImports((items) => [data.batch!, ...items.filter((item) => item.id !== data.batch!.id)]);
+      }
       setDMImportCSV("");
-      pushToast(`Imported ${data.imported} Auto DM recipients.`);
+      pushToast(`Imported ${data.imported} Auto DM recipients. Skipped ${data.skipped}.`);
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to import recipients." : "Failed to import recipients.");
     }
@@ -333,6 +341,7 @@ export default function AgentsPage() {
       <AutoDMReviewPanel
         tasks={dmTasks}
         recipients={dmRecipients}
+        imports={dmImports}
         onApprove={approveDMTask}
         onBlock={blockDMTask}
         onRetry={retryDMTask}
@@ -355,6 +364,7 @@ export default function AgentsPage() {
 function AutoDMReviewPanel({
   tasks,
   recipients,
+  imports,
   onApprove,
   onBlock,
   onRetry,
@@ -365,6 +375,7 @@ function AutoDMReviewPanel({
 }: {
   tasks: AutoDMTaskApi[];
   recipients: AutoDMRecipientRuleApi[];
+  imports: AutoDMRecipientImportApi[];
   onApprove: (id: number) => void;
   onBlock: (id: number) => void;
   onRetry: (id: number) => void;
@@ -469,6 +480,19 @@ function AutoDMReviewPanel({
                   {rule.recipient_username || rule.recipient_user_id}: {rule.status}
                   {rule.unsubscribe_url ? ` · ${rule.unsubscribe_url}` : ""}
                 </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {imports.length > 0 ? (
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+            <p className="mb-2 text-xs font-semibold text-white/70">{t("automation.dmReview.importHistory")}</p>
+            <div className="space-y-1.5">
+              {imports.slice(0, 5).map((item) => (
+                <div key={item.id} className="text-xs text-white/60">
+                  {new Date(item.imported_at).toLocaleString()} · {item.imported} {t("automation.dmReview.imported")} · {item.skipped} {t("automation.dmReview.skipped")}
+                  {item.errors?.length ? <span className="text-amber-100/80"> · {item.errors[0]}</span> : null}
+                </div>
               ))}
             </div>
           </div>

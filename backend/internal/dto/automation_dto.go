@@ -116,10 +116,25 @@ type AutoDMRecipientImportRequest struct {
 }
 
 type AutoDMRecipientImportResponse struct {
-	Imported int                       `json:"imported"`
-	Skipped  int                       `json:"skipped"`
-	Items    []AutoDMRecipientRuleItem `json:"items"`
-	Errors   []string                  `json:"errors,omitempty"`
+	Imported int                        `json:"imported"`
+	Skipped  int                        `json:"skipped"`
+	Batch    *AutoDMRecipientImportItem `json:"batch,omitempty"`
+	Items    []AutoDMRecipientRuleItem  `json:"items"`
+	Errors   []string                   `json:"errors,omitempty"`
+}
+
+type AutoDMRecipientImportItem struct {
+	ID         uint     `json:"id"`
+	XAccountID uint     `json:"x_account_id"`
+	Source     string   `json:"source"`
+	Imported   int      `json:"imported"`
+	Skipped    int      `json:"skipped"`
+	Errors     []string `json:"errors,omitempty"`
+	ImportedAt string   `json:"imported_at"`
+}
+
+type AutoDMRecipientImportsResponse struct {
+	Items []AutoDMRecipientImportItem `json:"items"`
 }
 
 type AutoDMPreferenceResponse struct {

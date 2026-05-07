@@ -308,6 +308,8 @@ export const dict: I18nDict = {
   "activity.preview.dmSkipped": "自动私信本次已跳过，因为账号配置不完整。",
   "activity.preview.dmSendSuccess": "自动私信已成功发送到 X。",
   "activity.preview.dmSendFailed": "自动私信真实发送到 X 失败。",
+  "activity.preview.dmRecipientRuleUpdated": "自动私信收件人规则已更新。",
+  "activity.preview.dmRecipientImport": "自动私信白名单导入已完成。",
   "activity.reply.story": "{account} 回复了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功发布一条内容。",
 
@@ -480,6 +482,9 @@ export const dict: I18nDict = {
   "automation.dmReview.rules": "收件人名单规则",
   "automation.dmReview.import": "导入白名单",
   "automation.dmReview.importCta": "导入",
+  "automation.dmReview.importHistory": "导入历史",
+  "automation.dmReview.imported": "已导入",
+  "automation.dmReview.skipped": "已跳过",
   "automation.dmReview.approve": "批准",
   "automation.dmReview.block": "拦截",
   "automation.runtime.title": "运行状态",

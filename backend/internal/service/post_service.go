@@ -338,7 +338,7 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 			delay := effectiveRateLimitDelay(pub)
 			next := at.Add(delay)
 			msg := truncateErrMsg(pub.Error())
-			if err := s.persistRateLimitReschedule(postID, userID, handle, at, next, msg); err != nil {
+			if err := s.persistRateLimitReschedule(postID, userID, p.XAccountID, handle, at, next, msg); err != nil {
 				zap.L().Error("post execute: persist rate-limit reschedule failed", append(base, zap.Error(err))...)
 				return nil, "", err
 			}
@@ -358,7 +358,7 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 		if errors.As(apiErr, &p2) {
 			failMsg = truncateErrMsg(p2.Error())
 		}
-		if err := s.persistExecuteFailure(postID, userID, handle, at, failMsg); err != nil {
+		if err := s.persistExecuteFailure(postID, userID, p.XAccountID, handle, at, failMsg); err != nil {
 			zap.L().Error("post execute: persist failure after x api error", append(base,
 				zap.String("account_handle", handle),
 				zap.String("x_api_detail", failMsg),
@@ -372,7 +372,7 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 		return nil, "", ErrExecuteUpstream(failMsg)
 	}
 
-	if err := s.persistExecuteSuccess(postID, userID, handle, at); err != nil {
+	if err := s.persistExecuteSuccess(postID, userID, p.XAccountID, handle, at); err != nil {
 		zap.L().Error("post execute: persist success state failed", append(base,
 			zap.String("tweet_id", tweetID),
 			zap.String("account_handle", handle),
@@ -443,7 +443,7 @@ func truncateErrMsg(s string) string {
 	return string(r[:errMsgMaxRunes]) + "…"
 }
 
-func (s *PostService) persistRateLimitReschedule(postID, userID uint, handle string, at, nextRun time.Time, errDetail string) error {
+func (s *PostService) persistRateLimitReschedule(postID, userID, xAccountID uint, handle string, at, nextRun time.Time, errDetail string) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
 			"status":       "scheduled",
@@ -458,6 +458,7 @@ func (s *PostService) persistRateLimitReschedule(postID, userID uint, handle str
 		}
 		log := &model.ActivityLog{
 			UserID:        userID,
+			XAccountID:    xAccountID,
 			Type:          "post",
 			Status:        "failed",
 			PreviewKey:    "activity.preview.postRateLimited",
@@ -495,7 +496,7 @@ func formatXAccountHandle(username string) string {
 	return "@" + u
 }
 
-func (s *PostService) persistExecuteFailure(postID, userID uint, handle string, at time.Time, errMsg string) error {
+func (s *PostService) persistExecuteFailure(postID, userID, xAccountID uint, handle string, at time.Time, errMsg string) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
 			"status":     "failed",
@@ -509,6 +510,7 @@ func (s *PostService) persistExecuteFailure(postID, userID uint, handle string, 
 		}
 		log := &model.ActivityLog{
 			UserID:        userID,
+			XAccountID:    xAccountID,
 			Type:          "post",
 			Status:        "failed",
 			PreviewKey:    "activity.preview.postExecuteFailed",
@@ -520,7 +522,7 @@ func (s *PostService) persistExecuteFailure(postID, userID uint, handle string, 
 	})
 }
 
-func (s *PostService) persistExecuteSuccess(postID, userID uint, handle string, at time.Time) error {
+func (s *PostService) persistExecuteSuccess(postID, userID, xAccountID uint, handle string, at time.Time) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
 			"status":       "published",
@@ -535,6 +537,7 @@ func (s *PostService) persistExecuteSuccess(postID, userID uint, handle string, 
 		}
 		log := &model.ActivityLog{
 			UserID:        userID,
+			XAccountID:    xAccountID,
 			Type:          "post",
 			Status:        "success",
 			PreviewKey:    "activity.preview.postExecuteSuccess",

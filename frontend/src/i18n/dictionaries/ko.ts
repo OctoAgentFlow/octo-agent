@@ -459,6 +459,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "분석 개요를 불러오지 못했습니다.",
   "analytics.retry": "다시 시도",
   "analytics.generatedAt": "{time} 업데이트",
+  "analytics.accountFilter.label": "X 계정",
+  "analytics.accountFilter.all": "모든 계정",
   "analytics.range.7d": "7일",
   "analytics.range.30d": "30일",
   "analytics.metric.activity": "활동",

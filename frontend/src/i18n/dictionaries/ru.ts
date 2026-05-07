@@ -459,6 +459,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "Не удалось загрузить обзор аналитики.",
   "analytics.retry": "Повторить",
   "analytics.generatedAt": "Обновлено {time}",
+  "analytics.accountFilter.label": "X аккаунт",
+  "analytics.accountFilter.all": "Все аккаунты",
   "analytics.range.7d": "7 дн.",
   "analytics.range.30d": "30 дн.",
   "analytics.metric.activity": "Активность",

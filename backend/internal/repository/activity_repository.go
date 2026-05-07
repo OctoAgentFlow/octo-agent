@@ -193,7 +193,7 @@ func (r *ActivityRepository) LatestSuccessExecutedAt(userID uint) (*time.Time, e
 }
 
 // CountByStatusBetween aggregates activity rows by status with executed_at in [from, to).
-func (r *ActivityRepository) CountByStatusBetween(userID uint, from, to time.Time) ([]ActivityStatusCount, error) {
+func (r *ActivityRepository) CountByStatusBetween(userID uint, from, to time.Time, accountID uint, accountHandle string) ([]ActivityStatusCount, error) {
 	var rows []ActivityStatusCount
 	q := r.DB.Model(&model.ActivityLog{}).
 		Select("status, COUNT(*) AS count").
@@ -204,12 +204,13 @@ func (r *ActivityRepository) CountByStatusBetween(userID uint, from, to time.Tim
 	if !to.IsZero() {
 		q = q.Where("executed_at < ?", to)
 	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group("status").Scan(&rows).Error
 	return rows, err
 }
 
 // CountByTypeAndStatusBetween aggregates activity rows by automation type and status with executed_at in [from, to).
-func (r *ActivityRepository) CountByTypeAndStatusBetween(userID uint, from, to time.Time) ([]ActivityTypeStatusCount, error) {
+func (r *ActivityRepository) CountByTypeAndStatusBetween(userID uint, from, to time.Time, accountID uint, accountHandle string) ([]ActivityTypeStatusCount, error) {
 	var rows []ActivityTypeStatusCount
 	q := r.DB.Model(&model.ActivityLog{}).
 		Select("type, status, COUNT(*) AS count").
@@ -220,12 +221,13 @@ func (r *ActivityRepository) CountByTypeAndStatusBetween(userID uint, from, to t
 	if !to.IsZero() {
 		q = q.Where("executed_at < ?", to)
 	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group("type, status").Scan(&rows).Error
 	return rows, err
 }
 
 // CountDailyByStatusBetween aggregates activity rows by UTC date and status with executed_at in [from, to).
-func (r *ActivityRepository) CountDailyByStatusBetween(userID uint, from, to time.Time) ([]ActivityDailyStatusCount, error) {
+func (r *ActivityRepository) CountDailyByStatusBetween(userID uint, from, to time.Time, accountID uint, accountHandle string) ([]ActivityDailyStatusCount, error) {
 	var rows []ActivityDailyStatusCount
 	q := r.DB.Model(&model.ActivityLog{}).
 		Select("DATE(executed_at) AS day, status, COUNT(*) AS count").
@@ -236,6 +238,17 @@ func (r *ActivityRepository) CountDailyByStatusBetween(userID uint, from, to tim
 	if !to.IsZero() {
 		q = q.Where("executed_at < ?", to)
 	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group("DATE(executed_at), status").Order("day ASC").Scan(&rows).Error
 	return rows, err
+}
+
+func applyActivityAccountFilter(q *gorm.DB, accountID uint, accountHandle string) *gorm.DB {
+	if accountID == 0 {
+		return q
+	}
+	if accountHandle == "" {
+		return q.Where("x_account_id = ?", accountID)
+	}
+	return q.Where("(x_account_id = ? OR account_handle = ?)", accountID, accountHandle)
 }

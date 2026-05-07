@@ -1,7 +1,8 @@
 package dto
 
 type AnalyticsOverviewQuery struct {
-	Range string `form:"range"`
+	Range     string `form:"range"`
+	AccountID uint   `form:"account_id"`
 }
 
 type AnalyticsOverviewResponse struct {

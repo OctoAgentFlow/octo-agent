@@ -460,6 +460,8 @@ export const dict: I18nDict = {
   "analytics.error.description": "加载分析概览失败。",
   "analytics.retry": "重试",
   "analytics.generatedAt": "更新于 {time}",
+  "analytics.accountFilter.label": "X 账号",
+  "analytics.accountFilter.all": "全部账号",
   "analytics.range.7d": "7 天",
   "analytics.range.30d": "30 天",
   "analytics.metric.activity": "活动",

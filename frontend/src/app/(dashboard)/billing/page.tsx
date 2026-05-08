@@ -18,7 +18,6 @@ import type {
   BillingOpsSummary,
   BillingOrderFilterState,
   BillingReconciliationStatus,
-  BillingRefundStatus,
   BillingReviewStatus,
   CurrentSubscription,
   PaymentMethodOption,
@@ -85,17 +84,10 @@ function mapReviewStatus(status: string): BillingReviewStatus {
   return "unreviewed";
 }
 
-function mapRefundStatus(status: string): BillingRefundStatus {
-  const s = status.trim().toLowerCase();
-  if (s === "requested" || s === "refunded" || s === "rejected") return s;
-  return "none";
-}
-
 function orderQueryFromFilters(filters: BillingOrderFilterState) {
   return {
     status: filters.status === "all" ? undefined : filters.status,
     review_status: filters.reviewStatus === "all" ? undefined : filters.reviewStatus,
-    refund_status: filters.refundStatus === "all" ? undefined : filters.refundStatus,
     scope: filters.scope,
     limit: 50,
   };
@@ -125,10 +117,7 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     nextAction: order.next_action || "",
     reconciliationStatus: mapReconciliationStatus(order.reconciliation_status || ""),
     reviewStatus: mapReviewStatus(order.review_status || ""),
-    refundStatus: mapRefundStatus(order.refund_status || ""),
-    refundReason: order.refund_reason || "",
     reviewedAt: order.reviewed_at || "",
-    refundMarkedAt: order.refund_marked_at || "",
     opsNote: order.ops_note || "",
     lastAuditAction: order.last_audit_action || "",
     lastAuditAt: order.last_audit_at || "",
@@ -148,10 +137,6 @@ const emptyOpsSummary: BillingOpsSummary = {
   needs_review: 0,
   review_needed: 0,
   reviewed: 0,
-  refund_none: 0,
-  refund_requested: 0,
-  refunded: 0,
-  refund_rejected: 0,
 };
 
 export default function BillingPage() {
@@ -167,7 +152,6 @@ export default function BillingPage() {
   const [paymentFilters, setPaymentFilters] = useState<BillingOrderFilterState>({
     status: "all",
     reviewStatus: "all",
-    refundStatus: "all",
     scope: "own",
   });
 
@@ -276,11 +260,10 @@ export default function BillingPage() {
   );
 
   const updateBillingOps = useCallback(
-    async (orderId: string, action: BillingOpsAction, payload?: { refundReason?: string; opsNote?: string }) => {
+    async (orderId: string, action: BillingOpsAction, payload?: { opsNote?: string }) => {
       try {
         await billingService.orderOpsAction(orderId, {
           action,
-          refund_reason: payload?.refundReason,
           ops_note: payload?.opsNote,
         });
         pushToast("Billing order updated.");

@@ -33,7 +33,6 @@ export type PaymentMethodOption = {
 export type PaymentStatus = "paid" | "pending" | "failed" | "expired";
 export type BillingReconciliationStatus = "unchecked" | "matched" | "mismatch" | "needs_review";
 export type BillingReviewStatus = "unreviewed" | "review_needed" | "reviewed";
-export type BillingRefundStatus = "none" | "requested" | "refunded" | "rejected";
 export type BillingOrderScope = "own" | "all";
 
 export type BillingOpsSummary = {
@@ -48,20 +47,15 @@ export type BillingOpsSummary = {
   needs_review: number;
   review_needed: number;
   reviewed: number;
-  refund_none: number;
-  refund_requested: number;
-  refunded: number;
-  refund_rejected: number;
 };
 
 export type BillingOrderFilterState = {
   status: PaymentStatus | "all";
   reviewStatus: BillingReviewStatus | "all";
-  refundStatus: BillingRefundStatus | "all";
   scope: BillingOrderScope;
 };
 
-export type BillingOpsAction = "mark_reviewed" | "mark_review_needed" | "request_refund" | "mark_refunded" | "reject_refund";
+export type BillingOpsAction = "mark_reviewed" | "mark_review_needed";
 
 export type PaymentRecord = {
   id: string;
@@ -79,10 +73,7 @@ export type PaymentRecord = {
   nextAction: string;
   reconciliationStatus: BillingReconciliationStatus;
   reviewStatus: BillingReviewStatus;
-  refundStatus: BillingRefundStatus;
-  refundReason: string;
   reviewedAt: string;
-  refundMarkedAt: string;
   opsNote: string;
   lastAuditAction: string;
   lastAuditAt: string;

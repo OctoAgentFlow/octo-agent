@@ -10,7 +10,6 @@ import type {
   BillingOpsAction,
   BillingOpsSummary,
   BillingOrderFilterState,
-  BillingRefundStatus,
   BillingReviewStatus,
   PaymentRecord,
   PaymentStatus,
@@ -26,13 +25,6 @@ function statusVariant(status: PaymentStatus): BadgeVariant {
 function reviewVariant(status: BillingReviewStatus): BadgeVariant {
   if (status === "reviewed") return "success";
   if (status === "review_needed") return "warning";
-  return "default";
-}
-
-function refundVariant(status: BillingRefundStatus): BadgeVariant {
-  if (status === "refunded") return "success";
-  if (status === "requested") return "warning";
-  if (status === "rejected") return "danger";
   return "default";
 }
 
@@ -52,10 +44,9 @@ function formatCheckedAt(value: string) {
 
 type OpsInputState = {
   opsNote: string;
-  refundReason: string;
 };
 
-const defaultOpsInput: OpsInputState = { opsNote: "", refundReason: "" };
+const defaultOpsInput: OpsInputState = { opsNote: "" };
 
 export function PaymentHistoryTable({
   paymentRecords,
@@ -72,11 +63,7 @@ export function PaymentHistoryTable({
   filters: BillingOrderFilterState;
   onFiltersChange: (filters: BillingOrderFilterState) => void;
   onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
-  onOpsAction?: (
-    orderId: string,
-    action: BillingOpsAction,
-    payload?: { refundReason?: string; opsNote?: string }
-  ) => Promise<void>;
+  onOpsAction?: (orderId: string, action: BillingOpsAction, payload?: { opsNote?: string }) => Promise<void>;
 }) {
   const { t } = useT();
   const [txInputs, setTxInputs] = useState<Record<string, string>>({});
@@ -115,7 +102,6 @@ export function PaymentHistoryTable({
     setRowErrors((prev) => ({ ...prev, [record.id]: "" }));
     try {
       await onOpsAction(record.id, action, {
-        refundReason: input.refundReason || record.refundReason,
         opsNote: input.opsNote || record.opsNote,
       });
       setOpsInputs((prev) => ({ ...prev, [record.id]: defaultOpsInput }));
@@ -132,13 +118,12 @@ export function PaymentHistoryTable({
     { key: "billing.history.summary.pending", value: opsSummary.pending },
     { key: "billing.history.summary.failed", value: opsSummary.failed },
     { key: "billing.history.summary.reviewNeeded", value: opsSummary.review_needed },
-    { key: "billing.history.summary.refundRequested", value: opsSummary.refund_requested },
     { key: "billing.history.summary.mismatch", value: opsSummary.mismatch },
   ];
 
   return (
     <SectionCard title={t("billing.history.title")} description={t("billing.history.description")}>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {summaryItems.map((item) => (
           <div key={item.key} className="rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2">
             <div className="text-[11px] uppercase tracking-[0.08em] text-white/45">{t(item.key)}</div>
@@ -147,7 +132,7 @@ export function PaymentHistoryTable({
         ))}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
         {canOperateBilling ? (
           <label className="space-y-1 text-xs text-white/55">
             <span>{t("billing.history.filters.scope")}</span>
@@ -188,22 +173,6 @@ export function PaymentHistoryTable({
             <option value="unreviewed">{t("billing.history.review.unreviewed")}</option>
             <option value="review_needed">{t("billing.history.review.review_needed")}</option>
             <option value="reviewed">{t("billing.history.review.reviewed")}</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs text-white/55">
-          <span>{t("billing.history.filters.refund")}</span>
-          <select
-            className="h-9 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-300/55"
-            value={filters.refundStatus}
-            onChange={(event) =>
-              updateFilter({ refundStatus: event.target.value as BillingOrderFilterState["refundStatus"] })
-            }
-          >
-            <option value="all">{t("billing.history.filters.all")}</option>
-            <option value="none">{t("billing.history.refund.none")}</option>
-            <option value="requested">{t("billing.history.refund.requested")}</option>
-            <option value="refunded">{t("billing.history.refund.refunded")}</option>
-            <option value="rejected">{t("billing.history.refund.rejected")}</option>
           </select>
         </label>
       </div>
@@ -259,9 +228,6 @@ export function PaymentHistoryTable({
                           <Badge variant={reviewVariant(record.reviewStatus)}>
                             {t(`billing.history.review.${record.reviewStatus}`)}
                           </Badge>
-                          <Badge variant={refundVariant(record.refundStatus)}>
-                            {t(`billing.history.refund.${record.refundStatus}`)}
-                          </Badge>
                         </div>
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-white/65">{maskHash(record.txHash)}</td>
@@ -276,11 +242,6 @@ export function PaymentHistoryTable({
                             {record.failureReason ? (
                               <p className="text-xs text-amber-100/85">
                                 {t("billing.history.failureReason")}: {record.failureReason}
-                              </p>
-                            ) : null}
-                            {record.refundReason ? (
-                              <p className="text-xs text-cyan-100/80">
-                                {t("billing.history.refundReason")}: {record.refundReason}
                               </p>
                             ) : null}
                             {record.opsNote ? (
@@ -318,12 +279,6 @@ export function PaymentHistoryTable({
                                     placeholder={t("billing.history.ops.notePlaceholder")}
                                     value={opsInput.opsNote}
                                     onChange={(event) => updateOpsInput(record.id, { opsNote: event.target.value })}
-                                  />
-                                  <input
-                                    className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
-                                    placeholder={t("billing.history.ops.refundPlaceholder")}
-                                    value={opsInput.refundReason}
-                                    onChange={(event) => updateOpsInput(record.id, { refundReason: event.target.value })}
                                   />
                                 </>
                               ) : null}
@@ -363,33 +318,6 @@ export function PaymentHistoryTable({
                                   onClick={() => void submitOpsAction(record, "mark_reviewed")}
                                 >
                                   {t("billing.history.ops.markReviewed")}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:request_refund`}
-                                  onClick={() => void submitOpsAction(record, "request_refund")}
-                                >
-                                  {t("billing.history.ops.requestRefund")}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_refunded`}
-                                  onClick={() => void submitOpsAction(record, "mark_refunded")}
-                                >
-                                  {t("billing.history.ops.markRefunded")}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:reject_refund`}
-                                  onClick={() => void submitOpsAction(record, "reject_refund")}
-                                >
-                                  {t("billing.history.ops.rejectRefund")}
                                 </Button>
                               </>
                             ) : null}

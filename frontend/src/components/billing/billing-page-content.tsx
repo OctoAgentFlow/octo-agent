@@ -26,7 +26,7 @@ type BillingPageContentProps = {
   onOpsAction?: (
     orderId: string,
     action: BillingOpsAction,
-    payload?: { refundReason?: string; opsNote?: string }
+    payload?: { opsNote?: string }
   ) => Promise<void>;
   onPaymentConfirmed?: () => void;
 };

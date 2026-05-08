@@ -75,10 +75,7 @@ type BillingOrderDetailResponse struct {
 	NextAction           string                  `json:"next_action"`
 	ReconciliationStatus string                  `json:"reconciliation_status"`
 	ReviewStatus         string                  `json:"review_status"`
-	RefundStatus         string                  `json:"refund_status"`
-	RefundReason         string                  `json:"refund_reason,omitempty"`
 	ReviewedAt           string                  `json:"reviewed_at,omitempty"`
-	RefundMarkedAt       string                  `json:"refund_marked_at,omitempty"`
 	OpsNote              string                  `json:"ops_note,omitempty"`
 	AuditTrail           []BillingOrderAuditItem `json:"audit_trail,omitempty"`
 }
@@ -102,10 +99,7 @@ type BillingOrderListItem struct {
 	NextAction           string `json:"next_action"`
 	ReconciliationStatus string `json:"reconciliation_status"`
 	ReviewStatus         string `json:"review_status"`
-	RefundStatus         string `json:"refund_status"`
-	RefundReason         string `json:"refund_reason,omitempty"`
 	ReviewedAt           string `json:"reviewed_at,omitempty"`
-	RefundMarkedAt       string `json:"refund_marked_at,omitempty"`
 	OpsNote              string `json:"ops_note,omitempty"`
 	LastAuditAction      string `json:"last_audit_action,omitempty"`
 	LastAuditAt          string `json:"last_audit_at,omitempty"`
@@ -116,27 +110,22 @@ type BillingOrderListQuery struct {
 	Status               string `form:"status"`
 	ReconciliationStatus string `form:"reconciliation_status"`
 	ReviewStatus         string `form:"review_status"`
-	RefundStatus         string `form:"refund_status"`
 	Limit                int    `form:"limit"`
 	Scope                string `form:"scope"`
 }
 
 type BillingOrderOpsSummary struct {
-	Total           int64 `json:"total"`
-	Pending         int64 `json:"pending"`
-	Paid            int64 `json:"paid"`
-	Failed          int64 `json:"failed"`
-	Expired         int64 `json:"expired"`
-	Unchecked       int64 `json:"unchecked"`
-	Matched         int64 `json:"matched"`
-	Mismatch        int64 `json:"mismatch"`
-	NeedsReview     int64 `json:"needs_review"`
-	ReviewNeeded    int64 `json:"review_needed"`
-	Reviewed        int64 `json:"reviewed"`
-	RefundNone      int64 `json:"refund_none"`
-	RefundRequested int64 `json:"refund_requested"`
-	Refunded        int64 `json:"refunded"`
-	RefundRejected  int64 `json:"refund_rejected"`
+	Total        int64 `json:"total"`
+	Pending      int64 `json:"pending"`
+	Paid         int64 `json:"paid"`
+	Failed       int64 `json:"failed"`
+	Expired      int64 `json:"expired"`
+	Unchecked    int64 `json:"unchecked"`
+	Matched      int64 `json:"matched"`
+	Mismatch     int64 `json:"mismatch"`
+	NeedsReview  int64 `json:"needs_review"`
+	ReviewNeeded int64 `json:"review_needed"`
+	Reviewed     int64 `json:"reviewed"`
 }
 
 type BillingOrderListResponse struct {
@@ -158,9 +147,8 @@ type BillingConfirmOrderRequest struct {
 }
 
 type BillingOrderOpsActionRequest struct {
-	Action       string `json:"action" binding:"required"`
-	RefundReason string `json:"refund_reason"`
-	OpsNote      string `json:"ops_note"`
+	Action  string `json:"action" binding:"required"`
+	OpsNote string `json:"ops_note"`
 }
 
 type BillingOrderAuditItem struct {
@@ -175,10 +163,6 @@ type BillingOrderAuditItem struct {
 	NewReconciliationStatus      string `json:"new_reconciliation_status,omitempty"`
 	PreviousReviewStatus         string `json:"previous_review_status,omitempty"`
 	NewReviewStatus              string `json:"new_review_status,omitempty"`
-	PreviousRefundStatus         string `json:"previous_refund_status,omitempty"`
-	NewRefundStatus              string `json:"new_refund_status,omitempty"`
-	PreviousRefundReason         string `json:"previous_refund_reason,omitempty"`
-	NewRefundReason              string `json:"new_refund_reason,omitempty"`
 	PreviousOpsNote              string `json:"previous_ops_note,omitempty"`
 	NewOpsNote                   string `json:"new_ops_note,omitempty"`
 	CreatedAt                    string `json:"created_at"`

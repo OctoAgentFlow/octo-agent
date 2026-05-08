@@ -23,9 +23,6 @@ type BillingOrder struct {
 	TokenDecimals        int        `gorm:"not null;default:18;comment:代币精度" json:"token_decimals"`
 	ReconciliationStatus string     `gorm:"size:32;index;not null;default:unchecked;comment:对账状态" json:"reconciliation_status,omitempty"`
 	ReviewStatus         string     `gorm:"size:32;index;not null;default:unreviewed;comment:人工复核状态" json:"review_status,omitempty"`
-	RefundStatus         string     `gorm:"size:32;index;not null;default:none;comment:退款状态" json:"refund_status,omitempty"`
-	RefundReason         string     `gorm:"size:512;comment:退款原因" json:"refund_reason,omitempty"`
 	ReviewedAt           *time.Time `gorm:"comment:人工复核时间" json:"reviewed_at,omitempty"`
-	RefundMarkedAt       *time.Time `gorm:"comment:退款标记时间" json:"refund_marked_at,omitempty"`
 	OpsNote              string     `gorm:"size:512;comment:运营备注" json:"ops_note,omitempty"`
 }

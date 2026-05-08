@@ -96,6 +96,7 @@ function orderQueryFromFilters(filters: BillingOrderFilterState) {
     status: filters.status === "all" ? undefined : filters.status,
     review_status: filters.reviewStatus === "all" ? undefined : filters.reviewStatus,
     refund_status: filters.refundStatus === "all" ? undefined : filters.refundStatus,
+    scope: filters.scope,
     limit: 50,
   };
 }
@@ -110,6 +111,7 @@ function formatOrderDate(order: BillingOrderListItemApi) {
 function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
   return {
     id: order.order_id,
+    userId: order.user_id,
     date: formatOrderDate(order),
     planKey: mapPlanKey(order.plan_code),
     amount: `${order.amount} ${order.currency}`,
@@ -128,6 +130,9 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     reviewedAt: order.reviewed_at || "",
     refundMarkedAt: order.refund_marked_at || "",
     opsNote: order.ops_note || "",
+    lastAuditAction: order.last_audit_action || "",
+    lastAuditAt: order.last_audit_at || "",
+    lastAuditOperatorId: order.last_audit_operator_id || 0,
   };
 }
 
@@ -158,10 +163,12 @@ export default function BillingPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   const [opsSummary, setOpsSummary] = useState<BillingOpsSummary>(emptyOpsSummary);
+  const [canOperateBilling, setCanOperateBilling] = useState(false);
   const [paymentFilters, setPaymentFilters] = useState<BillingOrderFilterState>({
     status: "all",
     reviewStatus: "all",
     refundStatus: "all",
+    scope: "own",
   });
 
   const fetchBilling = useCallback(
@@ -212,6 +219,7 @@ export default function BillingPage() {
         setPaymentMethods(mapPaymentMethods(methodsData.items));
         setPaymentRecords(ordersData.items.map(mapPaymentRecord));
         setOpsSummary(ordersData.ops_summary || emptyOpsSummary);
+        setCanOperateBilling(Boolean(ordersData.can_operate_billing));
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -314,6 +322,7 @@ export default function BillingPage() {
       paymentMethods={paymentMethods}
       paymentRecords={paymentRecords}
       opsSummary={opsSummary}
+      canOperateBilling={canOperateBilling}
       filters={paymentFilters}
       onFiltersChange={setPaymentFilters}
       onConfirmTx={confirmOrderTx}

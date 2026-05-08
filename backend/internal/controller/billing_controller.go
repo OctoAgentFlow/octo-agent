@@ -138,6 +138,10 @@ func (ctl *BillingController) ListOrders(c *gin.Context) {
 	}
 	data, err := ctl.billingService.ListOrders(userID, req)
 	if err != nil {
+		if errors.Is(err, service.ErrBillingOpsForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -163,11 +167,41 @@ func (ctl *BillingController) UpdateOrderOpsAction(c *gin.Context) {
 	}
 	data, err := ctl.billingService.UpdateOrderOpsAction(userID, uint(oid), req)
 	if err != nil {
-		if errors.Is(err, service.ErrBillingOrderNotFound) {
+		switch {
+		case errors.Is(err, service.ErrBillingOrderNotFound):
 			response.Fail(c, http.StatusNotFound, err.Error())
-			return
+		case errors.Is(err, service.ErrBillingOpsForbidden):
+			response.Fail(c, http.StatusForbidden, err.Error())
+		default:
+			response.Fail(c, http.StatusBadRequest, err.Error())
 		}
-		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *BillingController) ListOrderAudits(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	idStr := c.Param("id")
+	oid, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 64)
+	if err != nil || oid == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid order id")
+		return
+	}
+	data, err := ctl.billingService.ListOrderAudits(userID, uint(oid))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrBillingOrderNotFound):
+			response.Fail(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, service.ErrBillingOpsForbidden):
+			response.Fail(c, http.StatusForbidden, err.Error())
+		default:
+			response.Fail(c, http.StatusBadRequest, err.Error())
+		}
 		return
 	}
 	response.OK(c, data)

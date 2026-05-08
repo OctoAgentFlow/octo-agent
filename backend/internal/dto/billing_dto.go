@@ -57,32 +57,35 @@ type BillingCreateOrderResponse struct {
 
 // BillingOrderDetailResponse is returned by GET /billing/orders/:id (polling).
 type BillingOrderDetailResponse struct {
-	OrderID              string `json:"order_id"`
-	Amount               string `json:"amount"`
-	Currency             string `json:"currency"`
-	Network              string `json:"network"`
-	TokenAddress         string `json:"token_address"`
-	ReceiverAddress      string `json:"receiver_address"`
-	ChainID              int64  `json:"chain_id"`
-	ExpiredAt            string `json:"expired_at"`
-	Status               string `json:"status"`
-	TxHash               string `json:"tx_hash,omitempty"`
-	PaidAt               string `json:"paid_at,omitempty"`
-	FailureReason        string `json:"failure_reason,omitempty"`
-	LastCheckedAt        string `json:"last_checked_at,omitempty"`
-	CanRetry             bool   `json:"can_retry"`
-	NextAction           string `json:"next_action"`
-	ReconciliationStatus string `json:"reconciliation_status"`
-	ReviewStatus         string `json:"review_status"`
-	RefundStatus         string `json:"refund_status"`
-	RefundReason         string `json:"refund_reason,omitempty"`
-	ReviewedAt           string `json:"reviewed_at,omitempty"`
-	RefundMarkedAt       string `json:"refund_marked_at,omitempty"`
-	OpsNote              string `json:"ops_note,omitempty"`
+	OrderID              string                  `json:"order_id"`
+	UserID               uint                    `json:"user_id"`
+	Amount               string                  `json:"amount"`
+	Currency             string                  `json:"currency"`
+	Network              string                  `json:"network"`
+	TokenAddress         string                  `json:"token_address"`
+	ReceiverAddress      string                  `json:"receiver_address"`
+	ChainID              int64                   `json:"chain_id"`
+	ExpiredAt            string                  `json:"expired_at"`
+	Status               string                  `json:"status"`
+	TxHash               string                  `json:"tx_hash,omitempty"`
+	PaidAt               string                  `json:"paid_at,omitempty"`
+	FailureReason        string                  `json:"failure_reason,omitempty"`
+	LastCheckedAt        string                  `json:"last_checked_at,omitempty"`
+	CanRetry             bool                    `json:"can_retry"`
+	NextAction           string                  `json:"next_action"`
+	ReconciliationStatus string                  `json:"reconciliation_status"`
+	ReviewStatus         string                  `json:"review_status"`
+	RefundStatus         string                  `json:"refund_status"`
+	RefundReason         string                  `json:"refund_reason,omitempty"`
+	ReviewedAt           string                  `json:"reviewed_at,omitempty"`
+	RefundMarkedAt       string                  `json:"refund_marked_at,omitempty"`
+	OpsNote              string                  `json:"ops_note,omitempty"`
+	AuditTrail           []BillingOrderAuditItem `json:"audit_trail,omitempty"`
 }
 
 type BillingOrderListItem struct {
 	OrderID              string `json:"order_id"`
+	UserID               uint   `json:"user_id"`
 	PlanCode             string `json:"plan_code"`
 	Amount               string `json:"amount"`
 	Currency             string `json:"currency"`
@@ -104,6 +107,9 @@ type BillingOrderListItem struct {
 	ReviewedAt           string `json:"reviewed_at,omitempty"`
 	RefundMarkedAt       string `json:"refund_marked_at,omitempty"`
 	OpsNote              string `json:"ops_note,omitempty"`
+	LastAuditAction      string `json:"last_audit_action,omitempty"`
+	LastAuditAt          string `json:"last_audit_at,omitempty"`
+	LastAuditOperatorID  uint   `json:"last_audit_operator_id,omitempty"`
 }
 
 type BillingOrderListQuery struct {
@@ -112,6 +118,7 @@ type BillingOrderListQuery struct {
 	ReviewStatus         string `form:"review_status"`
 	RefundStatus         string `form:"refund_status"`
 	Limit                int    `form:"limit"`
+	Scope                string `form:"scope"`
 }
 
 type BillingOrderOpsSummary struct {
@@ -133,9 +140,11 @@ type BillingOrderOpsSummary struct {
 }
 
 type BillingOrderListResponse struct {
-	Items      []BillingOrderListItem `json:"items"`
-	Total      int64                  `json:"total"`
-	OpsSummary BillingOrderOpsSummary `json:"ops_summary"`
+	Items             []BillingOrderListItem `json:"items"`
+	Total             int64                  `json:"total"`
+	OpsSummary        BillingOrderOpsSummary `json:"ops_summary"`
+	Scope             string                 `json:"scope"`
+	CanOperateBilling bool                   `json:"can_operate_billing"`
 }
 
 type BillingWebhookOnchainRequest struct {
@@ -152,4 +161,29 @@ type BillingOrderOpsActionRequest struct {
 	Action       string `json:"action" binding:"required"`
 	RefundReason string `json:"refund_reason"`
 	OpsNote      string `json:"ops_note"`
+}
+
+type BillingOrderAuditItem struct {
+	ID                           string `json:"id"`
+	OrderID                      string `json:"order_id"`
+	UserID                       uint   `json:"user_id"`
+	OperatorUserID               uint   `json:"operator_user_id"`
+	Action                       string `json:"action"`
+	PreviousOrderStatus          string `json:"previous_order_status,omitempty"`
+	NewOrderStatus               string `json:"new_order_status,omitempty"`
+	PreviousReconciliationStatus string `json:"previous_reconciliation_status,omitempty"`
+	NewReconciliationStatus      string `json:"new_reconciliation_status,omitempty"`
+	PreviousReviewStatus         string `json:"previous_review_status,omitempty"`
+	NewReviewStatus              string `json:"new_review_status,omitempty"`
+	PreviousRefundStatus         string `json:"previous_refund_status,omitempty"`
+	NewRefundStatus              string `json:"new_refund_status,omitempty"`
+	PreviousRefundReason         string `json:"previous_refund_reason,omitempty"`
+	NewRefundReason              string `json:"new_refund_reason,omitempty"`
+	PreviousOpsNote              string `json:"previous_ops_note,omitempty"`
+	NewOpsNote                   string `json:"new_ops_note,omitempty"`
+	CreatedAt                    string `json:"created_at"`
+}
+
+type BillingOrderAuditListResponse struct {
+	Items []BillingOrderAuditItem `json:"items"`
 }

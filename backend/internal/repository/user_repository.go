@@ -32,6 +32,12 @@ func (r *UserRepository) GetByID(id uint) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *UserRepository) Count() (int64, error) {
+	var count int64
+	err := r.DB.Model(&model.User{}).Count(&count).Error
+	return count, err
+}
+
 func (r *UserRepository) Save(user *model.User) error {
 	return r.DB.Save(user).Error
 }

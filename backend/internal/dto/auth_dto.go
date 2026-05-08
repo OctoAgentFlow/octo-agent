@@ -44,6 +44,7 @@ type AuthUserData struct {
 	ID    uint   `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
+	Role  string `json:"role"`
 }
 
 type TokenData struct {
@@ -62,6 +63,7 @@ type MeResponse struct {
 	Email         string `json:"email"`
 	Name          string `json:"name"`
 	Status        string `json:"status"`
+	Role          string `json:"role"`
 	WalletAddress string `json:"wallet_address,omitempty"`
 }
 

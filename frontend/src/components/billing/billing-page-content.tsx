@@ -19,6 +19,7 @@ type BillingPageContentProps = {
   paymentMethods: PaymentMethodOption[];
   paymentRecords: PaymentRecord[];
   opsSummary: BillingOpsSummary;
+  canOperateBilling: boolean;
   filters: BillingOrderFilterState;
   onFiltersChange: (filters: BillingOrderFilterState) => void;
   onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
@@ -36,6 +37,7 @@ export function BillingPageContent({
   paymentMethods,
   paymentRecords,
   opsSummary,
+  canOperateBilling,
   filters,
   onFiltersChange,
   onConfirmTx,
@@ -50,6 +52,7 @@ export function BillingPageContent({
       <PaymentHistoryTable
         paymentRecords={paymentRecords}
         opsSummary={opsSummary}
+        canOperateBilling={canOperateBilling}
         filters={filters}
         onFiltersChange={onFiltersChange}
         onConfirmTx={onConfirmTx}

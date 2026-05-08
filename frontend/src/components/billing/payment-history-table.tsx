@@ -60,6 +60,7 @@ const defaultOpsInput: OpsInputState = { opsNote: "", refundReason: "" };
 export function PaymentHistoryTable({
   paymentRecords,
   opsSummary,
+  canOperateBilling,
   filters,
   onFiltersChange,
   onConfirmTx,
@@ -67,6 +68,7 @@ export function PaymentHistoryTable({
 }: {
   paymentRecords: PaymentRecord[];
   opsSummary: BillingOpsSummary;
+  canOperateBilling: boolean;
   filters: BillingOrderFilterState;
   onFiltersChange: (filters: BillingOrderFilterState) => void;
   onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
@@ -145,7 +147,20 @@ export function PaymentHistoryTable({
         ))}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {canOperateBilling ? (
+          <label className="space-y-1 text-xs text-white/55">
+            <span>{t("billing.history.filters.scope")}</span>
+            <select
+              className="h-9 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-300/55"
+              value={filters.scope}
+              onChange={(event) => updateFilter({ scope: event.target.value as BillingOrderFilterState["scope"] })}
+            >
+              <option value="own">{t("billing.history.scope.own")}</option>
+              <option value="all">{t("billing.history.scope.all")}</option>
+            </select>
+          </label>
+        ) : null}
         <label className="space-y-1 text-xs text-white/55">
           <span>{t("billing.history.filters.status")}</span>
           <select
@@ -221,7 +236,14 @@ export function PaymentHistoryTable({
                   <Fragment key={record.id}>
                     <tr className="border-b border-white/8 hover:bg-white/5">
                       <td className="px-3 py-3">{record.date}</td>
-                      <td className="px-3 py-3">{t(record.planKey)}</td>
+                      <td className="px-3 py-3">
+                        <div>{t(record.planKey)}</div>
+                        {canOperateBilling && filters.scope === "all" ? (
+                          <div className="mt-1 text-xs text-white/40">
+                            {t("billing.history.userId")}: {record.userId}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-3">{record.amount}</td>
                       <td className="px-3 py-3">
                         {t(record.methodKey)} / {record.network}
@@ -271,6 +293,13 @@ export function PaymentHistoryTable({
                                 {t("billing.history.lastCheckedAt")}: {formatCheckedAt(record.lastCheckedAt)}
                               </p>
                             ) : null}
+                            {record.lastAuditAction ? (
+                              <p className="text-xs text-white/45">
+                                {t("billing.history.audit.last")}: {t(`billing.history.audit.action.${record.lastAuditAction}`)}
+                                {record.lastAuditOperatorId ? ` · ${t("billing.history.audit.operator")} #${record.lastAuditOperatorId}` : ""}
+                                {record.lastAuditAt ? ` · ${formatCheckedAt(record.lastAuditAt)}` : ""}
+                              </p>
+                            ) : null}
                             <div className="grid gap-2 md:grid-cols-3">
                               {record.canRetry ? (
                                 <input
@@ -282,18 +311,22 @@ export function PaymentHistoryTable({
                                   }
                                 />
                               ) : null}
-                              <input
-                                className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
-                                placeholder={t("billing.history.ops.notePlaceholder")}
-                                value={opsInput.opsNote}
-                                onChange={(event) => updateOpsInput(record.id, { opsNote: event.target.value })}
-                              />
-                              <input
-                                className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
-                                placeholder={t("billing.history.ops.refundPlaceholder")}
-                                value={opsInput.refundReason}
-                                onChange={(event) => updateOpsInput(record.id, { refundReason: event.target.value })}
-                              />
+                              {canOperateBilling ? (
+                                <>
+                                  <input
+                                    className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
+                                    placeholder={t("billing.history.ops.notePlaceholder")}
+                                    value={opsInput.opsNote}
+                                    onChange={(event) => updateOpsInput(record.id, { opsNote: event.target.value })}
+                                  />
+                                  <input
+                                    className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
+                                    placeholder={t("billing.history.ops.refundPlaceholder")}
+                                    value={opsInput.refundReason}
+                                    onChange={(event) => updateOpsInput(record.id, { refundReason: event.target.value })}
+                                  />
+                                </>
+                              ) : null}
                             </div>
                             {rowErrors[record.id] ? <p className="text-xs text-rose-200">{rowErrors[record.id]}</p> : null}
                           </div>
@@ -311,51 +344,55 @@ export function PaymentHistoryTable({
                                   : t("billing.history.confirm.cta")}
                               </Button>
                             ) : null}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_review_needed`}
-                              onClick={() => void submitOpsAction(record, "mark_review_needed")}
-                            >
-                              {t("billing.history.ops.markReviewNeeded")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_reviewed`}
-                              onClick={() => void submitOpsAction(record, "mark_reviewed")}
-                            >
-                              {t("billing.history.ops.markReviewed")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!onOpsAction || opsSubmittingKey === `${record.id}:request_refund`}
-                              onClick={() => void submitOpsAction(record, "request_refund")}
-                            >
-                              {t("billing.history.ops.requestRefund")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_refunded`}
-                              onClick={() => void submitOpsAction(record, "mark_refunded")}
-                            >
-                              {t("billing.history.ops.markRefunded")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!onOpsAction || opsSubmittingKey === `${record.id}:reject_refund`}
-                              onClick={() => void submitOpsAction(record, "reject_refund")}
-                            >
-                              {t("billing.history.ops.rejectRefund")}
-                            </Button>
+                            {canOperateBilling ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_review_needed`}
+                                  onClick={() => void submitOpsAction(record, "mark_review_needed")}
+                                >
+                                  {t("billing.history.ops.markReviewNeeded")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_reviewed`}
+                                  onClick={() => void submitOpsAction(record, "mark_reviewed")}
+                                >
+                                  {t("billing.history.ops.markReviewed")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:request_refund`}
+                                  onClick={() => void submitOpsAction(record, "request_refund")}
+                                >
+                                  {t("billing.history.ops.requestRefund")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:mark_refunded`}
+                                  onClick={() => void submitOpsAction(record, "mark_refunded")}
+                                >
+                                  {t("billing.history.ops.markRefunded")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!onOpsAction || opsSubmittingKey === `${record.id}:reject_refund`}
+                                  onClick={() => void submitOpsAction(record, "reject_refund")}
+                                >
+                                  {t("billing.history.ops.rejectRefund")}
+                                </Button>
+                              </>
+                            ) : null}
                           </div>
                         </div>
                       </td>

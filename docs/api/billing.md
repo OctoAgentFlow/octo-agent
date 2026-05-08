@@ -2,7 +2,7 @@
 
 Base path: `/api/v1`
 
-除 **链上 Webhook** 外，路由均需 **Bearer Token**。
+除 **链上 Webhook** 外，路由均需 **Bearer Token**。Billing 运营动作需要当前用户 `role` 为 `owner` 或 `admin`。
 
 ## GET /api/v1/billing/subscription
 
@@ -34,9 +34,10 @@ Base path: `/api/v1`
 ## GET /api/v1/billing/orders
 
 - **用途**：返回当前用户最近支付订单，用于 Billing 页支付记录、对账筛选和退款/人工审核处理。
-- **Query**：支持 `status`、`reconciliation_status`、`review_status`、`refund_status`、`limit`（默认 20，最大 100）。
-- **响应**：`data.items` 为数组，元素含 `order_id`、`plan_code`、`amount`、`currency`、`method`、`network`、`status`、`tx_hash`、`created_at`、`expired_at`、`paid_at`、`failure_reason`、`last_checked_at`、`can_retry`、`next_action`，以及 `reconciliation_status`、`review_status`、`refund_status`、`refund_reason`、`reviewed_at`、`refund_marked_at`、`ops_note`。
+- **Query**：支持 `status`、`reconciliation_status`、`review_status`、`refund_status`、`limit`（默认 20，最大 100）、`scope`（`own` / `all`；`all` 仅 owner/admin 可用）。
+- **响应**：`data.items` 为数组，元素含 `order_id`、`user_id`、`plan_code`、`amount`、`currency`、`method`、`network`、`status`、`tx_hash`、`created_at`、`expired_at`、`paid_at`、`failure_reason`、`last_checked_at`、`can_retry`、`next_action`，以及 `reconciliation_status`、`review_status`、`refund_status`、`refund_reason`、`reviewed_at`、`refund_marked_at`、`ops_note`。owner/admin 响应还会带最近一次审计摘要 `last_audit_action`、`last_audit_at`、`last_audit_operator_id`。
 - **运营摘要**：`data.ops_summary` 返回当前用户全部订单的状态计数，包含支付状态、对账异常、待审核与退款状态计数；`data.total` 为当前筛选结果总数。
+- **权限标记**：`data.can_operate_billing` 表示当前用户是否可执行人工审核/退款动作；`data.scope` 表示本次返回范围。
 - **状态**：常见值为 `pending`、`paid`、`expired`、`failed`。
 - **对账状态**：`unchecked`、`matched`、`mismatch`、`needs_review`。
 - **审核状态**：`unreviewed`、`review_needed`、`reviewed`。
@@ -52,18 +53,26 @@ Base path: `/api/v1`
 
 ## POST /api/v1/billing/orders/{id}/ops-action
 
-- **用途**：Billing 运营处理入口，用于对账异常、人工审核和退款状态标记。当前 MVP 作用域为「当前登录用户自己的订单」，后续如引入后台角色可迁移到 admin 路由。
+- **权限**：仅 `owner` / `admin` 可调用；普通用户返回 `403`。
+- **用途**：Billing 运营处理入口，用于对账异常、人工审核和退款状态标记。owner/admin 可处理任意用户订单。
 - **Body**：
   - `action`：必填，支持 `mark_reviewed`、`mark_review_needed`、`request_refund`、`mark_refunded`、`reject_refund`
   - `ops_note`：可选，运营备注
   - `refund_reason`：可选，退款原因或拒绝退款原因
 - **成功响应**：返回更新后的订单详情。
+- **审计**：每次成功动作都会写入 `billing_order_audits`，记录操作人、动作、订单所属用户、操作前后订单/对账/审核/退款状态、退款原因和运营备注。
 - **状态联动**：
   - `mark_reviewed`：审核置为 `reviewed`，对账置为 `matched`
   - `mark_review_needed`：审核置为 `review_needed`，对账置为 `needs_review`
   - `request_refund`：退款置为 `requested`，审核置为 `review_needed`
   - `mark_refunded`：退款置为 `refunded`，审核置为 `reviewed`
   - `reject_refund`：退款置为 `rejected`，审核置为 `reviewed`
+
+## GET /api/v1/billing/orders/{id}/audits
+
+- **权限**：仅 `owner` / `admin` 可调用；普通用户返回 `403`。
+- **用途**：查看单笔订单的运营操作审计记录。
+- **响应**：`data.items` 为数组，元素含 `id`、`order_id`、`user_id`、`operator_user_id`、`action`、操作前后订单/对账/审核/退款状态、操作前后退款原因、操作前后运营备注、`created_at`。
 
 ## POST /api/v1/billing/orders/{id}/confirm
 

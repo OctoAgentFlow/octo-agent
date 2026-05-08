@@ -76,11 +76,18 @@ func (s *AuthService) Register(req dto.RegisterRequest) (*dto.AuthResponse, erro
 
 	now := time.Now().UTC()
 	trialEnd := now.AddDate(0, 0, subscription.DefaultTrialDays)
+	role := "user"
+	if count, err := s.userRepo.Count(); err != nil {
+		return nil, err
+	} else if count == 0 {
+		role = "owner"
+	}
 	user := &model.User{
 		Email:                 email,
 		Password:              hash,
 		Name:                  name,
 		Status:                "active",
+		Role:                  role,
 		SubscriptionPlanCode:  "free_trial",
 		SubscriptionStatus:    "active",
 		SubscriptionExpiresAt: &trialEnd,
@@ -213,6 +220,7 @@ func (s *AuthService) Me(userID uint) (*dto.MeResponse, error) {
 		Email:  user.Email,
 		Name:   user.Name,
 		Status: user.Status,
+		Role:   user.Role,
 	}
 
 	if wallet, err := s.walletRepo.GetPrimaryWallet(userID); err == nil {
@@ -338,6 +346,7 @@ func (s *AuthService) issueAuth(user *model.User) (*dto.AuthResponse, error) {
 			ID:    user.ID,
 			Email: user.Email,
 			Name:  user.Name,
+			Role:  user.Role,
 		},
 		Tokens: dto.TokenData{
 			AccessToken:  accessToken,

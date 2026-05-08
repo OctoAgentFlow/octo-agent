@@ -18,6 +18,7 @@ type BillingOrderListQuery struct {
 	ReviewStatus         string
 	RefundStatus         string
 	Limit                int
+	AllUsers             bool
 }
 
 type BillingOrderOpsSummary struct {
@@ -62,12 +63,15 @@ func (r *BillingOrderRepository) GetByUserAndID(userID, id uint) (*model.Billing
 	return &o, nil
 }
 
-func (r *BillingOrderRepository) ListByUser(userID uint, q BillingOrderListQuery) ([]model.BillingOrder, int64, error) {
+func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]model.BillingOrder, int64, error) {
 	limit := q.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	db := r.DB.Model(&model.BillingOrder{}).Where("user_id = ?", userID)
+	db := r.DB.Model(&model.BillingOrder{})
+	if !q.AllUsers {
+		db = db.Where("user_id = ?", userID)
+	}
 	if v := cleanBillingFilter(q.Status); v != "" {
 		db = db.Where("status = ?", v)
 	}
@@ -92,11 +96,13 @@ func (r *BillingOrderRepository) ListByUser(userID uint, q BillingOrderListQuery
 	return orders, total, err
 }
 
-func (r *BillingOrderRepository) OpsSummaryByUser(userID uint) (BillingOrderOpsSummary, error) {
+func (r *BillingOrderRepository) OpsSummary(userID uint, allUsers bool) (BillingOrderOpsSummary, error) {
 	var rows []model.BillingOrder
-	err := r.DB.Select("status, reconciliation_status, review_status, refund_status").
-		Where("user_id = ?", userID).
-		Find(&rows).Error
+	db := r.DB.Select("status, reconciliation_status, review_status, refund_status")
+	if !allUsers {
+		db = db.Where("user_id = ?", userID)
+	}
+	err := db.Find(&rows).Error
 	if err != nil {
 		return BillingOrderOpsSummary{}, err
 	}
@@ -146,6 +152,19 @@ func (r *BillingOrderRepository) OpsSummaryByUser(userID uint) (BillingOrderOpsS
 func (r *BillingOrderRepository) ExpireStaleByUser(userID uint, now time.Time) error {
 	return r.DB.Model(&model.BillingOrder{}).
 		Where("user_id = ? AND status IN ? AND expired_at < ?", userID, []string{"pending", "failed"}, now).
+		Updates(map[string]any{
+			"status":                "expired",
+			"failure_reason":        "order expired before payment confirmation",
+			"last_checked_at":       now,
+			"reconciliation_status": "needs_review",
+			"review_status":         "review_needed",
+			"ops_note":              "Order expired before payment confirmation.",
+		}).Error
+}
+
+func (r *BillingOrderRepository) ExpireStale(now time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).
+		Where("status IN ? AND expired_at < ?", []string{"pending", "failed"}, now).
 		Updates(map[string]any{
 			"status":                "expired",
 			"failure_reason":        "order expired before payment confirmation",
@@ -206,18 +225,52 @@ func (r *BillingOrderRepository) MarkPaid(id uint, txHash string, paidAt time.Ti
 	}).Error
 }
 
-func (r *BillingOrderRepository) UpdateOpsState(userID, id uint, updates map[string]any) (*model.BillingOrder, error) {
+func (r *BillingOrderRepository) UpdateOpsState(operatorUserID, id uint, action string, updates map[string]any) (*model.BillingOrder, error) {
 	err := r.DB.Transaction(func(tx *gorm.DB) error {
 		var order model.BillingOrder
-		if err := tx.Clauses(clauseLockingUpdate()).Where("user_id = ? AND id = ?", userID, id).First(&order).Error; err != nil {
+		if err := tx.Clauses(clauseLockingUpdate()).Where("id = ?", id).First(&order).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(updates).Error
+		if err := tx.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		var updated model.BillingOrder
+		if err := tx.First(&updated, id).Error; err != nil {
+			return err
+		}
+		audit := model.BillingOrderAudit{
+			OrderID:                      order.ID,
+			UserID:                       order.UserID,
+			OperatorUserID:               operatorUserID,
+			Action:                       action,
+			PreviousOrderStatus:          order.Status,
+			NewOrderStatus:               updated.Status,
+			PreviousReconciliationStatus: withBillingDefault(order.ReconciliationStatus, "unchecked"),
+			NewReconciliationStatus:      withBillingDefault(updated.ReconciliationStatus, "unchecked"),
+			PreviousReviewStatus:         withBillingDefault(order.ReviewStatus, "unreviewed"),
+			NewReviewStatus:              withBillingDefault(updated.ReviewStatus, "unreviewed"),
+			PreviousRefundStatus:         withBillingDefault(order.RefundStatus, "none"),
+			NewRefundStatus:              withBillingDefault(updated.RefundStatus, "none"),
+			PreviousRefundReason:         order.RefundReason,
+			NewRefundReason:              updated.RefundReason,
+			PreviousOpsNote:              order.OpsNote,
+			NewOpsNote:                   updated.OpsNote,
+		}
+		return tx.Create(&audit).Error
 	})
 	if err != nil {
 		return nil, err
 	}
-	return r.GetByUserAndID(userID, id)
+	return r.GetByID(id)
+}
+
+func (r *BillingOrderRepository) ListAuditsByOrder(orderID uint, limit int) ([]model.BillingOrderAudit, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var rows []model.BillingOrderAudit
+	err := r.DB.Where("order_id = ?", orderID).Order("id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
 }
 
 func cleanBillingFilter(v string) string {

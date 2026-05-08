@@ -34,6 +34,7 @@ export type PaymentStatus = "paid" | "pending" | "failed" | "expired";
 export type BillingReconciliationStatus = "unchecked" | "matched" | "mismatch" | "needs_review";
 export type BillingReviewStatus = "unreviewed" | "review_needed" | "reviewed";
 export type BillingRefundStatus = "none" | "requested" | "refunded" | "rejected";
+export type BillingOrderScope = "own" | "all";
 
 export type BillingOpsSummary = {
   total: number;
@@ -57,12 +58,14 @@ export type BillingOrderFilterState = {
   status: PaymentStatus | "all";
   reviewStatus: BillingReviewStatus | "all";
   refundStatus: BillingRefundStatus | "all";
+  scope: BillingOrderScope;
 };
 
 export type BillingOpsAction = "mark_reviewed" | "mark_review_needed" | "request_refund" | "mark_refunded" | "reject_refund";
 
 export type PaymentRecord = {
   id: string;
+  userId: number;
   date: string;
   planKey: string;
   amount: string;
@@ -81,4 +84,7 @@ export type PaymentRecord = {
   reviewedAt: string;
   refundMarkedAt: string;
   opsNote: string;
+  lastAuditAction: string;
+  lastAuditAt: string;
+  lastAuditOperatorId: number;
 };

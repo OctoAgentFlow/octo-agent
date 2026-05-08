@@ -71,10 +71,7 @@ export type BillingOrderDetailApi = {
   next_action: string;
   reconciliation_status: string;
   review_status: string;
-  refund_status: string;
-  refund_reason?: string;
   reviewed_at?: string;
-  refund_marked_at?: string;
   ops_note?: string;
   audit_trail?: BillingOrderAuditApi[];
 };
@@ -98,10 +95,7 @@ export type BillingOrderListItemApi = {
   next_action: string;
   reconciliation_status: string;
   review_status: string;
-  refund_status: string;
-  refund_reason?: string;
   reviewed_at?: string;
-  refund_marked_at?: string;
   ops_note?: string;
   last_audit_action?: string;
   last_audit_at?: string;
@@ -112,7 +106,6 @@ export type BillingOrderQueryApi = {
   status?: string;
   reconciliation_status?: string;
   review_status?: string;
-  refund_status?: string;
   limit?: number;
   scope?: string;
 };
@@ -129,10 +122,6 @@ export type BillingOrderAuditApi = {
   new_reconciliation_status?: string;
   previous_review_status?: string;
   new_review_status?: string;
-  previous_refund_status?: string;
-  new_refund_status?: string;
-  previous_refund_reason?: string;
-  new_refund_reason?: string;
   previous_ops_note?: string;
   new_ops_note?: string;
   created_at: string;
@@ -150,15 +139,10 @@ export type BillingOpsSummaryApi = {
   needs_review: number;
   review_needed: number;
   reviewed: number;
-  refund_none: number;
-  refund_requested: number;
-  refunded: number;
-  refund_rejected: number;
 };
 
 export type BillingOrderOpsActionRequest = {
   action: string;
-  refund_reason?: string;
   ops_note?: string;
 };
 

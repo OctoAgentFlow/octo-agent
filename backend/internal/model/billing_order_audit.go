@@ -1,6 +1,6 @@
 package model
 
-// BillingOrderAudit records operator actions for reconciliation, review and refund workflows.
+// BillingOrderAudit records operator actions for reconciliation and review workflows.
 type BillingOrderAudit struct {
 	Base
 	OrderID                      uint   `gorm:"index;not null;comment:支付订单ID" json:"order_id"`
@@ -13,10 +13,6 @@ type BillingOrderAudit struct {
 	NewReconciliationStatus      string `gorm:"size:32;comment:操作后对账状态" json:"new_reconciliation_status,omitempty"`
 	PreviousReviewStatus         string `gorm:"size:32;comment:操作前复核状态" json:"previous_review_status,omitempty"`
 	NewReviewStatus              string `gorm:"size:32;comment:操作后复核状态" json:"new_review_status,omitempty"`
-	PreviousRefundStatus         string `gorm:"size:32;comment:操作前退款状态" json:"previous_refund_status,omitempty"`
-	NewRefundStatus              string `gorm:"size:32;comment:操作后退款状态" json:"new_refund_status,omitempty"`
-	PreviousRefundReason         string `gorm:"size:512;comment:操作前退款原因" json:"previous_refund_reason,omitempty"`
-	NewRefundReason              string `gorm:"size:512;comment:操作后退款原因" json:"new_refund_reason,omitempty"`
 	PreviousOpsNote              string `gorm:"size:512;comment:操作前运营备注" json:"previous_ops_note,omitempty"`
 	NewOpsNote                   string `gorm:"size:512;comment:操作后运营备注" json:"new_ops_note,omitempty"`
 }

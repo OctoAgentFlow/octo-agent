@@ -16,27 +16,22 @@ type BillingOrderListQuery struct {
 	Status               string
 	ReconciliationStatus string
 	ReviewStatus         string
-	RefundStatus         string
 	Limit                int
 	AllUsers             bool
 }
 
 type BillingOrderOpsSummary struct {
-	Total           int64
-	Pending         int64
-	Paid            int64
-	Failed          int64
-	Expired         int64
-	Unchecked       int64
-	Matched         int64
-	Mismatch        int64
-	NeedsReview     int64
-	ReviewNeeded    int64
-	Reviewed        int64
-	RefundNone      int64
-	RefundRequested int64
-	Refunded        int64
-	RefundRejected  int64
+	Total        int64
+	Pending      int64
+	Paid         int64
+	Failed       int64
+	Expired      int64
+	Unchecked    int64
+	Matched      int64
+	Mismatch     int64
+	NeedsReview  int64
+	ReviewNeeded int64
+	Reviewed     int64
 }
 
 func NewBillingOrderRepository(db *gorm.DB) *BillingOrderRepository {
@@ -81,9 +76,6 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 	if v := cleanBillingFilter(q.ReviewStatus); v != "" {
 		db = db.Where("review_status = ?", v)
 	}
-	if v := cleanBillingFilter(q.RefundStatus); v != "" {
-		db = db.Where("refund_status = ?", v)
-	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -98,7 +90,7 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 
 func (r *BillingOrderRepository) OpsSummary(userID uint, allUsers bool) (BillingOrderOpsSummary, error) {
 	var rows []model.BillingOrder
-	db := r.DB.Select("status, reconciliation_status, review_status, refund_status")
+	db := r.DB.Select("status, reconciliation_status, review_status")
 	if !allUsers {
 		db = db.Where("user_id = ?", userID)
 	}
@@ -134,16 +126,6 @@ func (r *BillingOrderRepository) OpsSummary(userID uint, allUsers bool) (Billing
 			out.ReviewNeeded++
 		case "reviewed":
 			out.Reviewed++
-		}
-		switch withBillingDefault(row.RefundStatus, "none") {
-		case "none":
-			out.RefundNone++
-		case "requested":
-			out.RefundRequested++
-		case "refunded":
-			out.Refunded++
-		case "rejected":
-			out.RefundRejected++
 		}
 	}
 	return out, nil
@@ -249,10 +231,6 @@ func (r *BillingOrderRepository) UpdateOpsState(operatorUserID, id uint, action 
 			NewReconciliationStatus:      withBillingDefault(updated.ReconciliationStatus, "unchecked"),
 			PreviousReviewStatus:         withBillingDefault(order.ReviewStatus, "unreviewed"),
 			NewReviewStatus:              withBillingDefault(updated.ReviewStatus, "unreviewed"),
-			PreviousRefundStatus:         withBillingDefault(order.RefundStatus, "none"),
-			NewRefundStatus:              withBillingDefault(updated.RefundStatus, "none"),
-			PreviousRefundReason:         order.RefundReason,
-			NewRefundReason:              updated.RefundReason,
 			PreviousOpsNote:              order.OpsNote,
 			NewOpsNote:                   updated.OpsNote,
 		}

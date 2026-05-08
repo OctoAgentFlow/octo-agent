@@ -37,11 +37,6 @@ const (
 	billingReviewUnreviewed = "unreviewed"
 	billingReviewNeeded     = "review_needed"
 	billingReviewReviewed   = "reviewed"
-
-	billingRefundNone      = "none"
-	billingRefundRequested = "requested"
-	billingRefundRefunded  = "refunded"
-	billingRefundRejected  = "rejected"
 )
 
 func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, cfg *config.Config) *BillingService {
@@ -170,7 +165,6 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		TokenDecimals:        pm.Decimals,
 		ReconciliationStatus: billingReconUnchecked,
 		ReviewStatus:         billingReviewUnreviewed,
-		RefundStatus:         billingRefundNone,
 	}
 	if o.Currency == "" {
 		o.Currency = "USDT"
@@ -232,7 +226,6 @@ func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) 
 		Status:               req.Status,
 		ReconciliationStatus: req.ReconciliationStatus,
 		ReviewStatus:         req.ReviewStatus,
-		RefundStatus:         req.RefundStatus,
 		Limit:                req.Limit,
 		AllUsers:             allUsers,
 	})
@@ -282,8 +275,6 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
 		ReconciliationStatus: billingOrderReconStatus(o),
 		ReviewStatus:         billingOrderReviewStatus(o),
-		RefundStatus:         billingOrderRefundStatus(o),
-		RefundReason:         o.RefundReason,
 		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
@@ -295,9 +286,6 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	}
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
-	}
-	if o.RefundMarkedAt != nil {
-		out.RefundMarkedAt = o.RefundMarkedAt.UTC().Format(time.RFC3339)
 	}
 	return out
 }
@@ -320,8 +308,6 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
 		ReconciliationStatus: billingOrderReconStatus(o),
 		ReviewStatus:         billingOrderReviewStatus(o),
-		RefundStatus:         billingOrderRefundStatus(o),
-		RefundReason:         o.RefundReason,
 		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
@@ -333,29 +319,22 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
 	}
-	if o.RefundMarkedAt != nil {
-		out.RefundMarkedAt = o.RefundMarkedAt.UTC().Format(time.RFC3339)
-	}
 	return out
 }
 
 func orderOpsSummaryToDTO(s repository.BillingOrderOpsSummary) dto.BillingOrderOpsSummary {
 	return dto.BillingOrderOpsSummary{
-		Total:           s.Total,
-		Pending:         s.Pending,
-		Paid:            s.Paid,
-		Failed:          s.Failed,
-		Expired:         s.Expired,
-		Unchecked:       s.Unchecked,
-		Matched:         s.Matched,
-		Mismatch:        s.Mismatch,
-		NeedsReview:     s.NeedsReview,
-		ReviewNeeded:    s.ReviewNeeded,
-		Reviewed:        s.Reviewed,
-		RefundNone:      s.RefundNone,
-		RefundRequested: s.RefundRequested,
-		Refunded:        s.Refunded,
-		RefundRejected:  s.RefundRejected,
+		Total:        s.Total,
+		Pending:      s.Pending,
+		Paid:         s.Paid,
+		Failed:       s.Failed,
+		Expired:      s.Expired,
+		Unchecked:    s.Unchecked,
+		Matched:      s.Matched,
+		Mismatch:     s.Mismatch,
+		NeedsReview:  s.NeedsReview,
+		ReviewNeeded: s.ReviewNeeded,
+		Reviewed:     s.Reviewed,
 	}
 }
 
@@ -371,13 +350,6 @@ func billingOrderReviewStatus(o *model.BillingOrder) string {
 		return billingReviewUnreviewed
 	}
 	return strings.ToLower(strings.TrimSpace(o.ReviewStatus))
-}
-
-func billingOrderRefundStatus(o *model.BillingOrder) string {
-	if o == nil || strings.TrimSpace(o.RefundStatus) == "" {
-		return billingRefundNone
-	}
-	return strings.ToLower(strings.TrimSpace(o.RefundStatus))
 }
 
 func canRetryBillingOrder(o *model.BillingOrder, now time.Time) bool {
@@ -463,7 +435,6 @@ func (s *BillingService) UpdateOrderOpsAction(userID, orderID uint, req dto.Bill
 	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	note := sanitizeBillingOpsNote(req.OpsNote)
-	refundReason := sanitizeBillingOpsNote(req.RefundReason)
 	now := time.Now().UTC()
 	updates := map[string]any{}
 	if note != "" {
@@ -478,25 +449,6 @@ func (s *BillingService) UpdateOrderOpsAction(userID, orderID uint, req dto.Bill
 	case "mark_review_needed":
 		updates["review_status"] = billingReviewNeeded
 		updates["reconciliation_status"] = billingReconNeedsReview
-	case "request_refund":
-		updates["refund_status"] = billingRefundRequested
-		updates["refund_reason"] = refundReason
-		updates["refund_marked_at"] = now
-		updates["review_status"] = billingReviewNeeded
-		updates["reconciliation_status"] = billingReconNeedsReview
-	case "mark_refunded":
-		updates["refund_status"] = billingRefundRefunded
-		updates["refund_reason"] = refundReason
-		updates["refund_marked_at"] = now
-		updates["review_status"] = billingReviewReviewed
-		updates["reviewed_at"] = now
-		updates["reconciliation_status"] = billingReconMatched
-	case "reject_refund":
-		updates["refund_status"] = billingRefundRejected
-		updates["refund_reason"] = refundReason
-		updates["refund_marked_at"] = now
-		updates["review_status"] = billingReviewReviewed
-		updates["reviewed_at"] = now
 	default:
 		return nil, fmt.Errorf("unsupported billing ops action")
 	}
@@ -766,10 +718,6 @@ func billingAuditItemToDTO(row *model.BillingOrderAudit) dto.BillingOrderAuditIt
 		NewReconciliationStatus:      row.NewReconciliationStatus,
 		PreviousReviewStatus:         row.PreviousReviewStatus,
 		NewReviewStatus:              row.NewReviewStatus,
-		PreviousRefundStatus:         row.PreviousRefundStatus,
-		NewRefundStatus:              row.NewRefundStatus,
-		PreviousRefundReason:         row.PreviousRefundReason,
-		NewRefundReason:              row.NewRefundReason,
 		PreviousOpsNote:              row.PreviousOpsNote,
 		NewOpsNote:                   row.NewOpsNote,
 		CreatedAt:                    row.CreatedAt.UTC().Format(time.RFC3339),

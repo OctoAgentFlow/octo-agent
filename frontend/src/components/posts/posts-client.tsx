@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 
+import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
+import { accountService } from "@/services/account.service";
 import { postService } from "@/services/post.service";
 import type { PostItem } from "@/types/post";
 
@@ -24,13 +26,18 @@ export function PostsClient() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [items, setItems] = useState<PostItem[]>([]);
+  const [accountCount, setAccountCount] = useState(0);
 
   const fetchPosts = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
     try {
-      const data = await postService.list({ page: 1, page_size: 50 });
+      const [data, accountData] = await Promise.all([
+        postService.list({ page: 1, page_size: 50 }),
+        accountService.list(),
+      ]);
       setItems(data.items);
+      setAccountCount(accountData.items.length);
       setLoadState("ready");
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -76,9 +83,27 @@ export function PostsClient() {
       ) : null}
 
       {loadState === "ready" && items.length === 0 ? (
-        <Card>
-          <CardHeader title={t("posts.list.empty")} description="" />
-        </Card>
+        <>
+          <UserOnboardingCard
+            accountConnected={accountCount > 0}
+            automationEnabled={false}
+            postCreated={false}
+            activityObserved={false}
+          />
+          <Card>
+            <CardHeader title={t("posts.list.empty")} description={t("posts.list.emptyDescription")} />
+            <div className="flex flex-wrap justify-end gap-2">
+              {accountCount === 0 ? (
+                <Link href="/accounts" className={cn(buttonVariants({ variant: "outline" }))}>
+                  {t("posts.create.goAccounts")}
+                </Link>
+              ) : null}
+              <Link href="/posts/create" className={cn(buttonVariants())}>
+                {t("posts.actions.new")}
+              </Link>
+            </div>
+          </Card>
+        </>
       ) : null}
 
       {loadState === "ready" && items.length > 0 ? (

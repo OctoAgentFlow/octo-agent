@@ -5,6 +5,7 @@ import axios from "axios";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useToast } from "@/components/providers/toast-provider";
+import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -213,7 +214,18 @@ export function AccountsClient() {
         </Card>
       ) : null}
 
-      {isEmpty ? <AccountsEmptyState /> : null}
+      {isEmpty ? (
+        <>
+          <UserOnboardingCard
+            accountConnected={false}
+            automationEnabled={false}
+            postCreated={false}
+            activityObserved={false}
+            onConnectAccount={() => setDialogOpen(true)}
+          />
+          <AccountsEmptyState onConnect={() => setDialogOpen(true)} />
+        </>
+      ) : null}
 
       {loadState === "ready" && accounts.length > 0 ? (
         <div className="space-y-3">
@@ -231,4 +243,3 @@ export function AccountsClient() {
     </div>
   );
 }
-

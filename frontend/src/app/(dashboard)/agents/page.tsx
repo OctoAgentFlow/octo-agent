@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 import { useToast } from "@/components/providers/toast-provider";
+import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import {
@@ -12,6 +13,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { useT } from "@/i18n/use-t";
+import { accountService } from "@/services/account.service";
 import {
   automationService,
   type AutoDMRecipientImportApi,
@@ -20,6 +22,7 @@ import {
   type AutomationModuleApi,
   type AutomationRuntimeStatusApi,
 } from "@/services/automation.service";
+import { postService } from "@/services/post.service";
 import type { AutomationModule, AutomationModuleConfig, AutomationRuntimeStatus } from "@/types/automation";
 
 import { AutomationEditDialog } from "@/components/automation/automation-edit-dialog";
@@ -107,6 +110,8 @@ export default function AgentsPage() {
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
+  const [accountCount, setAccountCount] = useState(0);
+  const [postCount, setPostCount] = useState(0);
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -135,18 +140,22 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
           automationService.dmRecipients(),
           automationService.dmRecipientImports(),
+          accountService.list(),
+          postService.list({ page: 1, page_size: 1 }),
         ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setAccountCount(accountData.items.length);
+        setPostCount(postData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -166,14 +175,24 @@ export default function AgentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([automationService.list(), automationService.runtimeStatus(), automationService.dmTasks(), automationService.dmRecipients(), automationService.dmRecipientImports()])
-      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData]) => {
+    Promise.all([
+      automationService.list(),
+      automationService.runtimeStatus(),
+      automationService.dmTasks(),
+      automationService.dmRecipients(),
+      automationService.dmRecipientImports(),
+      accountService.list(),
+      postService.list({ page: 1, page_size: 1 }),
+    ])
+      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setAccountCount(accountData.items.length);
+        setPostCount(postData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -351,6 +370,13 @@ export default function AgentsPage() {
           </div>
         </Card>
       ) : null}
+
+      <UserOnboardingCard
+        accountConnected={accountCount > 0}
+        automationEnabled={modules.some((module) => module.config.enabled)}
+        postCreated={postCount > 0}
+        activityObserved={runtimeStatus.queueDepth > 0 || runtimeStatus.needsReview > 0 || runtimeStatus.lastSuccessKey !== "automation.time.paused"}
+      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         {modules.map((module) => (

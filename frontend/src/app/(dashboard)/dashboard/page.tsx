@@ -8,6 +8,7 @@ import { RecentActivityList } from "@/components/dashboard/recent-activity-list"
 import { StatusOverviewCards } from "@/components/dashboard/status-overview-cards";
 import { TrialUpgradeBanner } from "@/components/dashboard/trial-upgrade-banner";
 import { XAccountStatus } from "@/components/dashboard/x-account-status";
+import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import {
@@ -19,6 +20,7 @@ import { subscribeDashboardRefresh } from "@/lib/dashboard-refresh";
 import { activityService } from "@/services/activity.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
+import { postService } from "@/services/post.service";
 import type { ActivityRecord } from "@/types/activity";
 import type { AutomationModule } from "@/types/automation";
 
@@ -96,6 +98,7 @@ export default function DashboardPage() {
   const [recentRecords, setRecentRecords] = useState<ActivityRecord[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
   const [recentError, setRecentError] = useState<string | null>(null);
+  const [postCount, setPostCount] = useState(0);
 
   const fetchOverview = useCallback(async () => {
     setLoadState("loading");
@@ -160,6 +163,15 @@ export default function DashboardPage() {
       }
     } finally {
       setRecentLoading(false);
+    }
+  }, []);
+
+  const fetchPostCount = useCallback(async () => {
+    try {
+      const data = await postService.list({ page: 1, page_size: 1 });
+      setPostCount(data.pagination.total);
+    } catch {
+      setPostCount(0);
     }
   }, []);
 
@@ -255,12 +267,30 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    postService
+      .list({ page: 1, page_size: 1 })
+      .then((data) => {
+        if (cancelled) return;
+        setPostCount(data.pagination.total);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPostCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     return subscribeDashboardRefresh(() => {
       void fetchOverview();
       void fetchAutomations();
       void fetchRecentActivities();
+      void fetchPostCount();
     });
-  }, [fetchAutomations, fetchOverview, fetchRecentActivities]);
+  }, [fetchAutomations, fetchOverview, fetchPostCount, fetchRecentActivities]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -325,6 +355,13 @@ export default function DashboardPage() {
           setRecentLoading(false);
         }
 
+        try {
+          const data = await postService.list({ page: 1, page_size: 1 });
+          setPostCount(data.pagination.total);
+        } catch {
+          setPostCount(0);
+        }
+
         if (overviewOk) {
           broadcastDataSynced(Date.now());
         }
@@ -351,6 +388,12 @@ export default function DashboardPage() {
       ) : null}
 
       <StatusOverviewCards overview={overview} />
+      <UserOnboardingCard
+        accountConnected={(overview?.connected_x_count ?? 0) > 0}
+        automationEnabled={automations.some((module) => module.config.enabled)}
+        postCreated={postCount > 0}
+        activityObserved={recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0}
+      />
       <XAccountStatus overview={overview} />
       <AutomationOverview
         modules={automations}

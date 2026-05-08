@@ -248,6 +248,36 @@ func (s *AuthService) UpdateMe(userID uint, req dto.UpdateMeRequest) (*dto.MeRes
 	return s.Me(userID)
 }
 
+func (s *AuthService) ChangePassword(userID uint, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
+	if len([]rune(req.NewPassword)) < 8 {
+		return nil, errors.New("new password must be at least 8 characters")
+	}
+	if len([]rune(req.NewPassword)) > 128 {
+		return nil, errors.New("new password must be 128 characters or less")
+	}
+	if req.CurrentPassword == req.NewPassword {
+		return nil, errors.New("new password must be different from current password")
+	}
+
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !utils.CheckPassword(user.Password, req.CurrentPassword) {
+		return nil, errors.New("current password is incorrect")
+	}
+
+	hash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return nil, err
+	}
+	user.Password = hash
+	if err := s.userRepo.Save(user); err != nil {
+		return nil, err
+	}
+	return &dto.ChangePasswordResponse{Changed: true}, nil
+}
+
 func (s *AuthService) NotificationSettings(userID uint) (*dto.NotificationSettingsResponse, error) {
 	setting, err := s.getOrCreateNotificationSettings(userID)
 	if err != nil {

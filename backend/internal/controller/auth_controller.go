@@ -137,6 +137,26 @@ func (ctl *AuthController) UpdateMe(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AuthController) ChangePassword(c *gin.Context) {
+	rawUserID := c.GetString("user_id")
+	userIDValue, _ := strconv.ParseUint(rawUserID, 10, 64)
+	if userIDValue == 0 {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.authService.ChangePassword(uint(userIDValue), req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AuthController) NotificationSettings(c *gin.Context) {
 	rawUserID := c.GetString("user_id")
 	userIDValue, _ := strconv.ParseUint(rawUserID, 10, 64)

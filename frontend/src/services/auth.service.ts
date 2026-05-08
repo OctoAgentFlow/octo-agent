@@ -48,6 +48,11 @@ export type NotificationSettingsData = {
   weekly_summary: boolean;
 };
 
+export type ChangePasswordPayload = {
+  current_password: string;
+  new_password: string;
+};
+
 export const authService = {
   async login(payload: { email: string; password: string }) {
     const res = await request.post<ApiResponse<AuthResponse>>("/auth/login", payload);
@@ -67,6 +72,10 @@ export const authService = {
   },
   async updateMe(payload: { name: string }) {
     const res = await request.patch<ApiResponse<MeData>>("/users/me", payload);
+    return res.data.data;
+  },
+  async changePassword(payload: ChangePasswordPayload) {
+    const res = await request.patch<ApiResponse<{ changed: boolean }>>("/users/me/password", payload);
     return res.data.data;
   },
   async notificationSettings() {

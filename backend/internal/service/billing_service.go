@@ -207,33 +207,67 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 }
 
 func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) (*dto.BillingOrderListResponse, error) {
-	if err := s.orderRepo.ExpireStaleByUser(userID, time.Now().UTC()); err != nil {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
 		return nil, err
 	}
-	orders, total, err := s.orderRepo.ListByUser(userID, repository.BillingOrderListQuery{
+	canOperate := canOperateBilling(user)
+	scope := "own"
+	allUsers := strings.EqualFold(strings.TrimSpace(req.Scope), "all")
+	if allUsers {
+		if !canOperate {
+			return nil, ErrBillingOpsForbidden
+		}
+		scope = "all"
+	}
+	now := time.Now().UTC()
+	if allUsers {
+		if err := s.orderRepo.ExpireStale(now); err != nil {
+			return nil, err
+		}
+	} else if err := s.orderRepo.ExpireStaleByUser(userID, now); err != nil {
+		return nil, err
+	}
+	orders, total, err := s.orderRepo.List(userID, repository.BillingOrderListQuery{
 		Status:               req.Status,
 		ReconciliationStatus: req.ReconciliationStatus,
 		ReviewStatus:         req.ReviewStatus,
 		RefundStatus:         req.RefundStatus,
 		Limit:                req.Limit,
+		AllUsers:             allUsers,
 	})
 	if err != nil {
 		return nil, err
 	}
-	summary, err := s.orderRepo.OpsSummaryByUser(userID)
+	summary, err := s.orderRepo.OpsSummary(userID, allUsers)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]dto.BillingOrderListItem, 0, len(orders))
 	for i := range orders {
-		items = append(items, orderToListItemDTO(&orders[i]))
+		item := orderToListItemDTO(&orders[i])
+		if canOperate {
+			if audits, err := s.orderRepo.ListAuditsByOrder(orders[i].ID, 1); err == nil && len(audits) > 0 {
+				item.LastAuditAction = audits[0].Action
+				item.LastAuditAt = audits[0].CreatedAt.UTC().Format(time.RFC3339)
+				item.LastAuditOperatorID = audits[0].OperatorUserID
+			}
+		}
+		items = append(items, item)
 	}
-	return &dto.BillingOrderListResponse{Items: items, Total: total, OpsSummary: orderOpsSummaryToDTO(summary)}, nil
+	return &dto.BillingOrderListResponse{
+		Items:             items,
+		Total:             total,
+		OpsSummary:        orderOpsSummaryToDTO(summary),
+		Scope:             scope,
+		CanOperateBilling: canOperate,
+	}, nil
 }
 
 func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	out := &dto.BillingOrderDetailResponse{
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
+		UserID:               o.UserID,
 		Amount:               o.Amount,
 		Currency:             o.Currency,
 		Network:              o.Network,
@@ -271,6 +305,7 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	out := dto.BillingOrderListItem{
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
+		UserID:               o.UserID,
 		PlanCode:             o.PlanCode,
 		Amount:               o.Amount,
 		Currency:             o.Currency,
@@ -419,6 +454,13 @@ func (s *BillingService) ConfirmOrderTx(userID, orderID uint, req dto.BillingCon
 }
 
 func (s *BillingService) UpdateOrderOpsAction(userID, orderID uint, req dto.BillingOrderOpsActionRequest) (*dto.BillingOrderDetailResponse, error) {
+	operator, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !canOperateBilling(operator) {
+		return nil, ErrBillingOpsForbidden
+	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	note := sanitizeBillingOpsNote(req.OpsNote)
 	refundReason := sanitizeBillingOpsNote(req.RefundReason)
@@ -459,14 +501,39 @@ func (s *BillingService) UpdateOrderOpsAction(userID, orderID uint, req dto.Bill
 		return nil, fmt.Errorf("unsupported billing ops action")
 	}
 
-	updated, err := s.orderRepo.UpdateOpsState(userID, orderID, updates)
+	updated, err := s.orderRepo.UpdateOpsState(userID, orderID, action, updates)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrBillingOrderNotFound
 		}
 		return nil, err
 	}
-	return orderToDetailDTO(updated), nil
+	out := orderToDetailDTO(updated)
+	if audits, err := s.orderRepo.ListAuditsByOrder(updated.ID, 20); err == nil {
+		out.AuditTrail = billingAuditItemsToDTO(audits)
+	}
+	return out, nil
+}
+
+func (s *BillingService) ListOrderAudits(userID, orderID uint) (*dto.BillingOrderAuditListResponse, error) {
+	operator, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !canOperateBilling(operator) {
+		return nil, ErrBillingOpsForbidden
+	}
+	if _, err := s.orderRepo.GetByID(orderID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBillingOrderNotFound
+		}
+		return nil, err
+	}
+	rows, err := s.orderRepo.ListAuditsByOrder(orderID, 50)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.BillingOrderAuditListResponse{Items: billingAuditItemsToDTO(rows)}, nil
 }
 
 // WebhookOnchain confirms payment from chain. Amount and receiver are enforced by VerifyERC20Transfer (ERC20 Transfer log).
@@ -667,6 +734,48 @@ func sanitizeBillingOpsNote(note string) string {
 	return n
 }
 
+func canOperateBilling(user *model.User) bool {
+	if user == nil {
+		return false
+	}
+	role := strings.ToLower(strings.TrimSpace(user.Role))
+	return role == "owner" || role == "admin"
+}
+
+func billingAuditItemsToDTO(rows []model.BillingOrderAudit) []dto.BillingOrderAuditItem {
+	items := make([]dto.BillingOrderAuditItem, 0, len(rows))
+	for i := range rows {
+		items = append(items, billingAuditItemToDTO(&rows[i]))
+	}
+	return items
+}
+
+func billingAuditItemToDTO(row *model.BillingOrderAudit) dto.BillingOrderAuditItem {
+	if row == nil {
+		return dto.BillingOrderAuditItem{}
+	}
+	return dto.BillingOrderAuditItem{
+		ID:                           strconv.FormatUint(uint64(row.ID), 10),
+		OrderID:                      strconv.FormatUint(uint64(row.OrderID), 10),
+		UserID:                       row.UserID,
+		OperatorUserID:               row.OperatorUserID,
+		Action:                       row.Action,
+		PreviousOrderStatus:          row.PreviousOrderStatus,
+		NewOrderStatus:               row.NewOrderStatus,
+		PreviousReconciliationStatus: row.PreviousReconciliationStatus,
+		NewReconciliationStatus:      row.NewReconciliationStatus,
+		PreviousReviewStatus:         row.PreviousReviewStatus,
+		NewReviewStatus:              row.NewReviewStatus,
+		PreviousRefundStatus:         row.PreviousRefundStatus,
+		NewRefundStatus:              row.NewRefundStatus,
+		PreviousRefundReason:         row.PreviousRefundReason,
+		NewRefundReason:              row.NewRefundReason,
+		PreviousOpsNote:              row.PreviousOpsNote,
+		NewOpsNote:                   row.NewOpsNote,
+		CreatedAt:                    row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
 func normalizeEVMTxHash(hex string) (string, error) {
 	h := strings.TrimSpace(hex)
 	txHash := common.HexToHash(h)
@@ -682,4 +791,5 @@ var (
 	ErrBillingOrderNotFound    = errors.New("order not found")
 	ErrBillingTxAlreadyUsed    = errors.New("transaction already used for another order")
 	ErrBillingOrderExpired     = errors.New("order expired")
+	ErrBillingOpsForbidden     = errors.New("billing operator permission required")
 )

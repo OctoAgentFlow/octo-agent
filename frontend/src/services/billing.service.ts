@@ -54,6 +54,7 @@ export type BillingCreateOrderResponse = {
 
 export type BillingOrderDetailApi = {
   order_id: string;
+  user_id: number;
   amount: string;
   currency: string;
   network: string;
@@ -75,10 +76,12 @@ export type BillingOrderDetailApi = {
   reviewed_at?: string;
   refund_marked_at?: string;
   ops_note?: string;
+  audit_trail?: BillingOrderAuditApi[];
 };
 
 export type BillingOrderListItemApi = {
   order_id: string;
+  user_id: number;
   plan_code: string;
   amount: string;
   currency: string;
@@ -100,6 +103,9 @@ export type BillingOrderListItemApi = {
   reviewed_at?: string;
   refund_marked_at?: string;
   ops_note?: string;
+  last_audit_action?: string;
+  last_audit_at?: string;
+  last_audit_operator_id?: number;
 };
 
 export type BillingOrderQueryApi = {
@@ -108,6 +114,28 @@ export type BillingOrderQueryApi = {
   review_status?: string;
   refund_status?: string;
   limit?: number;
+  scope?: string;
+};
+
+export type BillingOrderAuditApi = {
+  id: string;
+  order_id: string;
+  user_id: number;
+  operator_user_id: number;
+  action: string;
+  previous_order_status?: string;
+  new_order_status?: string;
+  previous_reconciliation_status?: string;
+  new_reconciliation_status?: string;
+  previous_review_status?: string;
+  new_review_status?: string;
+  previous_refund_status?: string;
+  new_refund_status?: string;
+  previous_refund_reason?: string;
+  new_refund_reason?: string;
+  previous_ops_note?: string;
+  new_ops_note?: string;
+  created_at: string;
 };
 
 export type BillingOpsSummaryApi = {
@@ -146,6 +174,12 @@ type BillingOrdersData = {
   items: BillingOrderListItemApi[];
   total: number;
   ops_summary: BillingOpsSummaryApi;
+  scope: string;
+  can_operate_billing: boolean;
+};
+
+type BillingOrderAuditsData = {
+  items: BillingOrderAuditApi[];
 };
 
 export const billingService = {
@@ -181,6 +215,10 @@ export const billingService = {
   },
   async orderOpsAction(orderId: string, body: BillingOrderOpsActionRequest) {
     const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/billing/orders/${orderId}/ops-action`, body);
+    return res.data.data;
+  },
+  async orderAudits(orderId: string) {
+    const res = await request.get<ApiResponse<BillingOrderAuditsData>>(`/billing/orders/${orderId}/audits`);
     return res.data.data;
   },
 };

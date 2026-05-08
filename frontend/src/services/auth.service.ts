@@ -17,6 +17,7 @@ type AuthResponse = {
     id: number;
     email: string;
     name: string;
+    role: string;
   };
   tokens: TokenData;
 };
@@ -33,6 +34,7 @@ export type MeData = {
   email: string;
   name: string;
   status: string;
+  role: string;
   wallet_address?: string;
 };
 

@@ -27,6 +27,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Agent{},
 		&model.Task{},
 		&model.BillingOrder{},
+		&model.BillingOrderAudit{},
 		&model.BillingChainTx{},
 	); err != nil {
 		return err
@@ -34,7 +35,10 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := ApplyTableComments(db); err != nil {
 		return err
 	}
-	return BackfillActivityReplyFields(db)
+	if err := BackfillActivityReplyFields(db); err != nil {
+		return err
+	}
+	return BackfillUserOwnerRole(db)
 }
 
 // ApplyTableComments keeps table comments readable in MySQL.
@@ -59,6 +63,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.Agent{}, "Agent定义"},
 		{&model.Task{}, "任务执行记录"},
 		{&model.BillingOrder{}, "订阅支付订单"},
+		{&model.BillingOrderAudit{}, "订阅支付订单运营审计"},
 		{&model.BillingChainTx{}, "已消费的链上交易哈希"},
 	}
 	for _, item := range modelComments {
@@ -92,4 +97,30 @@ UPDATE activity_logs
 SET ref_tweet_id = NULL
 WHERE type = 'reply' AND status <> 'success'
 `).Error
+}
+
+// BackfillUserOwnerRole keeps legacy local/projects usable after introducing role-based operator permissions.
+func BackfillUserOwnerRole(db *gorm.DB) error {
+	if err := db.Model(&model.User{}).
+		Where("role = '' OR role IS NULL").
+		Update("role", "user").Error; err != nil {
+		return err
+	}
+	var operators int64
+	if err := db.Model(&model.User{}).
+		Where("role IN ?", []string{"owner", "admin"}).
+		Count(&operators).Error; err != nil {
+		return err
+	}
+	if operators > 0 {
+		return nil
+	}
+	var first model.User
+	if err := db.Order("id ASC").First(&first).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		return err
+	}
+	return db.Model(&model.User{}).Where("id = ?", first.ID).Update("role", "owner").Error
 }

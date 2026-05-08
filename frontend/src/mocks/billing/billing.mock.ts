@@ -52,6 +52,7 @@ export const paymentMethods: PaymentMethodOption[] = [
 export const paymentRecords: PaymentRecord[] = [
   {
     id: "mock-1",
+    userId: 1,
     date: "2026-04-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
@@ -70,9 +71,13 @@ export const paymentRecords: PaymentRecord[] = [
     reviewedAt: "2026-04-10T08:00:00Z",
     refundMarkedAt: "",
     opsNote: "",
+    lastAuditAction: "mark_reviewed",
+    lastAuditAt: "2026-04-10T08:00:00Z",
+    lastAuditOperatorId: 1,
   },
   {
     id: "mock-2",
+    userId: 1,
     date: "2026-03-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
@@ -91,9 +96,13 @@ export const paymentRecords: PaymentRecord[] = [
     reviewedAt: "2026-03-10T08:00:00Z",
     refundMarkedAt: "",
     opsNote: "",
+    lastAuditAction: "",
+    lastAuditAt: "",
+    lastAuditOperatorId: 0,
   },
   {
     id: "mock-3",
+    userId: 1,
     date: "2026-02-10",
     planKey: "billing.plan.basic",
     amount: "10 USDT",
@@ -112,5 +121,8 @@ export const paymentRecords: PaymentRecord[] = [
     reviewedAt: "",
     refundMarkedAt: "",
     opsNote: "",
+    lastAuditAction: "",
+    lastAuditAt: "",
+    lastAuditOperatorId: 0,
   },
 ];

@@ -4,7 +4,7 @@
 
 | Area | Main Pages | Status | Notes |
 | --- | --- | --- | --- |
-| Auth | `/login` | real | 邮箱验证码、注册、登录、刷新、`/users/me`。 |
+| Auth | `/login` | real | 邮箱验证码、注册、登录、刷新、`/users/me`、已登录用户修改密码。 |
 | Wallet Binding | `/login`, `/dashboard` | real | `challenge` → 签名 → `bind` / `unbind`。 |
 | Dashboard Data | `/dashboard` | real | `GET /dashboard/overview`；`runtime-status` 指标为 **DB 真实统计**（见 [automation.md](../api/automation.md)）。 |
 | Accounts | `/accounts` | real | 列表、OAuth、解绑。 |
@@ -13,7 +13,7 @@
 | Posts | `/posts` | real | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启），见 [post.md](../api/post.md)。 |
 | Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**；`GET /agents` 已作为兼容列表读取自动化配置。 |
 | Analytics | `/analytics` | real（MVP+） | `GET /analytics/overview?range=7d|30d&account_id=...` 聚合账号对比、账号级活动趋势、自动化拆分、失败原因、待处理项与内容状态，并跳转 Activity 排查。 |
-| Settings / Profile | `/settings`, `/profile` | real（MVP+） | `GET/PATCH /users/me`；`GET/PATCH /users/me/notification-settings`；语言偏好保存在浏览器本地。 |
+| Settings / Profile | `/settings`, `/profile` | real（MVP+） | `GET/PATCH /users/me`；`PATCH /users/me/password`；`GET/PATCH /users/me/notification-settings`；语言偏好保存在浏览器本地。 |
 
 ## Automation execution (backend)
 
@@ -25,10 +25,12 @@
 
 ## Next API Integration Priorities
 
-1. **Billing 财务对账导出**：在已隔离的 owner/admin 操作基础上，补 CSV 导出和异常订单对账报表。
-2. **Settings 安全增强**：补会话、安全提醒和工作区级配置。
-3. **Analytics 深度指标**：后续再接真实 X impressions / engagement 等外部表现指标。
-4. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。
+1. **用户端新手引导与空状态**：把账号绑定、自动化开启、首条内容发布串成更清晰的首次使用路径。
+2. **Posts 发布体验增强**：补发布前校验、失败重试提示和计划发布反馈。
+3. **Settings 安全继续增强**：后续再补多会话管理、安全提醒和更完整的工作区级配置。
+4. **Analytics 深度指标**：后续再接真实 X impressions / engagement 等外部表现指标。
+5. **Admin / Billing 运营后台**：财务对账导出、异常订单报表等放到后台管理系统研发阶段处理。
+6. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。
 
 ## Milestones
 

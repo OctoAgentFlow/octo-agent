@@ -71,6 +71,15 @@ type UpdateMeRequest struct {
 	Name string `json:"name" binding:"required,min=1,max=64"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required,min=6"`
+	NewPassword     string `json:"new_password" binding:"required,min=8,max=128"`
+}
+
+type ChangePasswordResponse struct {
+	Changed bool `json:"changed"`
+}
+
 type NotificationSettingsResponse struct {
 	EmailEnabled       bool `json:"email_enabled"`
 	InAppEnabled       bool `json:"in_app_enabled"`

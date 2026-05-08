@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { BadgeCheck, Bell, CreditCard, Languages, ShieldCheck, UserCog, Wallet } from "lucide-react";
+import { BadgeCheck, Bell, CreditCard, KeyRound, Languages, ShieldCheck, UserCog, Wallet } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -52,6 +52,12 @@ export default function SettingsPage() {
   const [notifications, setNotifications] = useState<NotificationSettingsData>(defaultNotificationSettings);
   const [savedNotifications, setSavedNotifications] = useState<NotificationSettingsData>(defaultNotificationSettings);
   const [name, setName] = useState("");
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const fetchMe = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -153,6 +159,48 @@ export default function SettingsPage() {
     }
   };
 
+  const changePassword = async () => {
+    const currentPassword = passwordForm.currentPassword;
+    const newPassword = passwordForm.newPassword;
+    const confirmPassword = passwordForm.confirmPassword;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      pushToast(t("settings.security.passwordRequired"));
+      return;
+    }
+    if (newPassword.length < 8) {
+      pushToast(t("settings.security.passwordTooShort"));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      pushToast(t("settings.security.passwordMismatch"));
+      return;
+    }
+    if (currentPassword === newPassword) {
+      pushToast(t("settings.security.passwordSame"));
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await authService.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      pushToast(t("settings.security.passwordChanged"));
+      signOut();
+      router.replace("/login");
+    } catch (error) {
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || t("settings.security.passwordChangeFailed")
+        : t("settings.security.passwordChangeFailed");
+      pushToast(msg);
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const logout = () => {
     signOut();
     router.replace("/login");
@@ -236,6 +284,51 @@ export default function SettingsPage() {
               <Button variant="outline" size="sm" onClick={logout}>
                 {t("common.logout")}
               </Button>
+            </div>
+            <div className="space-y-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+              <div className="flex items-start gap-2">
+                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-white/50" />
+                <div>
+                  <p className="text-sm font-medium text-white/78">{t("settings.security.password")}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/45">
+                    {t("settings.security.passwordDescription")}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordForm.currentPassword}
+                  placeholder={t("settings.security.currentPassword")}
+                  onChange={(event) =>
+                    setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
+                  }
+                />
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.newPassword}
+                  placeholder={t("settings.security.newPassword")}
+                  onChange={(event) =>
+                    setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))
+                  }
+                />
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.confirmPassword}
+                  placeholder={t("settings.security.confirmPassword")}
+                  onChange={(event) =>
+                    setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" disabled={changingPassword} onClick={() => void changePassword()}>
+                  {changingPassword ? t("settings.security.changingPassword") : t("settings.security.changePassword")}
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

@@ -8,6 +8,8 @@ export type PostItem = {
   status: PostStatus;
   scheduled_at?: string | null;
   published_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error_message?: string;
   created_at: string;
   updated_at: string;
 };

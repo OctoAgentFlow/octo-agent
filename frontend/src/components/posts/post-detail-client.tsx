@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AlertCircle, RotateCcw } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -70,16 +71,26 @@ export function PostDetailClient({ postId }: { postId: number }) {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!post) return;
+    const nextContent = content.trim();
+    if (!nextContent) {
+      pushToast(t("posts.create.contentRequired"));
+      return;
+    }
     setSaving(true);
     try {
       const body: Parameters<typeof postService.update>[1] = {
-        content: content.trim(),
+        content: nextContent,
         status,
       };
       if (status === "scheduled") {
         const iso = localDatetimeToISO(scheduledLocal);
         if (!iso) {
           pushToast(t("posts.create.scheduledRequired"));
+          setSaving(false);
+          return;
+        }
+        if (new Date(iso).getTime() <= Date.now()) {
+          pushToast(t("posts.create.scheduledFutureRequired"));
           setSaving(false);
           return;
         }
@@ -102,7 +113,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
 
   const execute = async () => {
     if (!post) return;
-    if (post.status !== "draft" && post.status !== "scheduled") return;
+    if (post.status !== "draft" && post.status !== "scheduled" && post.status !== "failed") return;
     setExecuting(true);
     try {
       const result = await postService.execute(post.id);
@@ -173,6 +184,22 @@ export function PostDetailClient({ postId }: { postId: number }) {
           {post.status === "processing" ? (
             <p className="mb-4 text-sm text-amber-200/90">{t("posts.detail.processingHint")}</p>
           ) : null}
+          {post.last_error_message ? (
+            <div className="mb-4 rounded-md border border-rose-300/25 bg-rose-500/10 p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-rose-100" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-rose-50">{t("posts.detail.lastError")}</p>
+                  <p className="mt-1 break-words text-xs leading-5 text-rose-50/80">{post.last_error_message}</p>
+                  {post.last_attempt_at ? (
+                    <p className="mt-1 text-xs text-rose-50/55">
+                      {t("posts.detail.lastAttemptAt")}: {new Date(post.last_attempt_at).toLocaleString()}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <form className="space-y-4" onSubmit={(e) => void save(e)}>
             <label className="block text-xs text-white/70">
               {t("posts.create.content")}
@@ -184,6 +211,9 @@ export function PostDetailClient({ postId }: { postId: number }) {
                 maxLength={5000}
                 disabled={post.status === "processing"}
               />
+              <span className="mt-1 block text-right text-xs text-white/40">
+                {t("posts.create.characterCount", { count: content.trim().length, max: 5000 })}
+              </span>
             </label>
             <label className="block text-xs text-white/70">
               {t("posts.create.status")}
@@ -195,7 +225,11 @@ export function PostDetailClient({ postId }: { postId: number }) {
               >
                 {(post.status === "processing"
                   ? (["processing"] as const)
-                  : (["draft", "scheduled", "published", "failed"] as const)
+                  : post.status === "published"
+                    ? (["published"] as const)
+                    : post.status === "failed"
+                      ? (["failed", "draft", "scheduled"] as const)
+                      : (["draft", "scheduled"] as const)
                 ).map((s) => (
                   <option key={s} value={s}>
                     {t(`posts.status.${s}`)}
@@ -221,7 +255,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
                 {t("posts.detail.publishedAt")}: {new Date(post.published_at).toLocaleString()}
               </p>
             ) : null}
-            {(post.status === "draft" || post.status === "scheduled") ? (
+            {(post.status === "draft" || post.status === "scheduled" || post.status === "failed") ? (
               <p className="text-xs text-white/50">{t("posts.detail.executeHint")}</p>
             ) : null}
             <div className="flex flex-wrap justify-between gap-3">
@@ -234,14 +268,19 @@ export function PostDetailClient({ postId }: { postId: number }) {
                 {t("posts.actions.delete")}
               </Button>
               <div className="flex flex-wrap gap-2">
-                {(post.status === "draft" || post.status === "scheduled") ? (
+                {(post.status === "draft" || post.status === "scheduled" || post.status === "failed") ? (
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={executing || saving}
                     onClick={() => void execute()}
                   >
-                    {executing ? t("posts.detail.executing") : t("posts.detail.execute")}
+                    {post.status === "failed" && !executing ? <RotateCcw className="size-4" /> : null}
+                    {executing
+                      ? t("posts.detail.executing")
+                      : post.status === "failed"
+                        ? t("posts.detail.retryPublish")
+                        : t("posts.detail.execute")}
                   </Button>
                 ) : null}
                 <Button type="submit" disabled={saving || executing || post.status === "processing"}>

@@ -16,12 +16,15 @@ Base path: `/api/v1`
 | `status` | `draft` \| `scheduled` \| `processing` \| `published` \| `failed`（`processing` 仅服务端在调度/执行过程中写入，客户端创建/更新不可设为该值） |
 | `scheduled_at` | 计划时间（RFC3339，可空） |
 | `published_at` | 发布时间（可空；`published` 创建时未传则服务端填当前 UTC） |
+| `last_attempt_at` | 最近一次发布尝试时间（可空） |
+| `last_error_message` | 最近一次发布失败原因（成功发布后清空） |
 | `created_at` / `updated_at` | 由 GORM `Base` 维护 |
 
 **规则摘要**
 
-- `status = scheduled` 时 **必须** 提供 `scheduled_at`（创建与更新均会校验）。
+- `status = scheduled` 时 **必须** 提供未来的 `scheduled_at`（创建与更新均会校验）。
 - `x_account_id` 必须存在且 `status <> disconnected`。
+- 手动执行支持 `draft`、`scheduled`、`failed`，失败内容可在修正后重试。
 
 ## GET /api/v1/posts
 
@@ -43,6 +46,7 @@ Base path: `/api/v1`
 ```
 
 - `content`、`x_account_id` 必填；`status` 默认 `draft`。
+- 用户端创建页只开放 `draft` / `scheduled`，避免手工创建 `published` / `failed` 状态。
 
 ## GET /api/v1/posts/{id}
 
@@ -63,14 +67,14 @@ Base path: `/api/v1`
 **校验**
 
 - 帖子属于当前用户。
-- `status` 必须为 `draft` 或 `scheduled`（`published` / `failed` 等会返回 **400**）。
+- `status` 必须为 `draft`、`scheduled` 或 `failed`（`published` / `processing` 等会返回 **400**）。
 - `x_account_id` 对应的 `twitter_accounts` 行须为当前用户且非 `disconnected`，且具备可用的 `access_token`（否则 **400**）。
 
 **行为**
 
 - 使用 X API v2 `POST /2/tweets`，`Authorization: Bearer {access_token}`，正文为帖子的 `content`。
-- **成功**：`status` → `published`，`published_at` → 当前 UTC；写入 `activity_logs`（`type=post`，`status=success`，`preview_key=activity.preview.postExecuteSuccess`）。
-- **失败**（X API 报错等）：`status` → `failed`；写入 `activity_logs`（`status=failed`，`preview_key=activity.preview.postExecuteFailed`）；HTTP **502**，`message` 为上游错误摘要。
+- **成功**：`status` → `published`，`published_at` / `last_attempt_at` → 当前 UTC，`last_error_message` 清空；写入 `activity_logs`（`type=post`，`status=success`，`preview_key=activity.preview.postExecuteSuccess`）。
+- **失败**（X API 报错等）：`status` → `failed`，写入 `last_attempt_at` / `last_error_message`；写入 `activity_logs`（`status=failed`，`preview_key=activity.preview.postExecuteFailed`）；HTTP **502**，`message` 为上游错误摘要。
 
 **响应 `data`**
 
@@ -91,5 +95,5 @@ Base path: `/api/v1`
 - 对每条帖子：先更新为 **`processing`**（防止重复执行），再调用与手动执行相同的 X 发帖与 Activity 写入逻辑；成功 → `published`，一般失败 → `failed`（`activity_logs.error_message` 记录原因）。
 - **processing 超时**：若 `status = processing` 且 **`updated_at` 早于约 5 分钟前**，调度器会将其 **恢复为 `scheduled`**（避免进程崩溃导致长期卡住）。
 - **限流（与 `automation_configs` 中 Post 模块一致）**：调度执行前会检查当日已成功发帖数（`frequency_daily_limit`）与最近 1 小时成功数（`safety_max_per_hour`），超出则 **推迟 1 分钟再试**（不写失败 Activity）。
-- **X 频率限制（429 等）**：帖子 **改回 `scheduled`**，并按 `Retry-After`（缺省约 15 分钟，有上限）延后 `scheduled_at`；Activity 记一条失败说明（含 `error_message`）。
+- **X 频率限制（429 等）**：帖子 **改回 `scheduled`**，并按 `Retry-After`（缺省约 15 分钟，有上限）延后 `scheduled_at`；Activity 记一条失败说明（含 `error_message`），帖子记录 `last_error_message`。
 - 若 **Post 自动化未启用**，该用户的计划帖 **不会** 被自动执行。

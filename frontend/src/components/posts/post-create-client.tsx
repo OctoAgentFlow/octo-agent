@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AlertCircle, CalendarClock } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
+import { automationService } from "@/services/automation.service";
 import { postService } from "@/services/post.service";
 import type { PostStatus } from "@/types/post";
 
@@ -26,22 +28,25 @@ export function PostCreateClient() {
   const { t } = useT();
   const router = useRouter();
   const { pushToast } = useToast();
-  const [accounts, setAccounts] = useState<{ id: number; username: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: number; username: string; status: string }[]>([]);
   const [loadAccounts, setLoadAccounts] = useState<"loading" | "ready" | "error">("loading");
   const [submitting, setSubmitting] = useState(false);
   const [xAccountId, setXAccountId] = useState<number>(0);
   const [content, setContent] = useState("");
   const [status, setStatus] = useState<PostStatus>("draft");
   const [scheduledLocal, setScheduledLocal] = useState("");
+  const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
   const load = useCallback(async () => {
     setLoadAccounts("loading");
     try {
-      const data = await accountService.list();
-      const opts = data.items.map((a) => ({ id: a.id, username: a.username }));
-      setAccounts(opts);
-      if (opts.length > 0) {
-        setXAccountId(opts[0].id);
+      const [data, automationData] = await Promise.all([accountService.list(), automationService.list()]);
+      const opts = data.items.map((a) => ({ id: a.id, username: a.username, status: a.status }));
+      const connected = opts.filter((account) => account.status === "connected");
+      setAccounts(connected);
+      setAutoPostEnabled(Boolean(automationData.modules.find((module) => module.type === "post")?.config.enabled));
+      if (connected.length > 0) {
+        setXAccountId(connected[0].id);
       }
       setLoadAccounts("ready");
     } catch (error) {
@@ -60,15 +65,24 @@ export function PostCreateClient() {
       pushToast(t("posts.create.needAccount"));
       return;
     }
+    const nextContent = content.trim();
+    if (!nextContent) {
+      pushToast(t("posts.create.contentRequired"));
+      return;
+    }
     const body: Parameters<typeof postService.create>[0] = {
       x_account_id: xAccountId,
-      content: content.trim(),
+      content: nextContent,
       status,
     };
     if (status === "scheduled") {
       const iso = localDatetimeToISO(scheduledLocal);
       if (!iso) {
         pushToast(t("posts.create.scheduledRequired"));
+        return;
+      }
+      if (new Date(iso).getTime() <= Date.now()) {
+        pushToast(t("posts.create.scheduledFutureRequired"));
         return;
       }
       body.scheduled_at = iso;
@@ -108,7 +122,7 @@ export function PostCreateClient() {
 
       {loadAccounts === "ready" && accounts.length === 0 ? (
         <Card>
-          <CardHeader title={t("posts.create.needAccount")} description="" />
+          <CardHeader title={t("posts.create.needAccount")} description={t("posts.create.needAccountDescription")} />
           <div className="flex justify-end">
             <Link href="/accounts" className={cn(buttonVariants())}>
               {t("posts.create.goAccounts")}
@@ -120,6 +134,20 @@ export function PostCreateClient() {
       {loadAccounts === "ready" && accounts.length > 0 ? (
         <Card>
           <form className="space-y-4" onSubmit={(e) => void submit(e)}>
+            <div className="rounded-md border border-white/8 bg-white/[0.03] p-3">
+              <div className="flex items-start gap-2">
+                <CalendarClock className="mt-0.5 size-4 shrink-0 text-cyan-200" />
+                <div className="space-y-1 text-xs text-white/58">
+                  <p className="font-medium text-white/80">{t("posts.create.preflightTitle")}</p>
+                  <p>{t("posts.create.preflightAccount", { count: accounts.length })}</p>
+                  <p>
+                    {autoPostEnabled
+                      ? t("posts.create.preflightAutomationOn")
+                      : t("posts.create.preflightAutomationOff")}
+                  </p>
+                </div>
+              </div>
+            </div>
             <label className="block text-xs text-white/70">
               {t("posts.create.account")}
               <select
@@ -143,6 +171,9 @@ export function PostCreateClient() {
                 required
                 maxLength={5000}
               />
+              <span className="mt-1 block text-right text-xs text-white/40">
+                {t("posts.create.characterCount", { count: content.trim().length, max: 5000 })}
+              </span>
             </label>
             <label className="block text-xs text-white/70">
               {t("posts.create.status")}
@@ -151,7 +182,7 @@ export function PostCreateClient() {
                 value={status}
                 onChange={(e) => setStatus(e.target.value as PostStatus)}
               >
-                {(["draft", "scheduled", "published", "failed"] as const).map((s) => (
+                {(["draft", "scheduled"] as const).map((s) => (
                   <option key={s} value={s}>
                     {t(`posts.status.${s}`)}
                   </option>
@@ -168,6 +199,12 @@ export function PostCreateClient() {
                   onChange={(e) => setScheduledLocal(e.target.value)}
                   required
                 />
+                {!autoPostEnabled ? (
+                  <span className="mt-2 flex items-center gap-1 text-xs text-amber-200/85">
+                    <AlertCircle className="size-3.5" />
+                    {t("posts.create.autoPostDisabledHint")}
+                  </span>
+                ) : null}
               </label>
             ) : null}
             <div className="flex justify-end">

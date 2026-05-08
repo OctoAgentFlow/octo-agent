@@ -135,6 +135,9 @@ func (s *PostService) Create(userID uint, req dto.PostCreateRequest) (*dto.PostI
 	if status == "scheduled" && sched == nil {
 		return nil, errors.New("scheduled_at is required when status is scheduled")
 	}
+	if status == "scheduled" && !sched.After(time.Now().UTC()) {
+		return nil, errors.New("scheduled_at must be in the future")
+	}
 	if status == "published" && pub == nil {
 		now := time.Now().UTC()
 		pub = &now
@@ -214,6 +217,12 @@ func (s *PostService) Update(userID, id uint, req dto.PostUpdateRequest) (*dto.P
 	if p.Status == "scheduled" && p.ScheduledAt == nil {
 		return nil, errors.New("scheduled_at is required when status is scheduled")
 	}
+	if p.Status == "scheduled" && !p.ScheduledAt.After(time.Now().UTC()) {
+		return nil, errors.New("scheduled_at must be in the future")
+	}
+	if p.Status != "failed" {
+		p.LastErrorMessage = ""
+	}
 	stOut := strings.ToLower(strings.TrimSpace(p.Status))
 	needsSub := false
 	switch {
@@ -245,12 +254,12 @@ func (s *PostService) Delete(userID, id uint) error {
 	return s.postRepo.DeleteByUserAndID(userID, id)
 }
 
-// Execute publishes the post via X API (manual run). Only draft or scheduled posts are allowed.
+// Execute publishes the post via X API (manual run). Draft, scheduled, and failed posts can be sent.
 func (s *PostService) Execute(ctx context.Context, userID, postID uint) (*dto.PostExecuteResponse, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	item, tweetID, err := s.executePublish(ctx, userID, postID, []string{"draft", "scheduled"}, "manual")
+	item, tweetID, err := s.executePublish(ctx, userID, postID, []string{"draft", "scheduled", "failed"}, "manual")
 	if err != nil {
 		return nil, err
 	}
@@ -446,9 +455,11 @@ func truncateErrMsg(s string) string {
 func (s *PostService) persistRateLimitReschedule(postID, userID, xAccountID uint, handle string, at, nextRun time.Time, errDetail string) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
-			"status":       "scheduled",
-			"scheduled_at": nextRun.UTC(),
-			"updated_at":   at,
+			"status":             "scheduled",
+			"scheduled_at":       nextRun.UTC(),
+			"last_attempt_at":    at,
+			"last_error_message": errDetail,
+			"updated_at":         at,
 		})
 		if res.Error != nil {
 			return res.Error
@@ -499,8 +510,10 @@ func formatXAccountHandle(username string) string {
 func (s *PostService) persistExecuteFailure(postID, userID, xAccountID uint, handle string, at time.Time, errMsg string) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
-			"status":     "failed",
-			"updated_at": at,
+			"status":             "failed",
+			"last_attempt_at":    at,
+			"last_error_message": errMsg,
+			"updated_at":         at,
 		})
 		if res.Error != nil {
 			return res.Error
@@ -525,9 +538,11 @@ func (s *PostService) persistExecuteFailure(postID, userID, xAccountID uint, han
 func (s *PostService) persistExecuteSuccess(postID, userID, xAccountID uint, handle string, at time.Time) error {
 	return s.postRepo.DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Post{}).Where("id = ? AND user_id = ?", postID, userID).Updates(map[string]any{
-			"status":       "published",
-			"published_at": at,
-			"updated_at":   at,
+			"status":             "published",
+			"published_at":       at,
+			"last_attempt_at":    at,
+			"last_error_message": "",
+			"updated_at":         at,
 		})
 		if res.Error != nil {
 			return res.Error
@@ -574,6 +589,11 @@ func postModelToDTO(p model.Post) dto.PostItem {
 		s := p.PublishedAt.UTC().Format(time.RFC3339)
 		item.PublishedAt = &s
 	}
+	if p.LastAttemptAt != nil {
+		s := p.LastAttemptAt.UTC().Format(time.RFC3339)
+		item.LastAttemptAt = &s
+	}
+	item.LastErrorMessage = p.LastErrorMessage
 	return item
 }
 

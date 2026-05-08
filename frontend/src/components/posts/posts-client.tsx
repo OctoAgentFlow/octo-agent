@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
 import { postService } from "@/services/post.service";
-import type { PostItem } from "@/types/post";
+import type { PostItem, PostStatus } from "@/types/post";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -27,6 +27,7 @@ export function PostsClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [items, setItems] = useState<PostItem[]>([]);
   const [accountCount, setAccountCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<PostStatus | "all">("all");
 
   const fetchPosts = useCallback(async () => {
     setLoadState("loading");
@@ -37,7 +38,7 @@ export function PostsClient() {
         accountService.list(),
       ]);
       setItems(data.items);
-      setAccountCount(accountData.items.length);
+      setAccountCount(accountData.items.filter((account) => account.status === "connected").length);
       setLoadState("ready");
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -108,7 +109,24 @@ export function PostsClient() {
 
       {loadState === "ready" && items.length > 0 ? (
         <div className="space-y-3">
-          {items.map((post) => (
+          <div className="flex flex-wrap gap-2">
+            {(["all", "draft", "scheduled", "processing", "published", "failed"] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setStatusFilter(filter)}
+                className={cn(
+                  "rounded-md border px-3 py-1.5 text-xs transition-colors",
+                  statusFilter === filter
+                    ? "border-cyan-200/40 bg-cyan-300/10 text-white"
+                    : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06]"
+                )}
+              >
+                {filter === "all" ? t("posts.list.filter.all") : t(`posts.status.${filter}`)}
+              </button>
+            ))}
+          </div>
+          {items.filter((post) => statusFilter === "all" || post.status === statusFilter).map((post) => (
             <Link
               key={post.id}
               href={`/posts/${post.id}`}
@@ -130,12 +148,22 @@ export function PostsClient() {
                         {t("posts.list.col.scheduled")}: {new Date(post.scheduled_at).toLocaleString()}
                       </span>
                     ) : null}
+                    {post.last_error_message ? (
+                      <span className="break-words text-rose-100/80">
+                        {t("posts.detail.lastError")}: {post.last_error_message}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <span className="text-xs text-white/45">{new Date(post.updated_at).toLocaleString()}</span>
               </div>
             </Link>
           ))}
+          {items.filter((post) => statusFilter === "all" || post.status === statusFilter).length === 0 ? (
+            <Card>
+              <CardHeader title={t("posts.list.filteredEmpty")} description="" />
+            </Card>
+          ) : null}
         </div>
       ) : null}
     </div>

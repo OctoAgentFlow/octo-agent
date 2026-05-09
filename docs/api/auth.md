@@ -166,16 +166,15 @@ Base path: `/api/v1`
 ## 邮件发送说明
 
 - Provider 由 `backend/configs/config.*.yaml` 的 `email.provider` 指定。
-- 当前已切换为 Amazon SES（`provider: ses`）。
-- SES 配置位于 `email.ses`：
-  - `region`
-  - `access_key_id`
-  - `secret_access_key`
+- 本地开发默认使用 `provider: local`：不会调用外部邮件服务，验证码会写入 API 日志；`APP_ENV=local` 时接口响应也会返回验证码，方便本地注册闭环。
+- 生产建议使用 `provider: resend`，配置位于 `email.resend`：
+  - `api_key`
   - `from_email`
-- `/auth/email-code/send` 保持原协议不变，但底层发送已由 SES 实现。
+- 仍保留 `provider: ses` 作为兼容选项，配置位于 `email.ses`。
+- `/auth/email-code/send` 保持原协议不变，底层发送由 provider 决定。
 - 发送失败返回更明确状态码：
   - `429`：频控限制
-  - `502`：SES 调用失败
+  - `502`：邮件 provider 调用失败
   - `500`：邮件发送成功后验证码落库失败
 
 ---

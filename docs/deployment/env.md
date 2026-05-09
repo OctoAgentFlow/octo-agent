@@ -35,16 +35,43 @@ x_oauth:
 - **未填写** `client_id` / `redirect_uri` 时，`POST /accounts/oauth/x/start` 会返回 400，提示在 yaml 中配置。
 - `redirect_uri` 必须与 [X Developer Portal](https://developer.twitter.com/en/portal/dashboard) 里 **Callback URL** 完全一致；scope 与后端一致：`tweet.read users.read offline.access`。
 
-## Email Provider (YAML Only)
+## Email Provider
 
-Email sending is configured only via backend YAML files (`backend/configs/config.*.yaml`), no environment override is required.
+Email provider is configured in backend YAML files (`backend/configs/config.*.yaml`) and can be overridden by environment variables when deploying.
+
+Local development defaults to `provider: local`. It does not call an external email service; verification codes are written to the API log and returned in the local API response.
 
 ```yaml
 email:
-  provider: "ses"
+  provider: "local"
+  local:
+    expose_code: true
+  resend:
+    api_key: ""
+    from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"
-    access_key_id: "<aws_access_key_id>"
-    secret_access_key: "<aws_secret_access_key>"
+    access_key_id: ""
+    secret_access_key: ""
     from_email: "no-reply@mail.octo-agent.com"
 ```
+
+For production, use Resend:
+
+```yaml
+email:
+  provider: "resend"
+  resend:
+    api_key: ""
+    from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
+```
+
+Recommended deployment environment overrides:
+
+- `EMAIL_PROVIDER=resend`
+- `RESEND_API_KEY=<resend_api_key>`
+- `RESEND_FROM_EMAIL=Octo Agent <no-reply@mail.octo-agent.com>`
+
+`RESEND_FROM_EMAIL` must be a valid sender address from a verified Resend domain. If only a domain such as `mail.octo-agent.com` is supplied, the backend normalizes it to `Octo Agent <no-reply@mail.octo-agent.com>`.
+
+`backend/configs/.env` is gitignored and can be used for local private overrides.

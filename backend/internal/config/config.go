@@ -10,13 +10,13 @@ import (
 )
 
 type Config struct {
-	API    ServerConfig   `yaml:"api"`
-	Admin  ServerConfig   `yaml:"admin"`
-	MySQL  MySQLConfig    `yaml:"mysql"`
-	Log    LogConfig      `yaml:"log"`
-	Email  EmailConfig    `yaml:"email"`
-	App    AppConfig      `yaml:"app"`
-	XOAuth XOAuthConfig   `yaml:"x_oauth"`
+	API     ServerConfig  `yaml:"api"`
+	Admin   ServerConfig  `yaml:"admin"`
+	MySQL   MySQLConfig   `yaml:"mysql"`
+	Log     LogConfig     `yaml:"log"`
+	Email   EmailConfig   `yaml:"email"`
+	App     AppConfig     `yaml:"app"`
+	XOAuth  XOAuthConfig  `yaml:"x_oauth"`
 	Billing BillingConfig `yaml:"billing"`
 }
 
@@ -105,8 +105,19 @@ type LogConfig struct {
 }
 
 type EmailConfig struct {
-	Provider string    `yaml:"provider"`
-	SES      SESConfig `yaml:"ses"`
+	Provider string       `yaml:"provider"`
+	Local    LocalConfig  `yaml:"local"`
+	Resend   ResendConfig `yaml:"resend"`
+	SES      SESConfig    `yaml:"ses"`
+}
+
+type LocalConfig struct {
+	ExposeCode bool `yaml:"expose_code"`
+}
+
+type ResendConfig struct {
+	APIKey    string `yaml:"api_key"`
+	FromEmail string `yaml:"from_email"`
 }
 
 type SESConfig struct {
@@ -200,7 +211,23 @@ func Load() (*Config, error) {
 		cfg.Log.AdminOutputPath = "logs/admin.log"
 	}
 	if cfg.Email.Provider == "" {
-		cfg.Email.Provider = "ses"
+		if env == "local" || env == "test" {
+			cfg.Email.Provider = "local"
+		} else {
+			cfg.Email.Provider = "resend"
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("EMAIL_PROVIDER")); v != "" {
+		cfg.Email.Provider = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RESEND_API_KEY")); v != "" {
+		cfg.Email.Resend.APIKey = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL")); v != "" {
+		cfg.Email.Resend.FromEmail = normalizeResendFromEmail(v)
+	}
+	if cfg.Email.Resend.FromEmail == "" {
+		cfg.Email.Resend.FromEmail = "Octo Agent <no-reply@mail.octo-agent.com>"
 	}
 	if cfg.Email.SES.Region == "" {
 		cfg.Email.SES.Region = "ap-southeast-1"
@@ -218,4 +245,12 @@ func Load() (*Config, error) {
 		cfg.Billing.RpcURLs = map[string]string{}
 	}
 	return &cfg, nil
+}
+
+func normalizeResendFromEmail(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || strings.Contains(v, "@") {
+		return v
+	}
+	return fmt.Sprintf("Octo Agent <no-reply@%s>", v)
 }

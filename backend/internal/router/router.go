@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"strings"
 
 	"octo-agent/backend/internal/config"
@@ -38,15 +39,12 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoDMTaskRepo := repository.NewAutoDMTaskRepository(db)
 	verificationRepo := repository.NewEmailVerificationRepository(db)
 	notificationSettingRepo := repository.NewUserNotificationSettingRepository(db)
-	if strings.ToLower(strings.TrimSpace(cfg.Email.Provider)) != "ses" {
-		zap.L().Fatal("unsupported email provider", zap.String("provider", cfg.Email.Provider))
-	}
-	sesSender, err := email.NewSESSender(cfg.Email.SES)
+	emailSender, err := newEmailSender(cfg)
 	if err != nil {
-		zap.L().Fatal("init ses sender failed", zap.Error(err))
+		zap.L().Fatal("init email sender failed", zap.String("provider", cfg.Email.Provider), zap.Error(err))
 	}
-	emailService := email.NewService(sesSender)
-	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService)
+	emailService := email.NewService(emailSender)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode)
 	walletService := service.NewWalletService(walletRepo)
 	accountService := service.NewAccountService(twitterAccountRepo, cfg.XOAuth)
 	dashboardService := service.NewDashboardService(userRepo, walletRepo, twitterAccountRepo, activityRepo)
@@ -86,6 +84,19 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService)
 
 	return r
+}
+
+func newEmailSender(cfg *config.Config) (email.EmailSender, error) {
+	switch strings.ToLower(strings.TrimSpace(cfg.Email.Provider)) {
+	case "local":
+		return email.NewLocalSender(), nil
+	case "resend":
+		return email.NewResendSender(cfg.Email.Resend)
+	case "ses":
+		return email.NewSESSender(cfg.Email.SES)
+	default:
+		return nil, fmt.Errorf("unsupported email provider: %s", cfg.Email.Provider)
+	}
 }
 
 func NewAdmin(_ *gorm.DB) *gin.Engine {

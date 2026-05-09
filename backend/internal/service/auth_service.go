@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -28,6 +27,7 @@ type AuthService struct {
 	verificationRepo *repository.EmailVerificationRepository
 	notificationRepo *repository.UserNotificationSettingRepository
 	emailService     *email.Service
+	exposeEmailCode  bool
 }
 
 var (
@@ -43,6 +43,7 @@ func NewAuthService(
 	verificationRepo *repository.EmailVerificationRepository,
 	notificationRepo *repository.UserNotificationSettingRepository,
 	emailService *email.Service,
+	exposeEmailCode bool,
 ) *AuthService {
 	return &AuthService{
 		userRepo:         userRepo,
@@ -50,6 +51,7 @@ func NewAuthService(
 		verificationRepo: verificationRepo,
 		notificationRepo: notificationRepo,
 		emailService:     emailService,
+		exposeEmailCode:  exposeEmailCode,
 	}
 }
 
@@ -147,8 +149,7 @@ func (s *AuthService) SendEmailCode(req dto.SendEmailCodeRequest) (*dto.SendEmai
 		Purpose:   purpose,
 		ExpiresIn: expiresIn,
 	}
-	// Local env keeps code in response for easy frontend debugging.
-	if os.Getenv("APP_ENV") == "local" {
+	if s.exposeEmailCode {
 		resp.Code = code
 	}
 	return resp, nil

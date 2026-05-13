@@ -302,6 +302,9 @@ export const dict: I18nDict = {
   "dashboard.upgrade.perk.unlimited": "无限工作流",
   "dashboard.upgrade.perk.priority": "优先队列",
   "dashboard.upgrade.perk.analytics": "高级分析",
+  "dashboard.upgrade.loadingPayment": "加载支付方式…",
+  "dashboard.upgrade.noPaymentMethod": "当前没有可用的支付方式，请稍后再试。",
+  "dashboard.upgrade.paymentMethodLoadFailed": "支付方式加载失败，请稍后重试。",
   "dashboard.membership.billingHint.basic": "Basic 方案起价为 {price} USDT / 月",
 
   // activity

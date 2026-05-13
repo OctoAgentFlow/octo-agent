@@ -301,6 +301,9 @@ export const dict: I18nDict = {
   "dashboard.upgrade.perk.unlimited": "Неограниченные воркфлоу",
   "dashboard.upgrade.perk.priority": "Приоритетная очередь",
   "dashboard.upgrade.perk.analytics": "Расширенная аналитика",
+  "dashboard.upgrade.loadingPayment": "Загрузка способов оплаты…",
+  "dashboard.upgrade.noPaymentMethod": "Способы оплаты пока недоступны. Повторите попытку позже.",
+  "dashboard.upgrade.paymentMethodLoadFailed": "Не удалось загрузить способы оплаты. Попробуйте еще раз.",
   "dashboard.membership.billingHint.basic": "Basic стоит от {price} USDT / месяц",
 
   // activity

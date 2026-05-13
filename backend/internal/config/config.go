@@ -61,6 +61,8 @@ type BillingPlanEntry struct {
 type AppConfig struct {
 	// FrontendBaseURL is the origin used after X OAuth callback redirects (e.g. http://localhost:3000).
 	FrontendBaseURL string `yaml:"frontend_base_url"`
+	OfficialXURL    string `yaml:"official_x_url"`
+	TelegramURL     string `yaml:"telegram_url"`
 }
 
 // AdminAuthConfig controls passwordless admin-console login.

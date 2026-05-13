@@ -110,6 +110,8 @@ export const dict: I18nDict = {
   "marketing.faq.q3.a": "Да. Шаблоны стратегии поддерживают токен‑проекты, бренды создателей и SaaS‑команды.",
 
   "marketing.footer.copyright": "Octo-Agent. AI Social Operations.",
+  "marketing.footer.officialX": "Официальный X",
+  "marketing.footer.telegram": "Telegram",
   "marketing.footer.terms": "Условия",
   "marketing.footer.privacy": "Конфиденциальность",
   "marketing.footer.contact": "Контакты",

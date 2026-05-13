@@ -110,6 +110,8 @@ export const dict: I18nDict = {
   "marketing.faq.q3.a": "네. 토큰 프로젝트, 크리에이터 브랜드, 일반 SaaS 성장 팀을 지원합니다.",
 
   "marketing.footer.copyright": "Octo-Agent. AI Social Operations.",
+  "marketing.footer.officialX": "공식 X",
+  "marketing.footer.telegram": "Telegram",
   "marketing.footer.terms": "약관",
   "marketing.footer.privacy": "개인정보",
   "marketing.footer.contact": "문의",

@@ -67,10 +67,12 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	bill := controller.NewBillingController(billingService)
 	p := controller.NewPostController(postService)
 	ag := controller.NewAgentController(agentService)
+	pub := controller.NewPublicController(cfg.App)
 
 	r.GET("/health", h.Ping)
 
 	v1 := r.Group("/api/v1")
+	RegisterPublic(v1, pub)
 	RegisterAuth(v1, a)
 	RegisterWallet(v1, wc)
 	RegisterDashboard(v1, dc)

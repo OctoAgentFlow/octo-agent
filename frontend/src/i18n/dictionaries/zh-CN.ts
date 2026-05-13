@@ -110,6 +110,8 @@ export const dict: I18nDict = {
   "marketing.faq.q3.a": "适合。策略模板覆盖代币项目、创作者品牌与一般 SaaS 增长团队。",
 
   "marketing.footer.copyright": "Octo-Agent. AI 社交运营。",
+  "marketing.footer.officialX": "官方 X",
+  "marketing.footer.telegram": "Telegram 群",
   "marketing.footer.terms": "条款",
   "marketing.footer.privacy": "隐私",
   "marketing.footer.contact": "联系",

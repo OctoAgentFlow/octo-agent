@@ -124,6 +124,8 @@ export const dict: I18nDict = {
 
   // marketing footer
   "marketing.footer.copyright": "Octo-Agent. AI Social Operations.",
+  "marketing.footer.officialX": "Official X",
+  "marketing.footer.telegram": "Telegram",
   "marketing.footer.terms": "Terms",
   "marketing.footer.privacy": "Privacy",
   "marketing.footer.contact": "Contact",

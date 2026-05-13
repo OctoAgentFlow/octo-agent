@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   BadgeDollarSign,
@@ -10,6 +10,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  ReceiptText,
   Settings,
   ShieldCheck,
   UserCircle,
@@ -33,11 +34,22 @@ const navItems = [
   { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
 
+const adminNavItems = [
+  { label: "运营总览", href: "/admin?section=overview", section: "overview", icon: LayoutDashboard },
+  { label: "用户管理", href: "/admin?section=users", section: "users", icon: Users },
+  { label: "订单审核", href: "/admin?section=billing", section: "billing", icon: ReceiptText },
+  { label: "活动监控", href: "/admin?section=activity", section: "activity", icon: Activity },
+  { label: "系统配置", href: "/admin?section=system", section: "system", icon: Settings },
+];
+
 export function AppSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useT();
-  const visibleNavItems = isAdminFrontend() ? navItems.filter((item) => item.href === "/admin") : navItems.filter((item) => item.href !== "/admin");
+  const adminMode = isAdminFrontend();
+  const visibleNavItems = adminMode ? adminNavItems : navItems.filter((item) => item.href !== "/admin");
+  const activeAdminSection = searchParams.get("section") || "overview";
 
   const onLogout = () => {
     signOut();
@@ -52,17 +64,19 @@ export function AppSidebar() {
       </div>
       <nav className="space-y-1">
         {visibleNavItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = "section" in item
+            ? pathname === "/admin" && item.section === activeAdminSection
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
-              key={`${item.href}-${item.labelKey}`}
+              key={item.href}
               href={item.href}
               className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
                 active ? "bg-white/12 text-white" : "text-white/65 hover:bg-white/8 hover:text-white"
               }`}
             >
               <item.icon className="size-4" />
-              {t(item.labelKey)}
+              {"label" in item ? item.label : t(item.labelKey)}
             </Link>
           );
         })}

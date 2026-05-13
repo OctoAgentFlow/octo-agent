@@ -35,7 +35,7 @@ func (ctl *AuthController) Login(c *gin.Context) {
 }
 
 func (ctl *AuthController) AdminLogin(c *gin.Context) {
-	var req dto.LoginRequest
+	var req dto.AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -83,6 +83,8 @@ func (ctl *AuthController) SendEmailCode(c *gin.Context) {
 			response.Fail(c, http.StatusBadGateway, service.ErrSendVerificationEmail.Error())
 		case errors.Is(err, service.ErrPersistVerificationCode):
 			response.Fail(c, http.StatusInternalServerError, service.ErrPersistVerificationCode.Error())
+		case errors.Is(err, service.ErrAdminLoginForbidden):
+			response.Fail(c, http.StatusForbidden, service.ErrAdminLoginForbidden.Error())
 		default:
 			response.Fail(c, http.StatusBadRequest, err.Error())
 		}

@@ -42,6 +42,12 @@ email:
 app:
   frontend_base_url: "https://test.octo-agent.com"
 
+admin_auth:
+  emails:
+    - "wang13704032425@163.com"
+    - "twodogtt01@gmail.com"
+  code_ttl_seconds: 300
+
 x_oauth:
   client_id: "TEtuVzdUZ21RNEV2bTlIWVBjZXE6MTpjaQ"
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"

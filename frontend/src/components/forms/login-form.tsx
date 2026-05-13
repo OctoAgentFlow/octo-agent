@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Resolver } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import axios from "axios";
@@ -10,30 +11,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
-import { loginSchema, registerSchema } from "@/schemas/auth.schema";
+import { adminLoginSchema, loginSchema, registerSchema } from "@/schemas/auth.schema";
 import { authService } from "@/services/auth.service";
 
 type AuthMode = "login" | "register";
 
 type LoginFormProps = {
   mode: AuthMode;
+  adminMode?: boolean;
   onSuccess?: (mode: AuthMode, tokens: { accessToken: string; refreshToken: string }) => void;
 };
 
-type LoginValues = z.infer<typeof loginSchema>;
+type LoginValues = {
+  email: string;
+  password: string;
+  verificationCode: string;
+};
 type RegisterValues = z.infer<typeof registerSchema>;
 const CODE_COOLDOWN_SECONDS = 60;
-const CODE_COOLDOWN_UNTIL_KEY = "octo_auth_code_cooldown_until";
 
-export function LoginForm({ mode, onSuccess }: LoginFormProps) {
+export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps) {
   const { t } = useT();
   const { pushToast } = useToast();
   const [codeCooldown, setCodeCooldown] = useState(0);
   const [sendingCode, setSendingCode] = useState(false);
+  const codeCooldownKey = adminMode ? "octo_admin_auth_code_cooldown_until" : "octo_auth_code_cooldown_until";
 
   const loginForm = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    resolver: zodResolver(adminMode ? adminLoginSchema : loginSchema) as unknown as Resolver<LoginValues>,
+    defaultValues: { email: "", password: "", verificationCode: "" },
   });
 
   const registerForm = useForm<RegisterValues>({
@@ -45,6 +51,7 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   const emailRegister = mode === "login" ? loginForm.register("email") : registerForm.register("email");
   const passwordRegister =
     mode === "login" ? loginForm.register("password") : registerForm.register("password");
+  const loginCodeRegister = loginForm.register("verificationCode");
   const emailError =
     mode === "login"
       ? loginForm.formState.errors.email?.message
@@ -53,14 +60,20 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
     mode === "login"
       ? loginForm.formState.errors.password?.message
       : registerForm.formState.errors.password?.message;
+  const loginCodeError = loginForm.formState.errors.verificationCode?.message;
 
   const onSubmit = currentForm.handleSubmit(async (values) => {
     try {
       if (mode === "login") {
-        const data = await authService.login({
-          email: values.email,
-          password: values.password,
-        });
+        const data = adminMode
+          ? await authService.adminLogin({
+              email: values.email,
+              verification_code: values.verificationCode || "",
+            })
+          : await authService.login({
+              email: values.email,
+              password: values.password || "",
+            });
         pushToast("Login success.");
         onSuccess?.(mode, {
           accessToken: data.tokens.access_token,
@@ -93,17 +106,17 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
 
   const sendEmailCode = async () => {
     if (sendingCode || codeCooldown > 0) return;
-    const email = registerForm.getValues("email");
+    const email = adminMode && mode === "login" ? loginForm.getValues("email") : registerForm.getValues("email");
     if (!email) {
       pushToast("Please input email first.");
       return;
     }
     setSendingCode(true);
     try {
-      await authService.sendEmailCode({ email, purpose: "register" });
+      await authService.sendEmailCode({ email, purpose: adminMode && mode === "login" ? "admin_login" : "register" });
       pushToast("Verification code sent.");
       const cooldownUntil = Date.now() + CODE_COOLDOWN_SECONDS * 1000;
-      window.localStorage.setItem(CODE_COOLDOWN_UNTIL_KEY, String(cooldownUntil));
+      window.localStorage.setItem(codeCooldownKey, String(cooldownUntil));
       setCodeCooldown(CODE_COOLDOWN_SECONDS);
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -126,11 +139,11 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   }, [codeCooldown]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(CODE_COOLDOWN_UNTIL_KEY);
+    const saved = window.localStorage.getItem(codeCooldownKey);
     if (!saved) return;
     const cooldownUntil = Number(saved);
     if (!Number.isFinite(cooldownUntil)) {
-      window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
+      window.localStorage.removeItem(codeCooldownKey);
       return;
     }
     const remainSeconds = Math.ceil((cooldownUntil - Date.now()) / 1000);
@@ -138,13 +151,13 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
       setCodeCooldown(remainSeconds);
       return;
     }
-    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
-  }, []);
+    window.localStorage.removeItem(codeCooldownKey);
+  }, [codeCooldownKey]);
 
   useEffect(() => {
     if (codeCooldown > 0) return;
-    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
-  }, [codeCooldown]);
+    window.localStorage.removeItem(codeCooldownKey);
+  }, [codeCooldown, codeCooldownKey]);
 
   return (
     <form className="space-y-3" onSubmit={onSubmit}>
@@ -161,7 +174,8 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
         />
       </div>
 
-      <div className="space-y-1.5">
+      {!(adminMode && mode === "login") ? (
+        <div className="space-y-1.5">
         <label htmlFor={`password-${mode}`} className="text-xs text-white/70">
           {t("auth.form.password.label")}
         </label>
@@ -172,7 +186,34 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
           error={passwordError}
           {...passwordRegister}
         />
-      </div>
+        </div>
+      ) : null}
+
+      {adminMode && mode === "login" ? (
+        <div className="space-y-1.5">
+          <label htmlFor="adminVerificationCode" className="text-xs text-white/70">
+            管理员验证码
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id="adminVerificationCode"
+              type="text"
+              placeholder="6 位验证码"
+              error={loginCodeError}
+              {...loginCodeRegister}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 shrink-0"
+              onClick={sendEmailCode}
+              disabled={sendingCode || codeCooldown > 0}
+            >
+              {sendingCode ? "发送中..." : codeCooldown > 0 ? `${codeCooldown}s` : "发送验证码"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {mode === "register" ? (
         <>

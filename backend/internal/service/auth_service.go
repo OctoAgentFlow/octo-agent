@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/email"
 	"octo-agent/backend/internal/model"
@@ -28,6 +29,7 @@ type AuthService struct {
 	notificationRepo *repository.UserNotificationSettingRepository
 	emailService     *email.Service
 	exposeEmailCode  bool
+	adminAuth        config.AdminAuthConfig
 }
 
 var (
@@ -45,6 +47,7 @@ func NewAuthService(
 	notificationRepo *repository.UserNotificationSettingRepository,
 	emailService *email.Service,
 	exposeEmailCode bool,
+	adminAuth config.AdminAuthConfig,
 ) *AuthService {
 	return &AuthService{
 		userRepo:         userRepo,
@@ -53,6 +56,7 @@ func NewAuthService(
 		notificationRepo: notificationRepo,
 		emailService:     emailService,
 		exposeEmailCode:  exposeEmailCode,
+		adminAuth:        adminAuth,
 	}
 }
 
@@ -111,6 +115,9 @@ func (s *AuthService) SendEmailCode(req dto.SendEmailCodeRequest) (*dto.SendEmai
 	if !isAllowedEmailCodePurpose(purpose) {
 		return nil, ErrInvalidEmailCodePurpose
 	}
+	if purpose == "admin_login" && !s.isAllowedAdminEmail(email) {
+		return nil, ErrAdminLoginForbidden
+	}
 
 	latest, err := s.verificationRepo.GetLatestUnexpiredByEmailPurpose(email, purpose)
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -126,7 +133,7 @@ func (s *AuthService) SendEmailCode(req dto.SendEmailCodeRequest) (*dto.SendEmai
 	if err != nil {
 		return nil, err
 	}
-	expiresIn := int64(600)
+	expiresIn := s.emailCodeTTLSeconds(purpose)
 
 	if err := s.emailService.SendVerificationCode(context.Background(), email, code); err != nil {
 		zap.L().Error("send email code failed", zap.String("email", email), zap.String("purpose", purpose), zap.Error(err))
@@ -165,6 +172,9 @@ func (s *AuthService) VerifyEmailCode(req dto.VerifyEmailCodeRequest) (*dto.Veri
 	if !isAllowedEmailCodePurpose(purpose) {
 		return nil, errors.New("invalid email code purpose")
 	}
+	if purpose == "admin_login" && !s.isAllowedAdminEmail(email) {
+		return nil, ErrAdminLoginForbidden
+	}
 	if err := s.verifyEmailCode(email, purpose, req.Code); err != nil {
 		zap.L().Warn("verify email code failed", zap.String("email", email), zap.String("purpose", purpose), zap.Error(err))
 		return nil, errors.New("invalid or expired verification code")
@@ -185,13 +195,18 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.AuthResponse, error) {
 	return s.issueAuth(user)
 }
 
-func (s *AuthService) AdminLogin(req dto.LoginRequest) (*dto.AuthResponse, error) {
-	user, err := s.authenticateUser(req)
+func (s *AuthService) AdminLogin(req dto.AdminLoginRequest) (*dto.AuthResponse, error) {
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if !s.isAllowedAdminEmail(email) {
+		return nil, ErrAdminLoginForbidden
+	}
+	if err := s.verifyEmailCode(email, "admin_login", req.VerificationCode); err != nil {
+		zap.L().Warn("admin login code verification failed", zap.String("email", email), zap.Error(err))
+		return nil, errors.New("invalid or expired verification code")
+	}
+	user, err := s.getOrCreateAdminUser(email)
 	if err != nil {
 		return nil, err
-	}
-	if !canAccessAdminFrontend(user) {
-		return nil, ErrAdminLoginForbidden
 	}
 	return s.issueAuth(user)
 }
@@ -461,6 +476,85 @@ func canAccessAdminFrontend(user *model.User) bool {
 	}
 	role := strings.ToLower(strings.TrimSpace(user.Role))
 	return role == "owner" || role == "admin"
+}
+
+func (s *AuthService) getOrCreateAdminUser(email string) (*model.User, error) {
+	user, err := s.userRepo.GetByEmail(email)
+	if err == nil {
+		changed := false
+		if strings.ToLower(strings.TrimSpace(user.Status)) != "active" {
+			user.Status = "active"
+			changed = true
+		}
+		if !canAccessAdminFrontend(user) {
+			user.Role = "admin"
+			changed = true
+		}
+		if strings.TrimSpace(user.Name) == "" {
+			user.Name = "admin"
+			changed = true
+		}
+		if changed {
+			if err := s.userRepo.Save(user); err != nil {
+				return nil, err
+			}
+		}
+		return user, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	rawPassword, err := randomHexString(32)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := utils.HashPassword(rawPassword)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	user = &model.User{
+		Email:                 email,
+		Password:              hash,
+		Name:                  "admin",
+		Status:                "active",
+		Role:                  "admin",
+		SubscriptionPlanCode:  "free_trial",
+		SubscriptionStatus:    "active",
+		SubscriptionExpiresAt: ptrTime(now.AddDate(0, 0, subscription.DefaultTrialDays)),
+	}
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) isAllowedAdminEmail(email string) bool {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" {
+		return false
+	}
+	for _, item := range s.adminAuth.Emails {
+		if strings.TrimSpace(strings.ToLower(item)) == email {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *AuthService) emailCodeTTLSeconds(purpose string) int64 {
+	if strings.TrimSpace(strings.ToLower(purpose)) == "admin_login" {
+		if s.adminAuth.CodeTTLSeconds > 0 {
+			return int64(s.adminAuth.CodeTTLSeconds)
+		}
+		return 300
+	}
+	return 600
+}
+
+func ptrTime(v time.Time) *time.Time {
+	return &v
 }
 
 func (s *AuthService) verifyRegisterCode(email, code string) error {

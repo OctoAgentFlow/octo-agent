@@ -68,18 +68,27 @@ function ConnectWalletButtonInner({
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const handledAddressRef = useRef<string | null>(null);
+  const connectRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!isConnected || !address) {
       handledAddressRef.current = null;
+      connectRequestedRef.current = false;
       return;
     }
+    if (!connectRequestedRef.current) return;
     if (handledAddressRef.current === address) return;
     handledAddressRef.current = address;
+    connectRequestedRef.current = false;
     void Promise.resolve(onConnected?.(address));
   }, [address, isConnected, onConnected]);
 
   const openWalletModal = () => {
+    void open();
+  };
+
+  const onConnect = () => {
+    connectRequestedRef.current = true;
     void open();
   };
 
@@ -115,11 +124,10 @@ function ConnectWalletButtonInner({
         "h-10 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white",
         className
       )}
-      onClick={openWalletModal}
+      onClick={onConnect}
     >
       <Wallet className="size-4" />
       {connectLabel}
     </Button>
   );
 }
-

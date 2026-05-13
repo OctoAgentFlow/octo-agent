@@ -103,7 +103,7 @@ func (s *BillingService) Plans() *dto.BillingPlansResponse {
 	}
 	if len(items) == 0 {
 		return &dto.BillingPlansResponse{Items: []dto.BillingPlanData{
-			{Code: "free_trial", Name: "Free Trial", Price: "0", Period: "7 days", Description: "Try before upgrade.", Features: []string{"Core automation"}, Highlight: false},
+			{Code: "free_trial", Name: "Free Trial", Price: "0", Period: "14 days", Description: "Try before upgrade.", Features: []string{"Core automation"}, Highlight: false},
 			{Code: "basic_monthly", Name: "Basic", Price: "10 USDT", Period: "month", Description: "Full automation.", Features: []string{"Auto Post", "Auto Reply"}, Highlight: true},
 		}}
 	}

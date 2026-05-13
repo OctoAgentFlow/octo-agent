@@ -22,7 +22,7 @@ func EffectiveStatus(u *model.User, now time.Time) string {
 
 // TrialDaysLeft returns remaining full days for free_trial while active; otherwise 0.
 func TrialDaysLeft(u *model.User, now time.Time) int {
-	if u == nil || !strings.EqualFold(strings.TrimSpace(u.SubscriptionPlanCode), "free_trial") {
+	if u == nil || !IsFreeTrial(u) {
 		return 0
 	}
 	if EffectiveStatus(u, now) != "active" || u.SubscriptionExpiresAt == nil {
@@ -33,4 +33,8 @@ func TrialDaysLeft(u *model.User, now time.Time) int {
 		return 0
 	}
 	return left
+}
+
+func IsFreeTrial(u *model.User) bool {
+	return u != nil && strings.EqualFold(strings.TrimSpace(u.SubscriptionPlanCode), "free_trial")
 }

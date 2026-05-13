@@ -14,7 +14,9 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
+import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import type { ConnectedXAccount } from "@/types/accounts";
 
 import { AccountsEmptyState } from "./accounts-empty-state";
@@ -52,6 +54,7 @@ function mapAccount(item: AccountListItem): ConnectedXAccount {
 }
 
 export function AccountsClient() {
+  const { t } = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -61,6 +64,7 @@ export function AccountsClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedXAccount[]>([]);
   const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
 
   const fetchAccounts = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -92,6 +96,21 @@ export function AccountsClient() {
   useEffect(() => {
     void fetchAccounts();
   }, [fetchAccounts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    billingService
+      .subscription()
+      .then((data) => {
+        if (!cancelled) setSubscription(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscription(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -152,9 +171,6 @@ export function AccountsClient() {
     router.replace(pathname);
   }, [fetchAccounts, pathname, pushToast, router, searchParams]);
 
-  const onReconnect = (id: string) => {
-    console.log("reconnect account", id);
-  };
   const onDisconnect = useCallback(
     async (id: string) => {
       const accountID = Number(id);
@@ -178,7 +194,14 @@ export function AccountsClient() {
     [fetchAccounts, pushToast]
   );
 
-  const startOAuth = useCallback(async () => {
+  const isFreeAccountLimitReached = subscription?.plan === "free_trial" && accounts.length >= 1;
+  const freeAccountLimitReason = t("accounts.limit.freeTrialOneAccount");
+
+  const startOAuth = useCallback(async (options?: { bypassFreeLimit?: boolean }) => {
+    if (isFreeAccountLimitReached && !options?.bypassFreeLimit) {
+      pushToast(freeAccountLimitReason);
+      throw new Error(freeAccountLimitReason);
+    }
     const data = await accountService.startXOAuth();
     if (!data.auth_url) throw new Error("OAuth url missing.");
     const features = ["popup=yes", "width=560", "height=720", "left=80", "top=80"].join(",");
@@ -188,13 +211,24 @@ export function AccountsClient() {
     }
     popup.focus();
     setDialogOpen(false);
-  }, [setDialogOpen]);
+  }, [freeAccountLimitReason, isFreeAccountLimitReached, pushToast, setDialogOpen]);
+
+  const onReconnect = useCallback(
+    () => {
+      void startOAuth({ bypassFreeLimit: true });
+    },
+    [startOAuth]
+  );
 
   const isEmpty = useMemo(() => loadState === "ready" && accounts.length === 0, [accounts.length, loadState]);
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <AccountsPageHeader onAddAccount={() => setDialogOpen(true)} />
+      <AccountsPageHeader
+        onAddAccount={() => setDialogOpen(true)}
+        addDisabled={isFreeAccountLimitReached}
+        addDisabledReason={isFreeAccountLimitReached ? freeAccountLimitReason : undefined}
+      />
 
       {loadState === "loading" ? (
         <Card>

@@ -20,6 +20,7 @@ import (
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/requestid"
+	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/repository"
 
 	"go.uber.org/zap"
@@ -27,15 +28,19 @@ import (
 
 type AccountService struct {
 	repo       *repository.TwitterAccountRepository
+	userRepo   *repository.UserRepository
 	oauth      config.XOAuthConfig
 	httpClient *http.Client
 }
 
 const xOAuthDefaultRequestedScopes = "tweet.read users.read offline.access"
 
-func NewAccountService(repo *repository.TwitterAccountRepository, oauth config.XOAuthConfig) *AccountService {
+var ErrFreeTwitterAccountLimit = errors.New("free accounts can connect at most 1 X account")
+
+func NewAccountService(repo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, oauth config.XOAuthConfig) *AccountService {
 	return &AccountService{
 		repo:       repo,
+		userRepo:   userRepo,
 		oauth:      oauth,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -76,7 +81,6 @@ func (s *AccountService) StartXOAuth(ctx context.Context, userID uint) (*dto.OAu
 			)...)
 		return nil, errors.New("x oauth not configured: set x_oauth.client_id and x_oauth.redirect_uri in configs/config.<env>.yaml")
 	}
-
 	codeVerifier, err := randomHexString(32)
 	if err != nil {
 		zap.L().Warn("x oauth: pkce verifier generation failed", xOAuthZapCtx(ctx, zap.Uint("user_id", userID), zap.Error(err))...)
@@ -152,6 +156,16 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 			)...)
 		return 0, errors.New("x oauth user info missing username")
 	}
+	if err := s.ensureCanBindXAccount(userID, account.TwitterUserID, account.Username); err != nil {
+		zap.L().Warn("x oauth: account bind rejected by account limit",
+			xOAuthZapCtx(ctx,
+				zap.Uint("user_id", userID),
+				zap.String("x_user_id", account.TwitterUserID),
+				zap.String("username", account.Username),
+				zap.Error(err),
+			)...)
+		return 0, err
+	}
 	if _, err := s.repo.UpsertByUser(userID, account); err != nil {
 		zap.L().Error("x oauth: upsert twitter account failed",
 			xOAuthZapCtx(ctx,
@@ -173,6 +187,24 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 
 func (s *AccountService) Delete(userID, accountID uint) error {
 	return s.repo.DeleteByUserAndID(userID, accountID)
+}
+
+func (s *AccountService) ensureCanBindXAccount(userID uint, twitterUserID, username string) error {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	if !subscription.IsFreeTrial(user) {
+		return nil
+	}
+	count, err := s.repo.CountByUserIDExcludingIdentity(userID, strings.TrimSpace(twitterUserID), strings.TrimSpace(username))
+	if err != nil {
+		return err
+	}
+	if count >= subscription.FreeTrialTwitterAccountLimit {
+		return ErrFreeTwitterAccountLimit
+	}
+	return nil
 }
 
 type xTokenResponse struct {

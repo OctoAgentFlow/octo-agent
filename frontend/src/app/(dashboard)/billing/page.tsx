@@ -180,7 +180,7 @@ export default function BillingPage() {
           plansData.items.map((item) => ({
             nameKey: mapPlanKey(item.code),
             price: item.price,
-            periodKey: item.period === "7 days" ? "billing.plan.period.sevenDays" : "billing.plan.period.month",
+            periodKey: item.period === "14 days" ? "billing.plan.period.fourteenDays" : "billing.plan.period.month",
             descriptionKey:
               item.code === "free_trial" ? "billing.plan.freeTrial.description" : "billing.plan.basic.description",
             featureKeys:

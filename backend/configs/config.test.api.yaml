@@ -7,7 +7,7 @@ api:
 mysql:
   # Test API database is configured to use the shared RDS octo_test schema.
   # Keep this pointed at octo_test; do not use octo_prod for test deployments.
-  data_source: "api:6HNzatYAu]+G@tcp(database-1.cdeiw4yyml4x.ap-southeast-1.rds.amazonaws.com:3306)/octo_test?timeout=10s&readTimeout=10s&writeTimeout=10s&charset=utf8mb4&parseTime=true&multiStatements=true"
+  data_source: "admin:6HNzatYAu]+G@tcp(database-1.cdeiw4yyml4x.ap-southeast-1.rds.amazonaws.com:3306)/octo_test?timeout=10s&readTimeout=10s&writeTimeout=10s&charset=utf8mb4&parseTime=true&multiStatements=true"
   max_idle_conns: 10
   max_open_conns: 100
   max_lifetime: 3600

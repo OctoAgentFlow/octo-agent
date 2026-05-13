@@ -24,10 +24,10 @@ func RegisterAuth(rg *gin.RouterGroup, c *controller.AuthController) {
 }
 
 func RegisterAdminAuth(rg *gin.RouterGroup, c *controller.AuthController) {
-	rg.POST("/auth/login", c.Login)
-	rg.POST("/auth/refresh", c.Refresh)
+	rg.POST("/auth/login", c.AdminLogin)
+	rg.POST("/auth/refresh", c.AdminRefresh)
 
 	user := rg.Group("/users")
 	user.Use(middleware.Auth())
-	user.GET("/me", c.Me)
+	user.GET("/me", c.AdminMe)
 }

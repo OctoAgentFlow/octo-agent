@@ -8,7 +8,17 @@ import { languages } from "@/i18n/types";
 import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
-export function LanguageSwitcher({ className }: { className?: string }) {
+export function LanguageSwitcher({
+  className,
+  buttonClassName,
+  menuClassName,
+  showLabelOnMobile = false,
+}: {
+  className?: string;
+  buttonClassName?: string;
+  menuClassName?: string;
+  showLabelOnMobile?: boolean;
+}) {
   const { lang, setLang } = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -34,14 +44,14 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       <Button
         type="button"
         variant="outline"
-        className="h-8 w-[132px] justify-between gap-1.5 px-2.5 text-white/80"
+        className={cn("h-8 w-[132px] justify-between gap-1.5 px-2.5 text-white/80", buttonClassName)}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
       >
         <span className="inline-flex items-center gap-1.5 overflow-hidden">
           <Languages className="size-3.5 shrink-0" />
-          <span className="hidden truncate whitespace-nowrap sm:inline">{currentLabel}</span>
+          <span className={cn("truncate whitespace-nowrap", showLabelOnMobile ? "inline" : "hidden sm:inline")}>{currentLabel}</span>
         </span>
         <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
       </Button>
@@ -49,7 +59,10 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+10px)] z-50 w-52 rounded-xl border border-white/16 bg-[#0b1020]/95 p-1.5 shadow-2xl shadow-black/45 backdrop-blur-xl"
+          className={cn(
+            "absolute right-0 top-[calc(100%+10px)] z-50 w-52 rounded-xl border border-white/16 bg-[#0b1020]/95 p-1.5 shadow-2xl shadow-black/45 backdrop-blur-xl",
+            menuClassName
+          )}
         >
           {languages.map((l) => {
             const active = l.code === lang;
@@ -77,4 +90,3 @@ export function LanguageSwitcher({ className }: { className?: string }) {
     </div>
   );
 }
-

@@ -59,14 +59,14 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
-      <Link href="/" className="mb-8 inline-flex w-fit items-center rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-blue-300/70">
-        <span className="relative block h-9 w-32 overflow-hidden rounded-md border border-white/10 bg-[#060915]">
+      <Link href="/" className="mb-8 inline-flex w-full items-center rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-blue-300/70">
+        <span className="relative block h-[78px] w-full max-w-[178px] overflow-hidden rounded-lg border border-white/10 bg-[#050815]">
           <Image
             src="/brand/oaf-logo.png"
             alt={t("common.brand")}
             fill
-            sizes="128px"
-            className="object-cover object-left"
+            sizes="178px"
+            className="object-contain p-2"
             priority
           />
         </span>

@@ -24,6 +24,7 @@ export function DashboardPreviewSection() {
 
   return (
     <SectionShell
+      id="preview"
       badge={t("marketing.preview.badge")}
       title={t("marketing.preview.title")}
       description={t("marketing.preview.description")}

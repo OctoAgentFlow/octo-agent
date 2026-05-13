@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -32,9 +33,18 @@ export function MarketingNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#070b17]/75 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6 md:px-8">
-        <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-white">
-          <span className="inline-block size-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-400" />
-          {t("common.brand")}
+        <Link href="/" className="flex items-center gap-3 text-sm font-semibold text-white">
+          <span className="relative block h-9 w-12 overflow-hidden rounded-md border border-white/10 bg-[#060915]">
+            <Image
+              src="/brand/oaf-logo.png"
+              alt={t("common.brand")}
+              fill
+              sizes="48px"
+              className="object-cover object-left"
+              priority
+            />
+          </span>
+          <span>{t("common.brand")}</span>
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-white/70 md:flex">
           {navItems.map((item) => (

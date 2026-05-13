@@ -1,7 +1,7 @@
 import type { I18nDict } from "../types";
 
 export const dict: I18nDict = {
-  "common.brand": "Octo-Agent",
+  "common.brand": "Octo-Agent Flow",
   "common.login": "登入",
   "common.startFreeTrial": "開始免費試用",
   "common.dashboard": "儀表板",
@@ -26,6 +26,7 @@ export const dict: I18nDict = {
   "marketing.hero.queue.item1": "已排程代幣上線推文串",
   "marketing.hero.queue.item2": "已生成 48 則提及回覆待審核",
   "marketing.hero.queue.item3": "已啟動對熱度線索的私訊跟進序列",
+  "marketing.hero.trust.title": "適合日常營運的安全邊界",
   "marketing.hero.trust.aiNative": "原生 AI",
   "marketing.hero.trust.builtForTeams": "團隊協作",
   "marketing.hero.trust.cryptoBilling": "加密支付",

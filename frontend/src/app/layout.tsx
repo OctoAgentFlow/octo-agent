@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Octo-Agent | AI Social Operations",
-  description: "Auto Post, Auto Reply, and Auto DM for Web3 projects, creators, and lean growth teams.",
+  title: "Octo-Agent Flow | AI Social Operations",
+  description: "AI workflow for X posting, replies, DMs, and growth analytics for Web3 projects and lean teams.",
 };
 
 export default function RootLayout({

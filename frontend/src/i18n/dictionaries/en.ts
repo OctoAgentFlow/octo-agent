@@ -2,7 +2,7 @@ import type { I18nDict } from "../types";
 
 export const dict: I18nDict = {
   // common
-  "common.brand": "Octo-Agent",
+  "common.brand": "Octo-Agent Flow",
   "common.login": "Log in",
   "common.startFreeTrial": "Start Free Trial",
   "common.dashboard": "Dashboard",
@@ -16,29 +16,30 @@ export const dict: I18nDict = {
 
   // marketing hero
   "marketing.hero.badge": "AI Social Operations",
-  "marketing.hero.title": "Let your team run social growth on autopilot.",
+  "marketing.hero.title": "Turn X operations into one controlled growth flow.",
   "marketing.hero.subtitle":
-    "Auto Post, Auto Reply, and Auto DM in one AI workflow built for Web3 teams, creators, and lean operators.",
+    "Octo-Agent Flow connects posting, replies, DMs, and performance review into one AI operations loop for Web3 projects, creators, and lean growth teams.",
   "marketing.hero.primaryCta": "Start Free Trial",
   "marketing.hero.secondaryCta": "View Product Demo",
   "marketing.hero.mobileLink": "Learn how it works",
-  "marketing.hero.note": "No credit card required. Activate your first workflow in minutes.",
-  "marketing.hero.stats.teamsOnboarded": "Teams onboarded",
-  "marketing.hero.stats.tasksAutomated": "Tasks automated",
-  "marketing.hero.stats.avgResponseSpeed": "Avg. response speed",
+  "marketing.hero.note": "14-day free trial. Connect 1 X account first and validate the real loop.",
+  "marketing.hero.stats.teamsOnboarded": "First account loop",
+  "marketing.hero.stats.tasksAutomated": "Automation coverage",
+  "marketing.hero.stats.avgResponseSpeed": "Code validity",
   "marketing.hero.queue.title": "Live Agent Queue",
   "marketing.hero.queue.item1": "Scheduled tweet thread for token launch",
   "marketing.hero.queue.item2": "48 mention replies generated for approval",
   "marketing.hero.queue.item3": "DM follow-up sequence started for warm leads",
+  "marketing.hero.trust.title": "Daily operations with safety boundaries",
   "marketing.hero.trust.aiNative": "AI Native",
   "marketing.hero.trust.builtForTeams": "Built for Teams",
   "marketing.hero.trust.cryptoBilling": "Crypto Billing",
 
   // marketing capabilities
   "marketing.capabilities.badge": "Core Capabilities",
-  "marketing.capabilities.title": "Three automation engines, one growth workflow.",
+  "marketing.capabilities.title": "Posting, engagement, and DM conversion around one account loop.",
   "marketing.capabilities.description":
-    "Cover outbound content, inbound engagement, and private conversion flows with consistent AI operations.",
+    "Stabilize the MVP journey first, then expand into more accounts, team workflows, and granular strategy controls.",
 
   // marketing features
   "marketing.features.status.running": "Running",
@@ -97,7 +98,7 @@ export const dict: I18nDict = {
   "marketing.pricing.title": "Simple pricing for fast-moving teams.",
   "marketing.pricing.description": "Start free, then scale with a single lightweight subscription.",
   "marketing.pricing.freeTrial.name": "Free Trial",
-  "marketing.pricing.freeTrial.description": "Try core automation with essential limits.",
+  "marketing.pricing.freeTrial.description": "Try core automation for 14 days. Free accounts can connect 1 X account.",
   "marketing.pricing.freeTrial.features.autoPost": "Auto Post",
   "marketing.pricing.freeTrial.features.autoReply": "Auto Reply",
   "marketing.pricing.freeTrial.features.basicDashboard": "Basic dashboard",

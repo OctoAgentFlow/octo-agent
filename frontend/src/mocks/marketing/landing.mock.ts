@@ -19,9 +19,9 @@ export const navItems: NavItem[] = [
 ];
 
 export const heroStats: HeroStat[] = [
-  { labelKey: "marketing.hero.stats.teamsOnboarded", value: "200+" },
-  { labelKey: "marketing.hero.stats.tasksAutomated", value: "1.2M+" },
-  { labelKey: "marketing.hero.stats.avgResponseSpeed", value: "18s" },
+  { labelKey: "marketing.hero.stats.teamsOnboarded", value: "1" },
+  { labelKey: "marketing.hero.stats.tasksAutomated", value: "3" },
+  { labelKey: "marketing.hero.stats.avgResponseSpeed", value: "300s" },
 ];
 
 export const features: FeatureCard[] = [
@@ -97,7 +97,7 @@ export const pricingPlans: PricingPlan[] = [
     nameKey: "marketing.pricing.freeTrial.name",
     price: "0",
     unit: "USDT",
-    period: "7 days",
+    period: "14 days",
     descriptionKey: "marketing.pricing.freeTrial.description",
     featureKeys: [
       "marketing.pricing.freeTrial.features.autoPost",
@@ -145,4 +145,3 @@ export const trustBadges: TrustBadge[] = [
   { labelKey: "marketing.hero.trust.builtForTeams", icon: Users },
   { labelKey: "marketing.hero.trust.cryptoBilling", icon: Wallet },
 ];
-

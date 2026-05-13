@@ -1,7 +1,7 @@
 import type { I18nDict } from "../types";
 
 export const dict: I18nDict = {
-  "common.brand": "Octo-Agent",
+  "common.brand": "Octo-Agent Flow",
   "common.login": "Войти",
   "common.startFreeTrial": "Начать бесплатный пробный период",
   "common.dashboard": "Дашборд",
@@ -26,6 +26,7 @@ export const dict: I18nDict = {
   "marketing.hero.queue.item1": "Запланирован тред для запуска токена",
   "marketing.hero.queue.item2": "Сгенерировано 48 ответов на упоминания для утверждения",
   "marketing.hero.queue.item3": "Запущена DM‑цепочка для тёплых лидов",
+  "marketing.hero.trust.title": "Безопасные границы для ежедневных операций",
   "marketing.hero.trust.aiNative": "AI Native",
   "marketing.hero.trust.builtForTeams": "Для команд",
   "marketing.hero.trust.cryptoBilling": "Крипто‑оплата",

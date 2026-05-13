@@ -6,6 +6,10 @@ export const dict: I18nDict = {
   "common.startFreeTrial": "無料トライアルを開始",
   "common.dashboard": "ダッシュボード",
   "common.logout": "ログアウト",
+  "common.cancel": "キャンセル",
+  "logout.confirm.title": "ログアウトしますか？",
+  "logout.confirm.description": "続けてコンソールを使うには再ログインが必要です。",
+  "logout.confirm.confirm": "ログアウト",
 
   "marketing.nav.capabilities": "機能",
   "marketing.nav.autoPost": "Auto Post",

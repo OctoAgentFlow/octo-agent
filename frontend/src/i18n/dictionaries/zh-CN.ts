@@ -6,6 +6,10 @@ export const dict: I18nDict = {
   "common.startFreeTrial": "开始免费试用",
   "common.dashboard": "控制台",
   "common.logout": "退出登录",
+  "common.cancel": "取消",
+  "logout.confirm.title": "确认退出登录？",
+  "logout.confirm.description": "退出后需要重新登录才能继续使用控制台。",
+  "logout.confirm.confirm": "确认退出",
 
   "marketing.nav.capabilities": "能力",
   "marketing.nav.autoPost": "自动发推",

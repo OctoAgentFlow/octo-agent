@@ -514,6 +514,8 @@ export const dict: I18nDict = {
   "automation.module.reply.description": "文脈を理解してメンションやスレッドに返信します。",
   "automation.module.dm.name": "Auto DM",
   "automation.module.dm.description": "温度感の高いリードやオンボーディング向けに安全なDMシーケンスを実行します。",
+  "automation.module.comment.name": "Auto Comment",
+  "automation.module.comment.description": "ターゲットアカウントの新規投稿を監視し、AIで自然なコメントを生成します。",
   "automation.dmReview.title": "Auto DM レビューキュー",
   "automation.dmReview.description": "実送信を有効化する前に、DM候補、権限確認、承認状態を監査します。",
   "automation.dmReview.empty": "Auto DM のレビュータスクはまだありません。",

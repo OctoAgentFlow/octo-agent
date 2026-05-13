@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, MessageCircleReply, Send } from "lucide-react";
+import { Bot, MessageCircleReply, MessageSquareText, Send } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
 import type { AutomationModule } from "@/types/automation";
@@ -20,6 +20,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
     post: Bot,
     reply: MessageCircleReply,
     dm: Send,
+    comment: MessageSquareText,
   } as const;
 
   return (
@@ -36,7 +37,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
           </button>
         </div>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {modules.map((module) => {
           const ModuleIcon = iconByType[module.type];
           return (

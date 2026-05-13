@@ -225,7 +225,7 @@ func (s *AutomationService) assertSubscriptionForAutomation(userID uint) error {
 }
 
 func isValidAutomationType(typ string) bool {
-	return typ == "post" || typ == "reply" || typ == "dm"
+	return typ == "post" || typ == "reply" || typ == "dm" || typ == "comment"
 }
 
 func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
@@ -233,7 +233,7 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 	_ = json.Unmarshal([]byte(m.SafetyBlockedKeywords), &blocked)
 	data := dto.AutomationModuleData{
 		Type:  m.Type,
-		Name:  strings.ToUpper(m.Type[:1]) + m.Type[1:],
+		Name:  automationDisplayName(m.Type),
 		State: m.State,
 		Config: dto.AutomationConfigPayload{
 			Enabled: m.Enabled,
@@ -256,4 +256,22 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 		data.NextRunAt = m.NextRunAt.UTC().Format(time.RFC3339)
 	}
 	return data
+}
+
+func automationDisplayName(typ string) string {
+	switch typ {
+	case "post":
+		return "Post"
+	case "reply":
+		return "Reply"
+	case "dm":
+		return "DM"
+	case "comment":
+		return "Comment"
+	default:
+		if typ == "" {
+			return ""
+		}
+		return strings.ToUpper(typ[:1]) + typ[1:]
+	}
 }

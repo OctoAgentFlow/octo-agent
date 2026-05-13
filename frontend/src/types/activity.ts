@@ -1,4 +1,4 @@
-export type ActivityType = "post" | "reply" | "dm";
+export type ActivityType = "post" | "reply" | "dm" | "comment";
 export type ActivityStatus = "success" | "review" | "failed";
 export type ActivityRange = "24h" | "7d" | "30d";
 

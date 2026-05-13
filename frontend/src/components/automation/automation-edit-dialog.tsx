@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
 import type { AutomationModule, AutomationModuleConfig, AutomationTone } from "@/types/automation";
-import { autoDmSchema, autoPostSchema, autoReplySchema } from "@/schemas/automation.schema";
+import { autoCommentSchema, autoDmSchema, autoPostSchema, autoReplySchema } from "@/schemas/automation.schema";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ type Props = {
 function schemaForType(type: AutomationModule["type"]) {
   if (type === "post") return autoPostSchema;
   if (type === "reply") return autoReplySchema;
+  if (type === "comment") return autoCommentSchema;
   return autoDmSchema;
 }
 
@@ -150,4 +151,3 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
     </Dialog>
   );
 }
-

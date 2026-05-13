@@ -1,4 +1,4 @@
-export type AutomationModuleType = "post" | "reply" | "dm";
+export type AutomationModuleType = "post" | "reply" | "dm" | "comment";
 export type AutomationTone = "Professional" | "Friendly" | "Degen" | "Web3-native";
 export type AutomationRunState = "Running" | "Queued" | "Paused" | "Needs Review";
 
@@ -52,4 +52,3 @@ export type AutomationRuntimeStatus = {
   retriesLast24h: number;
   needsReview: number;
 };
-

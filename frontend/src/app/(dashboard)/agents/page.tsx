@@ -17,6 +17,8 @@ import { accountService } from "@/services/account.service";
 import { activityService } from "@/services/activity.service";
 import {
   automationService,
+  type AutoCommentTargetApi,
+  type AutoCommentTaskApi,
   type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
@@ -111,6 +113,9 @@ export default function AgentsPage() {
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
+  const [commentTargets, setCommentTargets] = useState<AutoCommentTargetApi[]>([]);
+  const [commentTasks, setCommentTasks] = useState<AutoCommentTaskApi[]>([]);
+  const [commentTargetInput, setCommentTargetInput] = useState("");
   const [accountCount, setAccountCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
   const [activityCount, setActivityCount] = useState(0);
@@ -142,12 +147,14 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData, activityData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, commentTargetData, commentTaskData, accountData, postData, activityData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
           automationService.dmRecipients(),
           automationService.dmRecipientImports(),
+          automationService.commentTargets(),
+          automationService.commentTasks(),
           accountService.list(),
           postService.list({ page: 1, page_size: 1 }),
           activityService.list({ page: 1, page_size: 1 }),
@@ -157,6 +164,8 @@ export default function AgentsPage() {
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setCommentTargets(commentTargetData.items);
+        setCommentTasks(commentTaskData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
         setActivityCount(activityData.pagination.total);
@@ -185,17 +194,21 @@ export default function AgentsPage() {
       automationService.dmTasks(),
       automationService.dmRecipients(),
       automationService.dmRecipientImports(),
+      automationService.commentTargets(),
+      automationService.commentTasks(),
       accountService.list(),
       postService.list({ page: 1, page_size: 1 }),
       activityService.list({ page: 1, page_size: 1 }),
     ])
-      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData, activityData]) => {
+      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, commentTargetData, commentTaskData, accountData, postData, activityData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setCommentTargets(commentTargetData.items);
+        setCommentTasks(commentTaskData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
         setActivityCount(activityData.pagination.total);
@@ -358,6 +371,67 @@ export default function AgentsPage() {
     }
   };
 
+  const addCommentTarget = async () => {
+    try {
+      const created = await automationService.createCommentTarget(commentTargetInput);
+      setCommentTargets((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setCommentTargetInput("");
+      pushToast("Auto Comment target added.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to add target." : "Failed to add target.");
+    }
+  };
+
+  const updateCommentTargetStatus = async (id: number, status: AutoCommentTargetApi["status"]) => {
+    try {
+      const updated = await automationService.updateCommentTargetStatus(id, status);
+      setCommentTargets((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto Comment target updated.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update target." : "Failed to update target.");
+    }
+  };
+
+  const deleteCommentTarget = async (id: number) => {
+    try {
+      await automationService.deleteCommentTarget(id);
+      setCommentTargets((items) => items.filter((item) => item.id !== id));
+      pushToast("Auto Comment target deleted.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to delete target." : "Failed to delete target.");
+    }
+  };
+
+  const approveCommentTask = async (id: number) => {
+    try {
+      const updated = await automationService.approveCommentTask(id);
+      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto Comment task approved.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to approve comment." : "Failed to approve comment.");
+    }
+  };
+
+  const blockCommentTask = async (id: number) => {
+    try {
+      const updated = await automationService.blockCommentTask(id, "Blocked from Auto Comment review queue.");
+      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto Comment task blocked.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to block comment." : "Failed to block comment.");
+    }
+  };
+
+  const retryCommentTask = async (id: number) => {
+    try {
+      const updated = await automationService.retryCommentTask(id);
+      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast("Auto Comment task retried.");
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to retry comment." : "Failed to retry comment.");
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -405,6 +479,19 @@ export default function AgentsPage() {
         importCSV={dmImportCSV}
         onImportCSVChange={setDMImportCSV}
         onImport={importDMRecipients}
+      />
+
+      <AutoCommentPanel
+        targets={commentTargets}
+        tasks={commentTasks}
+        targetInput={commentTargetInput}
+        onTargetInputChange={setCommentTargetInput}
+        onAddTarget={addCommentTarget}
+        onTargetStatus={updateCommentTargetStatus}
+        onDeleteTarget={deleteCommentTarget}
+        onApproveTask={approveCommentTask}
+        onBlockTask={blockCommentTask}
+        onRetryTask={retryCommentTask}
       />
 
       <AutomationEditDialog
@@ -679,6 +766,161 @@ function AutoDMReviewPanel({
             placeholder="123456789,@username"
             className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35"
           />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AutoCommentPanel({
+  targets,
+  tasks,
+  targetInput,
+  onTargetInputChange,
+  onAddTarget,
+  onTargetStatus,
+  onDeleteTarget,
+  onApproveTask,
+  onBlockTask,
+  onRetryTask,
+}: {
+  targets: AutoCommentTargetApi[];
+  tasks: AutoCommentTaskApi[];
+  targetInput: string;
+  onTargetInputChange: (value: string) => void;
+  onAddTarget: () => void;
+  onTargetStatus: (id: number, status: AutoCommentTargetApi["status"]) => void;
+  onDeleteTarget: (id: number) => void;
+  onApproveTask: (id: number) => void;
+  onBlockTask: (id: number) => void;
+  onRetryTask: (id: number) => void;
+}) {
+  const { t } = useT();
+  return (
+    <Card>
+      <CardHeader title={t("automation.comment.title")} description={t("automation.comment.description")} />
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={targetInput}
+              onChange={(event) => onTargetInputChange(event.target.value)}
+              placeholder={t("automation.comment.targetInput")}
+              className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/35"
+            />
+            <Button type="button" disabled={!targetInput.trim()} onClick={onAddTarget}>
+              {t("automation.comment.addTarget")}
+            </Button>
+          </div>
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+            <p className="mb-3 text-xs font-semibold text-white/70">{t("automation.comment.targets")}</p>
+            {targets.length === 0 ? (
+              <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+                {t("automation.comment.emptyTargets")}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {targets.map((target) => (
+                  <div key={target.id} className="rounded-md border border-white/8 bg-black/10 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="break-all text-sm font-semibold text-white">@{target.target_username}</p>
+                        <p className="text-xs text-white/55">
+                          {t(`automation.comment.status.${target.status}`)}
+                          {target.last_checked_at ? ` · ${t("automation.comment.lastChecked")}: ${new Date(target.last_checked_at).toLocaleString()}` : ""}
+                        </p>
+                        {target.last_commented_at ? (
+                          <p className="text-xs text-emerald-100/80">
+                            {t("automation.comment.lastCommented")}: {new Date(target.last_commented_at).toLocaleString()}
+                          </p>
+                        ) : null}
+                        {target.last_failure_reason ? (
+                          <p className="line-clamp-2 text-xs text-amber-100/85">
+                            {t("automation.comment.failure")}: {target.last_failure_reason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onTargetStatus(target.id, target.status === "active" ? "paused" : "active")}
+                        >
+                          {target.status === "active" ? t("automation.comment.pause") : t("automation.comment.resume")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onDeleteTarget(target.id)}>
+                          {t("automation.comment.delete")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <p className="mb-3 text-xs font-semibold text-white/70">{t("automation.comment.tasks")}</p>
+          {tasks.length === 0 ? (
+            <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+              {t("automation.comment.emptyTasks")}
+            </p>
+          ) : (
+            <div className="max-h-[560px] space-y-2 overflow-y-auto">
+              {tasks.slice(0, 8).map((task) => {
+                const canApprove = task.status === "review";
+                const canRetry = task.status === "failed" && task.retryable;
+                return (
+                  <div key={task.id} className="rounded-md border border-white/8 bg-black/10 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-white">@{task.target_username}</p>
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
+                            {task.status}
+                          </span>
+                        </div>
+                        <div className="rounded-md border border-white/8 bg-white/[0.03] p-2">
+                          <p className="mb-1 text-xs text-white/45">{t("automation.comment.targetTweet")}</p>
+                          <p className="line-clamp-3 text-sm text-white/70">{task.target_tweet_text || task.target_tweet_id}</p>
+                        </div>
+                        <div className="rounded-md border border-blue-300/15 bg-blue-500/8 p-2">
+                          <p className="mb-1 text-xs text-blue-100/70">{t("automation.comment.generated")}</p>
+                          <p className="line-clamp-3 text-sm text-white/82">{task.generated_comment || "—"}</p>
+                        </div>
+                        {task.comment_tweet_id ? (
+                          <p className="text-xs text-emerald-100/80">Comment Tweet ID: {task.comment_tweet_id}</p>
+                        ) : null}
+                        {task.failure_reason ? (
+                          <p className="line-clamp-2 text-xs text-amber-100/85">
+                            {t("automation.comment.failure")}: {task.failure_reason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {canApprove ? (
+                          <Button size="sm" onClick={() => onApproveTask(task.id)}>
+                            {t("automation.comment.approve")}
+                          </Button>
+                        ) : null}
+                        {canRetry ? (
+                          <Button size="sm" onClick={() => onRetryTask(task.id)}>
+                            {t("automation.comment.retry")}
+                          </Button>
+                        ) : null}
+                        {task.status !== "blocked" && task.status !== "sent" ? (
+                          <Button size="sm" variant="outline" onClick={() => onBlockTask(task.id)}>
+                            {t("automation.comment.block")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </Card>

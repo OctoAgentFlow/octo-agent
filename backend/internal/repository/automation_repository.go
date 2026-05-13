@@ -54,6 +54,18 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			SafetyMaxPerHour:         10,
 			SafetyBlockedKeywords:    `["seed phrase","private key"]`,
 		},
+		{
+			UserID:                   userID,
+			Type:                     "comment",
+			Enabled:                  false,
+			State:                    "Paused",
+			FrequencyIntervalMinutes: 10,
+			FrequencyDailyLimit:      20,
+			Tone:                     "Friendly",
+			SafetyRequireApproval:    true,
+			SafetyMaxPerHour:         6,
+			SafetyBlockedKeywords:    `["airdrop","giveaway","seed phrase","private key"]`,
+		},
 	}
 
 	for _, item := range defaults {
@@ -111,8 +123,9 @@ func (r *AutomationRepository) Save(cfg *model.AutomationConfig) error {
 }
 
 const (
-	AutomationTypeReply = "reply"
-	AutomationTypeDM    = "dm"
+	AutomationTypeReply   = "reply"
+	AutomationTypeDM      = "dm"
+	AutomationTypeComment = "comment"
 )
 
 // ListUserIDsWithReplyAutomationEnabled returns user ids with reply automation on and an active subscription.

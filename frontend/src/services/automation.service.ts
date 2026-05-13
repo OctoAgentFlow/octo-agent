@@ -7,7 +7,7 @@ type ApiResponse<T> = {
 };
 
 export type AutomationModuleApi = {
-  type: "post" | "reply" | "dm";
+  type: "post" | "reply" | "dm" | "comment";
   name: string;
   state: "Running" | "Queued" | "Paused" | "Needs Review";
   config: {
@@ -133,6 +133,57 @@ export type AutoDMPreferenceData = {
   status: string;
 };
 
+export type AutoCommentTargetApi = {
+  id: number;
+  x_account_id: number;
+  target_user_id?: string;
+  target_username: string;
+  target_display_name?: string;
+  status: "active" | "paused";
+  last_seen_tweet_id?: string;
+  last_seen_tweet_at?: string;
+  last_checked_at?: string;
+  last_commented_at?: string;
+  last_failure_reason?: string;
+  resolved_at?: string;
+};
+
+export type AutoCommentTargetsData = {
+  items: AutoCommentTargetApi[];
+};
+
+export type AutoCommentTaskApi = {
+  id: number;
+  x_account_id: number;
+  target_id: number;
+  target_user_id?: string;
+  target_username: string;
+  target_tweet_id: string;
+  target_tweet_text?: string;
+  target_tweet_author?: string;
+  generated_comment?: string;
+  status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
+  capability_status: string;
+  failure_category?: string;
+  failure_reason?: string;
+  retryable: boolean;
+  retry_after_at?: string;
+  attempt_count: number;
+  last_attempt_at?: string;
+  approval_required: boolean;
+  activity_log_id?: number;
+  comment_tweet_id?: string;
+  detected_at: string;
+  generated_at?: string;
+  approved_at?: string;
+  blocked_at?: string;
+  sent_at?: string;
+};
+
+export type AutoCommentTasksData = {
+  items: AutoCommentTaskApi[];
+};
+
 export type AutomationSavePayload = {
   enabled: boolean;
   frequency: {
@@ -152,11 +203,11 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutomationsData>>("/automations");
     return res.data.data;
   },
-  async update(type: "post" | "reply" | "dm", payload: AutomationSavePayload) {
+  async update(type: "post" | "reply" | "dm" | "comment", payload: AutomationSavePayload) {
     const res = await request.put<ApiResponse<AutomationModuleApi>>(`/automations/${type}`, payload);
     return res.data.data;
   },
-  async toggle(type: "post" | "reply" | "dm", enabled: boolean) {
+  async toggle(type: "post" | "reply" | "dm" | "comment", enabled: boolean) {
     const res = await request.post<ApiResponse<AutomationModuleApi>>(`/automations/${type}/toggle`, { enabled });
     return res.data.data;
   },
@@ -219,6 +270,40 @@ export const automationService = {
   },
   async unsubscribeDM(token: string) {
     const res = await request.post<ApiResponse<AutoDMPreferenceData>>(`/auto-dm/unsubscribe/${token}`);
+    return res.data.data;
+  },
+  async commentTargets() {
+    const res = await request.get<ApiResponse<AutoCommentTargetsData>>("/auto-comment/targets");
+    return res.data.data;
+  },
+  async createCommentTarget(targetUsername: string, xAccountID?: number) {
+    const res = await request.post<ApiResponse<AutoCommentTargetApi>>("/auto-comment/targets", {
+      target_username: targetUsername,
+      x_account_id: xAccountID || 0,
+    });
+    return res.data.data;
+  },
+  async updateCommentTargetStatus(id: number, status: AutoCommentTargetApi["status"]) {
+    const res = await request.patch<ApiResponse<AutoCommentTargetApi>>(`/auto-comment/targets/${id}`, { status });
+    return res.data.data;
+  },
+  async deleteCommentTarget(id: number) {
+    await request.delete(`/auto-comment/targets/${id}`);
+  },
+  async commentTasks() {
+    const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comment/tasks");
+    return res.data.data;
+  },
+  async approveCommentTask(id: number) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/approve`);
+    return res.data.data;
+  },
+  async blockCommentTask(id: number, reason: string) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/block`, { reason });
+    return res.data.data;
+  },
+  async retryCommentTask(id: number) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/retry`);
     return res.data.data;
   },
 };

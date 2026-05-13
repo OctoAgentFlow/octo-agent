@@ -6,7 +6,7 @@ type ApiResponse<T> = {
   data: T;
 };
 
-export type AnalyticsAutomationType = "post" | "reply" | "dm";
+export type AnalyticsAutomationType = "post" | "reply" | "dm" | "comment";
 
 export type AnalyticsOverview = {
   range_days: number;

@@ -6,7 +6,7 @@ type ActivityLog struct {
 	Base
 	UserID              uint      `gorm:"index;not null;uniqueIndex:ux_activity_user_ref_tweet;comment:所属用户ID" json:"user_id"`
 	XAccountID          uint      `gorm:"index;column:x_account_id;comment:X账号ID" json:"x_account_id,omitempty"`
-	Type                string    `gorm:"size:16;index;not null;comment:活动类型（post/reply/dm）" json:"type"`
+	Type                string    `gorm:"size:16;index;not null;comment:活动类型（post/reply/dm/comment）" json:"type"`
 	Status              string    `gorm:"size:16;index;not null;comment:活动状态（success/review/failed）" json:"status"`
 	PreviewKey          string    `gorm:"size:128;not null;comment:前端预览文案键" json:"preview_key"`
 	AccountHandle       string    `gorm:"size:128;not null;comment:执行账号标识" json:"account_handle"`

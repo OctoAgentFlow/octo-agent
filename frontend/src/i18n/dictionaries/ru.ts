@@ -514,6 +514,8 @@ export const dict: I18nDict = {
   "automation.module.reply.description": "Обрабатывайте упоминания и треды контекстными AI‑ответами.",
   "automation.module.dm.name": "Auto DM",
   "automation.module.dm.description": "Запускайте безопасные DM‑сценарии для тёплых лидов и онбординга.",
+  "automation.module.comment.name": "Auto Comment",
+  "automation.module.comment.description": "Отслеживайте новые посты целевых аккаунтов и генерируйте AI‑комментарии для роста охвата.",
   "automation.dmReview.title": "Очередь проверки Auto DM",
   "automation.dmReview.description": "Проверяйте кандидатов DM, права и статусы одобрения до реальной отправки.",
   "automation.dmReview.empty": "Задач проверки Auto DM пока нет.",

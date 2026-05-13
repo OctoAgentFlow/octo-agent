@@ -16,6 +16,7 @@ func Start(
 	postRepo *repository.PostRepository,
 	autoReply *service.AutoReplyService,
 	autoDM *service.AutoDMService,
+	autoComment *service.AutoCommentService,
 ) {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
@@ -31,11 +32,13 @@ func Start(
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
 		RunAutoDMOnce(context.Background(), autoDM)
+		RunAutoCommentOnce(context.Background(), autoComment)
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
 			RunAutoReplyOnce(context.Background(), autoReply)
 			RunAutoDMOnce(context.Background(), autoDM)
+			RunAutoCommentOnce(context.Background(), autoComment)
 		}
 	}()
 }

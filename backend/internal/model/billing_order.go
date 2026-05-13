@@ -7,6 +7,7 @@ type BillingOrder struct {
 	Base
 	UserID               uint       `gorm:"index;not null;comment:所属用户ID" json:"user_id"`
 	PlanCode             string     `gorm:"size:64;index;not null;comment:订阅方案编码" json:"plan_code"`
+	BillingCycle         string     `gorm:"size:16;not null;default:monthly;comment:计费周期（monthly/yearly）" json:"billing_cycle"`
 	Amount               string     `gorm:"size:32;not null;comment:支付金额" json:"amount"`
 	Currency             string     `gorm:"size:16;not null;comment:币种" json:"currency"`
 	Method               string     `gorm:"size:16;not null;comment:支付方式" json:"method"`

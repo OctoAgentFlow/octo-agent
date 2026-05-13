@@ -1,20 +1,68 @@
-import type { TranslateParams } from "@/i18n/types";
-
 export type CurrentSubscription = {
-  planKey: string;
+  plan: string;
+  planName: string;
+  billingCycle: BillingCycle;
   expirationDate: string;
   remainingTrialDays: number;
   statusKey: string;
+  limits: PlanLimits;
+  usage: PlanUsage;
+};
+
+export type BillingCycle = "monthly" | "yearly";
+
+export type PlanLimits = {
+  maxBots: number;
+  maxTwitterAccounts: number;
+  aiGenerationsMonthly: number;
+  dailyAutoPosts: number;
+  dailyAutoReplies: number;
+  dailyAutoComments: number;
+  dailyAutoDMs: number;
+  analyticsDays: number;
+  teamSeats: number;
+  fullPersonaFields: boolean;
+  autoDMImport: boolean;
+  advancedBotStrategy: boolean;
+  bulkReview: boolean;
+  botPerformance: boolean;
+  dataExport: boolean;
+  multiBotMatrix: boolean;
+  abTesting: boolean;
+  advancedFlowBuilder: boolean;
+  advancedRiskRules: boolean;
+  prioritySupport: boolean;
+};
+
+export type PlanUsage = {
+  oafBots: number;
+  twitterAccounts: number;
+  aiGenerationsMonth: number;
+  autoPostsToday: number;
+  autoRepliesToday: number;
+  autoCommentsToday: number;
+  autoDMsToday: number;
+};
+
+export type PlanFeature = {
+  key: string;
+  label: string;
+  available: boolean;
+  minPlan?: string;
 };
 
 export type Plan = {
-  nameKey: string;
-  price: string;
-  periodKey: string;
-  descriptionKey: string;
-  featureKeys: string[];
-  priceNoteKey?: string;
-  priceNoteParams?: TranslateParams;
+  code: string;
+  name: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  currency: string;
+  audience: string;
+  badge?: string;
+  description: string;
+  features: string[];
+  featureFlags: PlanFeature[];
+  limits: PlanLimits;
   highlight: boolean;
 };
 

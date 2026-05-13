@@ -17,13 +17,14 @@ export type FeatureCard = {
 export type WorkflowStep = { titleKey: string; descriptionKey: string };
 
 export type PricingPlan = {
-  nameKey: string;
-  price: string;
+  code: string;
+  name: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
   unit: string;
-  period: string;
-  descriptionKey: string;
-  featureKeys: string[];
-  ctaKey: string;
+  audience: string;
+  badge?: string;
+  features: string[];
   highlight: boolean;
 };
 
@@ -33,4 +34,3 @@ export type DashboardPreview = {
   kpis: Array<{ labelKey: string; value: string; delta: string }>;
   tasks: Array<{ time: string; taskKey: string; statusKey: string }>;
 };
-

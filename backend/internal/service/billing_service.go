@@ -23,9 +23,11 @@ import (
 )
 
 type BillingService struct {
-	userRepo  *repository.UserRepository
-	orderRepo *repository.BillingOrderRepository
-	cfg       *config.Config
+	userRepo    *repository.UserRepository
+	orderRepo   *repository.BillingOrderRepository
+	accountRepo *repository.TwitterAccountRepository
+	oafBotRepo  *repository.OAFBotRepository
+	cfg         *config.Config
 }
 
 const (
@@ -39,8 +41,8 @@ const (
 	billingReviewReviewed   = "reviewed"
 )
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -52,8 +54,10 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	st := subscription.EffectiveStatus(user, now)
 	pc := strings.TrimSpace(user.SubscriptionPlanCode)
 	if pc == "" {
-		pc = "free_trial"
+		pc = subscription.PlanFreeTrial
 	}
+	normPlan := subscription.NormalizePlanCode(pc)
+	cycle := deriveBillingCycleFromPlanCode(pc)
 	var expStr string
 	if user.SubscriptionExpiresAt != nil {
 		expStr = user.SubscriptionExpiresAt.In(time.UTC).Format("2006-01-02")
@@ -62,50 +66,46 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	hint := ""
 	if st == "expired" {
 		hint = "Renew your subscription to restore automation and posting."
-	} else if strings.EqualFold(pc, "free_trial") {
+	} else if strings.EqualFold(normPlan, subscription.PlanFreeTrial) {
 		hint = "Basic plan starts at 10 USDT / month"
 	}
+	limits := subscription.LimitsForUser(user)
+	usage := s.subscriptionUsage(userID)
 	return &dto.BillingSubscriptionData{
-		Plan:           pc,
+		Plan:           normPlan,
+		BillingCycle:   cycle,
 		Status:         st,
 		ExpirationDate: expStr,
 		TrialDaysLeft:  trialLeft,
 		BillingHint:    hint,
+		Limits:         planLimitsToDTO(limits),
+		Usage:          usage,
 	}, nil
 }
 
 func (s *BillingService) Plans() *dto.BillingPlansResponse {
-	items := make([]dto.BillingPlanData, 0, len(s.cfg.Billing.Plans))
-	for code, p := range s.cfg.Billing.Plans {
-		period := "month"
-		if p.PeriodDays == 7 {
-			period = "7 days"
-		} else if p.PeriodDays > 0 && p.PeriodDays != 30 {
-			period = fmt.Sprintf("%d days", p.PeriodDays)
-		}
-		price := p.Amount
-		if p.Currency != "" {
-			price = p.Amount + " " + p.Currency
-		}
-		features := p.Features
-		if len(features) == 0 {
-			features = []string{"Auto Post + Auto Reply + Auto DM", "Priority queue"}
+	catalog := subscription.Catalog()
+	items := make([]dto.BillingPlanData, 0, len(catalog))
+	for _, p := range catalog {
+		if full, ok := subscription.FindPlan(p.Code); ok {
+			p = full
 		}
 		items = append(items, dto.BillingPlanData{
-			Code:        code,
-			Name:        p.Name,
-			Price:       price,
-			Period:      period,
-			Description: p.Description,
-			Features:    features,
-			Highlight:   code == "basic_monthly",
+			Code:         p.Code,
+			Name:         p.Name,
+			Price:        fmt.Sprintf("%d %s", p.MonthlyPrice, p.Currency),
+			Period:       "month",
+			MonthlyPrice: p.MonthlyPrice,
+			YearlyPrice:  p.YearlyPrice,
+			Currency:     p.Currency,
+			Audience:     p.Audience,
+			Badge:        p.Badge,
+			Description:  p.Description,
+			Features:     p.Benefits,
+			FeatureFlags: planFeaturesToDTO(p.Features),
+			Limits:       planLimitsToDTO(p.Limits),
+			Highlight:    p.Code == subscription.PlanPlus,
 		})
-	}
-	if len(items) == 0 {
-		return &dto.BillingPlansResponse{Items: []dto.BillingPlanData{
-			{Code: "free_trial", Name: "Free Trial", Price: "0", Period: "14 days", Description: "Try before upgrade.", Features: []string{"Core automation"}, Highlight: false},
-			{Code: "basic_monthly", Name: "Basic", Price: "10 USDT", Period: "month", Description: "Full automation.", Features: []string{"Auto Post", "Auto Reply"}, Highlight: true},
-		}}
 	}
 	return &dto.BillingPlansResponse{Items: items}
 }
@@ -127,12 +127,28 @@ func (s *BillingService) PaymentMethods(_ uint) *dto.BillingPaymentMethodsRespon
 	return &dto.BillingPaymentMethodsResponse{Items: out}
 }
 
+func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
+	var usage dto.PlanUsageData
+	if s.oafBotRepo != nil {
+		if n, err := s.oafBotRepo.CountByUserID(userID); err == nil {
+			usage.OAFBots = n
+		}
+	}
+	if s.accountRepo != nil {
+		if n, err := s.accountRepo.CountByUserID(userID); err == nil {
+			usage.TwitterAccounts = n
+		}
+	}
+	return usage
+}
+
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
-	plan, ok := s.cfg.Billing.Plans[req.PlanCode]
+	plan, ok := subscription.FindPlan(req.PlanCode)
 	if !ok {
 		return nil, fmt.Errorf("unknown plan_code")
 	}
+	cycle := subscription.NormalizeBillingCycle(req.BillingCycle)
 	if !strings.EqualFold(strings.TrimSpace(req.Method), "USDT") {
 		return nil, fmt.Errorf("unsupported method")
 	}
@@ -152,8 +168,9 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 
 	o := &model.BillingOrder{
 		UserID:               userID,
-		PlanCode:             req.PlanCode,
-		Amount:               plan.Amount,
+		PlanCode:             plan.Code,
+		BillingCycle:         cycle,
+		Amount:               strconv.Itoa(subscription.PriceForCycle(plan, cycle)),
 		Currency:             plan.Currency,
 		Method:               strings.ToUpper(strings.TrimSpace(req.Method)),
 		Network:              strings.ToUpper(strings.TrimSpace(pm.Network)),
@@ -294,7 +311,8 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	out := dto.BillingOrderListItem{
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
 		UserID:               o.UserID,
-		PlanCode:             o.PlanCode,
+		PlanCode:             subscription.NormalizePlanCode(o.PlanCode),
+		BillingCycle:         normalizeOrderBillingCycle(o),
 		Amount:               o.Amount,
 		Currency:             o.Currency,
 		Method:               o.Method,
@@ -646,17 +664,17 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 			return fmt.Errorf("order could not be marked paid")
 		}
 
-		plan, ok := s.cfg.Billing.Plans[ord.PlanCode]
+		plan, ok := subscription.FindPlan(ord.PlanCode)
 		if !ok {
 			return fmt.Errorf("plan config missing for %s", ord.PlanCode)
 		}
-		period := plan.PeriodDays
-		if period <= 0 {
-			period = 30
+		cycle := normalizeOrderBillingCycle(&ord)
+		expires := paidAt.AddDate(0, 1, 0)
+		if cycle == subscription.BillingCycleYearly {
+			expires = paidAt.AddDate(1, 0, 0)
 		}
-		expires := paidAt.AddDate(0, 0, period)
 		return tx.Model(&model.User{}).Where("id = ?", ord.UserID).Updates(map[string]any{
-			"subscription_plan_code":  ord.PlanCode,
+			"subscription_plan_code":  plan.Code,
 			"subscription_status":     "active",
 			"subscription_expires_at": expires,
 		}).Error
@@ -727,6 +745,24 @@ func normalizeEVMTxHash(hex string) (string, error) {
 		return "", fmt.Errorf("invalid tx_hash")
 	}
 	return strings.ToLower(txHash.Hex()), nil
+}
+
+func deriveBillingCycleFromPlanCode(planCode string) string {
+	if strings.Contains(strings.ToLower(strings.TrimSpace(planCode)), "year") {
+		return subscription.BillingCycleYearly
+	}
+	return subscription.BillingCycleMonthly
+}
+
+func normalizeOrderBillingCycle(o *model.BillingOrder) string {
+	if o == nil {
+		return subscription.BillingCycleMonthly
+	}
+	cycle := subscription.NormalizeBillingCycle(o.BillingCycle)
+	if strings.TrimSpace(o.BillingCycle) != "" {
+		return cycle
+	}
+	return deriveBillingCycleFromPlanCode(o.PlanCode)
 }
 
 // Exported for HTTP mapping in controllers.

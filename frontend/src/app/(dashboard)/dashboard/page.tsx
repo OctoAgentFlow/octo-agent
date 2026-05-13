@@ -390,9 +390,9 @@ export default function DashboardPage() {
       <StatusOverviewCards overview={overview} />
       <UserOnboardingCard
         accountConnected={(overview?.connected_x_count ?? 0) > 0}
-        automationEnabled={automations.some((module) => module.config.enabled)}
+        automationEnabled={(overview?.connected_x_count ?? 0) > 0 && automations.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
-        activityObserved={recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0}
+        activityObserved={(overview?.connected_x_count ?? 0) > 0 && (recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0)}
       />
       <XAccountStatus overview={overview} />
       <AutomationOverview

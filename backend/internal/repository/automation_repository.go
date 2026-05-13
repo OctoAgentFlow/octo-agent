@@ -70,7 +70,20 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			} else {
 				item.NextRunAt = nil
 			}
-			if err := r.DB.Create(&item).Error; err != nil {
+			if err := r.DB.Select(
+				"UserID",
+				"Type",
+				"Enabled",
+				"State",
+				"FrequencyIntervalMinutes",
+				"FrequencyDailyLimit",
+				"Tone",
+				"SafetyRequireApproval",
+				"SafetyMaxPerHour",
+				"SafetyBlockedKeywords",
+				"LastRunAt",
+				"NextRunAt",
+			).Create(&item).Error; err != nil {
 				return err
 			}
 		}

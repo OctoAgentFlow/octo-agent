@@ -38,6 +38,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := BackfillActivityReplyFields(db); err != nil {
 		return err
 	}
+	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
+		return err
+	}
 	return BackfillUserOwnerRole(db)
 }
 
@@ -96,6 +99,28 @@ AND ref_tweet_id IS NOT NULL AND TRIM(ref_tweet_id) != ''
 UPDATE activity_logs
 SET ref_tweet_id = NULL
 WHERE type = 'reply' AND status <> 'success'
+`).Error
+}
+
+// BackfillAutomationDefaultsDisabled fixes historical rows created while the model default
+// allowed new automation_configs to inherit enabled=true from the database.
+func BackfillAutomationDefaultsDisabled(db *gorm.DB) error {
+	if err := db.Exec(`
+ALTER TABLE automation_configs
+MODIFY enabled boolean NOT NULL DEFAULT false,
+MODIFY state varchar(32) NOT NULL DEFAULT 'Paused'
+`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`
+UPDATE automation_configs ac
+LEFT JOIN twitter_accounts ta
+  ON ta.user_id = ac.user_id AND ta.status = 'connected'
+SET ac.enabled = false,
+    ac.state = 'Paused',
+    ac.next_run_at = NULL
+WHERE ta.id IS NULL
+  AND ac.enabled = true
 `).Error
 }
 

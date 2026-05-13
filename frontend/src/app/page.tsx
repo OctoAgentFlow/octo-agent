@@ -9,6 +9,7 @@ import { MarketingNavbar } from "@/components/marketing/navbar";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { DashboardPreviewSection } from "@/components/marketing/dashboard-preview-section";
 import { WorkflowSection } from "@/components/marketing/workflow-section";
+import { AutoPostSection } from "@/components/marketing/auto-post-section";
 
 export default function Home() {
   if (process.env.NEXT_PUBLIC_FRONTEND_ROLE === "admin") {
@@ -20,6 +21,7 @@ export default function Home() {
       <MarketingNavbar />
       <main className="pb-20 md:pb-0">
         <HeroSection />
+        <AutoPostSection />
         <FeatureCardsSection />
         <WorkflowSection />
         <DashboardPreviewSection />

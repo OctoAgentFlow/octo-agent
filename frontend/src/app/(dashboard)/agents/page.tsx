@@ -373,9 +373,12 @@ export default function AgentsPage() {
 
       <UserOnboardingCard
         accountConnected={accountCount > 0}
-        automationEnabled={modules.some((module) => module.config.enabled)}
+        automationEnabled={accountCount > 0 && modules.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
-        activityObserved={runtimeStatus.queueDepth > 0 || runtimeStatus.needsReview > 0 || runtimeStatus.lastSuccessKey !== "automation.time.paused"}
+        activityObserved={
+          accountCount > 0 &&
+          (runtimeStatus.queueDepth > 0 || runtimeStatus.needsReview > 0 || runtimeStatus.lastSuccessKey !== "automation.time.paused")
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-2">

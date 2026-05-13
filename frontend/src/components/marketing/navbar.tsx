@@ -67,18 +67,15 @@ export function MarketingNavbar() {
         >
           <span className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-blue-300/20 bg-white/[0.055] shadow-[0_0_22px_rgba(80,132,255,0.18)]">
             <Image
-              src="/brand/oaf-logo.png"
+              src="/brand/oaf-octopus-icon.png"
               alt={t("common.brand")}
               fill
               sizes="36px"
-              className="object-cover object-left"
+              className="object-contain p-1"
               priority
             />
           </span>
-          <span className="hidden whitespace-nowrap text-[15px] font-semibold tracking-wide text-white min-[420px]:inline">
-            <span className="sm:hidden">Octo-Agent</span>
-            <span className="hidden sm:inline">{t("common.brand")}</span>
-          </span>
+          <span className="whitespace-nowrap text-[15px] font-semibold tracking-wide text-white">{t("common.brand")}</span>
         </Link>
         <nav className="hidden items-center gap-6 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.035] px-4 py-2 text-sm text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] xl:flex">
           {navItems.map((item) => (

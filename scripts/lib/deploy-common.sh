@@ -48,17 +48,54 @@ octo_stop_from_pid_file() {
   rm -f "$pid_file"
 }
 
+octo_listen_pids() {
+  local port="$1"
+  local pids
+
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -n "${pids:-}" ]; then
+    echo "$pids"
+    return 0
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntp 2>/dev/null | awk -v port=":$port" '
+      $0 ~ port {
+        while (match($0, /pid=[0-9]+/)) {
+          pid = substr($0, RSTART + 4, RLENGTH - 4)
+          print pid
+          $0 = substr($0, RSTART + RLENGTH)
+        }
+      }
+    ' | sort -u
+  fi
+}
+
+octo_is_port_listening() {
+  local port="$1"
+
+  if [ -n "$(octo_listen_pids "$port")" ]; then
+    return 0
+  fi
+
+  if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | awk -v port=":$port" '$0 ~ port { found = 1 } END { exit found ? 0 : 1 }'; then
+    return 0
+  fi
+
+  return 1
+}
+
 octo_ensure_port_free() {
   local label="$1"
   local port="$2"
 
   local port_pids
-  port_pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
-  if [ -z "${port_pids:-}" ]; then
+  port_pids="$(octo_listen_pids "$port")"
+  if [ -z "${port_pids:-}" ] && ! octo_is_port_listening "$port"; then
     return 0
   fi
 
-  if [ "${ALLOW_KILL_PORT:-0}" = "1" ]; then
+  if [ "${ALLOW_KILL_PORT:-0}" = "1" ] && [ -n "${port_pids:-}" ]; then
     echo "[$label] ALLOW_KILL_PORT=1, stopping existing listener(s) on port $port: $port_pids"
     kill $port_pids 2>/dev/null || true
     sleep 1
@@ -81,10 +118,14 @@ octo_wait_for_port() {
   local elapsed=0
   while [ "$elapsed" -lt "$timeout_seconds" ]; do
     local running_pids
-    running_pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
-    if [ -n "${running_pids:-}" ]; then
-      echo "${running_pids%%$'\n'*}" >"$pid_file"
-      echo "[$label] deploy success (listen_pid=${running_pids%%$'\n'*}, port=$port)"
+    running_pids="$(octo_listen_pids "$port")"
+    if [ -n "${running_pids:-}" ] || octo_is_port_listening "$port"; then
+      if [ -n "${running_pids:-}" ]; then
+        echo "${running_pids%%$'\n'*}" >"$pid_file"
+        echo "[$label] deploy success (listen_pid=${running_pids%%$'\n'*}, port=$port)"
+      else
+        echo "[$label] deploy success (port=$port)"
+      fi
       return 0
     fi
 
@@ -94,6 +135,30 @@ octo_wait_for_port() {
 
   echo "[$label] deploy failed: port $port did not listen within ${timeout_seconds}s"
   return 1
+}
+
+octo_prepare_node_runtime() {
+  local label="$1"
+
+  if command -v node >/dev/null 2>&1 && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
+    echo "[$label] node=$(node -v) npm=$(npm -v)"
+    return 0
+  fi
+
+  local candidate
+  for candidate in "$HOME/.nvm/versions/node/v20.11.1/bin" "$HOME/.nvm/versions/node/v20.9.0/bin" "$HOME/.nvm/versions/node/v20.20.2/bin"; do
+    if [ -x "$candidate/node" ]; then
+      export PATH="$candidate:$PATH"
+      break
+    fi
+  done
+
+  if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
+    echo "[$label] Node.js 20.9+ is required. Current: $(node -v 2>/dev/null || echo not-found)"
+    exit 1
+  fi
+
+  echo "[$label] node=$(node -v) npm=$(npm -v)"
 }
 
 octo_yaml_port() {

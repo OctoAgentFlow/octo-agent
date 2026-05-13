@@ -14,6 +14,7 @@ import {
 } from "@/lib/app-page-refresh";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
+import { activityService } from "@/services/activity.service";
 import {
   automationService,
   type AutoDMRecipientImportApi,
@@ -112,6 +113,7 @@ export default function AgentsPage() {
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [accountCount, setAccountCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
+  const [activityCount, setActivityCount] = useState(0);
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -140,7 +142,7 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData, activityData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
@@ -148,6 +150,7 @@ export default function AgentsPage() {
           automationService.dmRecipientImports(),
           accountService.list(),
           postService.list({ page: 1, page_size: 1 }),
+          activityService.list({ page: 1, page_size: 1 }),
         ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
@@ -156,6 +159,7 @@ export default function AgentsPage() {
         setDMImports(dmImportData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
+        setActivityCount(activityData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -183,8 +187,9 @@ export default function AgentsPage() {
       automationService.dmRecipientImports(),
       accountService.list(),
       postService.list({ page: 1, page_size: 1 }),
+      activityService.list({ page: 1, page_size: 1 }),
     ])
-      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData]) => {
+      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData, activityData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
@@ -193,6 +198,7 @@ export default function AgentsPage() {
         setDMImports(dmImportData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
+        setActivityCount(activityData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
@@ -375,10 +381,7 @@ export default function AgentsPage() {
         accountConnected={accountCount > 0}
         automationEnabled={accountCount > 0 && modules.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
-        activityObserved={
-          accountCount > 0 &&
-          (runtimeStatus.queueDepth > 0 || runtimeStatus.needsReview > 0 || runtimeStatus.lastSuccessKey !== "automation.time.paused")
-        }
+        activityObserved={accountCount > 0 && activityCount > 0}
       />
 
       <div className="grid gap-4 xl:grid-cols-2">

@@ -7,6 +7,10 @@ export const dict: I18nDict = {
   "common.startFreeTrial": "Start Free Trial",
   "common.dashboard": "Dashboard",
   "common.logout": "Log out",
+  "common.cancel": "Cancel",
+  "logout.confirm.title": "Log out?",
+  "logout.confirm.description": "You will need to log in again before using the console.",
+  "logout.confirm.confirm": "Log out",
 
   // marketing nav
   "marketing.nav.capabilities": "Capabilities",

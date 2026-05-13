@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Activity,
   BadgeDollarSign,
@@ -10,7 +10,6 @@ import {
   Bot,
   FileText,
   LayoutDashboard,
-  LogOut,
   ReceiptText,
   Settings,
   ShieldCheck,
@@ -18,8 +17,6 @@ import {
   Users,
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
-import { Button } from "@/components/ui/button";
-import { signOut } from "@/lib/auth-session";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
@@ -46,16 +43,10 @@ const adminNavItems = [
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { t } = useT();
   const adminMode = isAdminFrontend();
   const visibleNavItems = adminMode ? adminNavItems : navItems.filter((item) => item.href !== "/admin");
   const activeAdminSection = searchParams.get("section") || "overview";
-
-  const onLogout = () => {
-    signOut();
-    router.replace("/login");
-  };
 
   return (
     <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
@@ -91,14 +82,6 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="surface-card mt-auto space-y-3 p-3">
-        <Button variant="outline" className="w-full justify-start" onClick={onLogout}>
-          <LogOut className="size-4" />
-          {t("common.logout")}
-        </Button>
-        <p className="text-xs text-white/55">{t("sidebar.workspace")}</p>
-        <p className="text-sm font-medium text-white">{t("sidebar.workspaceTeam")}</p>
-      </div>
     </aside>
   );
 }

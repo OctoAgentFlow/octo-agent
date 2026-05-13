@@ -20,7 +20,9 @@ Octo-Agent is a full-stack scaffold for AI-assisted social content operations.
 ### 1) Backend
 
 1. Configure MySQL and YAML:
-   - Edit `backend/configs/config.local.yaml`（或设置 `APP_ENV` 指向其它 `config.<env>.yaml`）。
+   - API uses `backend/configs/config.local.api.yaml`.
+   - Admin API uses `backend/configs/config.local.admin.yaml`.
+   - Compatibility fallback: if `APP_SERVICE` is not set, backend still reads `backend/configs/config.local.yaml`.
    - 可选：在 `backend/configs/.env` 中设置 `APP_ENV`（若不存在则默认 `local`）。
 2. Ensure MySQL is running and the target DB exists.
 3. Start backend services:
@@ -54,7 +56,7 @@ Frontend services:
 - `make frontend-local` - run default Next.js dev server (api-front)
 - `make api-front-local` - run API Front service (3000)
 - `make admin-front-local` - run Admin Front service (3001)
-- `make api-local` - run Gin API service (见 `config.local.yaml` 中 `api.port`，默认与文档示例一致）
+- `make api-local` - run Gin API service (见 `config.local.api.yaml` 中 `api.port`，默认与文档示例一致）
 - `make admin-local` - run Gin Admin service (10002)
 - `make install` - install frontend deps + tidy go mod
 - `make lint` - frontend lint + backend tests
@@ -76,5 +78,5 @@ Frontend services:
 - `frontend/`: Next.js application
 - `backend/`: Gin API service
 - `deploy/`: Nginx, Docker, Compose templates
-- `docs/`: Product/API/Database/Deployment docs
+- `docs/`: Product/API/Database/Deployment/Audit docs, see [docs/README.md](docs/README.md)
 - `scripts/`: Root helper scripts

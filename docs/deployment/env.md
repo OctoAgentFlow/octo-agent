@@ -1,7 +1,9 @@
 # Environment Variables
 
+- `NEXT_PUBLIC_FRONTEND_ROLE`（前端：`api` / `admin`，决定用户端或后台端入口行为）
 - `NEXT_PUBLIC_API_BASE_URL`（前端，见 `frontend` 本地开发说明）
-- `APP_ENV`（后端：选择加载 `backend/configs/config.<APP_ENV>.yaml`；未设置时默认为 `local`）
+- `APP_ENV`（后端：选择环境；未设置时默认为 `local`）
+- `APP_SERVICE`（后端：可选，`api` / `admin`；设置后读取 `backend/configs/config.<APP_ENV>.<APP_SERVICE>.yaml`，未设置时兼容读取 `backend/configs/config.<APP_ENV>.yaml`）
 
 HTTP API 一览见 [docs/api/README.md](../api/README.md)。
 
@@ -13,13 +15,30 @@ HTTP API 一览见 [docs/api/README.md](../api/README.md)。
 
 - Frontend (`frontend/.env.local`)
   - `NEXT_PUBLIC_API_BASE_URL=http://localhost:10001/api/v1`
+  - API Front：`NEXT_PUBLIC_FRONTEND_ROLE=api`
+  - Admin Front：`NEXT_PUBLIC_FRONTEND_ROLE=admin` 且 `NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1`
 
 - Backend runtime
   - `APP_ENV=local`
+  - API：`APP_SERVICE=api`
+  - Admin API：`APP_SERVICE=admin`
+
+## Local Service Split
+
+本地开发按四个服务拆分，和部署形态保持一致：
+
+| Service | Command | URL |
+| --- | --- | --- |
+| API Front | `make api-front-local` | `http://localhost:3000` |
+| Admin Front | `make admin-front-local` | `http://localhost:3001` |
+| API | `make api-local` | `http://localhost:10001` |
+| Admin API | `make admin-api-local` | `http://localhost:10002` |
+
+API 与 Admin API 使用拆分后的 `backend/configs/config.<env>.api.yaml` / `backend/configs/config.<env>.admin.yaml`。未设置 `APP_SERVICE` 时仍兼容旧的 `backend/configs/config.<env>.yaml`。Admin API 只挂载后台和登录相关接口，不启动用户端自动化调度任务。
 
 ## X（Twitter）OAuth 2.0（YAML）
 
-在对应环境的 YAML（如 `configs/config.local.yaml`）中配置：
+在对应 API 环境 YAML（如 `configs/config.local.api.yaml`）中配置：
 
 ```yaml
 app:

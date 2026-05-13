@@ -6,6 +6,7 @@ import { dictionaries } from "./dictionaries";
 import { readStoredLanguage, storeLanguage } from "./storage";
 import { translate } from "./translate";
 import type { I18nDict, Language, TranslateParams } from "./types";
+import { isAdminFrontend } from "@/lib/frontend-role";
 
 type I18nContextValue = {
   lang: Language;
@@ -17,20 +18,28 @@ type I18nContextValue = {
 export const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Language>("en");
+  const adminFrontend = isAdminFrontend();
+  const [lang, setLangState] = useState<Language>(adminFrontend ? "zh-CN" : "en");
 
   const setLang = useCallback((next: Language) => {
+    if (adminFrontend) {
+      setLangState("zh-CN");
+      return;
+    }
     setLangState(next);
     storeLanguage(next);
-  }, []);
+  }, [adminFrontend]);
 
   useEffect(() => {
+    if (adminFrontend) {
+      return;
+    }
     const stored = readStoredLanguage();
     if (!stored || stored === "en") return;
     // Defer restore to avoid SSR/CSR hydration text mismatches.
     const id = window.setTimeout(() => setLangState(stored), 0);
     return () => window.clearTimeout(id);
-  }, []);
+  }, [adminFrontend]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -51,4 +60,3 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
-

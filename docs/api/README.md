@@ -11,6 +11,7 @@
 | [activity.md](./activity.md) | 活动日志分页列表（含时间范围、账号筛选与 reply 扩展字段） |
 | [analytics.md](./analytics.md) | 分析概览（7/30 日活动、账号筛选、自动化拆分、内容状态统计） |
 | [billing.md](./billing.md) | 订阅/套餐/支付方式（YAML）、下单与订单查询、BEP20 Webhook |
+| [admin.md](./admin.md) | 后台管理：概览、用户列表、角色/状态管理 |
 | [post.md](./post.md) | 帖子 CRUD（真实持久化） |
 | [agent.md](./agent.md) | Agent 兼容列表（读取自动化配置的真实状态） |
 

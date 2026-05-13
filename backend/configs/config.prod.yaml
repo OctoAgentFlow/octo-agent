@@ -24,10 +24,14 @@ email:
   local:
     expose_code: false
   resend:
+    # TODO: Do not commit real API keys. Set RESEND_API_KEY in backend/configs/.env
+    # or deployment environment variables before running production.
     api_key: ""
+    # TODO: Replace with a verified Resend sender domain/address before production launch.
     from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"
+    # TODO: SES is kept only as a compatibility provider. Do not commit real AWS keys.
     access_key_id: ""
     secret_access_key: ""
     from_email: "no-reply@mail.octo-agent.com"
@@ -45,7 +49,7 @@ billing:
   order_ttl_minutes: 30
   webhook_secret: ""
   rpc_urls:
-    "56": "https://bsc-dataseed.binance.org"
+    "56": "https://go.getblock.io/37bd62f02647427693e166fbad5cc53c"
   payment_methods:
     - method: "USDT"
       network: "BEP20"

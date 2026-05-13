@@ -16,9 +16,10 @@ type AuthMode = "login" | "register";
 
 type AuthCardProps = {
   nextPath?: string;
+  adminMode?: boolean;
 };
 
-export function AuthCard({ nextPath = "/dashboard" }: AuthCardProps) {
+export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCardProps) {
   const router = useRouter();
   const { t } = useT();
   const { pushToast } = useToast();
@@ -53,21 +54,25 @@ export function AuthCard({ nextPath = "/dashboard" }: AuthCardProps) {
         </div>
 
         <div className="space-y-4">
-          <AuthModeSwitch mode={mode} onChange={setMode} />
+          {adminMode ? null : <AuthModeSwitch mode={mode} onChange={setMode} />}
           <LoginForm mode={mode} onSuccess={handleAuthSuccess} />
 
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center">
-              <span className="h-px w-full bg-white/10" />
-            </div>
-            <p className="relative mx-auto w-fit bg-[#0d1122] px-2 text-xs text-white/50">OR</p>
-          </div>
+          {adminMode ? null : (
+            <>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="h-px w-full bg-white/10" />
+                </div>
+                <p className="relative mx-auto w-fit bg-[#0d1122] px-2 text-xs text-white/50">OR</p>
+              </div>
 
-          <ConnectWalletButton className="w-full" connectLabel={t("auth.card.connectWallet")} onConnected={handleWalletConnected} />
+              <ConnectWalletButton className="w-full" connectLabel={t("auth.card.connectWallet")} onConnected={handleWalletConnected} />
 
-          <p className="rounded-xl border border-blue-300/25 bg-blue-500/10 px-3 py-2 text-xs text-blue-100/90">
-            {t("auth.card.freeTrialNote")}
-          </p>
+              <p className="rounded-xl border border-blue-300/25 bg-blue-500/10 px-3 py-2 text-xs text-blue-100/90">
+                {t("auth.card.freeTrialNote")}
+              </p>
+            </>
+          )}
         </div>
       </section>
     </>

@@ -22,13 +22,12 @@ log:
   max_age: 7
   compress: true
 email:
-  provider: "local"
+  provider: "resend"
   local:
-    expose_code: true
+    expose_code: false
   resend:
-    # TODO: Keep empty while email.provider is local. Set RESEND_API_KEY in server env when enabling resend.
-    api_key: ""
-    # TODO: Replace with a verified Resend sender only when testing real delivery.
+    # Test environment sends real verification emails through Resend.
+    api_key: "re_5h9z8KuB_Dz3mVU32rN6etBr5RmQHTCcf"
     from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"

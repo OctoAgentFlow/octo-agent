@@ -1,25 +1,75 @@
 package dto
 
 type BillingSubscriptionData struct {
-	Plan           string `json:"plan"`
-	Status         string `json:"status"`
-	ExpirationDate string `json:"expiration_date"`
-	TrialDaysLeft  int    `json:"trial_days_left"`
-	BillingHint    string `json:"billing_hint"`
+	Plan           string         `json:"plan"`
+	BillingCycle   string         `json:"billing_cycle"`
+	Status         string         `json:"status"`
+	ExpirationDate string         `json:"expiration_date"`
+	TrialDaysLeft  int            `json:"trial_days_left"`
+	BillingHint    string         `json:"billing_hint"`
+	Limits         PlanLimitsData `json:"limits"`
+	Usage          PlanUsageData  `json:"usage"`
 }
 
 type BillingPlanData struct {
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Price       string   `json:"price"`
-	Period      string   `json:"period"`
-	Description string   `json:"description"`
-	Features    []string `json:"features"`
-	Highlight   bool     `json:"highlight"`
+	Code         string            `json:"code"`
+	Name         string            `json:"name"`
+	Price        string            `json:"price"`
+	Period       string            `json:"period"`
+	MonthlyPrice int               `json:"monthly_price"`
+	YearlyPrice  int               `json:"yearly_price"`
+	Currency     string            `json:"currency"`
+	Audience     string            `json:"audience"`
+	Badge        string            `json:"badge,omitempty"`
+	Description  string            `json:"description"`
+	Features     []string          `json:"features"`
+	FeatureFlags []PlanFeatureData `json:"feature_flags"`
+	Limits       PlanLimitsData    `json:"limits"`
+	Highlight    bool              `json:"highlight"`
 }
 
 type BillingPlansResponse struct {
 	Items []BillingPlanData `json:"items"`
+}
+
+type PlanLimitsData struct {
+	MaxBots              int64 `json:"max_bots"`
+	MaxTwitterAccounts   int64 `json:"max_twitter_accounts"`
+	AIGenerationsMonthly int64 `json:"ai_generations_monthly"`
+	DailyAutoPosts       int64 `json:"daily_auto_posts"`
+	DailyAutoReplies     int64 `json:"daily_auto_replies"`
+	DailyAutoComments    int64 `json:"daily_auto_comments"`
+	DailyAutoDMs         int64 `json:"daily_auto_dms"`
+	AnalyticsDays        int64 `json:"analytics_days"`
+	TeamSeats            int64 `json:"team_seats"`
+	FullPersonaFields    bool  `json:"full_persona_fields"`
+	AutoDMImport         bool  `json:"auto_dm_import"`
+	AdvancedBotStrategy  bool  `json:"advanced_bot_strategy"`
+	BulkReview           bool  `json:"bulk_review"`
+	BotPerformance       bool  `json:"bot_performance"`
+	DataExport           bool  `json:"data_export"`
+	MultiBotMatrix       bool  `json:"multi_bot_matrix"`
+	ABTesting            bool  `json:"ab_testing"`
+	AdvancedFlowBuilder  bool  `json:"advanced_flow_builder"`
+	AdvancedRiskRules    bool  `json:"advanced_risk_rules"`
+	PrioritySupport      bool  `json:"priority_support"`
+}
+
+type PlanFeatureData struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	Available bool   `json:"available"`
+	MinPlan   string `json:"min_plan,omitempty"`
+}
+
+type PlanUsageData struct {
+	OAFBots            int64 `json:"oaf_bots"`
+	TwitterAccounts    int64 `json:"twitter_accounts"`
+	AIGenerationsMonth int64 `json:"ai_generations_month"`
+	AutoPostsToday     int64 `json:"auto_posts_today"`
+	AutoRepliesToday   int64 `json:"auto_replies_today"`
+	AutoCommentsToday  int64 `json:"auto_comments_today"`
+	AutoDMsToday       int64 `json:"auto_dms_today"`
 }
 
 // BillingPaymentMethodItem is one USDT route (multi-chain).
@@ -39,9 +89,10 @@ type BillingPaymentMethodsResponse struct {
 }
 
 type BillingCreateOrderRequest struct {
-	PlanCode string `json:"plan_code" binding:"required"`
-	Method   string `json:"method" binding:"required"`
-	Network  string `json:"network" binding:"required"`
+	PlanCode     string `json:"plan_code" binding:"required"`
+	BillingCycle string `json:"billing_cycle"`
+	Method       string `json:"method" binding:"required"`
+	Network      string `json:"network" binding:"required"`
 }
 
 type BillingCreateOrderResponse struct {
@@ -84,6 +135,7 @@ type BillingOrderListItem struct {
 	OrderID              string `json:"order_id"`
 	UserID               uint   `json:"user_id"`
 	PlanCode             string `json:"plan_code"`
+	BillingCycle         string `json:"billing_cycle"`
 	Amount               string `json:"amount"`
 	Currency             string `json:"currency"`
 	Method               string `json:"method"`

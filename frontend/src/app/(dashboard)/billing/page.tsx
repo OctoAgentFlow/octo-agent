@@ -14,6 +14,7 @@ import {
 } from "@/lib/app-page-refresh";
 import { mapPaymentMethods } from "@/lib/billing-payment-methods";
 import { billingService, type BillingOrderListItemApi } from "@/services/billing.service";
+import type { BillingPlanApi, BillingSubscriptionApi, PlanLimitsApi, PlanUsageApi } from "@/services/billing.service";
 import type {
   BillingOpsAction,
   BillingOpsSummary,
@@ -25,6 +26,8 @@ import type {
   PaymentRecord,
   PaymentStatus,
   Plan,
+  PlanLimits,
+  PlanUsage,
 } from "@/types/billing";
 
 type LoadState = "loading" | "ready" | "error";
@@ -32,7 +35,19 @@ type LoadState = "loading" | "ready" | "error";
 function mapPlanKey(code: string) {
   if (code === "free_trial") return "billing.plan.freeTrial";
   if (code === "basic_monthly" || code === "basic") return "billing.plan.basic";
+  if (code === "plus") return "Plus";
+  if (code === "pro") return "Pro";
+  if (code === "pro_plus") return "Pro+";
   return "billing.plan.basic";
+}
+
+function mapPlanName(code: string) {
+  if (code === "free_trial") return "免费试用";
+  if (code === "basic_monthly" || code === "basic") return "Basic";
+  if (code === "plus") return "Plus";
+  if (code === "pro") return "Pro";
+  if (code === "pro_plus") return "Pro+";
+  return code || "Basic";
 }
 
 function mapSubscriptionStatusKey(status: string) {
@@ -100,6 +115,78 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
   };
 }
 
+function mapLimits(item: PlanLimitsApi): PlanLimits {
+  return {
+    maxBots: item.max_bots,
+    maxTwitterAccounts: item.max_twitter_accounts,
+    aiGenerationsMonthly: item.ai_generations_monthly,
+    dailyAutoPosts: item.daily_auto_posts,
+    dailyAutoReplies: item.daily_auto_replies,
+    dailyAutoComments: item.daily_auto_comments,
+    dailyAutoDMs: item.daily_auto_dms,
+    analyticsDays: item.analytics_days,
+    teamSeats: item.team_seats,
+    fullPersonaFields: item.full_persona_fields,
+    autoDMImport: item.auto_dm_import,
+    advancedBotStrategy: item.advanced_bot_strategy,
+    bulkReview: item.bulk_review,
+    botPerformance: item.bot_performance,
+    dataExport: item.data_export,
+    multiBotMatrix: item.multi_bot_matrix,
+    abTesting: item.ab_testing,
+    advancedFlowBuilder: item.advanced_flow_builder,
+    advancedRiskRules: item.advanced_risk_rules,
+    prioritySupport: item.priority_support,
+  };
+}
+
+function mapUsage(item: PlanUsageApi): PlanUsage {
+  return {
+    oafBots: item.oaf_bots,
+    twitterAccounts: item.twitter_accounts,
+    aiGenerationsMonth: item.ai_generations_month,
+    autoPostsToday: item.auto_posts_today,
+    autoRepliesToday: item.auto_replies_today,
+    autoCommentsToday: item.auto_comments_today,
+    autoDMsToday: item.auto_dms_today,
+  };
+}
+
+function mapPlan(item: BillingPlanApi): Plan {
+  return {
+    code: item.code,
+    name: item.name,
+    monthlyPrice: item.monthly_price,
+    yearlyPrice: item.yearly_price,
+    currency: item.currency,
+    audience: item.audience,
+    badge: item.badge,
+    description: item.description,
+    features: item.features,
+    featureFlags: (item.feature_flags || []).map((feature) => ({
+      key: feature.key,
+      label: feature.label,
+      available: feature.available,
+      minPlan: feature.min_plan,
+    })),
+    limits: mapLimits(item.limits),
+    highlight: item.highlight,
+  };
+}
+
+function mapSubscription(item: BillingSubscriptionApi): CurrentSubscription {
+  return {
+    plan: item.plan,
+    planName: mapPlanName(item.plan),
+    billingCycle: item.billing_cycle === "yearly" ? "yearly" : "monthly",
+    expirationDate: item.expiration_date,
+    remainingTrialDays: item.trial_days_left,
+    statusKey: mapSubscriptionStatusKey(item.status),
+    limits: mapLimits(item.limits),
+    usage: mapUsage(item.usage),
+  };
+}
+
 const emptyOpsSummary: BillingOpsSummary = {
   total: 0,
   pending: 0,
@@ -145,36 +232,8 @@ export default function BillingPage() {
           billingService.orders(orderQueryFromFilters(paymentFilters)),
         ]);
 
-        setSubscription({
-          planKey: mapPlanKey(subscriptionData.plan),
-          expirationDate: subscriptionData.expiration_date,
-          remainingTrialDays: subscriptionData.trial_days_left,
-          statusKey: mapSubscriptionStatusKey(subscriptionData.status),
-        });
-        setPlans(
-          plansData.items.map((item) => ({
-            nameKey: mapPlanKey(item.code),
-            price: item.price,
-            periodKey: item.period === "14 days" ? "billing.plan.period.fourteenDays" : "billing.plan.period.month",
-            descriptionKey:
-              item.code === "free_trial" ? "billing.plan.freeTrial.description" : "billing.plan.basic.description",
-            featureKeys:
-              item.code === "free_trial"
-                ? [
-                    "billing.plan.features.autoPost",
-                    "billing.plan.features.autoReply",
-                    "billing.plan.features.basicAutoDm",
-                    "billing.plan.features.communitySupport",
-                  ]
-                : [
-                    "billing.plan.features.allAutomations",
-                    "billing.plan.features.unlimitedRuns",
-                    "billing.plan.features.priorityQueue",
-                    "billing.plan.features.advancedAnalytics",
-                  ],
-            highlight: item.highlight,
-          }))
-        );
+        setSubscription(mapSubscription(subscriptionData));
+        setPlans(plansData.items.map(mapPlan));
         setPaymentMethods(mapPaymentMethods(methodsData.items));
         setPaymentRecords(ordersData.items.map(mapPaymentRecord));
         setOpsSummary(ordersData.ops_summary || emptyOpsSummary);

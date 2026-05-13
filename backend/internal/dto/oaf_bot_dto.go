@@ -1,0 +1,52 @@
+package dto
+
+type OAFBotItem struct {
+	ID               uint     `json:"id"`
+	Name             string   `json:"name"`
+	TwitterAccountID uint     `json:"twitter_account_id"`
+	Occupation       string   `json:"occupation"`
+	Industry         string   `json:"industry"`
+	AgeRange         string   `json:"age_range"`
+	Gender           string   `json:"gender"`
+	Education        string   `json:"education"`
+	MBTI             string   `json:"mbti"`
+	PersonalityTags  []string `json:"personality_tags"`
+	IdentitySummary  string   `json:"identity_summary"`
+	VoiceTone        string   `json:"voice_tone"`
+	Topics           []string `json:"topics"`
+	ForbiddenTopics  []string `json:"forbidden_topics"`
+	GrowthGoal       string   `json:"growth_goal"`
+	SafetyMode       string   `json:"safety_mode"`
+	CreatedAt        string   `json:"created_at"`
+	UpdatedAt        string   `json:"updated_at"`
+}
+
+type OAFBotListResponse struct {
+	Items  []OAFBotItem   `json:"items"`
+	Usage  PlanUsageData  `json:"usage"`
+	Limits PlanLimitsData `json:"limits"`
+}
+
+type OAFBotUpsertRequest struct {
+	Name             string   `json:"name" binding:"required"`
+	TwitterAccountID uint     `json:"twitter_account_id"`
+	Occupation       string   `json:"occupation"`
+	Industry         string   `json:"industry"`
+	AgeRange         string   `json:"age_range"`
+	Gender           string   `json:"gender"`
+	Education        string   `json:"education"`
+	MBTI             string   `json:"mbti"`
+	PersonalityTags  []string `json:"personality_tags"`
+	IdentitySummary  string   `json:"identity_summary"`
+	VoiceTone        string   `json:"voice_tone"`
+	Topics           []string `json:"topics"`
+	ForbiddenTopics  []string `json:"forbidden_topics"`
+	GrowthGoal       string   `json:"growth_goal"`
+	SafetyMode       string   `json:"safety_mode"`
+}
+
+type OAFBotTestGenerateResponse struct {
+	Tweet string `json:"tweet"`
+	Reply string `json:"reply"`
+	DM    string `json:"dm"`
+}

@@ -188,6 +188,7 @@ export const dict: I18nDict = {
   "sidebar.nav.dashboard": "대시보드",
   "sidebar.nav.activity": "활동",
   "sidebar.nav.automations": "자동화",
+  "sidebar.nav.oafBots": "OAF Bot",
   "sidebar.nav.analytics": "분석",
   "sidebar.nav.billing": "결제",
   "sidebar.nav.admin": "관리",

@@ -9,7 +9,7 @@ import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, broadcastPageRefreshRequest } from "@/lib/app-page-refresh";
 import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
 import { billingService, type BillingCreateOrderResponse } from "@/services/billing.service";
-import type { PaymentMethodOption } from "@/types/billing";
+import type { BillingCycle, PaymentMethodOption } from "@/types/billing";
 
 const POLL_MS = 3000;
 
@@ -18,6 +18,7 @@ type BillingCheckoutDialogProps = {
   onOpenChange: (open: boolean) => void;
   paymentMethods: PaymentMethodOption[];
   planCode?: string;
+  billingCycle?: BillingCycle;
   onPaid?: () => void;
 };
 
@@ -25,7 +26,8 @@ export function BillingCheckoutDialog({
   open,
   onOpenChange,
   paymentMethods,
-  planCode = "basic_monthly",
+  planCode = "basic",
+  billingCycle = "monthly",
   onPaid,
 }: BillingCheckoutDialogProps) {
   const { t } = useT();
@@ -90,6 +92,7 @@ export function BillingCheckoutDialog({
     try {
       const order = await billingService.createOrder({
         plan_code: planCode,
+        billing_cycle: billingCycle,
         method: "USDT",
         network: selectedNetworkValue,
       });

@@ -35,7 +35,7 @@ type AccountService struct {
 
 const xOAuthDefaultRequestedScopes = "tweet.read users.read offline.access"
 
-var ErrFreeTwitterAccountLimit = errors.New("free accounts can connect at most 1 X account")
+var ErrFreeTwitterAccountLimit = errors.New("current plan has reached the X account limit")
 
 func NewAccountService(repo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, oauth config.XOAuthConfig) *AccountService {
 	return &AccountService{
@@ -194,14 +194,12 @@ func (s *AccountService) ensureCanBindXAccount(userID uint, twitterUserID, usern
 	if err != nil {
 		return err
 	}
-	if !subscription.IsFreeTrial(user) {
-		return nil
-	}
+	limits := subscription.LimitsForUser(user)
 	count, err := s.repo.CountByUserIDExcludingIdentity(userID, strings.TrimSpace(twitterUserID), strings.TrimSpace(username))
 	if err != nil {
 		return err
 	}
-	if count >= subscription.FreeTrialTwitterAccountLimit {
+	if count >= limits.MaxTwitterAccounts {
 		return ErrFreeTwitterAccountLimit
 	}
 	return nil

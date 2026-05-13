@@ -23,6 +23,7 @@ const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.activity", href: "/activity", icon: Activity },
   { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
+  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },

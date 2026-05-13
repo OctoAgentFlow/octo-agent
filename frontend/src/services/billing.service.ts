@@ -8,10 +8,13 @@ type ApiResponse<T> = {
 
 export type BillingSubscriptionApi = {
   plan: string;
+  billing_cycle: "monthly" | "yearly";
   status: string;
   expiration_date: string;
   trial_days_left: number;
   billing_hint: string;
+  limits: PlanLimitsApi;
+  usage: PlanUsageApi;
 };
 
 export type BillingPlanApi = {
@@ -19,9 +22,56 @@ export type BillingPlanApi = {
   name: string;
   price: string;
   period: string;
+  monthly_price: number;
+  yearly_price: number;
+  currency: string;
+  audience: string;
+  badge?: string;
   description: string;
   features: string[];
+  feature_flags: PlanFeatureApi[];
+  limits: PlanLimitsApi;
   highlight: boolean;
+};
+
+export type PlanLimitsApi = {
+  max_bots: number;
+  max_twitter_accounts: number;
+  ai_generations_monthly: number;
+  daily_auto_posts: number;
+  daily_auto_replies: number;
+  daily_auto_comments: number;
+  daily_auto_dms: number;
+  analytics_days: number;
+  team_seats: number;
+  full_persona_fields: boolean;
+  auto_dm_import: boolean;
+  advanced_bot_strategy: boolean;
+  bulk_review: boolean;
+  bot_performance: boolean;
+  data_export: boolean;
+  multi_bot_matrix: boolean;
+  ab_testing: boolean;
+  advanced_flow_builder: boolean;
+  advanced_risk_rules: boolean;
+  priority_support: boolean;
+};
+
+export type PlanFeatureApi = {
+  key: string;
+  label: string;
+  available: boolean;
+  min_plan?: string;
+};
+
+export type PlanUsageApi = {
+  oaf_bots: number;
+  twitter_accounts: number;
+  ai_generations_month: number;
+  auto_posts_today: number;
+  auto_replies_today: number;
+  auto_comments_today: number;
+  auto_dms_today: number;
 };
 
 export type BillingPaymentMethodApi = {
@@ -37,6 +87,7 @@ export type BillingPaymentMethodApi = {
 
 export type BillingCreateOrderRequest = {
   plan_code: string;
+  billing_cycle?: "monthly" | "yearly";
   method: string;
   network: string;
 };
@@ -80,6 +131,7 @@ export type BillingOrderListItemApi = {
   order_id: string;
   user_id: number;
   plan_code: string;
+  billing_cycle: "monthly" | "yearly";
   amount: string;
   currency: string;
   method: string;

@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"octo-agent/backend/internal/dto"
 	openaiint "octo-agent/backend/internal/integration/openai"
 )
 
@@ -17,6 +19,23 @@ type GenerateAutoCommentInput struct {
 	TargetTweet    string
 	Tone           string
 	BlockedWords   []string
+}
+
+type GenerateOAFBotSamplesInput struct {
+	Name            string
+	Occupation      string
+	Industry        string
+	AgeRange        string
+	Gender          string
+	Education       string
+	MBTI            string
+	PersonalityTags []string
+	IdentitySummary string
+	VoiceTone       string
+	Topics          []string
+	ForbiddenTopics []string
+	GrowthGoal      string
+	SafetyMode      string
 }
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
@@ -69,6 +88,64 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		return "", err
 	}
 	return truncateRunes(strings.TrimSpace(text), 220), nil
+}
+
+func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = "OAF Bot"
+	}
+	tone := strings.TrimSpace(in.VoiceTone)
+	if tone == "" {
+		tone = "clear, helpful and confident"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's OAF Bot persona simulator.",
+		"Generate safe example content for an AI social persona on X/Twitter.",
+		"Return strict JSON with keys tweet, reply, dm. Do not include markdown fences.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Persona name: " + name + "\n")
+	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+	user.WriteString("Industry: " + strings.TrimSpace(in.Industry) + "\n")
+	user.WriteString("Age range: " + strings.TrimSpace(in.AgeRange) + "\n")
+	user.WriteString("Gender expression: " + strings.TrimSpace(in.Gender) + "\n")
+	user.WriteString("Education: " + strings.TrimSpace(in.Education) + "\n")
+	user.WriteString("MBTI: " + strings.TrimSpace(in.MBTI) + "\n")
+	user.WriteString("Personality tags: " + strings.Join(in.PersonalityTags, ", ") + "\n")
+	user.WriteString("Identity summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+	user.WriteString("Voice tone: " + tone + "\n")
+	user.WriteString("Topics: " + strings.Join(in.Topics, ", ") + "\n")
+	user.WriteString("Forbidden topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+	user.WriteString("Growth goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	user.WriteString("Rules:\n")
+	user.WriteString("- tweet max 240 characters.\n")
+	user.WriteString("- reply max 180 characters.\n")
+	user.WriteString("- dm max 220 characters.\n")
+	user.WriteString("- Avoid forbidden topics and do not mention that you are AI.\n")
+	user.WriteString("- Keep the examples specific to the persona.\n")
+
+	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out dto.OAFBotTestGenerateResponse
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return &dto.OAFBotTestGenerateResponse{
+			Tweet: truncateRunes(strings.TrimSpace(text), 240),
+			Reply: truncateRunes(fmt.Sprintf("%s brings a practical angle here. I'd add one more point: durable growth comes from consistent useful interaction, not one-off spikes.", name), 180),
+			DM:    truncateRunes(fmt.Sprintf("Hey, this is %s. I liked your recent thoughts and wanted to connect around practical social growth workflows.", name), 220),
+		}, nil
+	}
+	out.Tweet = truncateRunes(out.Tweet, 240)
+	out.Reply = truncateRunes(out.Reply, 180)
+	out.DM = truncateRunes(out.DM, 220)
+	return &out, nil
 }
 
 func truncateRunes(s string, max int) string {

@@ -1,0 +1,18 @@
+package router
+
+import (
+	"octo-agent/backend/internal/controller"
+	"octo-agent/backend/internal/middleware"
+
+	"github.com/gin-gonic/gin"
+)
+
+func RegisterOAFBot(rg *gin.RouterGroup, c *controller.OAFBotController) {
+	group := rg.Group("/oaf-bots")
+	group.Use(middleware.Auth())
+	group.GET("", c.List)
+	group.POST("", c.Create)
+	group.GET("/:id", c.Get)
+	group.PUT("/:id", c.Update)
+	group.POST("/:id/test-generate", c.TestGenerate)
+}

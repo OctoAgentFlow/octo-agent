@@ -38,6 +38,8 @@ email:
 
 app:
   frontend_base_url: "https://test.octo-agent.com"
+  official_x_url: "https://x.com/octo_agent_flow"
+  telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
 
 x_oauth:
   client_id: "TEtuVzdUZ21RNEV2bTlIWVBjZXE6MTpjaQ"

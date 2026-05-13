@@ -6,7 +6,7 @@ Octo-Agent is a full-stack scaffold for AI-assisted social content operations.
 
 - Frontend: Next.js (App Router) + Tailwind + shadcn/ui + React Hook Form + Zod
 - Backend: Gin + GORM + MySQL (AutoMigrate on startup)
-- Deploy templates: Docker + Docker Compose + Nginx
+- Deployment: script-based four-service deployment under `scripts/`
 
 ## Environment Prerequisites
 
@@ -60,6 +60,8 @@ Frontend services:
 - `make admin-local` - run Gin Admin service (10002)
 - `make install` - install frontend deps + tidy go mod
 - `make lint` - frontend lint + backend tests
+- `./scripts/deploy-all-test.sh` - deploy test API/Admin API/API Front/Admin Front with script-managed PID files
+- `./scripts/deploy-all-prod.sh` - deploy production API/Admin API/API Front/Admin Front with script-managed PID files
 
 ## Current Scaffold Coverage
 
@@ -77,6 +79,5 @@ Frontend services:
 
 - `frontend/`: Next.js application
 - `backend/`: Gin API service
-- `deploy/`: Nginx, Docker, Compose templates
+- `scripts/`: Local helpers and script-based test/prod deployment entries
 - `docs/`: Product/API/Database/Deployment/Audit docs, see [docs/README.md](docs/README.md)
-- `scripts/`: Root helper scripts

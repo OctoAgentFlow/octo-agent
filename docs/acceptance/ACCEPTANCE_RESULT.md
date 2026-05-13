@@ -542,7 +542,7 @@ make admin-front-local
 | --- | --- | --- | --- |
 | 合约工程 | 当前无法完整验收 | 仓库无 `contracts/`、Hardhat、Foundry 或 Solidity 源码 | `backend/internal/billingevm/transfer.go` |
 | CI/CD | 当前无法完整验收 | 仓库无 `.github/workflows`，前端无测试脚本，后端部分测试仍是 placeholder | `backend/test/*.go`、`frontend/package.json` |
-| 生产级 Docker 四服务部署 | 当前无法完整验收 | 本地四服务已通过，但 Docker/Compose/Nginx 模板仍需拆分 API/Admin API 和两个前端入口 | `deploy/docker/*`、`deploy/compose/*`、`deploy/nginx/*` |
+| 脚本化四服务部署 | 当前无法完整验收 | 本地四服务已通过，测试/生产部署脚本已准备；仍需在目标服务器真实部署后验收 | `scripts/deploy-all-test.sh`、`scripts/deploy-all-prod.sh`、`docs/deployment/DEPLOYMENT_SCRIPTS.md` |
 
 ## 十七、失败项记录
 
@@ -573,7 +573,7 @@ make admin-front-local
 
 工程化后续阻塞：
 
-- Docker 四服务部署模板未完整拆分。
+- 脚本化四服务部署仍需在测试/生产服务器真实执行验收。
 - CI/CD 未配置。
 - 合约工程不存在，若产品后续需要链上合约能力，需要单独立项。
 
@@ -586,7 +586,7 @@ make admin-front-local
 - 四服务启动、health check、路由隔离、Auth、Dashboard、Posts CRUD、Automations、Activity、Analytics、Billing 下单、Settings/Profile、Admin 登录和用户管理均通过。
 - 后端测试、后端构建、前端 lint、前端 build 均通过。
 
-是否可以进入 Docker 四服务部署修复：
+是否可以进入脚本化四服务部署验收：
 
 - 可以。
-- 建议下一步优先处理 Docker/Compose/Nginx 四服务拆分，使生产/容器环境与本地已通过的四服务模型一致。
+- 建议下一步在测试服务器执行 `scripts/deploy-all-test.sh`，再按 `docs/deployment/DEPLOYMENT_SCRIPTS.md` 做四服务访问和接口验收。

@@ -15,3 +15,4 @@ frontend/.env.local
 backend/configs/.env
 backend/tmp/
 backend/bin/
+logs/

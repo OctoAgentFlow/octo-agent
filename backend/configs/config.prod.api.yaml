@@ -1,13 +1,9 @@
-# WARNING: Production compatibility config.
-# Prefer config.prod.api.yaml and config.prod.admin.yaml with APP_SERVICE.
+# WARNING: Production API config.
 # TODO: Before production deployment, replace all TODO_* values in private server config.
 
 api:
   host: "0.0.0.0"
   port: 12001
-admin:
-  host: "0.0.0.0"
-  port: 12002
 mysql:
   # TODO: Replace TODO_MYSQL_* with the production database account.
   # Must point to octo_prod.

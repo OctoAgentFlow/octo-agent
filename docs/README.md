@@ -18,15 +18,10 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 ## Deployment
 
 - `deployment/env.md`：环境变量说明。
-- `deployment/ENVIRONMENT_MATRIX.md`：local/test/prod 环境矩阵。
-- `deployment/NON_DOCKER_DEPLOYMENT_RUNBOOK.md`：测试服务器非 Docker 部署手册。
-- `deployment/RUNTIME_INSTALL_RUNBOOK.md`：测试服务器独立 Go/Node/npm runtime 安装手册。
-- `deployment/nginx.md`：Nginx 相关说明。
+- `deployment/DEPLOYMENT_SCRIPTS.md`：脚本化测试/生产部署说明。
 
 ## Audits
 
-- `audits/SERVER_AUDIT.md`：测试服务器只读审计。
-- `audits/SCRIPT_AUDIT_RESULT.md`：部署脚本静态审计。
 - `audits/CONFIG_TEST_REVIEW.md`：测试配置结构审计。
 
 ## API / Database / Product

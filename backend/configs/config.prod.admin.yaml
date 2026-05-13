@@ -1,10 +1,6 @@
-# WARNING: Production compatibility config.
-# Prefer config.prod.api.yaml and config.prod.admin.yaml with APP_SERVICE.
+# WARNING: Production Admin API config.
 # TODO: Before production deployment, replace all TODO_* values in private server config.
 
-api:
-  host: "0.0.0.0"
-  port: 12001
 admin:
   host: "0.0.0.0"
   port: 12002

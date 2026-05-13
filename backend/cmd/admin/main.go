@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("auto migrate failed: %v", err)
 	}
 
-	r := router.NewAdmin(db)
+	r := router.NewAdmin(db, cfg)
 	if err := r.Run(cfg.Admin.Address()); err != nil {
 		log.Fatalf("admin server run failed: %v", err)
 	}

@@ -131,7 +131,7 @@ export const dict: I18nDict = {
   "auth.mode.register": "注册",
 
   "auth.form.email.label": "邮箱",
-  "auth.form.email.placeholder": "you@team.com",
+  "auth.form.email.placeholder": "请输入邮箱",
   "auth.form.password.label": "密码",
   "auth.form.password.placeholder": "至少 6 位字符",
   "auth.form.confirmPassword.label": "确认密码",
@@ -151,6 +151,7 @@ export const dict: I18nDict = {
   "sidebar.nav.automations": "自动化",
   "sidebar.nav.analytics": "分析",
   "sidebar.nav.billing": "计费",
+  "sidebar.nav.admin": "后台",
   "sidebar.nav.accounts": "X 账号",
   "sidebar.nav.posts": "帖子",
   "sidebar.nav.settings": "设置",

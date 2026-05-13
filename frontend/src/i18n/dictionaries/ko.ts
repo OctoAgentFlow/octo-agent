@@ -151,6 +151,7 @@ export const dict: I18nDict = {
   "sidebar.nav.automations": "자동화",
   "sidebar.nav.analytics": "분석",
   "sidebar.nav.billing": "결제",
+  "sidebar.nav.admin": "관리",
   "sidebar.nav.accounts": "X 계정",
   "sidebar.nav.posts": "게시",
   "sidebar.nav.settings": "설정",

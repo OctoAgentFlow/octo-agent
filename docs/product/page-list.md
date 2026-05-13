@@ -9,6 +9,7 @@
 | `/unsubscribe/[token]` | Auto DM 公开退订页 | **真实**：读取/提交 `/auto-dm/unsubscribe/{token}`，无需登录 |
 | `/activity` | 活动日志 | **真实**：`GET /activities`，支持 `type/status/range/account_id/error_reason` 筛选 |
 | `/billing` | 订阅与套餐、下单、异常订单处理、对账/审核 | **真实**：`/billing/*`（含 BEP20 支付配置、订单接口、补交 tx hash、自动过期、owner/admin 对账筛选、人工审核和操作审计，见 [billing.md](../api/billing.md)） |
+| `/admin` | 后台管理首页、用户管理、运营健康概览 | **真实（Admin MVP）**：`/admin/overview`、`/admin/users`、`PATCH /admin/users/:id`；仅 `owner/admin` 可访问 |
 | `/posts` | 帖子列表 / 状态筛选 / 创建 / 详情 / 内容空状态 | **真实（MVP+）**：`GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；无内容时结合 `/accounts` 引导连接账号或创建第一条内容；创建页做发布前检查；失败内容展示原因并可重试；定时调度见 [post.md](../api/post.md) |
 | `/analytics` | 分析 | **真实（MVP+）**：`GET /analytics/overview?range=7d|30d&account_id=...`，含账号对比、失败原因、待处理项跳转 Activity、Auto DM 运营摘要与内容效果面板 |
 | `/settings` | 工作区设置 | **真实（MVP+）**：`GET/PATCH /users/me`、`PATCH /users/me/password`、`GET/PATCH /users/me/notification-settings`、本地语言偏好 |

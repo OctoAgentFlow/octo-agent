@@ -151,9 +151,16 @@ func Load() (*Config, error) {
 		env = "local"
 	}
 
-	path := fmt.Sprintf("configs/config.%s.yaml", env)
+	service, err := normalizeConfigService(os.Getenv("APP_SERVICE"))
+	if err != nil {
+		return nil, err
+	}
+	path := configFilePath(env, service)
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("config file not found for APP_ENV=%s: %s", env, path)
+		if service == "" {
+			return nil, fmt.Errorf("config file not found for APP_ENV=%s: %s", env, path)
+		}
+		return nil, fmt.Errorf("config file not found for APP_ENV=%s APP_SERVICE=%s: %s", env, service, path)
 	}
 
 	data, err := os.ReadFile(path)
@@ -245,6 +252,26 @@ func Load() (*Config, error) {
 		cfg.Billing.RpcURLs = map[string]string{}
 	}
 	return &cfg, nil
+}
+
+func normalizeConfigService(v string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "":
+		return "", nil
+	case "api":
+		return "api", nil
+	case "admin", "admin-api":
+		return "admin", nil
+	default:
+		return "", fmt.Errorf("unsupported APP_SERVICE=%s, expected api or admin", v)
+	}
+}
+
+func configFilePath(env, service string) string {
+	if service == "" {
+		return fmt.Sprintf("configs/config.%s.yaml", env)
+	}
+	return fmt.Sprintf("configs/config.%s.%s.yaml", env, service)
 }
 
 func normalizeResendFromEmail(v string) string {

@@ -9,7 +9,10 @@ import (
 )
 
 // DefaultTrialDays matches billing free_trial length for new registrations.
-const DefaultTrialDays = 7
+const DefaultTrialDays = 14
+
+// FreeTrialTwitterAccountLimit is the maximum non-disconnected X accounts for a free-trial user.
+const FreeTrialTwitterAccountLimit int64 = 1
 
 // Sentinel errors returned by AssertUserMayProduceContent for API mapping.
 var (

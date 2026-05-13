@@ -11,7 +11,7 @@ export const plans: Plan[] = [
   {
     nameKey: "billing.plan.freeTrial",
     price: "0",
-    periodKey: "billing.plan.period.sevenDays",
+    periodKey: "billing.plan.period.fourteenDays",
     descriptionKey: "billing.plan.freeTrial.description",
     featureKeys: [
       "billing.plan.features.autoPost",

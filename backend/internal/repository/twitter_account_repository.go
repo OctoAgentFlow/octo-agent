@@ -30,6 +30,22 @@ func (r *TwitterAccountRepository) CountByUserID(userID uint) (int64, error) {
 	return count, nil
 }
 
+func (r *TwitterAccountRepository) CountByUserIDExcludingIdentity(userID uint, twitterUserID, username string) (int64, error) {
+	var count int64
+	q := r.DB.Model(&model.TwitterAccount{}).Where("user_id = ? AND status <> ?", userID, "disconnected")
+	if twitterUserID != "" && username != "" {
+		q = q.Where("NOT (twitter_user_id = ? OR username = ?)", twitterUserID, username)
+	} else if twitterUserID != "" {
+		q = q.Where("twitter_user_id <> ?", twitterUserID)
+	} else if username != "" {
+		q = q.Where("username <> ?", username)
+	}
+	if err := q.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *TwitterAccountRepository) UpsertByUser(userID uint, account *model.TwitterAccount) (*model.TwitterAccount, error) {
 	var existed model.TwitterAccount
 	err := r.DB.Where("user_id = ? AND username = ?", userID, account.Username).First(&existed).Error

@@ -24,6 +24,7 @@ func RegisterAuth(rg *gin.RouterGroup, c *controller.AuthController) {
 }
 
 func RegisterAdminAuth(rg *gin.RouterGroup, c *controller.AuthController) {
+	rg.POST("/auth/email-code/send", c.SendEmailCode)
 	rg.POST("/auth/login", c.AdminLogin)
 	rg.POST("/auth/refresh", c.AdminRefresh)
 

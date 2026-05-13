@@ -10,14 +10,15 @@ import (
 )
 
 type Config struct {
-	API     ServerConfig  `yaml:"api"`
-	Admin   ServerConfig  `yaml:"admin"`
-	MySQL   MySQLConfig   `yaml:"mysql"`
-	Log     LogConfig     `yaml:"log"`
-	Email   EmailConfig   `yaml:"email"`
-	App     AppConfig     `yaml:"app"`
-	XOAuth  XOAuthConfig  `yaml:"x_oauth"`
-	Billing BillingConfig `yaml:"billing"`
+	API       ServerConfig    `yaml:"api"`
+	Admin     ServerConfig    `yaml:"admin"`
+	MySQL     MySQLConfig     `yaml:"mysql"`
+	Log       LogConfig       `yaml:"log"`
+	Email     EmailConfig     `yaml:"email"`
+	App       AppConfig       `yaml:"app"`
+	AdminAuth AdminAuthConfig `yaml:"admin_auth"`
+	XOAuth    XOAuthConfig    `yaml:"x_oauth"`
+	Billing   BillingConfig   `yaml:"billing"`
 }
 
 // BillingConfig holds USDT payment settings (loaded from YAML; do not hardcode in code).
@@ -60,6 +61,12 @@ type BillingPlanEntry struct {
 type AppConfig struct {
 	// FrontendBaseURL is the origin used after X OAuth callback redirects (e.g. http://localhost:3000).
 	FrontendBaseURL string `yaml:"frontend_base_url"`
+}
+
+// AdminAuthConfig controls passwordless admin-console login.
+type AdminAuthConfig struct {
+	Emails         []string `yaml:"emails"`
+	CodeTTLSeconds int      `yaml:"code_ttl_seconds"`
 }
 
 // XOAuthConfig holds X (Twitter) OAuth 2.0 PKCE settings for account linking.
@@ -249,6 +256,9 @@ func Load() (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.App.FrontendBaseURL) == "" {
 		cfg.App.FrontendBaseURL = "http://localhost:3000"
+	}
+	if cfg.AdminAuth.CodeTTLSeconds <= 0 {
+		cfg.AdminAuth.CodeTTLSeconds = 300
 	}
 	if cfg.Billing.OrderTTLMinutes <= 0 {
 		cfg.Billing.OrderTTLMinutes = 30

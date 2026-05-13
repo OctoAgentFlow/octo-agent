@@ -44,7 +44,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		zap.L().Fatal("init email sender failed", zap.String("provider", cfg.Email.Provider), zap.Error(err))
 	}
 	emailService := email.NewService(emailSender)
-	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode, cfg.AdminAuth)
 	walletService := service.NewWalletService(walletRepo)
 	accountService := service.NewAccountService(twitterAccountRepo, cfg.XOAuth)
 	dashboardService := service.NewDashboardService(userRepo, walletRepo, twitterAccountRepo, activityRepo)
@@ -111,7 +111,7 @@ func NewAdmin(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		zap.L().Fatal("init admin email sender failed", zap.String("provider", cfg.Email.Provider), zap.Error(err))
 	}
 	emailService := email.NewService(emailSender)
-	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode, cfg.AdminAuth)
 	billingOrderRepo := repository.NewBillingOrderRepository(db)
 	adminService := service.NewAdminService(db, cfg, userRepo, billingOrderRepo)
 	auth := controller.NewAuthController(authService)

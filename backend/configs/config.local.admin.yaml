@@ -37,6 +37,12 @@ email:
 app:
   frontend_base_url: "http://localhost:3000"
 
+admin_auth:
+  emails:
+    - "owner@example.com"
+    - "ops@example.com"
+  code_ttl_seconds: 300
+
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"

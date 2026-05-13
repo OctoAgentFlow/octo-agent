@@ -49,13 +49,13 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCar
           <p className="text-xs tracking-wide text-blue-200/85 uppercase">{t("auth.card.kicker")}</p>
           <h2 className="text-2xl font-semibold text-white">{t("auth.card.title")}</h2>
           <p className="text-sm text-white/65">
-            {mode === "login" ? t("auth.card.subtitle.login") : t("auth.card.subtitle.register")}
+            {adminMode ? "请输入管理员邮箱并使用验证码登录后台。" : mode === "login" ? t("auth.card.subtitle.login") : t("auth.card.subtitle.register")}
           </p>
         </div>
 
         <div className="space-y-4">
           {adminMode ? null : <AuthModeSwitch mode={mode} onChange={setMode} />}
-          <LoginForm mode={mode} onSuccess={handleAuthSuccess} />
+          <LoginForm mode={mode} adminMode={adminMode} onSuccess={handleAuthSuccess} />
 
           {adminMode ? null : (
             <>

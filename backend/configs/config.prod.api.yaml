@@ -51,8 +51,7 @@ x_oauth:
 llm:
   default_provider: "openai"
   openai:
-    # TODO: Set through private production config or OPENAI_API_KEY. Do not use test keys in production.
-    api_key: "TODO_OPENAI_API_KEY"
+    api_key: "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"
     model: "gpt-4.1-mini"
     base_url: "https://api.openai.com/v1"
     timeout_sec: 20

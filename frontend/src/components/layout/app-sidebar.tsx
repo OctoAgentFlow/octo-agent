@@ -11,12 +11,14 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  ShieldCheck,
   UserCircle,
   Users,
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth-session";
+import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -26,6 +28,7 @@ const navItems = [
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
+  { labelKey: "sidebar.nav.admin", href: "/admin", icon: ShieldCheck },
   { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
   { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
@@ -34,6 +37,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useT();
+  const visibleNavItems = isAdminFrontend() ? navItems.filter((item) => item.href === "/admin") : navItems.filter((item) => item.href !== "/admin");
 
   const onLogout = () => {
     signOut();
@@ -47,7 +51,7 @@ export function AppSidebar() {
         <span className="text-sm font-semibold tracking-wide text-white">{t("common.brand")}</span>
       </div>
       <nav className="space-y-1">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link

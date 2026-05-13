@@ -151,6 +151,7 @@ export const dict: I18nDict = {
   "sidebar.nav.automations": "自動化",
   "sidebar.nav.analytics": "分析",
   "sidebar.nav.billing": "請求",
+  "sidebar.nav.admin": "管理",
   "sidebar.nav.accounts": "X アカウント",
   "sidebar.nav.posts": "投稿",
   "sidebar.nav.settings": "設定",

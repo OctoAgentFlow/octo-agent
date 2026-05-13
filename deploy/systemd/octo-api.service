@@ -1,0 +1,20 @@
+[Unit]
+Description=Octo Agent Test API
+After=network.target
+
+[Service]
+Type=simple
+User=octo
+Group=octo
+WorkingDirectory=/opt/octo-agent/current/backend
+EnvironmentFile=/etc/octo-agent/test/backend.env
+Environment=APP_SERVICE=api
+Environment=PATH=/opt/octo-agent/runtime/go/current/bin:/opt/octo-agent/runtime/node/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/octo-agent/current/backend/bin/octo-api
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

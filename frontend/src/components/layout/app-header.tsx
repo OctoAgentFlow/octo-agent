@@ -15,6 +15,7 @@ import {
   subscribePageRefreshComplete,
 } from "@/lib/app-page-refresh";
 import { cn } from "@/lib/utils";
+import { isAdminFrontend } from "@/lib/frontend-role";
 
 export function AppHeader() {
   const { t } = useT();
@@ -74,12 +75,14 @@ export function AppHeader() {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <LanguageSwitcher className="hidden sm:block" />
-        <ConnectWalletButton
-          className="hidden sm:inline-flex"
-          connectLabel={t("auth.card.connectWallet")}
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-        />
+        {isAdminFrontend() ? null : (
+          <ConnectWalletButton
+            className="hidden sm:inline-flex"
+            connectLabel={t("auth.card.connectWallet")}
+            onConnected={handleConnected}
+            onDisconnected={handleDisconnected}
+          />
+        )}
         <span className="stable-meta-chip hidden rounded-full border border-white/15 bg-white/6 px-2 py-1 text-xs text-white/60 sm:inline-flex">
           {syncedLabel}
         </span>

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { FAQSection } from "@/components/marketing/faq-section";
 import { FeatureCardsSection } from "@/components/marketing/feature-cards-section";
 import { MarketingFooter } from "@/components/marketing/footer";
@@ -9,6 +11,10 @@ import { DashboardPreviewSection } from "@/components/marketing/dashboard-previe
 import { WorkflowSection } from "@/components/marketing/workflow-section";
 
 export default function Home() {
+  if (process.env.NEXT_PUBLIC_FRONTEND_ROLE === "admin") {
+    redirect("/admin");
+  }
+
   return (
     <div className="surface-page relative min-h-screen overflow-hidden">
       <MarketingNavbar />

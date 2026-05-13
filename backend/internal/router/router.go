@@ -99,10 +99,28 @@ func newEmailSender(cfg *config.Config) (email.EmailSender, error) {
 	}
 }
 
-func NewAdmin(_ *gorm.DB) *gin.Engine {
+func NewAdmin(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	r := newBaseRouter()
 	h := controller.NewHealthController()
+	userRepo := repository.NewUserRepository(db)
+	walletRepo := repository.NewWalletRepository(db)
+	verificationRepo := repository.NewEmailVerificationRepository(db)
+	notificationSettingRepo := repository.NewUserNotificationSettingRepository(db)
+	emailSender, err := newEmailSender(cfg)
+	if err != nil {
+		zap.L().Fatal("init admin email sender failed", zap.String("provider", cfg.Email.Provider), zap.Error(err))
+	}
+	emailService := email.NewService(emailSender)
+	authService := service.NewAuthService(userRepo, walletRepo, verificationRepo, notificationSettingRepo, emailService, cfg.Email.Local.ExposeCode)
+	billingOrderRepo := repository.NewBillingOrderRepository(db)
+	adminService := service.NewAdminService(db, cfg, userRepo, billingOrderRepo)
+	auth := controller.NewAuthController(authService)
+	admin := controller.NewAdminController(adminService)
+
 	r.GET("/health", h.Ping)
 	r.GET("/admin/health", h.Ping)
+	v1 := r.Group("/api/v1")
+	RegisterAdminAuth(v1, auth)
+	RegisterAdmin(v1, admin)
 	return r
 }

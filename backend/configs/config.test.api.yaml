@@ -1,0 +1,72 @@
+# WARNING: Test API config only. Do not use for production.
+# TODO: Before production, move secrets to server private config or secret manager.
+
+api:
+  host: "0.0.0.0"
+  port: 11001
+mysql:
+  # TODO: Replace TODO_MYSQL_* with the test database account.
+  # Must point to octo_test, never octo_prod.
+  data_source: "TODO_MYSQL_DSN"
+  max_idle_conns: 10
+  max_open_conns: 100
+  max_lifetime: 3600
+  max_idletime: 1800
+log:
+  level: "debug"
+  encoding: "json"
+  api_output_path: "logs/api.log"
+  admin_output_path: "logs/admin.log"
+  max_size: 100
+  max_backups: 30
+  max_age: 7
+  compress: true
+email:
+  provider: "local"
+  local:
+    expose_code: true
+  resend:
+    # TODO: Keep empty while email.provider is local. Set RESEND_API_KEY in server env when enabling resend.
+    api_key: ""
+    # TODO: Replace with a verified Resend sender only when testing real delivery.
+    from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
+  ses:
+    region: "ap-southeast-1"
+    # TODO: SES is kept only as a compatibility provider. Do not commit real AWS keys.
+    access_key_id: ""
+    secret_access_key: ""
+    from_email: "no-reply@mail.octo-agent.com"
+
+app:
+  frontend_base_url: "https://test.octo-agent.com"
+
+x_oauth:
+  client_id: "TODO_X_CLIENT_ID"
+  client_secret: "TODO_X_CLIENT_SECRET"
+  redirect_uri: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback"
+  state_secret: "TODO_X_STATE_SECRET"
+
+billing:
+  order_ttl_minutes: 30
+  webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
+  rpc_urls:
+    "56": "TODO_BSC_RPC_URL"
+  payment_methods:
+    - method: "USDT"
+      network: "BEP20"
+      chain_id: 56
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 18
+      is_default: true
+      note: "推荐使用 BEP20，手续费更低"
+  plans:
+    basic_monthly:
+      name: "Basic"
+      amount: "10"
+      currency: "USDT"
+      period_days: 30
+      description: "Full automation for one month."
+      features:
+        - "Auto Post + Auto Reply + Auto DM"
+        - "Priority queue"

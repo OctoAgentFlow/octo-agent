@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Link2, PlugZap, Settings, Unplug } from "lucide-react";
+import { Link2, PlugZap, Unplug } from "lucide-react";
 
 import type { ConnectedXAccount } from "@/types/accounts";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,6 @@ import { useT } from "@/i18n/use-t";
 
 type AccountCardProps = {
   account: ConnectedXAccount;
-  onManage: (id: string) => void;
   onReconnect: (id: string) => void;
   onDisconnect: (id: string) => Promise<void>;
   isDisconnecting?: boolean;
@@ -27,7 +26,7 @@ function statusLabel(status: ConnectedXAccount["status"]) {
   return "accounts.status.disconnected";
 }
 
-export function AccountCard({ account, onManage, onReconnect, onDisconnect, isDisconnecting = false }: AccountCardProps) {
+export function AccountCard({ account, onReconnect, onDisconnect, isDisconnecting = false }: AccountCardProps) {
   const { t } = useT();
   return (
     <Card className="p-4 md:p-5">
@@ -64,10 +63,6 @@ export function AccountCard({ account, onManage, onReconnect, onDisconnect, isDi
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => onManage(account.id)}>
-            <Settings className="size-4" />
-            {t("accounts.actions.manage")}
-          </Button>
           {account.status === "needs_reauth" ? (
             <Button onClick={() => onReconnect(account.id)}>
               <PlugZap className="size-4" />

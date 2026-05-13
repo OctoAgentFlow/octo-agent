@@ -152,9 +152,6 @@ export function AccountsClient() {
     router.replace(pathname);
   }, [fetchAccounts, pathname, pushToast, router, searchParams]);
 
-  const onManage = (id: string) => {
-    console.log("manage account", id);
-  };
   const onReconnect = (id: string) => {
     console.log("reconnect account", id);
   };
@@ -231,7 +228,6 @@ export function AccountsClient() {
         <div className="space-y-3">
           <AccountList
             accounts={accounts}
-            onManage={onManage}
             onReconnect={onReconnect}
             onDisconnect={onDisconnect}
             disconnectingAccountId={disconnectingAccountId}

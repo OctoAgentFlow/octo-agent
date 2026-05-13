@@ -154,7 +154,7 @@ export const dict: I18nDict = {
   "marketing.footer.contact": "联系",
 
   "auth.brand.title": "用 AI 运营副驾把社交增长跑起来。",
-  "auth.brand.subtitle": "邮箱优先，覆盖所有用户；钱包入口，面向 Web3 原生团队。追求稳定日常执行，而非“概念演示”。",
+  "auth.brand.subtitle": "邮箱登录快速开始，钱包连接适配 Web3 团队协作。让内容发布、回复与私信转化稳定自动运行。",
   "auth.brand.points.one": "自动发推、自动回复、自动私信，一套工作流打通。",
   "auth.brand.points.two": "同时为 Web2 创作者与 Web3 团队设计。",
   "auth.brand.points.three": "先免费试用，按月订阅轻量扩展。",

@@ -35,6 +35,7 @@ var (
 	ErrEmailCodeRateLimited    = errors.New("please retry after cooldown")
 	ErrSendVerificationEmail   = errors.New("failed to send verification email")
 	ErrPersistVerificationCode = errors.New("failed to persist verification code")
+	ErrAdminLoginForbidden     = errors.New("admin access forbidden")
 )
 
 func NewAuthService(
@@ -177,15 +178,20 @@ func (s *AuthService) VerifyEmailCode(req dto.VerifyEmailCodeRequest) (*dto.Veri
 }
 
 func (s *AuthService) Login(req dto.LoginRequest) (*dto.AuthResponse, error) {
-	user, err := s.userRepo.GetByEmail(strings.ToLower(strings.TrimSpace(req.Email)))
+	user, err := s.authenticateUser(req)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, errors.New("invalid email or password")
-		}
 		return nil, err
 	}
-	if !utils.CheckPassword(user.Password, req.Password) {
-		return nil, errors.New("invalid email or password")
+	return s.issueAuth(user)
+}
+
+func (s *AuthService) AdminLogin(req dto.LoginRequest) (*dto.AuthResponse, error) {
+	user, err := s.authenticateUser(req)
+	if err != nil {
+		return nil, err
+	}
+	if !canAccessAdminFrontend(user) {
+		return nil, ErrAdminLoginForbidden
 	}
 	return s.issueAuth(user)
 }
@@ -194,6 +200,33 @@ func (s *AuthService) Refresh(req dto.RefreshRequest) (*dto.TokenData, error) {
 	claims, err := appjwt.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
 		return nil, errors.New("invalid refresh token")
+	}
+	accessToken, exp, err := appjwt.SignAccessToken(claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	refreshToken, err := appjwt.SignRefreshToken(claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.TokenData{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    exp,
+	}, nil
+}
+
+func (s *AuthService) AdminRefresh(req dto.RefreshRequest) (*dto.TokenData, error) {
+	claims, err := appjwt.ParseRefreshToken(req.RefreshToken)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	user, err := s.userRepo.GetByID(claims.UserID)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	if !canAccessAdminFrontend(user) {
+		return nil, ErrAdminLoginForbidden
 	}
 	accessToken, exp, err := appjwt.SignAccessToken(claims.UserID)
 	if err != nil {
@@ -228,6 +261,17 @@ func (s *AuthService) Me(userID uint) (*dto.MeResponse, error) {
 		me.WalletAddress = wallet.Address
 	}
 	return me, nil
+}
+
+func (s *AuthService) AdminMe(userID uint) (*dto.MeResponse, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !canAccessAdminFrontend(user) {
+		return nil, ErrAdminLoginForbidden
+	}
+	return userToMeResponse(user), nil
 }
 
 func (s *AuthService) UpdateMe(userID uint, req dto.UpdateMeRequest) (*dto.MeResponse, error) {
@@ -385,6 +429,38 @@ func (s *AuthService) issueAuth(user *model.User) (*dto.AuthResponse, error) {
 			ExpiresIn:    exp,
 		},
 	}, nil
+}
+
+func (s *AuthService) authenticateUser(req dto.LoginRequest) (*model.User, error) {
+	user, err := s.userRepo.GetByEmail(strings.ToLower(strings.TrimSpace(req.Email)))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("invalid email or password")
+		}
+		return nil, err
+	}
+	if !utils.CheckPassword(user.Password, req.Password) {
+		return nil, errors.New("invalid email or password")
+	}
+	return user, nil
+}
+
+func userToMeResponse(user *model.User) *dto.MeResponse {
+	return &dto.MeResponse{
+		ID:     user.ID,
+		Email:  user.Email,
+		Name:   user.Name,
+		Status: user.Status,
+		Role:   user.Role,
+	}
+}
+
+func canAccessAdminFrontend(user *model.User) bool {
+	if user == nil || strings.ToLower(strings.TrimSpace(user.Status)) != "active" {
+		return false
+	}
+	role := strings.ToLower(strings.TrimSpace(user.Role))
+	return role == "owner" || role == "admin"
 }
 
 func (s *AuthService) verifyRegisterCode(email, code string) error {

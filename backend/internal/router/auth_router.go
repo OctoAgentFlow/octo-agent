@@ -22,3 +22,12 @@ func RegisterAuth(rg *gin.RouterGroup, c *controller.AuthController) {
 	user.GET("/me/notification-settings", c.NotificationSettings)
 	user.PATCH("/me/notification-settings", c.UpdateNotificationSettings)
 }
+
+func RegisterAdminAuth(rg *gin.RouterGroup, c *controller.AuthController) {
+	rg.POST("/auth/login", c.Login)
+	rg.POST("/auth/refresh", c.Refresh)
+
+	user := rg.Group("/users")
+	user.Use(middleware.Auth())
+	user.GET("/me", c.Me)
+}

@@ -171,6 +171,7 @@ export const dict: I18nDict = {
   "sidebar.nav.automations": "Automations",
   "sidebar.nav.analytics": "Analytics",
   "sidebar.nav.billing": "Billing",
+  "sidebar.nav.admin": "Admin",
   "sidebar.nav.accounts": "X Accounts",
   "sidebar.nav.posts": "Posts",
   "sidebar.nav.settings": "Settings",

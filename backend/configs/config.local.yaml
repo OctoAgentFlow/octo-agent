@@ -25,10 +25,14 @@ email:
   local:
     expose_code: true
   resend:
+    # TODO: Do not commit real API keys. Set RESEND_API_KEY in backend/configs/.env
+    # or deployment environment variables when enabling provider: "resend".
     api_key: ""
+    # TODO: Replace with a verified Resend sender domain/address for production.
     from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"
+    # TODO: SES is kept only as a compatibility provider. Do not commit real AWS keys.
     access_key_id: ""
     secret_access_key: ""
     from_email: "no-reply@mail.octo-agent.com"

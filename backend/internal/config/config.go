@@ -25,12 +25,16 @@ type BillingConfig struct {
 	OrderTTLMinutes int    `yaml:"order_ttl_minutes"`
 	WebhookSecret   string `yaml:"webhook_secret"`
 	// RpcURLs maps chain id as string (e.g. "56", "1") to JSON-RPC HTTP endpoint for EVM verification.
-	RpcURLs        map[string]string           `yaml:"rpc_urls"`
-	PaymentMethods []PaymentMethodConfig       `yaml:"payment_methods"`
-	Plans          map[string]BillingPlanEntry `yaml:"plans"`
+	RpcURLs map[string]string `yaml:"rpc_urls"`
+	// WssURLs maps chain id as string to WebSocket endpoints for future chain listeners.
+	WssURLs map[string]string `yaml:"wss_urls"`
+	// ExplorerAPIKeys stores per-explorer API keys for future reconciliation fallbacks.
+	ExplorerAPIKeys map[string]string           `yaml:"explorer_api_keys"`
+	PaymentMethods  []PaymentMethodConfig       `yaml:"payment_methods"`
+	Plans           map[string]BillingPlanEntry `yaml:"plans"`
 }
 
-// PaymentMethodConfig is one USDT route (MVP: BEP20 only).
+// PaymentMethodConfig is one USDT payment route.
 type PaymentMethodConfig struct {
 	Method          string `yaml:"method"`
 	Network         string `yaml:"network"`
@@ -250,6 +254,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.Billing.RpcURLs == nil {
 		cfg.Billing.RpcURLs = map[string]string{}
+	}
+	if cfg.Billing.WssURLs == nil {
+		cfg.Billing.WssURLs = map[string]string{}
+	}
+	if cfg.Billing.ExplorerAPIKeys == nil {
+		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
 	return &cfg, nil
 }

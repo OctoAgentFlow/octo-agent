@@ -25,6 +25,7 @@ echo "[$LABEL] role=$NEXT_PUBLIC_FRONTEND_ROLE_VALUE api=$NEXT_PUBLIC_API_BASE_U
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 cd "$WEB_DIR"
+octo_prepare_node_runtime "$LABEL"
 
 if [ ! -d node_modules ]; then
   echo "[$LABEL] node_modules not found, running npm install"

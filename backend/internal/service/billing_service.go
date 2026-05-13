@@ -496,8 +496,8 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	}
 
 	net := strings.ToUpper(strings.TrimSpace(req.Network))
-	if net != "BEP20" {
-		return fmt.Errorf("only BEP20 is supported in current MVP")
+	if net == "" {
+		return fmt.Errorf("network is required")
 	}
 
 	orderID, err := strconv.ParseUint(strings.TrimSpace(req.OrderID), 10, 64)
@@ -541,10 +541,6 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 	if now.After(order.ExpiredAt) {
 		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
 		return ErrBillingOrderExpired
-	}
-
-	if net != "BEP20" {
-		return fmt.Errorf("unsupported network for on-chain confirmation")
 	}
 
 	var conflict int64

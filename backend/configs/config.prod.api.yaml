@@ -49,7 +49,13 @@ billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
   rpc_urls:
-    "56": "TODO_BSC_RPC_URL"
+    "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
+    "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
+  wss_urls:
+    "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
+    "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
+  explorer_api_keys:
+    etherscan: "SBSIVP2NBF2GY5XUT7SD1DNDC1A2VEKS86"
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -59,6 +65,14 @@ billing:
       decimals: 18
       is_default: true
       note: "推荐使用 BEP20，手续费更低"
+    - method: "USDT"
+      network: "ERC20"
+      chain_id: 1
+      token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      receiver_address: "TODO_PROD_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "ERC20 主网 USDT，适合从以太坊主网付款"
   plans:
     basic_monthly:
       name: "Basic"

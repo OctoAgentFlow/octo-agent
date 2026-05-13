@@ -5,9 +5,9 @@ admin:
   host: "0.0.0.0"
   port: 12002
 mysql:
-  # TODO: Replace TODO_MYSQL_* with the production database account.
-  # Must point to octo_prod.
-  data_source: "TODO_MYSQL_USER:TODO_MYSQL_PASSWORD@tcp(TODO_MYSQL_HOST:3306)/octo_prod?timeout=60s&readTimeout=180s&writeTimeout=180s&charset=utf8mb4&parseTime=true"
+  # Production Admin API database is configured to use the shared RDS octo_prod schema.
+  # Keep this pointed at octo_prod; never use this config for test deployments.
+  data_source: "admin:6HNzatYAu]+G@tcp(database-1.cdeiw4yyml4x.ap-southeast-1.rds.amazonaws.com:3306)/octo_prod?timeout=10s&readTimeout=10s&writeTimeout=10s&charset=utf8mb4&parseTime=true&multiStatements=true"
   max_idle_conns: 10
   max_open_conns: 100
   max_lifetime: 3600

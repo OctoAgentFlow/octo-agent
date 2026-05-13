@@ -44,6 +44,7 @@ x_oauth:
   client_secret: "TODO_X_CLIENT_SECRET"
   redirect_uri: "https://octo-agent.com/api/v1/accounts/oauth/x/callback"
   state_secret: "TODO_X_STATE_SECRET"
+  scopes: "tweet.read users.read offline.access"
 
 billing:
   order_ttl_minutes: 30

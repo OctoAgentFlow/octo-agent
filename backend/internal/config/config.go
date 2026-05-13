@@ -68,6 +68,7 @@ type XOAuthConfig struct {
 	ClientSecret string `yaml:"client_secret"`
 	RedirectURI  string `yaml:"redirect_uri"`
 	StateSecret  string `yaml:"state_secret"`
+	Scopes       string `yaml:"scopes"`
 }
 
 type ServerConfig struct {

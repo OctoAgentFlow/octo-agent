@@ -42,6 +42,7 @@ x_oauth:
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
   state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  scopes: "tweet.read users.read offline.access"
 
 billing:
   order_ttl_minutes: 30

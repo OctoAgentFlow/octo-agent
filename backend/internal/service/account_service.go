@@ -31,7 +31,7 @@ type AccountService struct {
 	httpClient *http.Client
 }
 
-const xOAuthRequestedScopes = "tweet.read tweet.write users.read offline.access dm.read dm.write"
+const xOAuthDefaultRequestedScopes = "tweet.read users.read offline.access"
 
 func NewAccountService(repo *repository.TwitterAccountRepository, oauth config.XOAuthConfig) *AccountService {
 	return &AccountService{
@@ -93,7 +93,7 @@ func (s *AccountService) StartXOAuth(ctx context.Context, userID uint) (*dto.OAu
 	q.Set("response_type", "code")
 	q.Set("client_id", clientID)
 	q.Set("redirect_uri", redirectURI)
-	q.Set("scope", xOAuthRequestedScopes)
+	q.Set("scope", s.requestedOAuthScopes())
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
@@ -142,7 +142,7 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 		Followers:     "",
 		AccessToken:   tokens.AccessToken,
 		RefreshToken:  tokens.RefreshToken,
-		OAuthScopes:   normalizedOAuthScopes(tokens.Scope),
+		OAuthScopes:   s.normalizedTokenScopes(tokens.Scope),
 	}
 	if account.Username == "" {
 		zap.L().Warn("x oauth: profile missing username",
@@ -354,6 +354,22 @@ func (s *AccountService) signOAuthState(data string) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+func (s *AccountService) requestedOAuthScopes() string {
+	scopes := normalizedOAuthScopes(s.oauth.Scopes)
+	if scopes == "" {
+		return xOAuthDefaultRequestedScopes
+	}
+	return scopes
+}
+
+func (s *AccountService) normalizedTokenScopes(scope string) string {
+	scopes := normalizedOAuthScopes(scope)
+	if scopes == "" {
+		return s.requestedOAuthScopes()
+	}
+	return scopes
+}
+
 func sha256Bytes(s string) []byte {
 	sum := sha256.Sum256([]byte(s))
 	return sum[:]
@@ -398,7 +414,7 @@ func truncateForLog(s string, max int) string {
 func normalizedOAuthScopes(scope string) string {
 	fields := strings.Fields(strings.TrimSpace(scope))
 	if len(fields) == 0 {
-		return xOAuthRequestedScopes
+		return ""
 	}
 	return strings.Join(fields, " ")
 }

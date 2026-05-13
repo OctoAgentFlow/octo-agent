@@ -12,6 +12,8 @@ export const dict: I18nDict = {
   "marketing.nav.workflow": "워크플로",
   "marketing.nav.pricing": "요금",
   "marketing.nav.faq": "FAQ",
+  "marketing.nav.openMenu": "내비게이션 메뉴 열기",
+  "marketing.nav.closeMenu": "내비게이션 메뉴 닫기",
 
   "marketing.hero.badge": "AI 소셜 운영",
   "marketing.hero.title": "소셜 성장을 자동 조종으로.",

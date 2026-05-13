@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
@@ -58,10 +59,18 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
-      <div className="mb-8 flex items-center gap-2">
-        <span className="inline-block size-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-400" />
-        <span className="text-sm font-semibold tracking-wide text-white">{t("common.brand")}</span>
-      </div>
+      <Link href="/" className="mb-8 inline-flex w-fit items-center rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-blue-300/70">
+        <span className="relative block h-9 w-32 overflow-hidden rounded-md border border-white/10 bg-[#060915]">
+          <Image
+            src="/brand/oaf-logo.png"
+            alt={t("common.brand")}
+            fill
+            sizes="128px"
+            className="object-cover object-left"
+            priority
+          />
+        </span>
+      </Link>
       <nav className="space-y-1">
         {visibleNavItems.map((item) => {
           const active = "section" in item

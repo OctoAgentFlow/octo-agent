@@ -12,6 +12,8 @@ export const dict: I18nDict = {
   "marketing.nav.workflow": "Процесс",
   "marketing.nav.pricing": "Тарифы",
   "marketing.nav.faq": "FAQ",
+  "marketing.nav.openMenu": "Открыть меню навигации",
+  "marketing.nav.closeMenu": "Закрыть меню навигации",
 
   "marketing.hero.badge": "AI Social Operations",
   "marketing.hero.title": "Пусть рост в соцсетях работает на автопилоте.",

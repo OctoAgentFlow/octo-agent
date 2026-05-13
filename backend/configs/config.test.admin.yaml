@@ -41,9 +41,9 @@ app:
 
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
-  client_secret: "TODO_X_CLIENT_SECRET"
+  client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
   redirect_uri: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback"
-  state_secret: "TODO_X_STATE_SECRET"
+  state_secret: "T9@vQ7#kL2!zX5$M8^pR"
 
 billing:
   order_ttl_minutes: 30

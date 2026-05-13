@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, RefreshCw, Send, Users } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, MessageSquareText, RefreshCw, Send, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ const automationIcon = {
   post: FileText,
   reply: RefreshCw,
   dm: Send,
+  comment: MessageSquareText,
 } satisfies Record<AnalyticsAutomationType, typeof FileText>;
 
 const analyticsRanges: AnalyticsRange[] = ["7d", "30d"];

@@ -7,6 +7,7 @@ import (
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/controller"
 	"octo-agent/backend/internal/email"
+	openaiint "octo-agent/backend/internal/integration/openai"
 	"octo-agent/backend/internal/jobs"
 	"octo-agent/backend/internal/middleware"
 	"octo-agent/backend/internal/repository"
@@ -37,6 +38,8 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoDMRecipientRuleRepo := repository.NewAutoDMRecipientRuleRepository(db)
 	autoDMRecipientImportRepo := repository.NewAutoDMRecipientImportRepository(db)
 	autoDMTaskRepo := repository.NewAutoDMTaskRepository(db)
+	autoCommentTargetRepo := repository.NewAutoCommentTargetRepository(db)
+	autoCommentTaskRepo := repository.NewAutoCommentTaskRepository(db)
 	verificationRepo := repository.NewEmailVerificationRepository(db)
 	notificationSettingRepo := repository.NewUserNotificationSettingRepository(db)
 	emailSender, err := newEmailSender(cfg)
@@ -52,16 +55,26 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	activityService := service.NewActivityService(activityRepo, twitterAccountRepo)
 	analyticsService := service.NewAnalyticsService(activityRepo, postRepo, twitterAccountRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, autoDMTaskRepo)
 	agentService := service.NewAgentService(automationRepo)
+	openaiClient := openaiint.NewClient(openaiint.Config{
+		APIKey:      cfg.LLM.OpenAI.APIKey,
+		Model:       cfg.LLM.OpenAI.Model,
+		BaseURL:     cfg.LLM.OpenAI.BaseURL,
+		TimeoutSec:  cfg.LLM.OpenAI.TimeoutSec,
+		MaxTokens:   cfg.LLM.OpenAI.MaxTokens,
+		Temperature: cfg.LLM.OpenAI.Temperature,
+	})
+	aiService := service.NewAIService(openaiClient)
 	billingOrderRepo := repository.NewBillingOrderRepository(db)
 	billingService := service.NewBillingService(userRepo, billingOrderRepo, cfg)
 	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo)
 	autoReplyService := service.NewAutoReplyService(twitterAccountRepo, automationRepo, activityRepo, replyReservationRepo, userRepo)
 	autoDMService := service.NewAutoDMService(twitterAccountRepo, automationRepo, activityRepo, autoDMTaskRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, userRepo, cfg.App.FrontendBaseURL)
+	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, activityRepo, userRepo, aiService)
 	a := controller.NewAuthController(authService)
 	wc := controller.NewWalletController(walletService)
 	dc := controller.NewDashboardController(dashboardService)
 	acc := controller.NewAccountController(accountService, cfg.App.FrontendBaseURL)
-	auto := controller.NewAutomationController(automationService, autoDMService)
+	auto := controller.NewAutomationController(automationService, autoDMService, autoCommentService)
 	act := controller.NewActivityController(activityService)
 	an := controller.NewAnalyticsController(analyticsService)
 	bill := controller.NewBillingController(billingService)
@@ -83,7 +96,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterBilling(v1, bill)
 	RegisterPost(v1, p)
 	RegisterAgent(v1, ag)
-	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService)
+	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService)
 
 	return r
 }

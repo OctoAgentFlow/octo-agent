@@ -23,4 +23,4 @@ export const baseAutomationConfigSchema = z.object({
 export const autoPostSchema = baseAutomationConfigSchema;
 export const autoReplySchema = baseAutomationConfigSchema;
 export const autoDmSchema = baseAutomationConfigSchema;
-
+export const autoCommentSchema = baseAutomationConfigSchema;

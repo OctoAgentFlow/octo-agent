@@ -160,3 +160,67 @@ type AutoDMPreferenceResponse struct {
 	RecipientUsername string `json:"recipient_username,omitempty"`
 	Status            string `json:"status"`
 }
+
+type AutoCommentTargetItem struct {
+	ID                uint   `json:"id"`
+	XAccountID        uint   `json:"x_account_id"`
+	TargetUserID      string `json:"target_user_id,omitempty"`
+	TargetUsername    string `json:"target_username"`
+	TargetDisplayName string `json:"target_display_name,omitempty"`
+	Status            string `json:"status"`
+	LastSeenTweetID   string `json:"last_seen_tweet_id,omitempty"`
+	LastSeenTweetAt   string `json:"last_seen_tweet_at,omitempty"`
+	LastCheckedAt     string `json:"last_checked_at,omitempty"`
+	LastCommentedAt   string `json:"last_commented_at,omitempty"`
+	LastFailureReason string `json:"last_failure_reason,omitempty"`
+	ResolvedAt        string `json:"resolved_at,omitempty"`
+}
+
+type AutoCommentTargetsResponse struct {
+	Items []AutoCommentTargetItem `json:"items"`
+}
+
+type AutoCommentTargetRequest struct {
+	XAccountID     uint   `json:"x_account_id"`
+	TargetUsername string `json:"target_username" binding:"required"`
+}
+
+type AutoCommentTargetStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+type AutoCommentTaskItem struct {
+	ID                uint   `json:"id"`
+	XAccountID        uint   `json:"x_account_id"`
+	TargetID          uint   `json:"target_id"`
+	TargetUserID      string `json:"target_user_id,omitempty"`
+	TargetUsername    string `json:"target_username"`
+	TargetTweetID     string `json:"target_tweet_id"`
+	TargetTweetText   string `json:"target_tweet_text,omitempty"`
+	TargetTweetAuthor string `json:"target_tweet_author,omitempty"`
+	GeneratedComment  string `json:"generated_comment,omitempty"`
+	Status            string `json:"status"`
+	CapabilityStatus  string `json:"capability_status"`
+	FailureCategory   string `json:"failure_category,omitempty"`
+	FailureReason     string `json:"failure_reason,omitempty"`
+	Retryable         bool   `json:"retryable"`
+	RetryAfterAt      string `json:"retry_after_at,omitempty"`
+	AttemptCount      int    `json:"attempt_count"`
+	LastAttemptAt     string `json:"last_attempt_at,omitempty"`
+	ApprovalRequired  bool   `json:"approval_required"`
+	ActivityLogID     uint   `json:"activity_log_id,omitempty"`
+	CommentTweetID    string `json:"comment_tweet_id,omitempty"`
+	DetectedAt        string `json:"detected_at"`
+	GeneratedAt       string `json:"generated_at,omitempty"`
+	ApprovedAt        string `json:"approved_at,omitempty"`
+	BlockedAt         string `json:"blocked_at,omitempty"`
+	SentAt            string `json:"sent_at,omitempty"`
+}
+
+type AutoCommentTasksResponse struct {
+	Items []AutoCommentTaskItem `json:"items"`
+}
+
+type AutoCommentTaskBlockRequest struct {
+	Reason string `json:"reason"`
+}

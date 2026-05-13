@@ -46,7 +46,18 @@ x_oauth:
   client_secret: "TODO_X_CLIENT_SECRET"
   redirect_uri: "https://octo-agent.com/api/v1/accounts/oauth/x/callback"
   state_secret: "TODO_X_STATE_SECRET"
-  scopes: "tweet.read users.read offline.access"
+  scopes: "tweet.read tweet.write users.read offline.access"
+
+llm:
+  default_provider: "openai"
+  openai:
+    # TODO: Set through private production config or OPENAI_API_KEY. Do not use test keys in production.
+    api_key: "TODO_OPENAI_API_KEY"
+    model: "gpt-4.1-mini"
+    base_url: "https://api.openai.com/v1"
+    timeout_sec: 20
+    max_tokens: 120
+    temperature: 0.65
 
 billing:
   order_ttl_minutes: 30

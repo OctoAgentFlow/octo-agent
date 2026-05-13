@@ -27,9 +27,33 @@ type ConversationReply struct {
 	CreatedAt      time.Time
 }
 
+type XUser struct {
+	ID          string
+	Username    string
+	DisplayName string
+}
+
+type UserTweet struct {
+	ID        string
+	AuthorID  string
+	Text      string
+	CreatedAt time.Time
+}
+
+type userLookupAPIResp struct {
+	Data struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+		Name     string `json:"name"`
+	} `json:"data"`
+}
+
 type userTweetsAPIResp struct {
 	Data []struct {
-		ID string `json:"id"`
+		ID        string `json:"id"`
+		AuthorID  string `json:"author_id"`
+		Text      string `json:"text"`
+		CreatedAt string `json:"created_at"`
 	} `json:"data"`
 }
 
@@ -58,8 +82,65 @@ type tweetSearchData struct {
 	} `json:"referenced_tweets"`
 }
 
+// LookupUserByUsername resolves a public X username into a user id using a user OAuth token.
+func LookupUserByUsername(ctx context.Context, client *http.Client, accessToken, username string) (*XUser, error) {
+	username = strings.TrimSpace(strings.TrimPrefix(username, "@"))
+	if username == "" {
+		return nil, fmt.Errorf("missing username")
+	}
+	if client == nil {
+		client = defaultHTTP
+	}
+	token := strings.TrimSpace(accessToken)
+	if token == "" {
+		return nil, fmt.Errorf("missing access token")
+	}
+	u := "https://api.x.com/2/users/by/username/" + url.PathEscape(username)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, newPublishError(resp, raw)
+	}
+	var out userLookupAPIResp
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode user lookup: %w", err)
+	}
+	if strings.TrimSpace(out.Data.ID) == "" {
+		return nil, fmt.Errorf("x user not found")
+	}
+	return &XUser{
+		ID:          strings.TrimSpace(out.Data.ID),
+		Username:    strings.TrimSpace(out.Data.Username),
+		DisplayName: strings.TrimSpace(out.Data.Name),
+	}, nil
+}
+
 // ListUserRootTweetIDs returns recent top-level tweet ids for the given X user id (newest first from API).
 func ListUserRootTweetIDs(ctx context.Context, client *http.Client, accessToken, twitterUserID string, maxResults int) ([]string, error) {
+	tweets, err := ListUserRootTweets(ctx, client, accessToken, twitterUserID, maxResults)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(tweets))
+	for _, tw := range tweets {
+		if tw.ID != "" {
+			ids = append(ids, tw.ID)
+		}
+	}
+	return ids, nil
+}
+
+// ListUserRootTweets returns recent top-level tweets for the given X user id (newest first from API).
+func ListUserRootTweets(ctx context.Context, client *http.Client, accessToken, twitterUserID string, maxResults int) ([]UserTweet, error) {
 	twitterUserID = strings.TrimSpace(twitterUserID)
 	if twitterUserID == "" {
 		return nil, fmt.Errorf("missing twitter user id")
@@ -85,6 +166,7 @@ func ListUserRootTweetIDs(ctx context.Context, client *http.Client, accessToken,
 	q := u.Query()
 	q.Set("max_results", strconv.Itoa(maxResults))
 	q.Set("exclude", "retweets,replies")
+	q.Set("tweet.fields", "author_id,created_at,text")
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -106,13 +188,26 @@ func ListUserRootTweetIDs(ctx context.Context, client *http.Client, accessToken,
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("decode user tweets: %w", err)
 	}
-	ids := make([]string, 0, len(out.Data))
+	tweets := make([]UserTweet, 0, len(out.Data))
 	for _, row := range out.Data {
-		if id := strings.TrimSpace(row.ID); id != "" {
-			ids = append(ids, id)
+		id := strings.TrimSpace(row.ID)
+		if id == "" {
+			continue
 		}
+		var at time.Time
+		if ts := strings.TrimSpace(row.CreatedAt); ts != "" {
+			if parsed, err := time.Parse(time.RFC3339, ts); err == nil {
+				at = parsed.UTC()
+			}
+		}
+		tweets = append(tweets, UserTweet{
+			ID:        id,
+			AuthorID:  strings.TrimSpace(row.AuthorID),
+			Text:      strings.TrimSpace(row.Text),
+			CreatedAt: at,
+		})
 	}
-	return ids, nil
+	return tweets, nil
 }
 
 // ListDirectRepliesFromOthers returns direct replies to rootTweetID where author is not myTwitterUserID.

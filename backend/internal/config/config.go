@@ -18,6 +18,7 @@ type Config struct {
 	App       AppConfig       `yaml:"app"`
 	AdminAuth AdminAuthConfig `yaml:"admin_auth"`
 	XOAuth    XOAuthConfig    `yaml:"x_oauth"`
+	LLM       LLMConfig       `yaml:"llm"`
 	Billing   BillingConfig   `yaml:"billing"`
 }
 
@@ -78,6 +79,21 @@ type XOAuthConfig struct {
 	RedirectURI  string `yaml:"redirect_uri"`
 	StateSecret  string `yaml:"state_secret"`
 	Scopes       string `yaml:"scopes"`
+}
+
+// LLMConfig is the shared LLM provider configuration for current and future AI features.
+type LLMConfig struct {
+	DefaultProvider string       `yaml:"default_provider"`
+	OpenAI          OpenAIConfig `yaml:"openai"`
+}
+
+type OpenAIConfig struct {
+	APIKey      string  `yaml:"api_key"`
+	Model       string  `yaml:"model"`
+	BaseURL     string  `yaml:"base_url"`
+	TimeoutSec  int     `yaml:"timeout_sec"`
+	MaxTokens   int     `yaml:"max_tokens"`
+	Temperature float32 `yaml:"temperature"`
 }
 
 type ServerConfig struct {
@@ -258,6 +274,39 @@ func Load() (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.App.FrontendBaseURL) == "" {
 		cfg.App.FrontendBaseURL = "http://localhost:3000"
+	}
+	if cfg.LLM.DefaultProvider == "" {
+		cfg.LLM.DefaultProvider = "openai"
+	}
+	if cfg.LLM.OpenAI.Model == "" {
+		cfg.LLM.OpenAI.Model = "gpt-4.1-mini"
+	}
+	if cfg.LLM.OpenAI.BaseURL == "" {
+		cfg.LLM.OpenAI.BaseURL = "https://api.openai.com/v1"
+	}
+	if cfg.LLM.OpenAI.TimeoutSec <= 0 {
+		cfg.LLM.OpenAI.TimeoutSec = 20
+	}
+	if cfg.LLM.OpenAI.MaxTokens <= 0 {
+		cfg.LLM.OpenAI.MaxTokens = 120
+	}
+	if cfg.LLM.OpenAI.Temperature <= 0 {
+		cfg.LLM.OpenAI.Temperature = 0.65
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_PROVIDER")); v != "" {
+		cfg.LLM.DefaultProvider = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_API_KEY")); v != "" {
+		cfg.LLM.OpenAI.APIKey = v
+	}
+	if strings.HasPrefix(strings.TrimSpace(cfg.LLM.OpenAI.APIKey), "TODO_") {
+		cfg.LLM.OpenAI.APIKey = ""
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_MODEL")); v != "" {
+		cfg.LLM.OpenAI.Model = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")); v != "" {
+		cfg.LLM.OpenAI.BaseURL = strings.TrimRight(v, "/")
 	}
 	if cfg.AdminAuth.CodeTTLSeconds <= 0 {
 		cfg.AdminAuth.CodeTTLSeconds = 300

@@ -514,6 +514,8 @@ export const dict: I18nDict = {
   "automation.module.reply.description": "멘션과 스레드를 문맥 기반으로 자동 응답합니다.",
   "automation.module.dm.name": "Auto DM",
   "automation.module.dm.description": "웜 리드 및 온보딩을 위한 안전한 DM 시퀀스를 실행합니다.",
+  "automation.module.comment.name": "Auto Comment",
+  "automation.module.comment.description": "타깃 계정의 새 트윗을 감지하고 AI 댓글로 노출을 확보합니다.",
   "automation.dmReview.title": "Auto DM 검토 대기열",
   "automation.dmReview.description": "실제 전송 전 DM 후보, 권한 확인, 승인 상태를 감사합니다.",
   "automation.dmReview.empty": "아직 Auto DM 검토 작업이 없습니다.",

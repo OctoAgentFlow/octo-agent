@@ -514,6 +514,8 @@ export const dict: I18nDict = {
   "automation.module.reply.description": "以脈絡驅動的 AI 回覆處理提及與討論串。",
   "automation.module.dm.name": "自動私訊",
   "automation.module.dm.description": "為溫度線索與 onboarding 流程執行安全的私訊序列。",
+  "automation.module.comment.name": "自動評論",
+  "automation.module.comment.description": "監控目標帳號新推文，用 AI 生成評論並提升曝光。",
   "automation.dmReview.title": "自動私訊審核佇列",
   "automation.dmReview.description": "在啟用真實發送前，審計私訊候選、能力檢查與審批狀態。",
   "automation.dmReview.empty": "暫無自動私訊審核任務。",

@@ -51,6 +51,21 @@ export const automationModulesMock: AutomationModule[] = [
     nextRunKey: "automation.time.paused",
     executedToday: 0,
   },
+  {
+    type: "comment",
+    nameKey: "automation.module.comment.name",
+    descriptionKey: "automation.module.comment.description",
+    state: "Paused",
+    config: {
+      enabled: false,
+      frequency: { intervalMinutes: 10, dailyLimit: 20 },
+      tone: "Friendly",
+      safety: { requireApproval: true, maxPerHour: 6, blockedKeywords: ["airdrop", "giveaway"] },
+    },
+    lastRunKey: "automation.time.paused",
+    nextRunKey: "automation.time.paused",
+    executedToday: 0,
+  },
 ];
 
 export const automationRuntimeStatusMock: AutomationRuntimeStatus = {

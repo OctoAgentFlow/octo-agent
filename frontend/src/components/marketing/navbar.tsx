@@ -55,31 +55,41 @@ export function MarketingNavbar() {
     router.replace("/");
   };
   return (
-    <header ref={headerRef} className="sticky top-0 z-40 border-b border-white/10 bg-[#070b17]/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 md:px-8">
-        <Link href="/" className="flex min-w-0 items-center gap-3 text-sm font-semibold text-white" onClick={() => setMobileOpen(false)}>
-          <span className="relative block h-9 w-12 overflow-hidden rounded-md border border-white/10 bg-[#060915]">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 border-b border-white/10 bg-[#070b17]/82 shadow-[0_14px_42px_rgba(38,78,255,0.10)] backdrop-blur-2xl"
+    >
+      <div className="mx-auto flex h-[68px] w-full max-w-7xl items-center justify-between gap-5 px-4 sm:px-6 lg:px-8">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-3 text-sm font-semibold text-white"
+          onClick={() => setMobileOpen(false)}
+        >
+          <span className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-blue-300/20 bg-white/[0.055] shadow-[0_0_22px_rgba(80,132,255,0.18)]">
             <Image
               src="/brand/oaf-logo.png"
               alt={t("common.brand")}
               fill
-              sizes="48px"
+              sizes="36px"
               className="object-cover object-left"
               priority
             />
           </span>
-          <span className="hidden truncate min-[420px]:inline">{t("common.brand")}</span>
+          <span className="hidden whitespace-nowrap text-[15px] font-semibold tracking-wide text-white min-[420px]:inline">
+            <span className="sm:hidden">Octo-Agent</span>
+            <span className="hidden sm:inline">{t("common.brand")}</span>
+          </span>
         </Link>
-        <nav className="hidden items-center gap-6 text-sm text-white/70 md:flex">
+        <nav className="hidden items-center gap-6 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.035] px-4 py-2 text-sm text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] xl:flex">
           {navItems.map((item) => (
-            <a key={item.href} href={item.href} className="transition-colors hover:text-white">
+            <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
               {t(item.labelKey)}
             </a>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <LanguageSwitcher className="hidden sm:block" />
-          <ConnectWalletButton className="hidden sm:inline-flex" connectLabel={t("auth.card.connectWallet")} />
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <LanguageSwitcher className="hidden md:block" buttonClassName="h-9" />
+          <ConnectWalletButton className="hidden md:inline-flex" connectLabel={t("auth.card.connectWallet")} />
           {authed ? (
             <>
               <Link
@@ -88,12 +98,12 @@ export function MarketingNavbar() {
                 rel="noopener noreferrer"
                 className={cn(
                   buttonVariants({ variant: "outline" }),
-                  "stable-cta-md hidden sm:inline-flex"
+                  "stable-cta-md hidden h-9 border-blue-300/25 bg-blue-500/10 text-white shadow-[0_0_18px_rgba(80,132,255,0.12)] hover:bg-blue-500/16 md:inline-flex"
                 )}
               >
                 {t("common.dashboard")}
               </Link>
-              <Button variant="ghost" className="stable-cta-sm hidden sm:inline-flex" onClick={onLogout}>
+              <Button variant="ghost" className="stable-cta-sm hidden h-9 text-white/76 hover:bg-white/10 hover:text-white md:inline-flex" onClick={onLogout}>
                 {t("common.logout")}
               </Button>
             </>
@@ -103,7 +113,7 @@ export function MarketingNavbar() {
                 href="/login"
                 className={cn(
                   buttonVariants({ variant: "ghost" }),
-                  "stable-cta-sm hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+                  "stable-cta-sm hidden h-9 text-white/80 hover:bg-white/10 hover:text-white md:inline-flex"
                 )}
               >
                 {t("common.login")}
@@ -112,7 +122,7 @@ export function MarketingNavbar() {
                 href="/login"
                 className={cn(
                   buttonVariants({ variant: "default" }),
-                  "stable-cta-md hidden bg-gradient-to-r from-blue-500 to-violet-500 text-white hover:opacity-90 sm:inline-flex"
+                  "stable-cta-md hidden h-9 border border-blue-300/20 bg-gradient-to-r from-blue-500/85 to-violet-500/85 text-white shadow-[0_0_20px_rgba(91,125,255,0.20)] hover:opacity-95 md:inline-flex"
                 )}
               >
                 {t("common.startFreeTrial")}
@@ -122,7 +132,7 @@ export function MarketingNavbar() {
           <Button
             type="button"
             variant="outline"
-            className="size-10 px-0 text-white/85 md:hidden"
+            className="size-10 px-0 text-white/85 xl:hidden"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label={mobileOpen ? t("marketing.nav.closeMenu") : t("marketing.nav.openMenu")}
             aria-expanded={mobileOpen}
@@ -133,14 +143,14 @@ export function MarketingNavbar() {
         </div>
       </div>
       {mobileOpen ? (
-        <div id="marketing-mobile-menu" className="border-t border-white/10 px-4 pb-4 md:hidden">
-          <div className="mx-auto w-full max-w-6xl rounded-b-2xl border-x border-b border-white/10 bg-[#080d1b]/95 p-4 shadow-2xl shadow-black/35">
+        <div id="marketing-mobile-menu" className="border-t border-white/10 px-4 pb-4 xl:hidden">
+          <div className="mx-auto w-full max-w-7xl rounded-b-2xl border-x border-b border-white/10 bg-[#080d1b]/95 p-4 shadow-2xl shadow-black/35">
             <nav className="grid gap-1 text-sm text-white/80">
               {navItems.map((item) => (
                 <a
                   key={item.href}
                   href={item.href}
-                  className="rounded-lg px-3 py-2.5 transition-colors hover:bg-white/8 hover:text-white"
+                  className="whitespace-nowrap rounded-lg px-3 py-2.5 transition-colors hover:bg-white/8 hover:text-white"
                   onClick={() => setMobileOpen(false)}
                 >
                   {t(item.labelKey)}

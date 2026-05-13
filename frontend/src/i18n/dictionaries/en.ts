@@ -324,6 +324,9 @@ export const dict: I18nDict = {
   "dashboard.upgrade.perk.unlimited": "Unlimited workflows",
   "dashboard.upgrade.perk.priority": "Priority queue",
   "dashboard.upgrade.perk.analytics": "Advanced analytics",
+  "dashboard.upgrade.loadingPayment": "Loading payment methods…",
+  "dashboard.upgrade.noPaymentMethod": "No payment method is available yet. Please try again later.",
+  "dashboard.upgrade.paymentMethodLoadFailed": "Failed to load payment methods. Please retry.",
   "dashboard.membership.billingHint.basic": "Basic plan starts at {price} USDT / month",
 
   // activity

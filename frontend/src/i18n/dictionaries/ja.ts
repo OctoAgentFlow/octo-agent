@@ -301,6 +301,9 @@ export const dict: I18nDict = {
   "dashboard.upgrade.perk.unlimited": "無制限のワークフロー",
   "dashboard.upgrade.perk.priority": "優先キュー",
   "dashboard.upgrade.perk.analytics": "高度な分析",
+  "dashboard.upgrade.loadingPayment": "支払い方法を読み込み中…",
+  "dashboard.upgrade.noPaymentMethod": "利用可能な支払い方法がありません。後でもう一度お試しください。",
+  "dashboard.upgrade.paymentMethodLoadFailed": "支払い方法の読み込みに失敗しました。再試行してください。",
   "dashboard.membership.billingHint.basic": "Basic プランは {price} USDT / 月 から",
 
   // activity

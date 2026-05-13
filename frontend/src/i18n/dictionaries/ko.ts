@@ -301,6 +301,9 @@ export const dict: I18nDict = {
   "dashboard.upgrade.perk.unlimited": "무제한 워크플로",
   "dashboard.upgrade.perk.priority": "우선 큐",
   "dashboard.upgrade.perk.analytics": "고급 분석",
+  "dashboard.upgrade.loadingPayment": "결제 수단 불러오는 중…",
+  "dashboard.upgrade.noPaymentMethod": "사용 가능한 결제 수단이 없습니다. 잠시 후 다시 시도하세요.",
+  "dashboard.upgrade.paymentMethodLoadFailed": "결제 수단을 불러오지 못했습니다. 다시 시도하세요.",
   "dashboard.membership.billingHint.basic": "Basic 플랜은 월 {price} USDT부터 시작합니다",
 
   // activity

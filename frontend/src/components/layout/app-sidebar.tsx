@@ -51,16 +51,24 @@ export function AppSidebar() {
 
   return (
     <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
-      <Link href="/" className="mb-8 inline-flex w-full items-center rounded-lg outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-blue-300/70">
-        <span className="relative block h-[78px] w-full max-w-[178px] overflow-hidden rounded-lg border border-white/10 bg-[#050815]">
+      <Link
+        href="/"
+        className="mb-8 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 outline-none transition hover:border-blue-300/25 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-blue-300/70"
+      >
+        <span className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/20 to-violet-500/20 shadow-[0_0_24px_rgba(96,165,250,0.18)]">
           <Image
-            src="/brand/oaf-logo.png"
+            src="/brand/oaf-octopus-icon.png"
             alt={t("common.brand")}
-            fill
-            sizes="178px"
-            className="object-contain p-2"
+            width={32}
+            height={32}
+            sizes="32px"
+            className="size-8 object-contain"
             priority
           />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="whitespace-nowrap text-sm font-semibold leading-5 text-white">Octo-Agent</span>
+          <span className="whitespace-nowrap text-xs leading-4 text-indigo-200/70">Flow</span>
         </span>
       </Link>
       <nav className="space-y-1">

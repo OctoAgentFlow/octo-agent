@@ -261,7 +261,7 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's OAF Bot persona simulator.",
 		"Generate safe example content for an AI social persona on X/Twitter.",
-		"Return strict JSON with keys tweet, reply, dm. Do not include markdown fences.",
+		"Return strict JSON with keys tweet, reply, comment, dm. Do not include markdown fences.",
 	}, " ")
 
 	var user strings.Builder
@@ -282,6 +282,7 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	user.WriteString("Rules:\n")
 	user.WriteString("- tweet max 240 characters.\n")
 	user.WriteString("- reply max 180 characters.\n")
+	user.WriteString("- comment max 180 characters.\n")
 	user.WriteString("- dm max 220 characters.\n")
 	user.WriteString("- Avoid forbidden topics and do not mention that you are AI.\n")
 	user.WriteString("- Keep the examples specific to the persona.\n")
@@ -296,13 +297,15 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	var out dto.OAFBotTestGenerateResponse
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
 		return &dto.OAFBotTestGenerateResponse{
-			Tweet: truncateRunes(strings.TrimSpace(text), 240),
-			Reply: truncateRunes(fmt.Sprintf("%s brings a practical angle here. I'd add one more point: durable growth comes from consistent useful interaction, not one-off spikes.", name), 180),
-			DM:    truncateRunes(fmt.Sprintf("Hey, this is %s. I liked your recent thoughts and wanted to connect around practical social growth workflows.", name), 220),
+			Tweet:   truncateRunes(strings.TrimSpace(text), 240),
+			Reply:   truncateRunes(fmt.Sprintf("%s brings a practical angle here. I'd add one more point: durable growth comes from consistent useful interaction, not one-off spikes.", name), 180),
+			Comment: truncateRunes("Useful angle. The real test is whether this can turn into repeatable interaction instead of a one-time content spike.", 180),
+			DM:      truncateRunes(fmt.Sprintf("Hey, this is %s. I liked your recent thoughts and wanted to connect around practical social growth workflows.", name), 220),
 		}, nil
 	}
 	out.Tweet = truncateRunes(out.Tweet, 240)
 	out.Reply = truncateRunes(out.Reply, 180)
+	out.Comment = truncateRunes(out.Comment, 180)
 	out.DM = truncateRunes(out.DM, 220)
 	return &out, nil
 }

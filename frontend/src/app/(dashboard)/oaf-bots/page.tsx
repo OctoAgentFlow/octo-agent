@@ -1,19 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import axios from "axios";
-import { Bot, Lock, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  ChevronRight,
+  Info,
+  Lock,
+  Mail,
+  MessageCircle,
+  MessagesSquare,
+  Save,
+  Send,
+  Sparkles,
+} from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { useT } from "@/i18n/use-t";
+import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { oafBotService } from "@/services/oaf-bot.service";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
+
+type WizardStep = "identity" | "style" | "topics" | "goals" | "test";
+type SampleScene = keyof OAFBotSamples;
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+type ApiErrorBody = {
+  message?: string;
+  error_code?: string;
+};
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -66,6 +92,26 @@ const emptyForm: OAFBotPayload = {
   safety_mode: "balanced",
 };
 
+const mbtiValues = [
+  "not_set",
+  "INTJ",
+  "INTP",
+  "ENTJ",
+  "ENTP",
+  "INFJ",
+  "INFP",
+  "ENFJ",
+  "ENFP",
+  "ISTJ",
+  "ISFJ",
+  "ESTJ",
+  "ESFJ",
+  "ISTP",
+  "ISFP",
+  "ESTP",
+  "ESFP",
+];
+
 export default function OAFBotsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -76,6 +122,8 @@ export default function OAFBotsPage() {
   const [usage, setUsage] = useState<PlanUsage>(emptyUsage);
   const [selectedID, setSelectedID] = useState<number | null>(null);
   const [form, setForm] = useState<OAFBotPayload>(emptyForm);
+  const [activeStep, setActiveStep] = useState<WizardStep>("identity");
+  const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
   const [samples, setSamples] = useState<OAFBotSamples | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
@@ -84,6 +132,121 @@ export default function OAFBotsPage() {
 
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
   const canCreate = usage.oafBots < limits.maxBots;
+  const formChanged = useMemo(() => {
+    if (!selectedBot) return false;
+    return JSON.stringify(botToPayload(selectedBot)) !== JSON.stringify(form);
+  }, [form, selectedBot]);
+
+  const accountByID = useMemo(() => {
+    return new Map(accounts.map((account) => [account.id, account]));
+  }, [accounts]);
+
+  const accountBoundByOtherBot = useMemo(() => {
+    const map = new Map<number, OAFBot>();
+    bots.forEach((bot) => {
+      if (bot.twitter_account_id && bot.id !== selectedID) {
+        map.set(bot.twitter_account_id, bot);
+      }
+    });
+    return map;
+  }, [bots, selectedID]);
+
+  const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
+  const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
+
+  const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
+    () => [
+      { id: "identity", label: t("oafBots.wizard.identity"), description: t("oafBots.wizard.identityDesc") },
+      { id: "style", label: t("oafBots.wizard.style"), description: t("oafBots.wizard.styleDesc") },
+      { id: "topics", label: t("oafBots.wizard.topics"), description: t("oafBots.wizard.topicsDesc") },
+      { id: "goals", label: t("oafBots.wizard.goals"), description: t("oafBots.wizard.goalsDesc") },
+      { id: "test", label: t("oafBots.wizard.test"), description: t("oafBots.wizard.testDesc") },
+    ],
+    [t],
+  );
+
+  const occupationOptions = useMemo(
+    () => optionKeys("occupation", [
+      "web3GrowthManager",
+      "aiProductManager",
+      "cryptoResearcher",
+      "communityManager",
+      "founder",
+      "developerAdvocate",
+      "contentCreator",
+      "kolAssistant",
+    ], t),
+    [t],
+  );
+  const industryOptions = useMemo(
+    () => optionKeys("industry", ["ai", "web3", "defi", "socialfi", "nft", "gaming", "saas", "creatorEconomy", "cryptoTrading", "developerTools"], t),
+    [t],
+  );
+  const personalityOptions = useMemo(
+    () => optionKeys("personality", ["professional", "casual", "humorous", "restrained", "direct", "warm", "sharp", "curious", "helpful", "growth"], t),
+    [t],
+  );
+  const topicOptions = useMemo(
+    () => optionKeys("topics", ["aiAgent", "web3Growth", "socialfi", "xMarketing", "communityBuilding", "tokenEconomy", "productLaunch", "cryptoTrends", "startup"], t),
+    [t],
+  );
+  const forbiddenTopicOptions = useMemo(
+    () => optionKeys("forbidden", ["investmentAdvice", "profitPromise", "politics", "adult", "attacks", "impersonation", "pricePrediction"], t),
+    [t],
+  );
+  const growthGoalOptions = useMemo(
+    () => optionKeys("growthGoals", ["activity", "followers", "website", "trial", "leads", "brandAuthority", "dmConversion"], t),
+    [t],
+  );
+  const voicePresetOptions = useMemo(
+    () => optionKeys("voicePresets", ["concise", "natural", "web3Native", "founder", "technical", "growth", "community"], t),
+    [t],
+  );
+
+  const ageOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: t("oafBots.options.unset") },
+      { value: "18-24", label: "18-24" },
+      { value: "25-30", label: "25-30" },
+      { value: "31-40", label: "31-40" },
+      { value: "40+", label: "40+" },
+    ],
+    [t],
+  );
+  const genderOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: t("oafBots.options.unset") },
+      { value: "feminine", label: t("oafBots.options.gender.feminine") },
+      { value: "masculine", label: t("oafBots.options.gender.masculine") },
+      { value: "neutral", label: t("oafBots.options.gender.neutral") },
+      { value: "brand", label: t("oafBots.options.gender.brand") },
+    ],
+    [t],
+  );
+  const educationOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: t("oafBots.options.unset") },
+      { value: "bachelor", label: t("oafBots.options.education.bachelor") },
+      { value: "master", label: t("oafBots.options.education.master") },
+      { value: "phd", label: t("oafBots.options.education.phd") },
+      { value: "self_taught", label: t("oafBots.options.education.selfTaught") },
+      { value: "serial_founder", label: t("oafBots.options.education.serialFounder") },
+      { value: "tech_community", label: t("oafBots.options.education.techCommunity") },
+    ],
+    [t],
+  );
+  const mbtiOptions = useMemo<SelectOption[]>(
+    () => mbtiValues.map((value) => ({ value: value === "not_set" ? "" : value, label: value === "not_set" ? t("oafBots.options.unset") : value })),
+    [t],
+  );
+  const safetyOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "conservative", label: t("oafBots.safety.conservative") },
+      { value: "balanced", label: t("oafBots.safety.balanced") },
+      { value: "autopilot", label: t("oafBots.safety.autopilot") },
+    ],
+    [t],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,11 +262,11 @@ export default function OAFBotsPage() {
       }
       broadcastDataSynced(Date.now());
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "加载 OAF Bot 失败" : "加载 OAF Bot 失败");
+      pushToast(errorMessage(error, t("oafBots.toast.loadFailed")));
     } finally {
       setLoading(false);
     }
-  }, [pushToast, selectedID]);
+  }, [pushToast, selectedID, t]);
 
   useEffect(() => {
     void load();
@@ -115,7 +278,7 @@ export default function OAFBotsPage() {
       const data = await oafBotService.generationUsages(botID);
       setGenerationUsages(data.items);
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("oafBots.usages.loadFailed") : t("oafBots.usages.loadFailed"));
+      pushToast(errorMessage(error, t("oafBots.usages.loadFailed")));
       setGenerationUsages([]);
     } finally {
       setGenerationUsagesLoading(false);
@@ -130,20 +293,30 @@ export default function OAFBotsPage() {
     void loadGenerationUsages(selectedID);
   }, [loadGenerationUsages, selectedID]);
 
+  const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
   const selectBot = (bot: OAFBot) => {
     setSelectedID(bot.id);
     setForm(botToPayload(bot));
+    setActiveStep("identity");
     setSamples(null);
   };
 
   const startCreate = () => {
     setSelectedID(null);
     setForm(emptyForm);
+    setActiveStep("identity");
     setSamples(null);
     setGenerationUsages([]);
   };
 
   const save = async () => {
+    if (selectedAccountConflict) {
+      pushToast(t("oafBots.toast.accountAlreadyBound", { name: selectedAccountConflict.name }));
+      return;
+    }
     setSaving(true);
     try {
       const saved = selectedID ? await oafBotService.update(selectedID, form) : await oafBotService.create(form);
@@ -151,9 +324,14 @@ export default function OAFBotsPage() {
       setSelectedID(saved.id);
       setForm(botToPayload(saved));
       setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
-      pushToast("OAF Bot 已保存");
+      pushToast(t("oafBots.toast.saved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "保存 OAF Bot 失败" : "保存 OAF Bot 失败");
+      const body = getErrorBody(error);
+      if (body?.error_code === "oaf_bot_twitter_account_already_bound") {
+        pushToast(t("oafBots.toast.accountBoundError"));
+      } else {
+        pushToast(body?.message || t("oafBots.toast.saveFailed"));
+      }
     } finally {
       setSaving(false);
     }
@@ -161,22 +339,38 @@ export default function OAFBotsPage() {
 
   const testGenerate = async () => {
     if (!selectedID) {
-      pushToast("请先保存 OAF Bot，再生成示例内容");
+      pushToast(t("oafBots.test.saveFirst"));
+      return;
+    }
+    if (formChanged) {
+      pushToast(t("oafBots.test.saveChangesFirst"));
+      return;
+    }
+    const validationMessage = validateBeforeGenerate(form, t);
+    if (validationMessage) {
+      pushToast(validationMessage);
       return;
     }
     setGenerating(true);
     try {
       setSamples(await oafBotService.testGenerate(selectedID));
       await loadGenerationUsages(selectedID);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + 1 }));
+      pushToast(t("oafBots.test.success"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "生成示例失败" : "生成示例失败");
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.test.failed"));
+      }
     } finally {
       setGenerating(false);
     }
   };
 
   if (loading) {
-    return <Card><CardHeader title="正在加载 OAF Bot..." description="读取机器人画像和套餐限制。" /></Card>;
+    return <Card><CardHeader title={t("oafBots.loading.title")} description={t("oafBots.loading.description")} /></Card>;
   }
 
   return (
@@ -184,10 +378,8 @@ export default function OAFBotsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-sm text-violet-100/80"><Bot className="size-4" /> OAF Bot</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">AI 社交人格机器人</h1>
-          <p className="mt-2 max-w-2xl text-sm text-white/60">
-            为绑定的 X 账号配置可复用的人设。当前阶段支持画像管理和示例生成，后续会接入自动发推、回复、评论和私信执行链路。
-          </p>
+          <h1 className="mt-2 text-2xl font-semibold text-white">{t("oafBots.page.title")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">{t("oafBots.page.subtitle")}</p>
         </div>
         <Button
           type="button"
@@ -195,143 +387,301 @@ export default function OAFBotsPage() {
           onClick={startCreate}
           className="bg-gradient-to-r from-blue-500 to-violet-500 text-white"
         >
-          新建 OAF Bot
+          {t("oafBots.actions.new")}
         </Button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
         <QuotaCard label="OAF Bots" used={usage.oafBots} limit={limits.maxBots} />
-        <QuotaCard label="X Accounts" used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
-        <QuotaCard label="AI 生成/月" used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
-        <QuotaCard label="自动评论/日" used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
+        <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
+        <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
+        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
       </div>
 
       {!canCreate ? (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">
           <Lock className="size-4" />
-          当前套餐 OAF Bot 数量已达上限。升级 Plus / Pro 可创建更多机器人。
+          {t("oafBots.limitReached")}
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <SectionCard title="机器人列表" description="选择一个机器人进行编辑，或新建机器人画像。">
+      <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
+        <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")}>
           <div className="space-y-2">
             {bots.length === 0 ? (
-              <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">暂无 OAF Bot。</p>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-sm font-medium text-white">{t("oafBots.list.emptyTitle")}</p>
+                <p className="mt-2 text-sm leading-relaxed text-white/55">{t("oafBots.list.emptyDescription")}</p>
+              </div>
             ) : (
-              bots.map((bot) => (
-                <button
-                  key={bot.id}
-                  type="button"
-                  onClick={() => selectBot(bot)}
-                  className={`w-full rounded-xl border p-4 text-left transition ${
-                    selectedID === bot.id ? "border-violet-300/45 bg-violet-500/12" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
-                  }`}
-                >
-                  <p className="font-medium text-white">{bot.name}</p>
-                  <p className="mt-1 text-xs text-white/55">{bot.voice_tone || "尚未设置语言风格"}</p>
-                  <p className="mt-2 line-clamp-2 text-sm text-white/65">{bot.identity_summary || "尚未填写身份摘要"}</p>
-                </button>
-              ))
+              bots.map((bot) => {
+                const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : null;
+                return (
+                  <button
+                    key={bot.id}
+                    type="button"
+                    onClick={() => selectBot(bot)}
+                    className={`w-full rounded-xl border p-4 text-left transition ${
+                      selectedID === bot.id ? "border-violet-300/45 bg-violet-500/12" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{bot.name}</p>
+                        <p className="mt-1 text-xs text-white/55">
+                          {account ? `@${account.username}` : t("oafBots.list.unbound")}
+                        </p>
+                      </div>
+                      <ChevronRight className="mt-1 size-4 shrink-0 text-white/35" />
+                    </div>
+                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-white/65">
+                      {bot.identity_summary || t("oafBots.list.noSummary")}
+                    </p>
+                  </button>
+                );
+              })
             )}
           </div>
         </SectionCard>
 
-        <div className="space-y-5">
-        <SectionCard title={selectedBot ? "编辑 OAF Bot" : "新建 OAF Bot"} description="配置机器人画像、话题边界和增长目标。">
-          <div className="grid gap-4 md:grid-cols-2">
-            <TextField label="名称" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} />
-            <label className="space-y-1.5 text-sm text-white/70">
-              <span>X 账号</span>
-              <select
-                className="form-input"
-                value={form.twitter_account_id || 0}
-                onChange={(event) => setForm((prev) => ({ ...prev, twitter_account_id: Number(event.target.value) }))}
-              >
-                <option value={0}>暂不绑定</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>@{account.username}</option>
-                ))}
-              </select>
-            </label>
-            <TextField label="职业" value={form.occupation} onChange={(value) => setForm((prev) => ({ ...prev, occupation: value }))} />
-            <TextField label="行业" value={form.industry} onChange={(value) => setForm((prev) => ({ ...prev, industry: value }))} />
-            <TextField label="年龄段" value={form.age_range} onChange={(value) => setForm((prev) => ({ ...prev, age_range: value }))} />
-            <TextField label="性别表达" value={form.gender} onChange={(value) => setForm((prev) => ({ ...prev, gender: value }))} />
-            <TextField label="学历" value={form.education} onChange={(value) => setForm((prev) => ({ ...prev, education: value }))} />
-            <TextField label="MBTI" value={form.mbti} onChange={(value) => setForm((prev) => ({ ...prev, mbti: value }))} />
-            <TextField label="性格标签（逗号分隔）" value={form.personality_tags.join(", ")} onChange={(value) => setForm((prev) => ({ ...prev, personality_tags: splitList(value) }))} />
-            <TextField label="话题领域（逗号分隔）" value={form.topics.join(", ")} onChange={(value) => setForm((prev) => ({ ...prev, topics: splitList(value) }))} />
-            <TextField label="禁聊话题（逗号分隔）" value={form.forbidden_topics.join(", ")} onChange={(value) => setForm((prev) => ({ ...prev, forbidden_topics: splitList(value) }))} />
-            <TextField label="安全模式" value={form.safety_mode} onChange={(value) => setForm((prev) => ({ ...prev, safety_mode: value }))} />
-          </div>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <TextArea label="身份摘要" value={form.identity_summary} onChange={(value) => setForm((prev) => ({ ...prev, identity_summary: value }))} />
-            <TextArea label="增长目标" value={form.growth_goal} onChange={(value) => setForm((prev) => ({ ...prev, growth_goal: value }))} />
-          </div>
-          <TextArea label="语言风格" value={form.voice_tone} onChange={(value) => setForm((prev) => ({ ...prev, voice_tone: value }))} className="mt-4" />
-
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={testGenerate} disabled={!selectedID || generating}>
-              <Sparkles className="size-4" />
-              {generating ? "生成中..." : "生成示例"}
-            </Button>
-            <Button type="button" onClick={save} disabled={saving || (!selectedID && !canCreate)} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
-              {saving ? "保存中..." : "保存 OAF Bot"}
-            </Button>
-          </div>
-
-          {samples ? (
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <SampleCard title="示例推文" text={samples.tweet} />
-              <SampleCard title="示例回复" text={samples.reply} />
-              <SampleCard title="示例私信" text={samples.dm} />
-            </div>
-          ) : null}
-        </SectionCard>
-
-        <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
-          {!selectedID ? (
-            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
-              {t("oafBots.usages.selectBot")}
-            </p>
-          ) : generationUsagesLoading ? (
-            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
-              {t("oafBots.usages.loading")}
-            </p>
-          ) : generationUsages.length === 0 ? (
-            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
-              {t("oafBots.usages.empty")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {generationUsages.map((item) => (
-                <div
-                  key={`${item.bot_id}-${item.scene}-${item.month}`}
-                  className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72 sm:grid-cols-[0.7fr_1.2fr_0.8fr_0.6fr]"
+        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <SectionCard
+            title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
+            description={t("oafBots.form.description")}
+          >
+            <div className="mb-5 grid gap-2 md:grid-cols-5">
+              {wizardSteps.map((step, index) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => setActiveStep(step.id)}
+                  className={`rounded-2xl border px-3 py-3 text-left transition ${
+                    activeStep === step.id
+                      ? "border-violet-300/45 bg-violet-500/15 text-white"
+                      : "border-white/10 bg-white/[0.035] text-white/55 hover:bg-white/[0.06]"
+                  }`}
                 >
-                  <div>
-                    <p className="text-xs text-white/45">{t("oafBots.usages.botId")}</p>
-                    <p className="mt-1 font-medium text-white">#{item.bot_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/45">{t("oafBots.usages.scene")}</p>
-                    <p className="mt-1 font-medium text-white">{t(`oafBots.usages.scene.${item.scene}`)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/45">{t("oafBots.usages.month")}</p>
-                    <p className="mt-1 text-white/78">{item.month}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/45">{t("oafBots.usages.count")}</p>
-                    <p className="mt-1 text-white/78">{item.count}</p>
-                  </div>
-                </div>
+                  <p className="text-xs">{t("oafBots.wizard.step", { count: index + 1 })}</p>
+                  <p className="mt-1 whitespace-nowrap text-sm font-semibold">{step.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/45">{step.description}</p>
+                </button>
               ))}
             </div>
-          )}
-        </SectionCard>
+
+            {activeStep === "identity" ? (
+              <WizardPanel title={t("oafBots.section.identity")} description={t("oafBots.section.identityDesc")}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField
+                    label={t("oafBots.fields.name")}
+                    value={form.name}
+                    onChange={(value) => updateForm("name", value)}
+                    placeholder={t("oafBots.placeholders.name")}
+                    helper={t("oafBots.helpers.name")}
+                    recommended
+                  />
+                  <AccountSelect
+                    label={t("oafBots.fields.twitterAccount")}
+                    helper={t("oafBots.helpers.twitterAccount")}
+                    accounts={accounts}
+                    value={form.twitter_account_id}
+                    boundByOtherBot={accountBoundByOtherBot}
+                    onChange={(value) => updateForm("twitter_account_id", value)}
+                    noneLabel={t("oafBots.account.none")}
+                    connectedLabel={t("oafBots.account.connected")}
+                    boundLabel={t("oafBots.account.bound")}
+                  />
+                  <ChipTextField
+                    label={t("oafBots.fields.occupation")}
+                    value={form.occupation}
+                    onChange={(value) => updateForm("occupation", value)}
+                    placeholder={t("oafBots.placeholders.occupation")}
+                    helper={t("oafBots.helpers.occupation")}
+                    options={occupationOptions}
+                  />
+                  <ChipTextField
+                    label={t("oafBots.fields.industry")}
+                    value={form.industry}
+                    onChange={(value) => updateForm("industry", value)}
+                    placeholder={t("oafBots.placeholders.industry")}
+                    helper={t("oafBots.helpers.industry")}
+                    options={industryOptions}
+                  />
+                  <SelectField
+                    label={t("oafBots.fields.ageRange")}
+                    value={form.age_range}
+                    onChange={(value) => updateForm("age_range", value)}
+                    options={ageOptions}
+                    helper={t("oafBots.helpers.ageRange")}
+                  />
+                  <SelectField
+                    label={t("oafBots.fields.gender")}
+                    value={form.gender}
+                    onChange={(value) => updateForm("gender", value)}
+                    options={genderOptions}
+                    helper={t("oafBots.helpers.gender")}
+                  />
+                  <SelectField
+                    label={t("oafBots.fields.education")}
+                    value={form.education}
+                    onChange={(value) => updateForm("education", value)}
+                    options={educationOptions}
+                    helper={t("oafBots.helpers.education")}
+                  />
+                  <SelectField
+                    label={t("oafBots.fields.mbti")}
+                    value={form.mbti}
+                    onChange={(value) => updateForm("mbti", value)}
+                    options={mbtiOptions}
+                    helper={t("oafBots.helpers.mbti")}
+                  />
+                </div>
+              </WizardPanel>
+            ) : null}
+
+            {activeStep === "style" ? (
+              <WizardPanel title={t("oafBots.section.style")} description={t("oafBots.section.styleDesc")}>
+                <TagPicker
+                  label={t("oafBots.fields.personalityTags")}
+                  values={form.personality_tags}
+                  options={personalityOptions}
+                  onChange={(values) => updateForm("personality_tags", values)}
+                  helper={t("oafBots.helpers.personalityTags")}
+                  placeholder={t("oafBots.placeholders.tagInput")}
+                  recommended
+                />
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <ChipTextArea
+                    label={t("oafBots.fields.voiceTone")}
+                    value={form.voice_tone}
+                    onChange={(value) => updateForm("voice_tone", value)}
+                    placeholder={t("oafBots.placeholders.voiceTone")}
+                    helper={t("oafBots.helpers.voiceTone")}
+                    options={voicePresetOptions}
+                    recommended
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.identitySummary")}
+                    value={form.identity_summary}
+                    onChange={(value) => updateForm("identity_summary", value)}
+                    placeholder={t("oafBots.placeholders.identitySummary")}
+                    helper={t("oafBots.helpers.identitySummary")}
+                    recommended
+                  />
+                </div>
+              </WizardPanel>
+            ) : null}
+
+            {activeStep === "topics" ? (
+              <WizardPanel title={t("oafBots.section.topics")} description={t("oafBots.section.topicsDesc")}>
+                <TagPicker
+                  label={t("oafBots.fields.topics")}
+                  values={form.topics}
+                  options={topicOptions}
+                  onChange={(values) => updateForm("topics", values)}
+                  helper={t("oafBots.helpers.topics")}
+                  placeholder={t("oafBots.placeholders.tagInput")}
+                  recommended
+                />
+                <div className="mt-4">
+                  <TagPicker
+                    label={t("oafBots.fields.forbiddenTopics")}
+                    values={form.forbidden_topics}
+                    options={forbiddenTopicOptions}
+                    onChange={(values) => updateForm("forbidden_topics", values)}
+                    helper={t("oafBots.helpers.forbiddenTopics")}
+                    placeholder={t("oafBots.placeholders.tagInput")}
+                  />
+                </div>
+                <div className="mt-4">
+                  <SelectField
+                    label={t("oafBots.fields.safetyMode")}
+                    value={form.safety_mode}
+                    onChange={(value) => updateForm("safety_mode", value)}
+                    options={safetyOptions}
+                    helper={t("oafBots.helpers.safetyMode")}
+                  />
+                </div>
+              </WizardPanel>
+            ) : null}
+
+            {activeStep === "goals" ? (
+              <WizardPanel title={t("oafBots.section.goals")} description={t("oafBots.section.goalsDesc")}>
+                <ChipTextArea
+                  label={t("oafBots.fields.growthGoal")}
+                  value={form.growth_goal}
+                  onChange={(value) => updateForm("growth_goal", value)}
+                  placeholder={t("oafBots.placeholders.growthGoal")}
+                  helper={t("oafBots.helpers.growthGoal")}
+                  options={growthGoalOptions}
+                  recommended
+                />
+              </WizardPanel>
+            ) : null}
+
+            {activeStep === "test" ? (
+              <WizardPanel title={t("oafBots.section.test")} description={t("oafBots.section.testDesc")}>
+                <SamplePanel
+                  t={t}
+                  samples={samples}
+                  scene={sampleScene}
+                  onSceneChange={setSampleScene}
+                  generating={generating}
+                  onGenerate={testGenerate}
+                  selectedID={selectedID}
+                  formChanged={formChanged}
+                />
+              </WizardPanel>
+            ) : null}
+
+            {selectedAccountConflict ? (
+              <div className="mt-5 rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-relaxed text-amber-100">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p>{t("oafBots.account.conflict", { name: selectedAccountConflict.name })}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {formChanged && selectedID ? (
+              <div className="mt-5 rounded-xl border border-blue-300/20 bg-blue-400/10 p-4 text-sm leading-relaxed text-blue-100">
+                <div className="flex gap-2">
+                  <Info className="mt-0.5 size-4 shrink-0" />
+                  <p>{t("oafBots.test.unsavedHint")}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={testGenerate} disabled={generating}>
+                <Sparkles className="size-4" />
+                {generating ? t("oafBots.actions.generating") : t("oafBots.actions.generate")}
+              </Button>
+              <Button
+                type="button"
+                onClick={save}
+                disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
+                className="bg-gradient-to-r from-blue-500 to-violet-500 text-white"
+              >
+                <Save className="size-4" />
+                {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
+              </Button>
+            </div>
+          </SectionCard>
+
+          <div className="space-y-5">
+            <BotPreview
+              t={t}
+              form={form}
+              account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
+              completion={personaCompleteness}
+            />
+            <GenerationUsageCard
+              t={t}
+              selectedID={selectedID}
+              generationUsages={generationUsages}
+              loading={generationUsagesLoading}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -358,8 +708,37 @@ function botToPayload(bot: OAFBot): OAFBotPayload {
   };
 }
 
-function splitList(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
+function optionKeys(namespace: string, keys: string[], t: (key: string, params?: Record<string, string | number>) => string): string[] {
+  return keys.map((key) => t(`oafBots.options.${namespace}.${key}`));
+}
+
+function calculatePersonaCompleteness(form: OAFBotPayload) {
+  let score = 0;
+  if (form.name.trim()) score += 10;
+  if (form.twitter_account_id) score += 10;
+  if (form.occupation.trim() || form.industry.trim()) score += 15;
+  if (form.personality_tags.length > 0) score += 15;
+  if (form.topics.length > 0) score += 15;
+  if (form.forbidden_topics.length > 0) score += 10;
+  if (form.identity_summary.trim()) score += 15;
+  if (form.growth_goal.trim()) score += 10;
+  return score;
+}
+
+function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string) {
+  if (!form.name.trim()) return t("oafBots.test.needName");
+  if (form.topics.length === 0) return t("oafBots.test.needTopic");
+  if (!form.identity_summary.trim() && !form.voice_tone.trim()) return t("oafBots.test.needPersona");
+  return "";
+}
+
+function getErrorBody(error: unknown): ApiErrorBody | undefined {
+  if (!axios.isAxiosError(error)) return undefined;
+  return error.response?.data as ApiErrorBody | undefined;
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return getErrorBody(error)?.message || fallback;
 }
 
 function QuotaCard({ label, used, limit }: { label: string; used: number; limit: number }) {
@@ -371,29 +750,492 @@ function QuotaCard({ label, used, limit }: { label: string; used: number; limit:
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <label className="space-y-1.5 text-sm text-white/70">
-      <span>{label}</span>
-      <input className="form-input" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function TextArea({ label, value, onChange, className = "" }: { label: string; value: string; onChange: (value: string) => void; className?: string }) {
-  return (
-    <label className={`block space-y-1.5 text-sm text-white/70 ${className}`}>
-      <span>{label}</span>
-      <textarea className="form-input min-h-28 resize-y" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function SampleCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-      <p className="text-xs text-white/45">{title}</p>
-      <p className="mt-2 text-sm text-white/75">{text}</p>
+    <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-white/55">{description}</p>
+      </div>
+      {children}
     </div>
+  );
+}
+
+function FieldShell({
+  label,
+  helper,
+  recommended,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  recommended?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block space-y-1.5 text-sm text-white/70">
+      <span className="flex items-center gap-2">
+        {label}
+        {recommended ? (
+          <span className="inline-flex size-5 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+            <CheckCircle2 className="size-3" />
+          </span>
+        ) : null}
+      </span>
+      {children}
+      {helper ? <span className="block text-xs leading-relaxed text-white/42">{helper}</span> : null}
+    </label>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  helper,
+  recommended,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  helper?: string;
+  recommended?: boolean;
+}) {
+  return (
+    <FieldShell label={label} helper={helper} recommended={recommended}>
+      <input className="form-input" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </FieldShell>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  helper,
+  recommended,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  helper?: string;
+  recommended?: boolean;
+}) {
+  return (
+    <FieldShell label={label} helper={helper} recommended={recommended}>
+      <textarea className="form-input min-h-32 resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </FieldShell>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  helper,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  helper?: string;
+}) {
+  const hasCurrentValue = value && !options.some((option) => option.value === value);
+  return (
+    <FieldShell label={label} helper={helper}>
+      <select className="form-input" value={value} onChange={(event) => onChange(event.target.value)}>
+        {hasCurrentValue ? <option value={value}>{value}</option> : null}
+        {options.map((option) => (
+          <option key={option.value || "empty"} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </FieldShell>
+  );
+}
+
+function AccountSelect({
+  label,
+  helper,
+  accounts,
+  value,
+  boundByOtherBot,
+  onChange,
+  noneLabel,
+  connectedLabel,
+  boundLabel,
+}: {
+  label: string;
+  helper?: string;
+  accounts: AccountListItem[];
+  value: number;
+  boundByOtherBot: Map<number, OAFBot>;
+  onChange: (value: number) => void;
+  noneLabel: string;
+  connectedLabel: string;
+  boundLabel: string;
+}) {
+  return (
+    <FieldShell label={label} helper={helper} recommended>
+      <select className="form-input" value={value || 0} onChange={(event) => onChange(Number(event.target.value))}>
+        <option value={0}>{noneLabel}</option>
+        {accounts.map((account) => {
+          const boundBot = boundByOtherBot.get(account.id);
+          return (
+            <option key={account.id} value={account.id} disabled={Boolean(boundBot)}>
+              @{account.username} · {boundBot ? `${boundLabel}: ${boundBot.name}` : connectedLabel}
+            </option>
+          );
+        })}
+      </select>
+    </FieldShell>
+  );
+}
+
+function ChipTextField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  helper,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+  helper?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <TextField label={label} value={value} onChange={onChange} placeholder={placeholder} helper={helper} />
+      <ChipOptions options={options} onPick={onChange} selected={value ? [value] : []} />
+    </div>
+  );
+}
+
+function ChipTextArea({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  helper,
+  recommended,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+  helper?: string;
+  recommended?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <TextArea label={label} value={value} onChange={onChange} placeholder={placeholder} helper={helper} recommended={recommended} />
+      <ChipOptions options={options} onPick={onChange} selected={value ? [value] : []} />
+    </div>
+  );
+}
+
+function TagPicker({
+  label,
+  values,
+  options,
+  onChange,
+  helper,
+  placeholder,
+  recommended,
+}: {
+  label: string;
+  values: string[];
+  options: string[];
+  onChange: (values: string[]) => void;
+  helper?: string;
+  placeholder?: string;
+  recommended?: boolean;
+}) {
+  const [input, setInput] = useState("");
+  const addValue = (value: string) => {
+    const next = value.trim();
+    if (!next || values.includes(next)) return;
+    onChange([...values, next]);
+    setInput("");
+  };
+  const removeValue = (value: string) => {
+    onChange(values.filter((item) => item !== value));
+  };
+  return (
+    <div className="space-y-2">
+      <FieldShell label={label} helper={helper} recommended={recommended}>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <div className="flex flex-wrap gap-2">
+            {values.length === 0 ? <span className="text-sm text-white/35">{placeholder}</span> : null}
+            {values.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => removeValue(value)}
+                className="rounded-full border border-violet-300/25 bg-violet-400/10 px-3 py-1 text-xs text-violet-50 hover:bg-violet-400/18"
+              >
+                {value} ×
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input
+              className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+              value={input}
+              placeholder={placeholder}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addValue(input);
+                }
+              }}
+            />
+            <button type="button" className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/10" onClick={() => addValue(input)}>
+              +
+            </button>
+          </div>
+        </div>
+      </FieldShell>
+      <ChipOptions options={options} onPick={addValue} selected={values} />
+    </div>
+  );
+}
+
+function ChipOptions({ options, selected, onPick }: { options: string[]; selected: string[]; onPick: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = selected.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onPick(option)}
+            className={`rounded-full border px-3 py-1 text-xs transition ${
+              active ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-50" : "border-white/10 bg-white/[0.035] text-white/55 hover:bg-white/[0.07]"
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BotPreview({
+  t,
+  form,
+  account,
+  completion,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  form: OAFBotPayload;
+  account?: AccountListItem;
+  completion: number;
+}) {
+  const lowCompletion = completion < 60;
+  return (
+    <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")}>
+      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100 shadow-[0_0_24px_rgba(56,189,248,0.18)]">
+            <Bot className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold text-white">{form.name || t("oafBots.preview.unnamed")}</p>
+            <p className="text-xs text-white/50">{account ? `@${account.username}` : t("oafBots.preview.noAccount")}</p>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between text-xs text-white/55">
+            <span>{t("oafBots.preview.completeness")}</span>
+            <span className="text-white">{completion}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full ${lowCompletion ? "bg-amber-300" : "bg-gradient-to-r from-cyan-400 to-violet-400"}`}
+              style={{ width: `${completion}%` }}
+            />
+          </div>
+          {lowCompletion ? <p className="mt-2 text-xs leading-relaxed text-amber-100/85">{t("oafBots.preview.lowCompleteness")}</p> : null}
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <PreviewRow label={t("oafBots.fields.occupation")} value={[form.occupation, form.industry].filter(Boolean).join(" · ") || t("oafBots.preview.notSet")} />
+          <PreviewRow label={t("oafBots.fields.personalityTags")} value={form.personality_tags.join(" / ") || t("oafBots.preview.notSet")} />
+          <PreviewRow label={t("oafBots.fields.topics")} value={form.topics.join(" / ") || t("oafBots.preview.notSet")} />
+          <PreviewRow label={t("oafBots.fields.safetyMode")} value={form.safety_mode || t("oafBots.preview.notSet")} />
+          <PreviewRow label={t("oafBots.fields.growthGoal")} value={form.growth_goal || t("oafBots.preview.notSet")} />
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+      <p className="text-xs text-white/40">{label}</p>
+      <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-white/75">{value}</p>
+    </div>
+  );
+}
+
+function SamplePanel({
+  t,
+  samples,
+  scene,
+  onSceneChange,
+  generating,
+  onGenerate,
+  selectedID,
+  formChanged,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  samples: OAFBotSamples | null;
+  scene: SampleScene;
+  onSceneChange: (scene: SampleScene) => void;
+  generating: boolean;
+  onGenerate: () => void;
+  selectedID: number | null;
+  formChanged: boolean;
+}) {
+  const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
+    { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
+    { id: "reply", icon: <MessageCircle className="size-4" />, title: t("oafBots.samples.reply"), description: t("oafBots.samples.replyContext") },
+    { id: "comment", icon: <MessagesSquare className="size-4" />, title: t("oafBots.samples.comment"), description: t("oafBots.samples.commentContext") },
+    { id: "dm", icon: <Mail className="size-4" />, title: t("oafBots.samples.dm"), description: t("oafBots.samples.dmContext") },
+  ];
+  const selectedSample = samples?.[scene];
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm leading-relaxed text-cyan-50">
+        <div className="flex gap-2">
+          <Sparkles className="mt-0.5 size-4 shrink-0" />
+          <p>{t("oafBots.test.costHint")}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        {sceneItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSceneChange(item.id)}
+            className={`rounded-2xl border p-4 text-left transition ${
+              scene === item.id ? "border-cyan-300/35 bg-cyan-400/12 text-white" : "border-white/10 bg-white/[0.035] text-white/60 hover:bg-white/[0.07]"
+            }`}
+          >
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {item.icon}
+              {item.title}
+            </div>
+            <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-white/45">{item.description}</p>
+          </button>
+        ))}
+      </div>
+
+      {!selectedID ? (
+        <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.saveFirst")}</p>
+      ) : formChanged ? (
+        <p className="rounded-xl border border-blue-300/20 bg-blue-400/10 p-4 text-sm text-blue-100">{t("oafBots.test.saveChangesFirst")}</p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+        <div>
+          <p className="text-sm font-medium text-white">{t("oafBots.test.panelTitle")}</p>
+          <p className="mt-1 text-xs text-white/45">{t("oafBots.test.panelDescription")}</p>
+        </div>
+        <Button type="button" onClick={onGenerate} disabled={generating} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+          <Sparkles className="size-4" />
+          {generating ? t("oafBots.actions.generating") : t("oafBots.actions.generate")}
+        </Button>
+      </div>
+
+      {samples ? (
+        <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+          <SampleCard title={t(`oafBots.samples.${scene}`)} text={selectedSample || t("oafBots.samples.empty")} highlight />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            {sceneItems.filter((item) => item.id !== scene).map((item) => (
+              <SampleCard key={item.id} title={item.title} text={samples[item.id] || t("oafBots.samples.empty")} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.025] p-6 text-center">
+          <Sparkles className="mx-auto size-6 text-violet-200/75" />
+          <p className="mt-3 text-sm font-medium text-white">{t("oafBots.samples.emptyTitle")}</p>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/50">{t("oafBots.samples.emptyDescription")}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SampleCard({ title, text, highlight = false }: { title: string; text: string; highlight?: boolean }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/45">{title}</p>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/78">{text}</p>
+    </div>
+  );
+}
+
+function GenerationUsageCard({
+  t,
+  selectedID,
+  generationUsages,
+  loading,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  selectedID: number | null;
+  generationUsages: OAFBotGenerationUsage[];
+  loading: boolean;
+}) {
+  return (
+    <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
+      {!selectedID ? (
+        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+          {t("oafBots.usages.selectBot")}
+        </p>
+      ) : loading ? (
+        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+          {t("oafBots.usages.loading")}
+        </p>
+      ) : generationUsages.length === 0 ? (
+        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+          {t("oafBots.usages.empty")}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {generationUsages.map((item) => (
+            <div key={`${item.bot_id}-${item.scene}-${item.month}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-white/45">{t("oafBots.usages.scene")}</p>
+                  <p className="mt-1 font-medium text-white">{t(`oafBots.usages.scene.${item.scene}`)}</p>
+                </div>
+                <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/65">{item.count}</span>
+              </div>
+              <p className="mt-3 text-xs text-white/45">{item.month}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
   );
 }

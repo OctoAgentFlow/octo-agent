@@ -409,7 +409,7 @@ export default function AutoCommentsPage() {
                                 {t("autoComment.review.approve")}
                               </Button>
                             ) : null}
-                            {draft.status !== "rejected" && draft.status !== "sent" ? (
+                            {draft.status !== "rejected" && draft.status !== "sent" && draft.status !== "published" ? (
                               <Button size="sm" variant="outline" onClick={() => void rejectDraft(draft.id)}>
                                 <XCircle className="size-4" />
                                 {t("autoComment.review.reject")}

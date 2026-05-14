@@ -314,6 +314,9 @@ type ReviewQueueItem struct {
 	TargetSummary      string   `json:"target_summary,omitempty"`
 	RiskLevel          string   `json:"risk_level"`
 	RiskReasons        []string `json:"risk_reasons"`
+	PublishJobID       uint     `json:"publish_job_id,omitempty"`
+	PublishStatus      string   `json:"publish_status,omitempty"`
+	PublishLastError   string   `json:"publish_last_error,omitempty"`
 	CreatedAt          string   `json:"created_at"`
 	SourceStatus       string   `json:"source_status,omitempty"`
 	SourceID           uint     `json:"source_id"`
@@ -325,4 +328,27 @@ type ReviewQueueResponse struct {
 	Page     int               `json:"page"`
 	PageSize int               `json:"page_size"`
 	Stats    ReviewQueueStats  `json:"stats"`
+}
+
+type PublishJobItem struct {
+	ID               uint   `json:"id"`
+	UserID           uint   `json:"user_id"`
+	TwitterAccountID uint   `json:"twitter_account_id"`
+	BotID            uint   `json:"bot_id"`
+	SourceType       string `json:"source_type"`
+	SourceID         uint   `json:"source_id"`
+	Content          string `json:"content"`
+	Status           string `json:"status"`
+	ExecutionMode    string `json:"execution_mode"`
+	AttemptCount     int    `json:"attempt_count"`
+	MaxAttempts      int    `json:"max_attempts"`
+	NextAttemptAt    string `json:"next_attempt_at,omitempty"`
+	LastError        string `json:"last_error,omitempty"`
+	PublishedAt      string `json:"published_at,omitempty"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+}
+
+type PublishJobsResponse struct {
+	Items []PublishJobItem `json:"items"`
 }

@@ -12,14 +12,16 @@ import (
 type ReviewQueueService struct {
 	commentTaskRepo *repository.AutoCommentTaskRepository
 	replyDraftRepo  *repository.AutoReplyDraftRepository
+	publishJobRepo  *repository.PublishJobRepository
 	botRepo         *repository.OAFBotRepository
 	accountRepo     *repository.TwitterAccountRepository
 }
 
-func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
+func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, publishJobRepo *repository.PublishJobRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
 	return &ReviewQueueService{
 		commentTaskRepo: commentTaskRepo,
 		replyDraftRepo:  replyDraftRepo,
+		publishJobRepo:  publishJobRepo,
 		botRepo:         botRepo,
 		accountRepo:     accountRepo,
 	}
@@ -62,6 +64,32 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	for _, account := range accounts {
 		accountNames[account.ID] = displayAccountName(account)
 	}
+	commentJobs := map[uint]model.PublishJob{}
+	replyJobs := map[uint]model.PublishJob{}
+	if s.publishJobRepo != nil {
+		commentIDs := make([]uint, 0, len(tasks))
+		for _, task := range tasks {
+			commentIDs = append(commentIDs, task.ID)
+		}
+		jobs, err := s.publishJobRepo.ListBySources(userID, repository.PublishSourceComment, commentIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, job := range jobs {
+			commentJobs[job.SourceID] = job
+		}
+		replyIDs := make([]uint, 0, len(replyDrafts))
+		for _, draft := range replyDrafts {
+			replyIDs = append(replyIDs, draft.ID)
+		}
+		jobs, err = s.publishJobRepo.ListBySources(userID, repository.PublishSourceReply, replyIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, job := range jobs {
+			replyJobs[job.SourceID] = job
+		}
+	}
 
 	typeFilter := normalizeReviewQueueFilter(query.Type)
 	statusFilter := normalizeReviewQueueFilter(query.Status)
@@ -71,6 +99,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	stats := dto.ReviewQueueStats{}
 	for _, task := range tasks {
 		item := autoCommentTaskToReviewQueueItem(task, botNames[task.BotID], accountNames[task.XAccountID])
+		applyPublishJobToReviewQueueItem(&item, commentJobs[task.ID])
 		incrementReviewQueueStats(&stats, item.Status)
 		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
 			continue
@@ -85,6 +114,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	}
 	for _, draft := range replyDrafts {
 		item := autoReplyDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
+		applyPublishJobToReviewQueueItem(&item, replyJobs[draft.ID])
 		incrementReviewQueueStats(&stats, item.Status)
 		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
 			continue
@@ -118,6 +148,26 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		PageSize: pageSize,
 		Stats:    stats,
 	}, nil
+}
+
+func applyPublishJobToReviewQueueItem(item *dto.ReviewQueueItem, job model.PublishJob) {
+	if item == nil || job.ID == 0 {
+		return
+	}
+	item.PublishJobID = job.ID
+	item.PublishStatus = job.Status
+	item.PublishLastError = job.LastError
+	switch job.Status {
+	case repository.PublishStatusProcessing:
+		item.Status = repository.PublishStatusProcessing
+	case repository.PublishStatusPublished:
+		item.Status = "published"
+	case repository.PublishStatusFailed:
+		item.Status = "failed"
+		if strings.TrimSpace(job.LastError) != "" {
+			item.RiskReasons = append(item.RiskReasons, job.LastError)
+		}
+	}
 }
 
 func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string, accountName string) dto.ReviewQueueItem {
@@ -205,9 +255,11 @@ func normalizeReviewQueueStatus(status string) string {
 		return "pending_review"
 	case "sent":
 		return "published"
+	case "processing":
+		return "processing"
 	case "ready_to_publish":
 		return "ready_to_publish"
-	case "draft", "approved", "rejected", "failed":
+	case "draft", "approved", "rejected", "failed", "published":
 		return strings.ToLower(strings.TrimSpace(status))
 	default:
 		return strings.ToLower(strings.TrimSpace(status))
@@ -231,7 +283,7 @@ func incrementReviewQueueStats(stats *dto.ReviewQueueStats, status string) {
 		stats.PendingReview++
 	case "ready_to_publish":
 		stats.ReadyToPublish++
-	case "approved":
+	case "approved", "published":
 		stats.Approved++
 	case "rejected":
 		stats.Rejected++

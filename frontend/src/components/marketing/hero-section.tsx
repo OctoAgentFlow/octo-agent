@@ -14,6 +14,7 @@ const personaFields = [
   ["marketing.hero.persona.voiceLabel", "marketing.hero.persona.voiceValue"],
   ["marketing.hero.persona.topicsLabel", "marketing.hero.persona.topicsValue"],
   ["marketing.hero.persona.guardrailsLabel", "marketing.hero.persona.guardrailsValue"],
+  ["marketing.hero.persona.growthGoalLabel", "marketing.hero.persona.growthGoalValue"],
 ] as const;
 
 const personaTasks = [
@@ -26,15 +27,16 @@ const personaTasks = [
 export function HeroSection() {
   const { t } = useT();
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-10 px-6 pt-10 pb-12 md:grid-cols-[1.04fr_0.96fr] md:px-8 md:pt-16">
+    <section className="mx-auto grid w-full max-w-7xl gap-10 px-6 pt-10 pb-12 md:grid-cols-[1.06fr_0.94fr] md:px-8 md:pt-16 lg:gap-12">
       <div className="flex flex-col justify-center space-y-6">
-        <span className="inline-flex w-fit rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200 uppercase">
+        <span className="inline-flex w-fit rounded-full border border-blue-400/30 bg-blue-500/10 px-3.5 py-1.5 text-xs font-medium text-blue-100 shadow-[0_0_24px_rgba(59,130,246,0.12)]">
           {t("marketing.hero.badge")}
         </span>
-        <h1 className="max-w-2xl text-4xl leading-tight font-semibold text-white md:text-6xl">
-          {t("marketing.hero.title")}
+        <h1 className="max-w-3xl text-4xl leading-[1.12] font-semibold text-balance text-white md:text-5xl lg:text-6xl">
+          <span className="block">{t("marketing.hero.titleLine1")}</span>
+          <span className="block">{t("marketing.hero.titleLine2")}</span>
         </h1>
-        <p className="max-w-xl text-base text-white/70 md:text-lg">
+        <p className="max-w-2xl text-base leading-8 text-white/70 md:text-lg">
           {t("marketing.hero.subtitle")}
         </p>
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
@@ -66,18 +68,18 @@ export function HeroSection() {
           {heroStats.map((item) => (
             <div
               key={item.labelKey}
-              className="rounded-lg border border-white/10 bg-white/[0.045] p-3 transition-transform duration-200 hover:-translate-y-0.5"
+              className="min-h-24 rounded-2xl border border-white/10 bg-white/[0.045] p-3.5 transition-transform duration-200 hover:-translate-y-0.5"
             >
-              <p className="text-lg font-semibold text-white">{item.value}</p>
-              <p className="text-xs text-white/60">{t(item.labelKey)}</p>
+              <p className="text-lg font-semibold leading-tight text-white">{t(item.valueKey)}</p>
+              <p className="mt-2 text-xs leading-relaxed text-white/60">{t(item.labelKey)}</p>
             </div>
           ))}
         </div>
       </div>
-      <div className="relative overflow-hidden rounded-3xl border border-white/12 bg-[#080d20]/95 p-5 shadow-2xl shadow-blue-950/30">
+      <div className="relative overflow-hidden rounded-3xl border border-white/12 bg-[#080d20]/95 p-4 shadow-2xl shadow-blue-950/30 sm:p-5">
         <div className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-violet-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 size-64 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="relative rounded-2xl border border-white/10 bg-white/[0.045] p-5">
+        <div className="relative rounded-2xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-2xl border border-blue-300/25 bg-blue-500/12 text-blue-200 shadow-[0_0_24px_rgba(59,130,246,0.22)]">
@@ -86,6 +88,7 @@ export function HeroSection() {
               <div>
                 <p className="text-xs tracking-[0.18em] text-blue-200 uppercase">{t("marketing.hero.persona.kicker")}</p>
                 <h2 className="mt-1 text-xl font-semibold text-white">{t("marketing.hero.persona.title")}</h2>
+                <p className="mt-1 text-xs text-white/48">{t("marketing.hero.persona.account")}</p>
               </div>
             </div>
             <span className="hidden rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100 sm:inline-flex">
@@ -93,9 +96,15 @@ export function HeroSection() {
             </span>
           </div>
 
-          <div className="mt-5 grid gap-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {personaFields.map(([labelKey, valueKey]) => (
-              <div key={labelKey} className="rounded-xl border border-white/10 bg-[#0b1230]/80 p-3">
+              <div
+                key={labelKey}
+                className={cn(
+                  "rounded-xl border border-white/10 bg-[#0b1230]/80 p-3",
+                  labelKey.includes("topics") || labelKey.includes("guardrails") || labelKey.includes("growthGoal") ? "sm:col-span-2" : ""
+                )}
+              >
                 <p className="text-xs text-white/45">{t(labelKey)}</p>
                 <p className="mt-1 text-sm leading-relaxed text-white/82">{t(valueKey)}</p>
               </div>

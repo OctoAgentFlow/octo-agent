@@ -1,4 +1,4 @@
-import { Bot, MessageCircleReply, Send, Sparkles, Users, Wallet } from "lucide-react";
+import { Bot, MessageCircleReply, MessageSquareText, Send, Sparkles, Users, Wallet } from "lucide-react";
 
 import type {
   DashboardPreview,
@@ -12,7 +12,7 @@ import type {
 } from "@/types/marketing";
 
 export const navItems: NavItem[] = [
-  { labelKey: "marketing.nav.autoPost", href: "#auto-post" },
+  { labelKey: "marketing.nav.oafBot", href: "#oaf-bot" },
   { labelKey: "marketing.nav.capabilities", href: "#capabilities" },
   { labelKey: "marketing.nav.workflow", href: "#workflow" },
   { labelKey: "marketing.nav.pricing", href: "#pricing" },
@@ -20,9 +20,9 @@ export const navItems: NavItem[] = [
 ];
 
 export const heroStats: HeroStat[] = [
-  { labelKey: "marketing.hero.stats.teamsOnboarded", value: "1" },
-  { labelKey: "marketing.hero.stats.tasksAutomated", value: "3" },
-  { labelKey: "marketing.hero.stats.avgResponseSpeed", value: "300s" },
+  { labelKey: "marketing.hero.stats.personaEngine", value: "OAF" },
+  { labelKey: "marketing.hero.stats.socialActions", value: "4" },
+  { labelKey: "marketing.hero.stats.guardrails", value: "24/7" },
 ];
 
 export const features: FeatureCard[] = [
@@ -49,6 +49,17 @@ export const features: FeatureCard[] = [
     statusKey: "marketing.features.status.queued",
   },
   {
+    titleKey: "marketing.features.autoComment.title",
+    descriptionKey: "marketing.features.autoComment.description",
+    bulletKeys: [
+      "marketing.features.autoComment.bullets.targets",
+      "marketing.features.autoComment.bullets.persona",
+      "marketing.features.autoComment.bullets.review",
+    ],
+    icon: MessageSquareText,
+    statusKey: "marketing.features.status.queued",
+  },
+  {
     titleKey: "marketing.features.autoDm.title",
     descriptionKey: "marketing.features.autoDm.description",
     bulletKeys: [
@@ -63,20 +74,16 @@ export const features: FeatureCard[] = [
 
 export const workflowSteps: WorkflowStep[] = [
   {
-    titleKey: "marketing.workflow.steps.connect.title",
-    descriptionKey: "marketing.workflow.steps.connect.description",
+    titleKey: "marketing.workflow.steps.createBot.title",
+    descriptionKey: "marketing.workflow.steps.createBot.description",
   },
   {
-    titleKey: "marketing.workflow.steps.configure.title",
-    descriptionKey: "marketing.workflow.steps.configure.description",
+    titleKey: "marketing.workflow.steps.bindAccount.title",
+    descriptionKey: "marketing.workflow.steps.bindAccount.description",
   },
   {
-    titleKey: "marketing.workflow.steps.approve.title",
-    descriptionKey: "marketing.workflow.steps.approve.description",
-  },
-  {
-    titleKey: "marketing.workflow.steps.run.title",
-    descriptionKey: "marketing.workflow.steps.run.description",
+    titleKey: "marketing.workflow.steps.launchFlow.title",
+    descriptionKey: "marketing.workflow.steps.launchFlow.description",
   },
 ];
 

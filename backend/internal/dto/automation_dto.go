@@ -243,3 +243,45 @@ type AutoCommentTaskBlockRequest struct {
 type AutoCommentDraftUpdateRequest struct {
 	GeneratedComment string `json:"generated_comment" binding:"required"`
 }
+
+type ReviewQueueQuery struct {
+	Type          string `form:"type"`
+	Status        string `form:"status"`
+	ExecutionMode string `form:"execution_mode"`
+	Page          int    `form:"page"`
+	PageSize      int    `form:"page_size"`
+}
+
+type ReviewQueueStats struct {
+	PendingReview  int `json:"pending_review"`
+	ReadyToPublish int `json:"ready_to_publish"`
+	Approved       int `json:"approved"`
+	Rejected       int `json:"rejected"`
+	Failed         int `json:"failed"`
+}
+
+type ReviewQueueItem struct {
+	ID                 uint     `json:"id"`
+	Type               string   `json:"type"`
+	Content            string   `json:"content"`
+	Status             string   `json:"status"`
+	ExecutionMode      string   `json:"execution_mode"`
+	BotID              uint     `json:"bot_id"`
+	BotName            string   `json:"bot_name,omitempty"`
+	TwitterAccountID   uint     `json:"twitter_account_id"`
+	TwitterAccountName string   `json:"twitter_account_name,omitempty"`
+	TargetSummary      string   `json:"target_summary,omitempty"`
+	RiskLevel          string   `json:"risk_level"`
+	RiskReasons        []string `json:"risk_reasons"`
+	CreatedAt          string   `json:"created_at"`
+	SourceStatus       string   `json:"source_status,omitempty"`
+	SourceID           uint     `json:"source_id"`
+}
+
+type ReviewQueueResponse struct {
+	Items    []ReviewQueueItem `json:"items"`
+	Total    int               `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"page_size"`
+	Stats    ReviewQueueStats  `json:"stats"`
+}

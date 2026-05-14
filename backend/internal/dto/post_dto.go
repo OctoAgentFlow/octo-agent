@@ -13,6 +13,11 @@ type PostCreateRequest struct {
 	PublishedAt *string `json:"published_at"`
 }
 
+type PostGenerateRequest struct {
+	XAccountID uint   `json:"x_account_id" binding:"required"`
+	Topic      string `json:"topic"`
+}
+
 type PostUpdateRequest struct {
 	XAccountID  *uint   `json:"x_account_id"`
 	Content     *string `json:"content"`
@@ -50,4 +55,12 @@ type PostPagination struct {
 type PostExecuteResponse struct {
 	Post    PostItem `json:"post"`
 	TweetID string   `json:"tweet_id,omitempty"`
+}
+
+type PostGenerateResponse struct {
+	Content string         `json:"content"`
+	BotID   uint           `json:"bot_id,omitempty"`
+	Scene   string         `json:"scene"`
+	Usage   PlanUsageData  `json:"usage"`
+	Limits  PlanLimitsData `json:"limits"`
 }

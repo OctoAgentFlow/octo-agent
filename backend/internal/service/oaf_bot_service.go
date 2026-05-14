@@ -22,11 +22,12 @@ type OAFBotService struct {
 	botRepo     *repository.OAFBotRepository
 	accountRepo *repository.TwitterAccountRepository
 	userRepo    *repository.UserRepository
+	usageRepo   *repository.AIGenerationUsageRepository
 	ai          *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -47,6 +48,7 @@ func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
 	if n, err := s.accountRepo.CountByUserID(userID); err == nil {
 		usage.TwitterAccounts = n
 	}
+	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, time.Now().UTC())
 	return &dto.OAFBotListResponse{
 		Items:  items,
 		Usage:  usage,
@@ -109,7 +111,11 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto
 	if err != nil {
 		return nil, err
 	}
-	return s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	out, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
 		Name:            bot.Name,
 		Occupation:      bot.Occupation,
 		Industry:        bot.Industry,
@@ -125,6 +131,13 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto
 		GrowthGoal:      bot.GrowthGoal,
 		SafetyMode:      bot.SafetyMode,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.usageRepo.Increment(userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, 1); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *OAFBotService) assertTwitterAccount(userID uint, accountID uint) error {

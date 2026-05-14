@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarClock } from "lucide-react";
+import { AlertCircle, CalendarClock, Sparkles } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -36,6 +36,7 @@ export function PostCreateClient() {
   const [status, setStatus] = useState<PostStatus>("draft");
   const [scheduledLocal, setScheduledLocal] = useState("");
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const load = useCallback(async () => {
     setLoadAccounts("loading");
@@ -102,6 +103,30 @@ export function PostCreateClient() {
     }
   };
 
+  const generateContent = async () => {
+    if (!xAccountId) {
+      pushToast(t("posts.create.needAccount"));
+      return;
+    }
+    setGenerating(true);
+    try {
+      const data = await postService.generate({ x_account_id: xAccountId });
+      setContent(data.content);
+      const used = data.usage?.ai_generations_month ?? 0;
+      const limit = data.limits?.ai_generations_monthly ?? 0;
+      pushToast(data.bot_id ? `已根据 OAF Bot 生成人设内容。AI 用量 ${used}/${limit}` : `已使用默认风格生成内容。AI 用量 ${used}/${limit}`);
+    } catch (error) {
+      const body = axios.isAxiosError(error) ? error.response?.data as { message?: string; error_code?: string } | undefined : undefined;
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast("AI 生成次数已达当前套餐上限，请前往 Billing 升级套餐。");
+      } else {
+        pushToast(body?.message || "AI 生成内容失败。");
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -163,7 +188,19 @@ export function PostCreateClient() {
               </select>
             </label>
             <label className="block text-xs text-white/70">
-              {t("posts.create.content")}
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span>{t("posts.create.content")}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8"
+                  disabled={generating}
+                  onClick={() => void generateContent()}
+                >
+                  <Sparkles className="size-3.5" />
+                  {generating ? "生成中..." : "AI 生成"}
+                </Button>
+              </span>
               <textarea
                 className="form-input mt-1 min-h-[140px] w-full"
                 value={content}

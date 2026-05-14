@@ -24,6 +24,23 @@ export type PostUpdateBody = {
   published_at?: string | null;
 };
 
+export type PostGenerateBody = {
+  x_account_id: number;
+  topic?: string;
+};
+
+export type PostGenerateResult = {
+  content: string;
+  bot_id?: number;
+  scene: "auto_post";
+  usage: {
+    ai_generations_month: number;
+  };
+  limits: {
+    ai_generations_monthly: number;
+  };
+};
+
 export const postService = {
   async list(params?: { page?: number; page_size?: number }) {
     const res = await request.get<ApiResponse<PostListData>>("/posts", { params });
@@ -37,6 +54,11 @@ export const postService = {
 
   async create(body: PostCreateBody) {
     const res = await request.post<ApiResponse<PostItem>>("/posts", body);
+    return res.data.data;
+  },
+
+  async generate(body: PostGenerateBody) {
+    const res = await request.post<ApiResponse<PostGenerateResult>>("/posts/generate", body);
     return res.data.data;
   },
 

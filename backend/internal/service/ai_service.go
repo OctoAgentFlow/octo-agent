@@ -38,6 +38,26 @@ type GenerateOAFBotSamplesInput struct {
 	SafetyMode      string
 }
 
+type GenerateAutoPostInput struct {
+	AccountHandle   string
+	Topic           string
+	HasBot          bool
+	Name            string
+	Occupation      string
+	Industry        string
+	AgeRange        string
+	Gender          string
+	Education       string
+	MBTI            string
+	PersonalityTags []string
+	IdentitySummary string
+	VoiceTone       string
+	Topics          []string
+	ForbiddenTopics []string
+	GrowthGoal      string
+	SafetyMode      string
+}
+
 func NewAIService(openaiClient *openaiint.Client) *AIService {
 	return &AIService{openai: openaiClient}
 }
@@ -146,6 +166,58 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	out.Reply = truncateRunes(out.Reply, 180)
 	out.DM = truncateRunes(out.DM, 220)
 	return &out, nil
+}
+
+func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (string, error) {
+	handle := strings.TrimSpace(in.AccountHandle)
+	if handle == "" {
+		handle = "@account"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's Auto Post content generator.",
+		"Write one original X/Twitter post for the provided account.",
+		"Output only the post text. Do not include markdown, labels, or surrounding quotes.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Account: " + handle + "\n")
+	if strings.TrimSpace(in.Topic) != "" {
+		user.WriteString("User requested topic: " + strings.TrimSpace(in.Topic) + "\n")
+	}
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+		user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
+		user.WriteString("age_range: " + strings.TrimSpace(in.AgeRange) + "\n")
+		user.WriteString("gender: " + strings.TrimSpace(in.Gender) + "\n")
+		user.WriteString("education: " + strings.TrimSpace(in.Education) + "\n")
+		user.WriteString("mbti: " + strings.TrimSpace(in.MBTI) + "\n")
+		user.WriteString("personality_tags: " + strings.Join(in.PersonalityTags, ", ") + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	} else {
+		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: practical, clear, useful, and non-spammy.\n")
+	}
+	user.WriteString("Hard rules:\n")
+	user.WriteString("- Maximum 260 characters.\n")
+	user.WriteString("- Make it useful and specific, not hype.\n")
+	user.WriteString("- Do not mention that you are AI.\n")
+	user.WriteString("- Do not ask for private keys, seed phrases, wallet connections, airdrops, or guaranteed returns.\n")
+	user.WriteString("- Avoid forbidden topics if any are listed.\n")
+
+	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return "", err
+	}
+	return truncateRunes(strings.TrimSpace(text), 260), nil
 }
 
 func truncateRunes(s string, max int) string {

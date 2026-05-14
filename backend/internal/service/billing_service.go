@@ -27,6 +27,7 @@ type BillingService struct {
 	orderRepo   *repository.BillingOrderRepository
 	accountRepo *repository.TwitterAccountRepository
 	oafBotRepo  *repository.OAFBotRepository
+	usageRepo   *repository.AIGenerationUsageRepository
 	cfg         *config.Config
 }
 
@@ -41,8 +42,8 @@ const (
 	billingReviewReviewed   = "reviewed"
 )
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -139,6 +140,7 @@ func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 			usage.TwitterAccounts = n
 		}
 	}
+	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, time.Now().UTC())
 	return usage
 }
 

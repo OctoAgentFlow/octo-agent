@@ -43,3 +43,11 @@ func (r *OAFBotRepository) GetByUserAndID(userID, id uint) (*model.OAFBot, error
 	}
 	return &bot, nil
 }
+
+func (r *OAFBotRepository) GetByUserAndTwitterAccountID(userID, twitterAccountID uint) (*model.OAFBot, error) {
+	var bot model.OAFBot
+	if err := r.DB.Where("user_id = ? AND twitter_account_id = ?", userID, twitterAccountID).Order("id DESC").First(&bot).Error; err != nil {
+		return nil, err
+	}
+	return &bot, nil
+}

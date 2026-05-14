@@ -32,6 +32,7 @@ export type OAFBotListData = {
 export type OAFBotSamples = {
   tweet: string;
   reply: string;
+  comment: string;
   dm: string;
 };
 

@@ -46,9 +46,10 @@ type OAFBotUpsertRequest struct {
 }
 
 type OAFBotTestGenerateResponse struct {
-	Tweet string `json:"tweet"`
-	Reply string `json:"reply"`
-	DM    string `json:"dm"`
+	Tweet   string `json:"tweet"`
+	Reply   string `json:"reply"`
+	Comment string `json:"comment"`
+	DM      string `json:"dm"`
 }
 
 type OAFBotGenerationUsageItem struct {

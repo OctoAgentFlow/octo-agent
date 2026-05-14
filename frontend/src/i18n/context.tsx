@@ -47,15 +47,16 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [lang]);
 
   const dict = dictionaries[lang] ?? dictionaries.en;
+  const mergedDict = useMemo<I18nDict>(() => ({ ...dictionaries.en, ...dict }), [dict]);
 
   const value = useMemo<I18nContextValue>(
     () => ({
       lang,
-      dict,
+      dict: mergedDict,
       setLang,
-      t: (key, params) => translate(dict, key, params),
+      t: (key, params) => translate(mergedDict, key, params),
     }),
-    [dict, lang, setLang]
+    [mergedDict, lang, setLang]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

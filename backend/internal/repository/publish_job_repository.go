@@ -21,6 +21,10 @@ const (
 	PublishStatusPublished  = "published"
 	PublishStatusFailed     = "failed"
 	PublishStatusCancelled  = "cancelled"
+
+	PublishModeSimulated = "simulated"
+	PublishModeDryRun    = "dry_run"
+	PublishModeReal      = "real"
 )
 
 type PublishJobRepository struct {
@@ -42,6 +46,9 @@ func (r *PublishJobRepository) Ensure(job *model.PublishJob) (*model.PublishJob,
 	}
 	if job.Status == "" {
 		job.Status = PublishStatusPending
+	}
+	if job.PublishMode == "" {
+		job.PublishMode = PublishModeSimulated
 	}
 	if job.MaxAttempts <= 0 {
 		job.MaxAttempts = 3
@@ -133,8 +140,35 @@ func (r *PublishJobRepository) UpsertPending(job *model.PublishJob) error {
 	if job.Status == "" {
 		job.Status = PublishStatusPending
 	}
+	if job.PublishMode == "" {
+		job.PublishMode = PublishModeSimulated
+	}
 	return r.DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "source_type"}, {Name: "source_id"}},
 		DoNothing: true,
 	}).Create(job).Error
+}
+
+func (r *PublishJobRepository) CountManualPublishedByAccount(accountID uint, from, to time.Time) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.PublishJob{}).
+		Where("twitter_account_id = ? AND status = ?", accountID, PublishStatusPublished).
+		Where("publish_mode IN ?", []string{PublishModeDryRun, PublishModeReal}).
+		Where("published_at >= ? AND published_at < ?", from, to).
+		Count(&n).Error
+	return n, err
+}
+
+func (r *PublishJobRepository) LastManualPublishedByAccount(accountID uint) (*model.PublishJob, error) {
+	var row model.PublishJob
+	err := r.DB.
+		Where("twitter_account_id = ? AND status = ?", accountID, PublishStatusPublished).
+		Where("publish_mode IN ?", []string{PublishModeDryRun, PublishModeReal}).
+		Where("published_at IS NOT NULL").
+		Order("published_at DESC, id DESC").
+		First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

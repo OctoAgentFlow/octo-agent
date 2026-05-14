@@ -56,6 +56,14 @@ x_oauth:
   state_secret: "TODO_X_STATE_SECRET"
   scopes: "tweet.read users.read offline.access"
 
+x_publisher:
+  # Production should remain disabled until X posting permissions, legal review, and rate limits are verified.
+  real_publish_enabled: false
+  manual_publish_enabled: true
+  per_account_daily_limit: 20
+  per_account_min_interval_seconds: 300
+  dry_run: true
+
 billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"

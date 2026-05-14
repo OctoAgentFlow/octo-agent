@@ -316,7 +316,9 @@ type ReviewQueueItem struct {
 	RiskReasons        []string `json:"risk_reasons"`
 	PublishJobID       uint     `json:"publish_job_id,omitempty"`
 	PublishStatus      string   `json:"publish_status,omitempty"`
+	PublishMode        string   `json:"publish_mode,omitempty"`
 	PublishLastError   string   `json:"publish_last_error,omitempty"`
+	PublishExternalURL string   `json:"publish_external_url,omitempty"`
 	CreatedAt          string   `json:"created_at"`
 	SourceStatus       string   `json:"source_status,omitempty"`
 	SourceID           uint     `json:"source_id"`
@@ -340,15 +342,28 @@ type PublishJobItem struct {
 	Content          string `json:"content"`
 	Status           string `json:"status"`
 	ExecutionMode    string `json:"execution_mode"`
+	PublishMode      string `json:"publish_mode"`
 	AttemptCount     int    `json:"attempt_count"`
 	MaxAttempts      int    `json:"max_attempts"`
 	NextAttemptAt    string `json:"next_attempt_at,omitempty"`
 	LastError        string `json:"last_error,omitempty"`
+	ExternalID       string `json:"external_id,omitempty"`
+	ExternalURL      string `json:"external_url,omitempty"`
+	RawResponse      string `json:"raw_response,omitempty"`
 	PublishedAt      string `json:"published_at,omitempty"`
 	CreatedAt        string `json:"created_at"`
 	UpdatedAt        string `json:"updated_at"`
 }
 
+type XPublisherSettings struct {
+	RealPublishEnabled           bool `json:"real_publish_enabled"`
+	ManualPublishEnabled         bool `json:"manual_publish_enabled"`
+	PerAccountDailyLimit         int  `json:"per_account_daily_limit"`
+	PerAccountMinIntervalSeconds int  `json:"per_account_min_interval_seconds"`
+	DryRun                       bool `json:"dry_run"`
+}
+
 type PublishJobsResponse struct {
-	Items []PublishJobItem `json:"items"`
+	Items    []PublishJobItem   `json:"items"`
+	Settings XPublisherSettings `json:"settings"`
 }

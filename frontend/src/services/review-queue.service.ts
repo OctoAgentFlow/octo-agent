@@ -25,7 +25,9 @@ export type ReviewQueueItemApi = {
   risk_reasons: string[];
   publish_job_id?: number;
   publish_status?: string;
+  publish_mode?: "simulated" | "dry_run" | "real" | "";
   publish_last_error?: string;
+  publish_external_url?: string;
   created_at: string;
   source_status?: string;
   source_id: number;

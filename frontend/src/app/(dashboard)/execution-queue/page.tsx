@@ -9,7 +9,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { automationService } from "@/services/automation.service";
-import { publishingService } from "@/services/publishing.service";
+import { publishingService, type PublishJobsData } from "@/services/publishing.service";
 import {
   reviewQueueService,
   type ReviewQueueExecutionMode,
@@ -59,6 +59,7 @@ export default function ExecutionQueuePage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
+  const [publisherSettings, setPublisherSettings] = useState<PublishJobsData["settings"] | null>(null);
 
   useEffect(() => {
     const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
@@ -70,15 +71,19 @@ export default function ExecutionQueuePage() {
   const loadQueue = useCallback(async () => {
     setLoadState("loading");
     try {
-      const data = await reviewQueueService.list({
-        type: typeFilter,
-        status: statusFilter,
-        executionMode: modeFilter,
-        page: 1,
-        pageSize: 50,
-      });
+      const [data, publishingData] = await Promise.all([
+        reviewQueueService.list({
+          type: typeFilter,
+          status: statusFilter,
+          executionMode: modeFilter,
+          page: 1,
+          pageSize: 50,
+        }),
+        publishingService.jobs(),
+      ]);
       setItems(data.items);
       setStats(data.stats);
+      setPublisherSettings(publishingData.settings);
       setLoadState("ready");
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -183,6 +188,21 @@ export default function ExecutionQueuePage() {
     }
   };
 
+  const realPublish = async (item: ReviewQueueItemApi) => {
+    if (!item.publish_job_id) return;
+    if (!window.confirm(t("executionQueue.confirm.realPublish"))) return;
+    setBusyID(item.id);
+    try {
+      const updated = await publishingService.publishNow(item.publish_job_id);
+      pushToast(updated.publish_mode === "dry_run" ? t("executionQueue.toast.dryRunPublish") : t("executionQueue.toast.realPublish"));
+      void loadQueue();
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.realPublish") : t("executionQueue.errors.realPublish"));
+    } finally {
+      setBusyID(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -280,8 +300,14 @@ export default function ExecutionQueuePage() {
                           <p className="md:col-span-2">
                             {t("executionQueue.item.publishJob")}: #{item.publish_job_id}
                             {item.publish_status ? ` · ${t(`executionQueue.publishStatus.${item.publish_status}`)}` : ""}
+                            {item.publish_mode ? ` · ${t(`executionQueue.publishMode.${item.publish_mode}`)}` : ""}
                             {item.publish_last_error ? ` · ${item.publish_last_error}` : ""}
                           </p>
+                        ) : null}
+                        {item.publish_external_url ? (
+                          <a className="md:col-span-2 text-blue-200 hover:text-blue-100" href={item.publish_external_url} target="_blank" rel="noreferrer">
+                            {item.publish_external_url}
+                          </a>
                         ) : null}
                       </div>
                     </div>
@@ -333,6 +359,18 @@ export default function ExecutionQueuePage() {
                             <Button size="sm" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
                               <Send className="size-4" />
                               {t("executionQueue.actions.retryPublish")}
+                            </Button>
+                          ) : null}
+                          {(item.status === "ready_to_publish" || item.status === "failed") && item.publish_job_id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busyID === item.id || !publisherSettings?.manual_publish_enabled || !publisherSettings?.real_publish_enabled}
+                              title={!publisherSettings?.real_publish_enabled ? t("executionQueue.actions.realPublishDisabledTip") : ""}
+                              onClick={() => void realPublish(item)}
+                            >
+                              <Send className="size-4" />
+                              {t("executionQueue.actions.realPublish")}
                             </Button>
                           ) : null}
                         </>

@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Pencil, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Lock, Pencil, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import { billingService } from "@/services/billing.service";
 import {
   automationService,
   type AutoCommentTargetApi,
@@ -19,6 +20,7 @@ import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
+type ExecutionMode = "manual" | "review" | "autopilot";
 
 function extractTweetID(url: string) {
   const match = url.match(/\/status(?:es)?\/(\d+)/);
@@ -30,6 +32,21 @@ function formatHandle(value?: string) {
   return normalized ? `@${normalized}` : "—";
 }
 
+function normalizePlan(plan?: string) {
+  if (plan === "pro_plus") return "pro_plus";
+  if (plan === "pro" || plan === "plus" || plan === "basic") return plan;
+  return "free_trial";
+}
+
+function canUseAutopilot(plan?: string) {
+  const normalized = normalizePlan(plan);
+  return normalized === "plus" || normalized === "pro" || normalized === "pro_plus";
+}
+
+function statusKey(status: string) {
+  return `autoComment.status.${status}`;
+}
+
 export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -38,6 +55,8 @@ export default function AutoCommentsPage() {
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [targets, setTargets] = useState<AutoCommentTargetApi[]>([]);
   const [drafts, setDrafts] = useState<AutoCommentTaskApi[]>([]);
+  const [plan, setPlan] = useState("free_trial");
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [xAccountID, setXAccountID] = useState<number>(0);
   const [tweetURL, setTweetURL] = useState("");
   const [authorHandle, setAuthorHandle] = useState("");
@@ -51,24 +70,28 @@ export default function AutoCommentsPage() {
     () => bots.find((bot) => selectedAccount && bot.twitter_account_id === selectedAccount.id) ?? null,
     [bots, selectedAccount]
   );
+  const autopilotAvailable = canUseAutopilot(plan);
 
   const loadAll = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [accountData, botData, targetData, draftData] = await Promise.all([
+      const [accountData, botData, targetData, draftData, automationData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
         automationService.commentTargets(),
         automationService.commentDrafts(),
+        automationService.list(),
+        billingService.subscription(),
       ]);
       const connected = accountData.items.filter((item) => item.status === "connected");
       setAccounts(connected);
       setBots(botData.items);
       setTargets(targetData.items);
       setDrafts(draftData.items);
-      if (!xAccountID && connected[0]) {
-        setXAccountID(connected[0].id);
-      }
+      setPlan(subscriptionData.plan);
+      const commentModule = automationData.modules.find((item) => item.type === "comment");
+      setExecutionMode(commentModule?.config.execution_mode || "review");
+      setXAccountID((current) => current || connected[0]?.id || 0);
       setLoadState("ready");
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -77,7 +100,7 @@ export default function AutoCommentsPage() {
       pushToast(message);
       setLoadState("error");
     }
-  }, [pushToast, t, xAccountID]);
+  }, [pushToast, t]);
 
   useEffect(() => {
     void loadAll();
@@ -101,7 +124,7 @@ export default function AutoCommentsPage() {
       setTweetURL("");
       setAuthorHandle("");
       setTargetText("");
-      pushToast(t("autoComment.toast.generated"));
+      pushToast(t(draft.status === "ready_to_publish" ? "autoComment.toast.readyToPublish" : "autoComment.toast.generated"));
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
       const message =
@@ -153,6 +176,22 @@ export default function AutoCommentsPage() {
   };
 
   const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
+
+  const selectExecutionMode = async (mode: ExecutionMode) => {
+    if (mode === "autopilot" && !autopilotAvailable) return;
+    const previous = executionMode;
+    setExecutionMode(mode);
+    try {
+      await automationService.updateExecutionMode("comment", mode);
+      pushToast(t("autoComment.execution.saved"));
+    } catch (error) {
+      setExecutionMode(previous);
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message || t("autoComment.execution.saveFailed")
+        : t("autoComment.execution.saveFailed");
+      pushToast(message);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -231,6 +270,46 @@ export default function AutoCommentsPage() {
               </div>
             </div>
 
+            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-white">{t("autoComment.execution.title")}</p>
+                <p className="mt-1 text-xs leading-5 text-white/55">{t("autoComment.execution.description")}</p>
+              </div>
+              <div className="grid gap-2">
+                {(["manual", "review", "autopilot"] as ExecutionMode[]).map((mode) => {
+                  const locked = mode === "autopilot" && !autopilotAvailable;
+                  const active = executionMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => void selectExecutionMode(mode)}
+                      className={[
+                        "flex items-start justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-all",
+                        active
+                          ? "border-blue-300/45 bg-blue-500/15 shadow-[0_0_24px_rgba(59,130,246,0.12)]"
+                          : "border-white/10 bg-black/15 hover:border-white/20 hover:bg-white/[0.045]",
+                        locked ? "cursor-not-allowed opacity-55" : "",
+                      ].join(" ")}
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-white">{t(`autoComment.execution.${mode}.title`)}</span>
+                        <span className="mt-1 block text-xs leading-5 text-white/56">{t(`autoComment.execution.${mode}.description`)}</span>
+                        {mode === "autopilot" ? (
+                          <span className="mt-1 block text-xs leading-5 text-blue-100/70">{t("autoComment.execution.autopilot.currentTest")}</span>
+                        ) : null}
+                      </span>
+                      {locked ? <Lock className="mt-0.5 size-4 shrink-0 text-amber-200" /> : active ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-blue-100" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {!autopilotAvailable ? (
+                <p className="mt-3 text-xs leading-5 text-amber-100/75">{t("autoComment.execution.upgradeHint")}</p>
+              ) : null}
+            </div>
+
             <label className="block space-y-2">
               <span className="text-xs font-medium text-white/60">{t("autoComment.target.url")}</span>
               <input
@@ -280,7 +359,7 @@ export default function AutoCommentsPage() {
               </div>
             ) : (
               drafts.slice(0, 12).map((draft) => {
-                const canReview = draft.status === "review";
+                const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
                 const editing = editingDraftID === draft.id;
                 return (
                   <div key={draft.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
@@ -288,8 +367,10 @@ export default function AutoCommentsPage() {
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">{draft.status}</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">{t(statusKey(draft.status))}</span>
                           <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">auto_comment</span>
+                          {draft.status === "ready_to_publish" ? <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-100">{t("autoComment.execution.autopilot.title")}</span> : null}
+                          {draft.risk_level === "high" ? <span className="rounded-full border border-amber-300/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-100">{t("autoComment.review.riskIntercepted")}</span> : null}
                           {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">Bot #{draft.bot_id}</span> : null}
                         </div>
                         <div className="rounded-lg border border-white/8 bg-black/15 p-3">

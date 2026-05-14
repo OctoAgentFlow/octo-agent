@@ -197,11 +197,20 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	if err != nil {
 		return nil, err
 	}
-	blocked := s.commentBlockedWords(userID)
+	cfg := s.commentConfig(userID)
+	mode := s.effectiveCommentExecutionMode(userID, cfg)
+	if mode == ExecutionModeAutopilot {
+		if err := s.assertAutoCommentDailyQuota(userID, now); err != nil {
+			return nil, err
+		}
+	}
+	blocked := blockedWordsFromConfig(cfg)
 	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromBot(target, bot, blocked))
 	if err != nil {
 		return nil, err
 	}
+	risk := evaluateAutoCommentRisk(comment, bot, blocked)
+	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)
 	task := &model.AutoCommentTask{
 		UserID:            userID,
 		BotID:             botIDForUsage(bot),
@@ -213,18 +222,26 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		TargetTweetText:   truncateRunes(target.TargetText, 1000),
 		TargetTweetAuthor: displayCommentTargetHandle(*target),
 		GeneratedComment:  truncateRunes(comment, autoCommentPreviewRunes),
-		Status:            "review",
-		RiskLevel:         "low",
-		CapabilityStatus:  "draft_generated",
-		ApprovalRequired:  true,
+		Status:            status,
+		RiskLevel:         risk.Level,
+		CapabilityStatus:  capability,
+		FailureCategory:   risk.Category,
+		FailureReason:     risk.Reason,
+		ApprovalRequired:  approvalRequired,
 		DetectedAt:        now,
 		GeneratedAt:       &now,
+		ApprovedAt:        approvedAt,
 	}
 	if err := s.taskRepo.Create(task); err != nil {
 		return nil, err
 	}
 	if err := s.usageRepo.Increment(userID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
 		return nil, err
+	}
+	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
+		if err := s.createAutopilotPreparedActivity(task, acc.Username, now); err != nil {
+			return nil, err
+		}
 	}
 	item := toAutoCommentTaskItem(*task)
 	return &item, nil
@@ -235,7 +252,7 @@ func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (
 	if err != nil {
 		return nil, err
 	}
-	if task.Status != "review" && task.Status != "approved" {
+	if task.Status != "review" && task.Status != "pending_review" && task.Status != "draft" && task.Status != "approved" {
 		return nil, fmt.Errorf("task cannot be approved from status %s", task.Status)
 	}
 	now := time.Now().UTC()
@@ -273,12 +290,12 @@ func (s *AutoCommentService) UpdateDraft(userID, id uint, content string) (*dto.
 	if err != nil {
 		return nil, err
 	}
-	if task.Status != "review" && task.Status != "approved" {
+	if task.Status != "review" && task.Status != "pending_review" && task.Status != "draft" && task.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be edited from status %s", task.Status)
 	}
 	task.GeneratedComment = truncateRunes(content, autoCommentPreviewRunes)
 	if task.Status == "approved" {
-		task.Status = "review"
+		task.Status = "pending_review"
 		task.ApprovedAt = nil
 	}
 	if err := s.taskRepo.Save(task); err != nil {
@@ -319,7 +336,7 @@ func (s *AutoCommentService) RetryTask(ctx context.Context, userID, id uint) (*d
 	if err := s.regenerateTaskComment(ctx, task); err != nil {
 		return nil, err
 	}
-	task.Status = "review"
+	task.Status = "pending_review"
 	task.CapabilityStatus = "draft_generated"
 	task.Retryable = false
 	if err := s.taskRepo.Save(task); err != nil {
@@ -472,9 +489,16 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if err != nil {
 		return nil, err
 	}
-	var blocked []string
-	_ = json.Unmarshal([]byte(cfg.SafetyBlockedKeywords), &blocked)
+	blocked := blockedWordsFromConfig(&cfg)
+	mode := s.effectiveCommentExecutionMode(target.UserID, &cfg)
+	if mode == ExecutionModeAutopilot {
+		if err := s.assertAutoCommentDailyQuota(target.UserID, now); err != nil {
+			return nil, err
+		}
+	}
 	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot))
+	risk := evaluateAutoCommentRisk(comment, bot, blocked)
+	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)
 	task := &model.AutoCommentTask{
 		UserID:            target.UserID,
 		BotID:             botIDForUsage(bot),
@@ -485,11 +509,14 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 		TargetTweetID:     tw.ID,
 		TargetTweetText:   truncateRunes(tw.Text, 500),
 		TargetTweetAuthor: target.TargetUsername,
-		Status:            "review",
-		RiskLevel:         "low",
-		CapabilityStatus:  "llm_generated",
-		ApprovalRequired:  true,
+		Status:            status,
+		RiskLevel:         risk.Level,
+		CapabilityStatus:  capability,
+		FailureCategory:   risk.Category,
+		FailureReason:     risk.Reason,
+		ApprovalRequired:  approvalRequired,
 		DetectedAt:        now,
+		ApprovedAt:        approvedAt,
 	}
 	if err != nil {
 		task.Status = "failed"
@@ -509,6 +536,11 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	}
 	if err := s.usageRepo.Increment(target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
 		return nil, err
+	}
+	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
+		if err := s.createAutopilotPreparedActivity(task, target.TargetUsername, now); err != nil {
+			return nil, err
+		}
 	}
 	return task, nil
 }
@@ -702,17 +734,140 @@ func (s *AutoCommentService) botForAccount(userID, xAccountID uint) (*model.OAFB
 	return bot, nil
 }
 
-func (s *AutoCommentService) commentBlockedWords(userID uint) []string {
+func (s *AutoCommentService) commentConfig(userID uint) *model.AutomationConfig {
 	if s.automationRepo == nil {
 		return nil
 	}
+	_ = s.automationRepo.EnsureDefaults(userID)
 	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeComment)
-	if err != nil || cfg == nil {
+	if err != nil {
+		return nil
+	}
+	return cfg
+}
+
+func blockedWordsFromConfig(cfg *model.AutomationConfig) []string {
+	if cfg == nil {
 		return nil
 	}
 	var blocked []string
 	_ = json.Unmarshal([]byte(cfg.SafetyBlockedKeywords), &blocked)
 	return blocked
+}
+
+func (s *AutoCommentService) effectiveCommentExecutionMode(userID uint, cfg *model.AutomationConfig) string {
+	mode := ExecutionModeReview
+	if cfg != nil {
+		mode = effectiveExecutionMode(cfg.ExecutionMode)
+	}
+	if mode != ExecutionModeAutopilot {
+		return mode
+	}
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return ExecutionModeReview
+	}
+	plan := subscription.NormalizePlanCode(u.SubscriptionPlanCode)
+	if plan == subscription.PlanPlus || plan == subscription.PlanPro || plan == subscription.PlanProPlus {
+		return ExecutionModeAutopilot
+	}
+	return ExecutionModeReview
+}
+
+func (s *AutoCommentService) assertAutoCommentDailyQuota(userID uint, now time.Time) error {
+	if s.taskRepo == nil || s.userRepo == nil {
+		return nil
+	}
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	limit := subscription.LimitsForUser(u).DailyAutoComments
+	if limit <= 0 {
+		return fmt.Errorf("daily auto comment quota exceeded")
+	}
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	used, err := s.taskRepo.CountCreatedBetween(userID, dayStart, now)
+	if err != nil {
+		return err
+	}
+	if used >= limit {
+		return fmt.Errorf("daily auto comment quota exceeded")
+	}
+	return nil
+}
+
+type autoCommentRisk struct {
+	Level    string
+	Category string
+	Reason   string
+}
+
+func evaluateAutoCommentRisk(content string, bot *model.OAFBot, blockedWords []string) autoCommentRisk {
+	text := strings.ToLower(strings.TrimSpace(content))
+	if text == "" {
+		return autoCommentRisk{Level: "high", Category: "empty_content", Reason: "Generated comment is empty."}
+	}
+	topics := append([]string{}, blockedWords...)
+	if bot != nil {
+		topics = append(topics, decodeStringList(bot.ForbiddenTopics)...)
+	}
+	for _, word := range topics {
+		w := strings.ToLower(strings.TrimSpace(word))
+		if w != "" && strings.Contains(text, w) {
+			return autoCommentRisk{Level: "high", Category: "risk_blocked_keyword", Reason: "Generated comment matched a forbidden topic or blocked keyword."}
+		}
+	}
+	highRisk := []string{
+		"guaranteed return", "guaranteed profit", "risk-free", "100x", "pump", "airdrop",
+		"seed phrase", "private key", "connect wallet", "official support",
+		"稳赚", "保本", "收益保证", "私钥", "助记词", "连接钱包", "官方客服",
+	}
+	for _, word := range highRisk {
+		if strings.Contains(text, word) {
+			return autoCommentRisk{Level: "high", Category: "risk_policy", Reason: "Generated comment matched a high-risk safety rule."}
+		}
+	}
+	return autoCommentRisk{Level: "low"}
+}
+
+func autoCommentInitialState(mode string, risk autoCommentRisk, now time.Time) (status string, capability string, approvalRequired bool, approvedAt *time.Time) {
+	if risk.Level == "high" {
+		return "pending_review", "risk_review_required", true, nil
+	}
+	switch mode {
+	case ExecutionModeManual:
+		return "draft", "manual_suggestion", false, nil
+	case ExecutionModeAutopilot:
+		t := now
+		return "ready_to_publish", "autopilot_prepared", false, &t
+	default:
+		return "pending_review", "review_required", true, nil
+	}
+}
+
+func (s *AutoCommentService) createAutopilotPreparedActivity(task *model.AutoCommentTask, accountUsername string, now time.Time) error {
+	if s.activityRepo == nil || task == nil {
+		return nil
+	}
+	log := &model.ActivityLog{
+		UserID:              task.UserID,
+		XAccountID:          task.XAccountID,
+		Type:                "comment",
+		Status:              "review",
+		PreviewKey:          "activity.preview.commentAutopilotPrepared",
+		AccountHandle:       formatXAccountHandle(accountUsername),
+		ExecutedAt:          now,
+		ReplyCommentTweetID: task.TargetTweetID,
+		ReplyToUsername:     replyAuthorDisplay(task.TargetUsername),
+		ReplyToTextPreview:  truncateReplyPreview(task.TargetTweetText, autoReplyPreviewRunes),
+		ReplyTextPreview:    truncateReplyPreview(task.GeneratedComment, autoReplyPreviewRunes),
+	}
+	if err := s.activityRepo.DB.Create(log).Error; err != nil {
+		return err
+	}
+	task.ActivityLogID = log.ID
+	return s.taskRepo.Save(task)
 }
 
 func autoCommentInputFromBot(target *model.AutoCommentTarget, bot *model.OAFBot, blocked []string) GenerateAutoCommentInput {

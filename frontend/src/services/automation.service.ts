@@ -17,6 +17,7 @@ export type AutomationModuleApi = {
       daily_limit: number;
     };
     tone: "Professional" | "Friendly" | "Degen" | "Web3-native";
+    execution_mode: "manual" | "review" | "autopilot";
     safety: {
       require_approval: boolean;
       max_per_hour: number;
@@ -167,7 +168,7 @@ export type AutoCommentTaskApi = {
   target_tweet_text?: string;
   target_tweet_author?: string;
   generated_comment?: string;
-  status: "review" | "approved" | "rejected" | "sending" | "blocked" | "failed" | "sent";
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "rejected" | "sending" | "blocked" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;
@@ -205,6 +206,7 @@ export type AutomationSavePayload = {
     daily_limit: number;
   };
   tone: "Professional" | "Friendly" | "Degen" | "Web3-native";
+  execution_mode?: "manual" | "review" | "autopilot";
   safety: {
     require_approval: boolean;
     max_per_hour: number;
@@ -223,6 +225,12 @@ export const automationService = {
   },
   async toggle(type: "post" | "reply" | "dm" | "comment", enabled: boolean) {
     const res = await request.post<ApiResponse<AutomationModuleApi>>(`/automations/${type}/toggle`, { enabled });
+    return res.data.data;
+  },
+  async updateExecutionMode(type: "post" | "reply" | "dm" | "comment", executionMode: "manual" | "review" | "autopilot") {
+    const res = await request.patch<ApiResponse<AutomationModuleApi>>(`/automations/${type}/execution-mode`, {
+      execution_mode: executionMode,
+    });
     return res.data.data;
   },
   async runtimeStatus() {

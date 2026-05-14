@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const toneEnum = z.enum(["Professional", "Friendly", "Degen", "Web3-native"]);
+export const executionModeEnum = z.enum(["manual", "review", "autopilot"]);
 
 export const safetySchema = z.object({
   requireApproval: z.boolean(),
@@ -17,6 +18,7 @@ export const baseAutomationConfigSchema = z.object({
   enabled: z.boolean(),
   frequency: frequencySchema,
   tone: toneEnum,
+  executionMode: executionModeEnum,
   safety: safetySchema,
 });
 

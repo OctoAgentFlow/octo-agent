@@ -17,6 +17,7 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	group.GET("", c.List)
 	group.PUT("/:type", c.Update)
 	group.POST("/:type/toggle", c.Toggle)
+	group.PATCH("/:type/execution-mode", c.UpdateExecutionMode)
 	group.GET("/runtime-status", c.RuntimeStatus)
 
 	dm := rg.Group("/auto-dm")

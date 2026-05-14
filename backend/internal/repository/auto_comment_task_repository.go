@@ -42,6 +42,15 @@ func (r *AutoCommentTaskRepository) ExistsForTargetTweet(userID, xAccountID uint
 	return n > 0, err
 }
 
+func (r *AutoCommentTaskRepository) GetByTargetTweet(userID, xAccountID uint, tweetID string) (*model.AutoCommentTask, error) {
+	var row model.AutoCommentTask
+	err := r.DB.Where("user_id = ? AND x_account_id = ? AND target_tweet_id = ?", userID, xAccountID, tweetID).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *AutoCommentTaskRepository) Create(task *model.AutoCommentTask) error {
 	return r.DB.Create(task).Error
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"octo-agent/backend/internal/repository"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 const autoCommentPreviewRunes = 220
@@ -27,6 +30,8 @@ type AutoCommentService struct {
 	taskRepo       *repository.AutoCommentTaskRepository
 	activityRepo   *repository.ActivityRepository
 	userRepo       *repository.UserRepository
+	oafBotRepo     *repository.OAFBotRepository
+	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
 }
 
@@ -37,6 +42,8 @@ func NewAutoCommentService(
 	taskRepo *repository.AutoCommentTaskRepository,
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
+	oafBotRepo *repository.OAFBotRepository,
+	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
 ) *AutoCommentService {
 	return &AutoCommentService{
@@ -46,6 +53,8 @@ func NewAutoCommentService(
 		taskRepo:       taskRepo,
 		activityRepo:   activityRepo,
 		userRepo:       userRepo,
+		oafBotRepo:     oafBotRepo,
+		usageRepo:      usageRepo,
 		ai:             ai,
 	}
 }
@@ -63,19 +72,56 @@ func (s *AutoCommentService) ListTargets(userID uint) (*dto.AutoCommentTargetsRe
 }
 
 func (s *AutoCommentService) CreateTarget(userID uint, req dto.AutoCommentTargetRequest) (*dto.AutoCommentTargetItem, error) {
-	username := normalizeHandle(req.TargetUsername)
+	username := normalizeHandle(firstNonEmpty(req.TargetUsername, req.TargetAuthorHandle))
 	if username == "" {
-		return nil, fmt.Errorf("target username is required")
+		return nil, fmt.Errorf("target author handle is required")
 	}
 	xAccountID, err := s.resolveExecutorAccountID(userID, req.XAccountID)
 	if err != nil {
 		return nil, err
 	}
+	tweetID := strings.TrimSpace(req.TargetTweetID)
+	if tweetID == "" {
+		tweetID = extractTweetID(req.TargetTweetURL)
+	}
+	targetText := strings.TrimSpace(req.TargetText)
+	if targetText != "" && tweetID == "" {
+		return nil, fmt.Errorf("target tweet URL or tweet ID is required")
+	}
+	if tweetID != "" {
+		if existing, err := s.targetRepo.GetByUserAccountAndTweet(userID, xAccountID, tweetID); err == nil {
+			applyManualCommentTarget(existing, req, username, tweetID, targetText)
+			if err := s.targetRepo.Save(existing); err != nil {
+				return nil, err
+			}
+			item := toAutoCommentTargetItem(*existing)
+			return &item, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if existing, err := s.targetRepo.GetByUserAccountAndUsername(userID, xAccountID, username); err == nil && strings.TrimSpace(existing.TargetTweetID) == "" {
+			applyManualCommentTarget(existing, req, username, tweetID, targetText)
+			if err := s.targetRepo.Save(existing); err != nil {
+				return nil, err
+			}
+			item := toAutoCommentTargetItem(*existing)
+			return &item, nil
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
 	target := &model.AutoCommentTarget{
-		UserID:         userID,
-		XAccountID:     xAccountID,
-		TargetUsername: username,
-		Status:         "active",
+		UserID:             userID,
+		XAccountID:         xAccountID,
+		TargetUsername:     username,
+		TargetAuthorHandle: username,
+		TargetTweetID:      tweetID,
+		TargetTweetURL:     strings.TrimSpace(req.TargetTweetURL),
+		TargetText:         truncateRunes(targetText, 1000),
+		Status:             "active",
+	}
+	if tweetID != "" || targetText != "" {
+		target.Status = "paused"
 	}
 	if err := s.targetRepo.Create(target); err != nil {
 		return nil, err
@@ -117,6 +163,73 @@ func (s *AutoCommentService) ListTasks(userID uint) (*dto.AutoCommentTasksRespon
 	return &dto.AutoCommentTasksResponse{Items: items}, nil
 }
 
+func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID uint) (*dto.AutoCommentTaskItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	target, err := s.targetRepo.GetByUserAndID(userID, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(target.TargetTweetID) == "" {
+		return nil, fmt.Errorf("target tweet id is required")
+	}
+	if strings.TrimSpace(target.TargetText) == "" {
+		return nil, fmt.Errorf("target tweet text is required")
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, target.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
+	existing, err := s.taskRepo.GetByTargetTweet(userID, target.XAccountID, target.TargetTweetID)
+	if err == nil {
+		item := toAutoCommentTaskItem(*existing)
+		return &item, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	bot, err := s.botForAccount(userID, target.XAccountID)
+	if err != nil {
+		return nil, err
+	}
+	blocked := s.commentBlockedWords(userID)
+	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromBot(target, bot, blocked))
+	if err != nil {
+		return nil, err
+	}
+	task := &model.AutoCommentTask{
+		UserID:            userID,
+		BotID:             botIDForUsage(bot),
+		XAccountID:        acc.ID,
+		TargetID:          target.ID,
+		TargetUserID:      target.TargetUserID,
+		TargetUsername:    displayCommentTargetHandle(*target),
+		TargetTweetID:     target.TargetTweetID,
+		TargetTweetText:   truncateRunes(target.TargetText, 1000),
+		TargetTweetAuthor: displayCommentTargetHandle(*target),
+		GeneratedComment:  truncateRunes(comment, autoCommentPreviewRunes),
+		Status:            "review",
+		RiskLevel:         "low",
+		CapabilityStatus:  "draft_generated",
+		ApprovalRequired:  true,
+		DetectedAt:        now,
+		GeneratedAt:       &now,
+	}
+	if err := s.taskRepo.Create(task); err != nil {
+		return nil, err
+	}
+	if err := s.usageRepo.Increment(userID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
+		return nil, err
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
 func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {
@@ -131,7 +244,44 @@ func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
-	if err := s.sendTask(ctx, task); err != nil {
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
+func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.AutoCommentTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	task.Status = "rejected"
+	task.BlockedAt = &now
+	task.FailureReason = truncateErrMsg(strings.TrimSpace(reason))
+	task.Retryable = false
+	if task.FailureReason == "" {
+		task.FailureReason = "Rejected by user."
+	}
+	if err := s.taskRepo.Save(task); err != nil {
+		return nil, err
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
+func (s *AutoCommentService) UpdateDraft(userID, id uint, content string) (*dto.AutoCommentTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status != "review" && task.Status != "approved" {
+		return nil, fmt.Errorf("draft cannot be edited from status %s", task.Status)
+	}
+	task.GeneratedComment = truncateRunes(content, autoCommentPreviewRunes)
+	if task.Status == "approved" {
+		task.Status = "review"
+		task.ApprovedAt = nil
+	}
+	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
 	item := toAutoCommentTaskItem(*task)
@@ -166,12 +316,13 @@ func (s *AutoCommentService) RetryTask(ctx context.Context, userID, id uint) (*d
 	if task.Status != "failed" || !task.Retryable {
 		return nil, fmt.Errorf("task is not retryable")
 	}
-	if strings.TrimSpace(task.GeneratedComment) == "" {
-		if err := s.regenerateTaskComment(ctx, task); err != nil {
-			return nil, err
-		}
+	if err := s.regenerateTaskComment(ctx, task); err != nil {
+		return nil, err
 	}
-	if err := s.sendTask(ctx, task); err != nil {
+	task.Status = "review"
+	task.CapabilityStatus = "draft_generated"
+	task.Retryable = false
+	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
 	item := toAutoCommentTaskItem(*task)
@@ -185,12 +336,15 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 	}
 	var blocked []string
 	_ = json.Unmarshal([]byte(cfg.SafetyBlockedKeywords), &blocked)
-	comment, err := s.ai.GenerateAutoComment(ctx, GenerateAutoCommentInput{
-		TargetUsername: task.TargetUsername,
-		TargetTweet:    task.TargetTweetText,
-		Tone:           cfg.Tone,
-		BlockedWords:   blocked,
-	})
+	bot, err := s.botForAccount(task.UserID, task.XAccountID)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, task.UserID, now); err != nil {
+		return err
+	}
+	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(task.TargetUsername, task.TargetTweetText, cfg.Tone, blocked, bot))
 	if err != nil {
 		task.FailureCategory = "llm_error"
 		task.FailureReason = truncateErrMsg(err.Error())
@@ -198,12 +352,15 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 		_ = s.taskRepo.Save(task)
 		return err
 	}
-	now := time.Now().UTC()
 	task.GeneratedComment = truncateRunes(comment, autoCommentPreviewRunes)
 	task.GeneratedAt = &now
+	task.BotID = botIDForUsage(bot)
 	task.FailureCategory = ""
 	task.FailureReason = ""
-	return s.taskRepo.Save(task)
+	if err := s.taskRepo.Save(task); err != nil {
+		return err
+	}
+	return s.usageRepo.Increment(task.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1)
 }
 
 func (s *AutoCommentService) RunTick(ctx context.Context) {
@@ -307,17 +464,20 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 }
 
 func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target model.AutoCommentTarget, cfg model.AutomationConfig, tw twitter.UserTweet) (*model.AutoCommentTask, error) {
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, target.UserID, now); err != nil {
+		return nil, err
+	}
+	bot, err := s.botForAccount(target.UserID, target.XAccountID)
+	if err != nil {
+		return nil, err
+	}
 	var blocked []string
 	_ = json.Unmarshal([]byte(cfg.SafetyBlockedKeywords), &blocked)
-	comment, err := s.ai.GenerateAutoComment(ctx, GenerateAutoCommentInput{
-		TargetUsername: target.TargetUsername,
-		TargetTweet:    tw.Text,
-		Tone:           cfg.Tone,
-		BlockedWords:   blocked,
-	})
-	now := time.Now().UTC()
+	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot))
 	task := &model.AutoCommentTask{
 		UserID:            target.UserID,
+		BotID:             botIDForUsage(bot),
 		XAccountID:        target.XAccountID,
 		TargetID:          target.ID,
 		TargetUserID:      target.TargetUserID,
@@ -326,8 +486,9 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 		TargetTweetText:   truncateRunes(tw.Text, 500),
 		TargetTweetAuthor: target.TargetUsername,
 		Status:            "review",
+		RiskLevel:         "low",
 		CapabilityStatus:  "llm_generated",
-		ApprovalRequired:  cfg.SafetyRequireApproval,
+		ApprovalRequired:  true,
 		DetectedAt:        now,
 	}
 	if err != nil {
@@ -346,11 +507,8 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if err := s.taskRepo.Create(task); err != nil {
 		return nil, err
 	}
-	if cfg.SafetyRequireApproval {
-		return task, nil
-	}
-	if err := s.sendTask(ctx, task); err != nil {
-		return task, err
+	if err := s.usageRepo.Increment(target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
+		return nil, err
 	}
 	return task, nil
 }
@@ -481,16 +639,131 @@ func normalizeHandle(v string) string {
 	return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(v, "@")))
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+var tweetIDPattern = regexp.MustCompile(`/status(?:es)?/([0-9]+)`)
+
+func extractTweetID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if match := tweetIDPattern.FindStringSubmatch(raw); len(match) == 2 {
+		return match[1]
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for i, part := range parts {
+		if (part == "status" || part == "statuses") && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+func applyManualCommentTarget(target *model.AutoCommentTarget, req dto.AutoCommentTargetRequest, username, tweetID, targetText string) {
+	target.TargetUsername = username
+	target.TargetAuthorHandle = username
+	target.TargetTweetID = tweetID
+	target.TargetTweetURL = strings.TrimSpace(req.TargetTweetURL)
+	target.TargetText = truncateRunes(targetText, 1000)
+	target.Status = "paused"
+}
+
+func displayCommentTargetHandle(target model.AutoCommentTarget) string {
+	handle := normalizeHandle(firstNonEmpty(target.TargetAuthorHandle, target.TargetUsername))
+	if handle == "" {
+		return "target"
+	}
+	return handle
+}
+
+func (s *AutoCommentService) botForAccount(userID, xAccountID uint) (*model.OAFBot, error) {
+	if s.oafBotRepo == nil {
+		return nil, nil
+	}
+	bot, err := s.oafBotRepo.GetByUserAndTwitterAccountID(userID, xAccountID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return bot, nil
+}
+
+func (s *AutoCommentService) commentBlockedWords(userID uint) []string {
+	if s.automationRepo == nil {
+		return nil
+	}
+	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeComment)
+	if err != nil || cfg == nil {
+		return nil
+	}
+	var blocked []string
+	_ = json.Unmarshal([]byte(cfg.SafetyBlockedKeywords), &blocked)
+	return blocked
+}
+
+func autoCommentInputFromBot(target *model.AutoCommentTarget, bot *model.OAFBot, blocked []string) GenerateAutoCommentInput {
+	if target == nil {
+		return GenerateAutoCommentInput{Tone: "Friendly", BlockedWords: blocked}
+	}
+	return autoCommentInputFromValues(displayCommentTargetHandle(*target), target.TargetText, "Friendly", blocked, bot)
+}
+
+func autoCommentInputFromValues(username, tweet, tone string, blocked []string, bot *model.OAFBot) GenerateAutoCommentInput {
+	in := GenerateAutoCommentInput{
+		TargetUsername: normalizeHandle(username),
+		TargetTweet:    tweet,
+		Tone:           tone,
+		BlockedWords:   blocked,
+	}
+	if bot == nil {
+		return in
+	}
+	in.HasBot = true
+	in.Name = bot.Name
+	in.Occupation = bot.Occupation
+	in.Industry = bot.Industry
+	in.AgeRange = bot.AgeRange
+	in.Gender = bot.Gender
+	in.Education = bot.Education
+	in.MBTI = bot.MBTI
+	in.PersonalityTags = decodeStringList(bot.PersonalityTags)
+	in.IdentitySummary = bot.IdentitySummary
+	in.VoiceTone = bot.VoiceTone
+	in.Topics = decodeStringList(bot.Topics)
+	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
+	in.GrowthGoal = bot.GrowthGoal
+	in.SafetyMode = bot.SafetyMode
+	return in
+}
+
 func toAutoCommentTargetItem(row model.AutoCommentTarget) dto.AutoCommentTargetItem {
 	item := dto.AutoCommentTargetItem{
-		ID:                row.ID,
-		XAccountID:        row.XAccountID,
-		TargetUserID:      row.TargetUserID,
-		TargetUsername:    row.TargetUsername,
-		TargetDisplayName: row.TargetDisplayName,
-		Status:            row.Status,
-		LastSeenTweetID:   row.LastSeenTweetID,
-		LastFailureReason: row.LastFailureReason,
+		ID:                 row.ID,
+		XAccountID:         row.XAccountID,
+		TargetUserID:       row.TargetUserID,
+		TargetUsername:     row.TargetUsername,
+		TargetDisplayName:  row.TargetDisplayName,
+		TargetTweetID:      row.TargetTweetID,
+		TargetTweetURL:     row.TargetTweetURL,
+		TargetAuthorHandle: row.TargetAuthorHandle,
+		TargetText:         row.TargetText,
+		Status:             row.Status,
+		LastSeenTweetID:    row.LastSeenTweetID,
+		LastFailureReason:  row.LastFailureReason,
 	}
 	if row.LastSeenTweetAt != nil {
 		item.LastSeenTweetAt = row.LastSeenTweetAt.UTC().Format(time.RFC3339)
@@ -510,6 +783,7 @@ func toAutoCommentTargetItem(row model.AutoCommentTarget) dto.AutoCommentTargetI
 func toAutoCommentTaskItem(row model.AutoCommentTask) dto.AutoCommentTaskItem {
 	item := dto.AutoCommentTaskItem{
 		ID:                row.ID,
+		BotID:             row.BotID,
 		XAccountID:        row.XAccountID,
 		TargetID:          row.TargetID,
 		TargetUserID:      row.TargetUserID,
@@ -519,6 +793,7 @@ func toAutoCommentTaskItem(row model.AutoCommentTask) dto.AutoCommentTaskItem {
 		TargetTweetAuthor: row.TargetTweetAuthor,
 		GeneratedComment:  row.GeneratedComment,
 		Status:            row.Status,
+		RiskLevel:         row.RiskLevel,
 		CapabilityStatus:  row.CapabilityStatus,
 		FailureCategory:   row.FailureCategory,
 		FailureReason:     row.FailureReason,

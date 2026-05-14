@@ -5,6 +5,7 @@ import "time"
 type AutoCommentTask struct {
 	Base
 	UserID            uint       `gorm:"index;not null;uniqueIndex:ux_auto_comment_task_tweet;comment:所属用户ID" json:"user_id"`
+	BotID             uint       `gorm:"index;not null;default:0;comment:生成评论使用的OAF Bot ID，0表示未绑定" json:"bot_id"`
 	XAccountID        uint       `gorm:"index;column:x_account_id;not null;uniqueIndex:ux_auto_comment_task_tweet;comment:执行评论的X账号ID" json:"x_account_id"`
 	TargetID          uint       `gorm:"index;not null;comment:目标账号配置ID" json:"target_id"`
 	TargetUserID      string     `gorm:"size:64;index;comment:目标X用户ID" json:"target_user_id,omitempty"`
@@ -14,6 +15,7 @@ type AutoCommentTask struct {
 	TargetTweetAuthor string     `gorm:"size:128;comment:目标推文作者" json:"target_tweet_author,omitempty"`
 	GeneratedComment  string     `gorm:"size:512;comment:LLM生成的评论内容" json:"generated_comment,omitempty"`
 	Status            string     `gorm:"size:32;index;not null;default:review;comment:任务状态（review/approved/sending/blocked/failed/sent）" json:"status"`
+	RiskLevel         string     `gorm:"size:32;index;not null;default:low;comment:草稿风险等级" json:"risk_level"`
 	CapabilityStatus  string     `gorm:"size:64;index;not null;comment:发送能力状态" json:"capability_status"`
 	FailureCategory   string     `gorm:"size:64;index;comment:失败分类" json:"failure_category,omitempty"`
 	FailureReason     string     `gorm:"size:1024;comment:失败或阻断原因" json:"failure_reason,omitempty"`

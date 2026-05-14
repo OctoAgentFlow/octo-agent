@@ -70,6 +70,10 @@ func (ctl *OAFBotController) Create(c *gin.Context) {
 			response.Fail(c, http.StatusForbidden, err.Error())
 			return
 		}
+		if errors.Is(err, service.ErrOAFBotTwitterAccountAlreadyBound) {
+			response.FailWithCode(c, http.StatusConflict, err.Error(), "oaf_bot_twitter_account_already_bound")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -90,6 +94,10 @@ func (ctl *OAFBotController) Update(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		if errors.Is(err, service.ErrOAFBotTwitterAccountAlreadyBound) {
+			response.FailWithCode(c, http.StatusConflict, err.Error(), "oaf_bot_twitter_account_already_bound")
 			return
 		}
 		response.Fail(c, http.StatusBadRequest, err.Error())

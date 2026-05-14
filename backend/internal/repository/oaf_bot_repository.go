@@ -51,3 +51,15 @@ func (r *OAFBotRepository) GetByUserAndTwitterAccountID(userID, twitterAccountID
 	}
 	return &bot, nil
 }
+
+func (r *OAFBotRepository) GetByUserAndTwitterAccountIDExcludingBot(userID, twitterAccountID, excludeBotID uint) (*model.OAFBot, error) {
+	var bot model.OAFBot
+	query := r.DB.Where("user_id = ? AND twitter_account_id = ?", userID, twitterAccountID)
+	if excludeBotID != 0 {
+		query = query.Where("id <> ?", excludeBotID)
+	}
+	if err := query.Order("id DESC").First(&bot).Error; err != nil {
+		return nil, err
+	}
+	return &bot, nil
+}

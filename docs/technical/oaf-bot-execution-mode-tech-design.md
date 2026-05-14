@@ -24,6 +24,13 @@ user_id + type -> execution_mode
 
 其中 `type=comment` 对应 Auto Comment。
 
+OAF Bot 绑定规则保持 one bot per account：
+
+- 一个 OAF Bot 只有一个 `twitter_account_id`。
+- 一个 `twitter_account_id` 同一时间只能绑定一个 active OAF Bot。
+- 自动化生成时按 `twitter_account_id` 查询绑定 Bot，不通过 Bot 反查多个账号。
+- 多账号复用人设未来通过 Bot Template / Clone 实现，本阶段不新增多账号绑定关系表。
+
 ### auto_comment_tasks
 
 扩展状态语义：

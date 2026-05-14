@@ -333,26 +333,28 @@ type ReviewQueueResponse struct {
 }
 
 type PublishJobItem struct {
-	ID               uint   `json:"id"`
-	UserID           uint   `json:"user_id"`
-	TwitterAccountID uint   `json:"twitter_account_id"`
-	BotID            uint   `json:"bot_id"`
-	SourceType       string `json:"source_type"`
-	SourceID         uint   `json:"source_id"`
-	Content          string `json:"content"`
-	Status           string `json:"status"`
-	ExecutionMode    string `json:"execution_mode"`
-	PublishMode      string `json:"publish_mode"`
-	AttemptCount     int    `json:"attempt_count"`
-	MaxAttempts      int    `json:"max_attempts"`
-	NextAttemptAt    string `json:"next_attempt_at,omitempty"`
-	LastError        string `json:"last_error,omitempty"`
-	ExternalID       string `json:"external_id,omitempty"`
-	ExternalURL      string `json:"external_url,omitempty"`
-	RawResponse      string `json:"raw_response,omitempty"`
-	PublishedAt      string `json:"published_at,omitempty"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
+	ID                 uint   `json:"id"`
+	UserID             uint   `json:"user_id"`
+	TwitterAccountID   uint   `json:"twitter_account_id"`
+	BotID              uint   `json:"bot_id"`
+	SourceType         string `json:"source_type"`
+	SourceID           uint   `json:"source_id"`
+	Content            string `json:"content"`
+	Status             string `json:"status"`
+	ExecutionMode      string `json:"execution_mode"`
+	PublishMode        string `json:"publish_mode"`
+	AttemptCount       int    `json:"attempt_count"`
+	MaxAttempts        int    `json:"max_attempts"`
+	NextAttemptAt      string `json:"next_attempt_at,omitempty"`
+	LastError          string `json:"last_error,omitempty"`
+	ExternalID         string `json:"external_id,omitempty"`
+	ExternalURL        string `json:"external_url,omitempty"`
+	RawResponse        string `json:"raw_response,omitempty"`
+	PublishedAt        string `json:"published_at,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+	DryRun             bool   `json:"dry_run"`
+	RealPublishEnabled bool   `json:"real_publish_enabled"`
 }
 
 type XPublisherSettings struct {
@@ -366,4 +368,14 @@ type XPublisherSettings struct {
 type PublishJobsResponse struct {
 	Items    []PublishJobItem   `json:"items"`
 	Settings XPublisherSettings `json:"settings"`
+}
+
+type PublishingStatusResponse struct {
+	RealPublishEnabled             bool `json:"real_publish_enabled"`
+	ManualPublishEnabled           bool `json:"manual_publish_enabled"`
+	DryRun                         bool `json:"dry_run"`
+	PerAccountDailyLimit           int  `json:"per_account_daily_limit"`
+	PerAccountMinIntervalSeconds   int  `json:"per_account_min_interval_seconds"`
+	CurrentUserConnectedAccounts   int  `json:"current_user_connected_accounts_count"`
+	AccountsMissingTweetWriteCount int  `json:"accounts_missing_tweet_write_count"`
 }

@@ -15,6 +15,7 @@ Publishing Pipeline 是 Octo-Agent Flow 的统一发布器。它接管所有 `re
 - 可观测：Publish Job、Activity、Execution Queue
 - 手动真实发布入口：Execution Queue 的“真实发布”按钮
 - 测试环境默认：`real_publish_enabled=false`、`dry_run=true`
+- 灰度检查接口：`GET /api/v1/publishing/status`
 
 ## 用户可感知流程
 
@@ -34,8 +35,8 @@ V2 预留了真实 X 发布通道：
 1. 用户在 Execution Queue 中点击“真实发布”。
 2. 系统弹窗确认：“将使用绑定的 X 账号真实发布到 X。此操作不可撤销。”
 3. 后端检查环境开关、X 账号连接状态、access token、`tweet.write` 权限、每日限流和冷却时间。
-4. `real_publish_enabled=false` 时直接返回明确错误，不会调用 X。
-5. `dry_run=true` 时执行发布演练，不会调用 X。
+4. `dry_run=true` 时执行发布演练，不会调用 X。
+5. `dry_run=false` 且 `real_publish_enabled=false` 时直接返回明确错误，不会调用 X。
 6. 未来 `real_publish_enabled=true` 且 `dry_run=false` 后，才会调用真实 X Publisher Adapter。
 
 ## 当前限制

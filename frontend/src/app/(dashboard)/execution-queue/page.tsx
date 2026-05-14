@@ -9,7 +9,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { automationService } from "@/services/automation.service";
-import { publishingService, type PublishJobsData } from "@/services/publishing.service";
+import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
 import {
   reviewQueueService,
   type ReviewQueueExecutionMode,
@@ -59,7 +59,7 @@ export default function ExecutionQueuePage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
-  const [publisherSettings, setPublisherSettings] = useState<PublishJobsData["settings"] | null>(null);
+  const [publisherStatus, setPublisherStatus] = useState<XPublisherStatusApi | null>(null);
 
   useEffect(() => {
     const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
@@ -71,7 +71,7 @@ export default function ExecutionQueuePage() {
   const loadQueue = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [data, publishingData] = await Promise.all([
+      const [data, publishingStatus] = await Promise.all([
         reviewQueueService.list({
           type: typeFilter,
           status: statusFilter,
@@ -79,11 +79,11 @@ export default function ExecutionQueuePage() {
           page: 1,
           pageSize: 50,
         }),
-        publishingService.jobs(),
+        publishingService.status(),
       ]);
       setItems(data.items);
       setStats(data.stats);
-      setPublisherSettings(publishingData.settings);
+      setPublisherStatus(publishingStatus);
       setLoadState("ready");
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -190,7 +190,8 @@ export default function ExecutionQueuePage() {
 
   const realPublish = async (item: ReviewQueueItemApi) => {
     if (!item.publish_job_id) return;
-    if (!window.confirm(t("executionQueue.confirm.realPublish"))) return;
+    const confirmKey = publisherStatus?.dry_run ? "executionQueue.confirm.dryRunPublish" : "executionQueue.confirm.realPublish";
+    if (!window.confirm(t(confirmKey))) return;
     setBusyID(item.id);
     try {
       const updated = await publishingService.publishNow(item.publish_job_id);
@@ -209,6 +210,37 @@ export default function ExecutionQueuePage() {
         <p className="text-sm text-blue-100/75">{t("executionQueue.kicker")}</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">{t("executionQueue.title")}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{t("executionQueue.subtitle")}</p>
+        {publisherStatus ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-white/65">
+              {t("executionQueue.publisherMode.label")}
+            </span>
+            <span className={`rounded-full border px-3 py-1 ${
+              publisherStatus.real_publish_enabled && !publisherStatus.dry_run
+                ? "border-rose-300/25 bg-rose-500/10 text-rose-100"
+                : publisherStatus.dry_run
+                  ? "border-sky-300/25 bg-sky-500/10 text-sky-100"
+                  : "border-emerald-300/25 bg-emerald-500/10 text-emerald-100"
+            }`}>
+              {publisherStatus.real_publish_enabled && !publisherStatus.dry_run
+                ? t("executionQueue.publisherMode.real")
+                : publisherStatus.dry_run
+                  ? t("executionQueue.publisherMode.dryRun")
+                  : t("executionQueue.publisherMode.simulated")}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-white/55">
+              {t("executionQueue.publisherMode.limits", {
+                daily: publisherStatus.per_account_daily_limit,
+                cooldown: publisherStatus.per_account_min_interval_seconds,
+              })}
+            </span>
+            {publisherStatus.accounts_missing_tweet_write_count > 0 ? (
+              <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-3 py-1 text-amber-100">
+                {t("executionQueue.publisherMode.missingScope", { count: publisherStatus.accounts_missing_tweet_write_count })}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-3 md:grid-cols-5">
@@ -365,12 +397,12 @@ export default function ExecutionQueuePage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={busyID === item.id || !publisherSettings?.manual_publish_enabled || !publisherSettings?.real_publish_enabled}
-                              title={!publisherSettings?.real_publish_enabled ? t("executionQueue.actions.realPublishDisabledTip") : ""}
+                              disabled={busyID === item.id || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
+                              title={!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
                               onClick={() => void realPublish(item)}
                             >
                               <Send className="size-4" />
-                              {t("executionQueue.actions.realPublish")}
+                              {publisherStatus?.dry_run ? t("executionQueue.actions.dryRunPublish") : t("executionQueue.actions.realPublish")}
                             </Button>
                           ) : null}
                         </>

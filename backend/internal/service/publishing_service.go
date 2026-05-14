@@ -120,6 +120,33 @@ func (s *PublishingService) ListJobs(userID uint) (*dto.PublishJobsResponse, err
 	return &dto.PublishJobsResponse{Items: items, Settings: xPublisherSettingsToDTO(s.cfg)}, nil
 }
 
+func (s *PublishingService) Status(userID uint) (*dto.PublishingStatusResponse, error) {
+	accounts, err := s.accountRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	connected := 0
+	missingTweetWrite := 0
+	for _, account := range accounts {
+		if strings.EqualFold(strings.TrimSpace(account.Status), "disconnected") {
+			continue
+		}
+		connected++
+		if !hasOAuthScope(account.OAuthScopes, "tweet.write") {
+			missingTweetWrite++
+		}
+	}
+	return &dto.PublishingStatusResponse{
+		RealPublishEnabled:             s.cfg.RealPublishEnabled,
+		ManualPublishEnabled:           s.cfg.ManualPublishEnabled,
+		DryRun:                         s.cfg.DryRun,
+		PerAccountDailyLimit:           s.cfg.PerAccountDailyLimit,
+		PerAccountMinIntervalSeconds:   s.cfg.PerAccountMinIntervalSecs,
+		CurrentUserConnectedAccounts:   connected,
+		AccountsMissingTweetWriteCount: missingTweetWrite,
+	}, nil
+}
+
 func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now time.Time) (*model.PublishJob, bool, error) {
 	if task == nil || task.Status != "ready_to_publish" {
 		return nil, false, nil
@@ -251,10 +278,16 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 	if job.Status != repository.PublishStatusPending && job.Status != repository.PublishStatusFailed {
 		return nil, fmt.Errorf("only pending or failed publish jobs can be manually published")
 	}
+	if !s.cfg.DryRun && !s.cfg.RealPublishEnabled {
+		return nil, &PublishingError{Code: "publisher_real_publish_disabled", Message: "real x publishing is disabled in this environment"}
+	}
 	now := time.Now().UTC()
 	account, err := s.validateManualPublishJob(job, now)
 	if err != nil {
 		if pe := (&PublishingError{}); errors.As(err, &pe) {
+			if shouldMarkJobFailedForPublishingError(pe.Code) {
+				_ = s.failJobWithPreview(job, pe.Code, pe.Message, false, "activity.preview.realPublishFailed")
+			}
 			return nil, err
 		}
 		_ = s.failJobWithPreview(job, "manual_publish_validation_failed", err.Error(), false, "activity.preview.realPublishFailed")
@@ -275,8 +308,9 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 	}
 	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
 	if err != nil {
-		_ = s.failJobWithPreview(job, "manual_publish_failed", err.Error(), false, "activity.preview.realPublishFailed")
-		return nil, err
+		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
+		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, false, "activity.preview.realPublishFailed")
+		return nil, publishErr
 	}
 	if err := s.completeJob(job, result, mode, previewKey); err != nil {
 		return nil, err
@@ -286,6 +320,8 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 		return nil, err
 	}
 	item := publishJobToItem(*updated)
+	item.DryRun = s.cfg.DryRun
+	item.RealPublishEnabled = s.cfg.RealPublishEnabled
 	return &item, nil
 }
 
@@ -355,9 +391,6 @@ func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now 
 	if strings.TrimSpace(job.Content) == "" {
 		return nil, fmt.Errorf("publish content is empty")
 	}
-	if !s.cfg.RealPublishEnabled {
-		return nil, &PublishingError{Code: "publisher_real_publish_disabled", Message: "real x publishing is disabled in this environment"}
-	}
 	u, err := s.userRepo.GetByID(job.UserID)
 	if err != nil {
 		return nil, err
@@ -370,10 +403,10 @@ func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now 
 		return nil, fmt.Errorf("x account is not connected")
 	}
 	if strings.TrimSpace(account.AccessToken) == "" {
-		return nil, fmt.Errorf("missing x access token")
+		return nil, &PublishingError{Code: "x_access_token_missing", Message: "x_access_token_missing"}
 	}
-	if !strings.Contains(strings.ToLower(account.OAuthScopes), "tweet.write") {
-		return nil, fmt.Errorf("x account does not have tweet.write permission")
+	if !hasOAuthScope(account.OAuthScopes, "tweet.write") {
+		return nil, &PublishingError{Code: "missing_tweet_write_scope", Message: "missing_tweet_write_scope"}
 	}
 	switch job.SourceType {
 	case repository.PublishSourceComment, repository.PublishSourceReply:
@@ -702,6 +735,25 @@ func normalizeXPublisherConfig(cfg config.XPublisherConfig) config.XPublisherCon
 		cfg.DryRun = true
 	}
 	return cfg
+}
+
+func hasOAuthScope(scopes string, expected string) bool {
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	for _, scope := range strings.Fields(strings.ToLower(scopes)) {
+		if scope == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldMarkJobFailedForPublishingError(code string) bool {
+	switch code {
+	case "x_access_token_missing", "missing_tweet_write_scope":
+		return true
+	default:
+		return false
+	}
 }
 
 func xPublisherSettingsToDTO(cfg config.XPublisherConfig) dto.XPublisherSettings {

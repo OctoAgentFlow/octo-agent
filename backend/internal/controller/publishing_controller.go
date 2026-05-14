@@ -32,6 +32,20 @@ func (ctl *PublishingController) List(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *PublishingController) Status(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.service.Status(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *PublishingController) Retry(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

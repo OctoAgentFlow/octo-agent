@@ -20,9 +20,9 @@ export const navItems: NavItem[] = [
 ];
 
 export const heroStats: HeroStat[] = [
-  { labelKey: "marketing.hero.stats.personaEngine", value: "OAF" },
-  { labelKey: "marketing.hero.stats.socialActions", value: "4" },
-  { labelKey: "marketing.hero.stats.guardrails", value: "24/7" },
+  { labelKey: "marketing.hero.stats.personaEngine", valueKey: "marketing.hero.stats.personaEngineValue" },
+  { labelKey: "marketing.hero.stats.socialActions", valueKey: "marketing.hero.stats.socialActionsValue" },
+  { labelKey: "marketing.hero.stats.guardrails", valueKey: "marketing.hero.stats.guardrailsValue" },
 ];
 
 export const features: FeatureCard[] = [

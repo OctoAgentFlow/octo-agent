@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 
 export type NavItem = { labelKey: string; href: string };
 
-export type HeroStat = { labelKey: string; value: string };
+export type HeroStat = { labelKey: string; valueKey: string };
 
 export type TrustBadge = { labelKey: string; icon: LucideIcon };
 

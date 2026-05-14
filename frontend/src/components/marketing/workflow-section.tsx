@@ -14,9 +14,10 @@ export function WorkflowSection() {
       title={t("marketing.workflow.title")}
       description={t("marketing.workflow.description")}
     >
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         {workflowSteps.map((step, idx) => (
-          <article key={step.titleKey} className="surface-card relative rounded-2xl p-5">
+          <article key={step.titleKey} className="surface-card relative overflow-hidden rounded-2xl p-5">
+            <div className="pointer-events-none absolute -top-10 -right-10 size-24 rounded-full bg-blue-500/10 blur-2xl" />
             <span className="mb-3 inline-flex size-8 items-center justify-center rounded-full border border-white/15 text-sm text-white/80">
               {idx + 1}
             </span>

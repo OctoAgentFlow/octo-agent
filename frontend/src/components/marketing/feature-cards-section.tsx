@@ -14,7 +14,7 @@ export function FeatureCardsSection() {
       title={t("marketing.capabilities.title")}
       description={t("marketing.capabilities.description")}
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {features.map((feature) => (
           <article key={feature.titleKey} className="surface-card rounded-2xl p-5">
             <div className="mb-4 flex items-center justify-between">
@@ -24,12 +24,12 @@ export function FeatureCardsSection() {
               </span>
             </div>
             <h3 className="text-lg font-semibold text-white">{t(feature.titleKey)}</h3>
-            <p className="mt-2 text-sm text-white/65">{t(feature.descriptionKey)}</p>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">{t(feature.descriptionKey)}</p>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
               {feature.bulletKeys.map((bulletKey) => (
-                <li key={bulletKey} className="flex items-center gap-2">
-                  <span className="inline-block size-1.5 rounded-full bg-blue-300/80" />
-                  {t(bulletKey)}
+                <li key={bulletKey} className="flex items-start gap-2">
+                  <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-blue-300/80" />
+                  <span>{t(bulletKey)}</span>
                 </li>
               ))}
             </ul>

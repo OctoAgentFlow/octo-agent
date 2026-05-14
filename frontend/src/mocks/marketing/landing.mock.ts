@@ -92,6 +92,7 @@ export const dashboardPreviewData: DashboardPreview = {
     { labelKey: "marketing.preview.kpis.postsSent", value: "124", delta: "+18%" },
     { labelKey: "marketing.preview.kpis.repliesHandled", value: "847", delta: "+31%" },
     { labelKey: "marketing.preview.kpis.dmConversions", value: "63", delta: "+12%" },
+    { labelKey: "marketing.preview.kpis.personaConsistency", value: "96%", delta: "+6%" },
   ],
   tasks: [
     { time: "09:00", taskKey: "marketing.preview.tasks.t1", statusKey: "marketing.preview.status.completed" },

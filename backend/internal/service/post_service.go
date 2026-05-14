@@ -35,6 +35,9 @@ type PostService struct {
 	automationRepo *repository.AutomationRepository
 	activityRepo   *repository.ActivityRepository
 	userRepo       *repository.UserRepository
+	oafBotRepo     *repository.OAFBotRepository
+	usageRepo      *repository.AIGenerationUsageRepository
+	ai             *AIService
 }
 
 func NewPostService(
@@ -43,6 +46,9 @@ func NewPostService(
 	automationRepo *repository.AutomationRepository,
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
+	oafBotRepo *repository.OAFBotRepository,
+	usageRepo *repository.AIGenerationUsageRepository,
+	ai *AIService,
 ) *PostService {
 	return &PostService{
 		postRepo:       postRepo,
@@ -50,6 +56,9 @@ func NewPostService(
 		automationRepo: automationRepo,
 		activityRepo:   activityRepo,
 		userRepo:       userRepo,
+		oafBotRepo:     oafBotRepo,
+		usageRepo:      usageRepo,
+		ai:             ai,
 	}
 }
 
@@ -254,6 +263,55 @@ func (s *PostService) Delete(userID, id uint) error {
 	return s.postRepo.DeleteByUserAndID(userID, id)
 }
 
+func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGenerateRequest) (*dto.PostGenerateResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, req.XAccountID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("x_account_id not found or not connected")
+		}
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	var bot *model.OAFBot
+	if s.oafBotRepo != nil {
+		bot, err = s.oafBotRepo.GetByUserAndTwitterAccountID(userID, req.XAccountID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			bot = nil
+		}
+	}
+	content, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
+	if err != nil {
+		return nil, err
+	}
+	botID := botIDForUsage(bot)
+	if err := s.usageRepo.Increment(userID, botID, repository.AIGenerationSceneAutoPost, now, 1); err != nil {
+		return nil, err
+	}
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	limits := subscription.LimitsForUser(user)
+	return &dto.PostGenerateResponse{
+		Content: content,
+		BotID:   botID,
+		Scene:   repository.AIGenerationSceneAutoPost,
+		Usage: dto.PlanUsageData{
+			AIGenerationsMonth: currentAIGenerationUsage(s.usageRepo, userID, now),
+		},
+		Limits: planLimitsToDTO(limits),
+	}, nil
+}
+
 // Execute publishes the post via X API (manual run). Draft, scheduled, and failed posts can be sent.
 func (s *PostService) Execute(ctx context.Context, userID, postID uint) (*dto.PostExecuteResponse, error) {
 	if ctx == nil {
@@ -401,6 +459,32 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 		zap.String("account_handle", handle),
 	)...)
 	return &item, tweetID, nil
+}
+
+func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic string) GenerateAutoPostInput {
+	in := GenerateAutoPostInput{
+		AccountHandle: formatXAccountHandle(acc.Username),
+		Topic:         topic,
+	}
+	if bot == nil {
+		return in
+	}
+	in.HasBot = true
+	in.Name = bot.Name
+	in.Occupation = bot.Occupation
+	in.Industry = bot.Industry
+	in.AgeRange = bot.AgeRange
+	in.Gender = bot.Gender
+	in.Education = bot.Education
+	in.MBTI = bot.MBTI
+	in.PersonalityTags = decodeStringList(bot.PersonalityTags)
+	in.IdentitySummary = bot.IdentitySummary
+	in.VoiceTone = bot.VoiceTone
+	in.Topics = decodeStringList(bot.Topics)
+	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
+	in.GrowthGoal = bot.GrowthGoal
+	in.SafetyMode = bot.SafetyMode
+	return in
 }
 
 func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {

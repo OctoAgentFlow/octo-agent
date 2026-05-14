@@ -109,6 +109,10 @@ func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "oaf bot not found")
 			return
 		}
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

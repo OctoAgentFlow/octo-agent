@@ -17,6 +17,7 @@ import (
 )
 
 var ErrOAFBotLimitExceeded = errors.New("oaf bot limit exceeded for current plan")
+var ErrOAFBotTwitterAccountAlreadyBound = errors.New("twitter_account_id is already bound to another active OAF Bot; unbind it first or choose another X account")
 
 type OAFBotService struct {
 	botRepo     *repository.OAFBotRepository
@@ -78,7 +79,7 @@ func (s *OAFBotService) Create(userID uint, req dto.OAFBotUpsertRequest) (*dto.O
 	if count >= limits.MaxBots {
 		return nil, ErrOAFBotLimitExceeded
 	}
-	if err := s.assertTwitterAccount(userID, req.TwitterAccountID); err != nil {
+	if err := s.assertTwitterAccountBinding(userID, 0, req.TwitterAccountID); err != nil {
 		return nil, err
 	}
 	bot := &model.OAFBot{UserID: userID}
@@ -95,7 +96,7 @@ func (s *OAFBotService) Update(userID, id uint, req dto.OAFBotUpsertRequest) (*d
 	if err != nil {
 		return nil, err
 	}
-	if err := s.assertTwitterAccount(userID, req.TwitterAccountID); err != nil {
+	if err := s.assertTwitterAccountBinding(userID, bot.ID, req.TwitterAccountID); err != nil {
 		return nil, err
 	}
 	applyOAFBotRequest(bot, req)
@@ -161,7 +162,7 @@ func (s *OAFBotService) GenerationUsages(userID, id uint) (*dto.OAFBotGeneration
 	return &dto.OAFBotGenerationUsageResponse{Items: items}, nil
 }
 
-func (s *OAFBotService) assertTwitterAccount(userID uint, accountID uint) error {
+func (s *OAFBotService) assertTwitterAccountBinding(userID uint, currentBotID uint, accountID uint) error {
 	if accountID == 0 {
 		return nil
 	}
@@ -170,6 +171,16 @@ func (s *OAFBotService) assertTwitterAccount(userID uint, accountID uint) error 
 			return fmt.Errorf("twitter_account_id does not belong to current user")
 		}
 		return err
+	}
+	existing, err := s.botRepo.GetByUserAndTwitterAccountIDExcludingBot(userID, accountID, currentBotID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if existing != nil {
+		return ErrOAFBotTwitterAccountAlreadyBound
 	}
 	return nil
 }

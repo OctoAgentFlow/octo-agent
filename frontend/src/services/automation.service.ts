@@ -139,6 +139,10 @@ export type AutoCommentTargetApi = {
   target_user_id?: string;
   target_username: string;
   target_display_name?: string;
+  target_tweet_id?: string;
+  target_tweet_url?: string;
+  target_author_handle?: string;
+  target_text?: string;
   status: "active" | "paused";
   last_seen_tweet_id?: string;
   last_seen_tweet_at?: string;
@@ -154,6 +158,7 @@ export type AutoCommentTargetsData = {
 
 export type AutoCommentTaskApi = {
   id: number;
+  bot_id: number;
   x_account_id: number;
   target_id: number;
   target_user_id?: string;
@@ -162,7 +167,8 @@ export type AutoCommentTaskApi = {
   target_tweet_text?: string;
   target_tweet_author?: string;
   generated_comment?: string;
-  status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
+  status: "review" | "approved" | "rejected" | "sending" | "blocked" | "failed" | "sent";
+  risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;
   failure_reason?: string;
@@ -182,6 +188,14 @@ export type AutoCommentTaskApi = {
 
 export type AutoCommentTasksData = {
   items: AutoCommentTaskApi[];
+};
+
+export type AutoCommentTargetPayload = {
+  x_account_id: number;
+  target_tweet_url: string;
+  target_tweet_id?: string;
+  target_author_handle: string;
+  target_text: string;
 };
 
 export type AutomationSavePayload = {
@@ -283,6 +297,14 @@ export const automationService = {
     });
     return res.data.data;
   },
+  async createCommentTweetTarget(payload: AutoCommentTargetPayload) {
+    const res = await request.post<ApiResponse<AutoCommentTargetApi>>("/auto-comments/targets", payload);
+    return res.data.data;
+  },
+  async generateCommentDraft(targetID: number) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/targets/${targetID}/generate`, {});
+    return res.data.data;
+  },
   async updateCommentTargetStatus(id: number, status: AutoCommentTargetApi["status"]) {
     const res = await request.patch<ApiResponse<AutoCommentTargetApi>>(`/auto-comment/targets/${id}`, { status });
     return res.data.data;
@@ -294,8 +316,22 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comment/tasks");
     return res.data.data;
   },
+  async commentDrafts() {
+    const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comments/drafts");
+    return res.data.data;
+  },
   async approveCommentTask(id: number) {
-    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/approve`);
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/approve`);
+    return res.data.data;
+  },
+  async updateCommentDraft(id: number, generatedComment: string) {
+    const res = await request.patch<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}`, {
+      generated_comment: generatedComment,
+    });
+    return res.data.data;
+  },
+  async rejectCommentDraft(id: number, reason: string) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/reject`, { reason });
     return res.data.data;
   },
   async blockCommentTask(id: number, reason: string) {

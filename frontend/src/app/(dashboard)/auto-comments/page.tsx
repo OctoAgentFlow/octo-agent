@@ -1,0 +1,369 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import axios from "axios";
+import { ArrowRight, Bot, CheckCircle2, Pencil, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
+import { useToast } from "@/components/providers/toast-provider";
+import { useT } from "@/i18n/use-t";
+import { accountService, type AccountListItem } from "@/services/account.service";
+import {
+  automationService,
+  type AutoCommentTargetApi,
+  type AutoCommentTaskApi,
+} from "@/services/automation.service";
+import { oafBotService } from "@/services/oaf-bot.service";
+import type { OAFBot } from "@/types/oaf-bot";
+
+type LoadState = "loading" | "ready" | "error";
+
+function extractTweetID(url: string) {
+  const match = url.match(/\/status(?:es)?\/(\d+)/);
+  return match?.[1] || "";
+}
+
+function formatHandle(value?: string) {
+  const normalized = (value || "").trim().replace(/^@/, "");
+  return normalized ? `@${normalized}` : "—";
+}
+
+export default function AutoCommentsPage() {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  const [bots, setBots] = useState<OAFBot[]>([]);
+  const [targets, setTargets] = useState<AutoCommentTargetApi[]>([]);
+  const [drafts, setDrafts] = useState<AutoCommentTaskApi[]>([]);
+  const [xAccountID, setXAccountID] = useState<number>(0);
+  const [tweetURL, setTweetURL] = useState("");
+  const [authorHandle, setAuthorHandle] = useState("");
+  const [targetText, setTargetText] = useState("");
+  const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
+  const selectedBot = useMemo(
+    () => bots.find((bot) => selectedAccount && bot.twitter_account_id === selectedAccount.id) ?? null,
+    [bots, selectedAccount]
+  );
+
+  const loadAll = useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const [accountData, botData, targetData, draftData] = await Promise.all([
+        accountService.list(),
+        oafBotService.list(),
+        automationService.commentTargets(),
+        automationService.commentDrafts(),
+      ]);
+      const connected = accountData.items.filter((item) => item.status === "connected");
+      setAccounts(connected);
+      setBots(botData.items);
+      setTargets(targetData.items);
+      setDrafts(draftData.items);
+      if (!xAccountID && connected[0]) {
+        setXAccountID(connected[0].id);
+      }
+      setLoadState("ready");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message || t("autoComment.errors.load")
+        : t("autoComment.errors.load");
+      pushToast(message);
+      setLoadState("error");
+    }
+  }, [pushToast, t, xAccountID]);
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  const createTargetAndGenerate = async () => {
+    const accountID = selectedAccount?.id ?? 0;
+    if (!accountID || !tweetURL.trim() || !authorHandle.trim() || !targetText.trim()) return;
+    setBusy(true);
+    try {
+      const target = await automationService.createCommentTweetTarget({
+        x_account_id: accountID,
+        target_tweet_url: tweetURL.trim(),
+        target_tweet_id: extractTweetID(tweetURL),
+        target_author_handle: authorHandle.trim(),
+        target_text: targetText.trim(),
+      });
+      const draft = await automationService.generateCommentDraft(target.id);
+      setTargets((items) => [target, ...items.filter((item) => item.id !== target.id)]);
+      setDrafts((items) => [draft, ...items.filter((item) => item.id !== draft.id)]);
+      setTweetURL("");
+      setAuthorHandle("");
+      setTargetText("");
+      pushToast(t("autoComment.toast.generated"));
+    } catch (error) {
+      const body = axios.isAxiosError(error) ? error.response?.data : null;
+      const message =
+        body?.error_code === "ai_generation_quota_exceeded"
+          ? t("autoComment.errors.quota")
+          : body?.message || t("autoComment.errors.generate");
+      pushToast(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approveDraft = async (id: number) => {
+    try {
+      const updated = await automationService.approveCommentTask(id);
+      setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t("autoComment.toast.approved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.approve") : t("autoComment.errors.approve"));
+    }
+  };
+
+  const rejectDraft = async (id: number) => {
+    try {
+      const updated = await automationService.rejectCommentDraft(id, "Rejected from Auto Comment review queue.");
+      setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t("autoComment.toast.rejected"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.reject") : t("autoComment.errors.reject"));
+    }
+  };
+
+  const startEdit = (draft: AutoCommentTaskApi) => {
+    setEditingDraftID(draft.id);
+    setEditingContent(draft.generated_comment || "");
+  };
+
+  const saveDraft = async () => {
+    if (!editingDraftID || !editingContent.trim()) return;
+    try {
+      const updated = await automationService.updateCommentDraft(editingDraftID, editingContent.trim());
+      setDrafts((items) => items.map((item) => (item.id === editingDraftID ? updated : item)));
+      setEditingDraftID(null);
+      setEditingContent("");
+      pushToast(t("autoComment.toast.saved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.save") : t("autoComment.errors.save"));
+    }
+  };
+
+  const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm text-blue-100/75">{t("autoComment.kicker")}</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">{t("autoComment.title")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{t("autoComment.subtitle")}</p>
+        </div>
+        <Link
+          href="/oaf-bots"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-white/20 bg-white/5 px-3 text-sm font-medium text-white transition-all hover:bg-white/10"
+        >
+          <Bot className="size-4" />
+          {t("autoComment.manageBots")}
+        </Link>
+      </div>
+
+      {loadState === "loading" ? (
+        <Card>
+          <CardHeader title={t("autoComment.loading.title")} description={t("autoComment.loading.description")} />
+        </Card>
+      ) : null}
+
+      {loadState === "error" ? (
+        <Card>
+          <CardHeader title={t("autoComment.error.title")} description={t("autoComment.error.description")} />
+          <Button onClick={() => void loadAll()}>{t("autoComment.retry")}</Button>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <Card>
+          <CardHeader title={t("autoComment.target.title")} description={t("autoComment.target.description")} />
+          <div className="space-y-4">
+            <label className="block space-y-2">
+              <span className="text-xs font-medium text-white/60">{t("autoComment.target.account")}</span>
+              <select
+                value={selectedAccount?.id ?? 0}
+                onChange={(event) => setXAccountID(Number(event.target.value))}
+                className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+              >
+                {accounts.length === 0 ? <option value={0}>{t("autoComment.target.noAccounts")}</option> : null}
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    @{account.username || account.display_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-2 text-blue-100">
+                  <ShieldCheck className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{t("autoComment.botStatus.title")}</p>
+                  {selectedBot ? (
+                    <div className="mt-2 space-y-1 text-sm text-white/65">
+                      <p>{selectedBot.name}</p>
+                      <p>{t("autoComment.botStatus.voice")}: {selectedBot.voice_tone || "—"}</p>
+                      <p>{t("autoComment.botStatus.goal")}: {selectedBot.growth_goal || "—"}</p>
+                      <p className="text-blue-100/80">{t("autoComment.botStatus.bound")}</p>
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-2 text-sm text-white/62">
+                      <p>{t("autoComment.botStatus.unbound")}</p>
+                      <Link className="inline-flex items-center gap-1 text-blue-100 hover:text-white" href="/oaf-bots">
+                        {t("autoComment.botStatus.bindCta")}
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-medium text-white/60">{t("autoComment.target.url")}</span>
+              <input
+                value={tweetURL}
+                onChange={(event) => setTweetURL(event.target.value)}
+                placeholder="https://x.com/octo_agent_flow/status/1234567890"
+                className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="text-xs font-medium text-white/60">{t("autoComment.target.author")}</span>
+              <input
+                value={authorHandle}
+                onChange={(event) => setAuthorHandle(event.target.value)}
+                placeholder="@target_account"
+                className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="text-xs font-medium text-white/60">{t("autoComment.target.text")}</span>
+              <textarea
+                value={targetText}
+                onChange={(event) => setTargetText(event.target.value)}
+                rows={5}
+                placeholder={t("autoComment.target.textPlaceholder")}
+                className="min-h-32 w-full resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-white/30"
+              />
+            </label>
+
+            <div className="rounded-xl border border-violet-300/20 bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-3 text-sm text-white/70">
+              <Sparkles className="mr-2 inline size-4 text-blue-100" />
+              {t("autoComment.target.costHint")}
+            </div>
+
+            <Button className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white" disabled={!canGenerate} onClick={() => void createTargetAndGenerate()}>
+              {busy ? t("autoComment.target.generating") : t("autoComment.target.generate")}
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+          <div className="space-y-3">
+            {drafts.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-10 text-center text-sm text-white/55">
+                {t("autoComment.review.empty")}
+              </div>
+            ) : (
+              drafts.slice(0, 12).map((draft) => {
+                const canReview = draft.status === "review";
+                const editing = editingDraftID === draft.id;
+                return (
+                  <div key={draft.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">{draft.status}</span>
+                          <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">auto_comment</span>
+                          {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">Bot #{draft.bot_id}</span> : null}
+                        </div>
+                        <div className="rounded-lg border border-white/8 bg-black/15 p-3">
+                          <p className="mb-1 text-xs text-white/40">{t("autoComment.review.targetTweet")}</p>
+                          <p className="line-clamp-3 text-sm leading-6 text-white/68">{draft.target_tweet_text || draft.target_tweet_id}</p>
+                        </div>
+                        <div className="rounded-lg border border-blue-300/15 bg-blue-500/8 p-3">
+                          <p className="mb-2 text-xs text-blue-100/75">{t("autoComment.review.generated")}</p>
+                          {editing ? (
+                            <textarea
+                              value={editingContent}
+                              onChange={(event) => setEditingContent(event.target.value)}
+                              rows={4}
+                              className="w-full resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm leading-6 text-white outline-none"
+                            />
+                          ) : (
+                            <p className="text-sm leading-6 text-white/86">{draft.generated_comment || "—"}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {editing ? (
+                          <>
+                            <Button size="sm" onClick={() => void saveDraft()}>{t("autoComment.review.save")}</Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditingDraftID(null)}>{t("common.cancel")}</Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
+                              <Pencil className="size-4" />
+                              {t("autoComment.review.edit")}
+                            </Button>
+                            {canReview ? (
+                              <Button size="sm" onClick={() => void approveDraft(draft.id)}>
+                                <CheckCircle2 className="size-4" />
+                                {t("autoComment.review.approve")}
+                              </Button>
+                            ) : null}
+                            {draft.status !== "rejected" && draft.status !== "sent" ? (
+                              <Button size="sm" variant="outline" onClick={() => void rejectDraft(draft.id)}>
+                                <XCircle className="size-4" />
+                                {t("autoComment.review.reject")}
+                              </Button>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader title={t("autoComment.targets.title")} description={t("autoComment.targets.description")} />
+        {targets.length === 0 ? (
+          <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-white/55">{t("autoComment.targets.empty")}</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {targets.slice(0, 9).map((target) => (
+              <div key={target.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="min-w-0 truncate text-sm font-semibold text-white">{formatHandle(target.target_author_handle || target.target_username)}</p>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/55">{target.status}</span>
+                </div>
+                <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/55">{target.target_text || target.target_tweet_url || target.target_username}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}

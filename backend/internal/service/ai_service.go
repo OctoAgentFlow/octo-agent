@@ -15,10 +15,25 @@ type AIService struct {
 }
 
 type GenerateAutoCommentInput struct {
-	TargetUsername string
-	TargetTweet    string
-	Tone           string
-	BlockedWords   []string
+	TargetUsername  string
+	TargetTweet     string
+	Tone            string
+	BlockedWords    []string
+	HasBot          bool
+	Name            string
+	Occupation      string
+	Industry        string
+	AgeRange        string
+	Gender          string
+	Education       string
+	MBTI            string
+	PersonalityTags []string
+	IdentitySummary string
+	VoiceTone       string
+	Topics          []string
+	ForbiddenTopics []string
+	GrowthGoal      string
+	SafetyMode      string
 }
 
 type GenerateOAFBotSamplesInput struct {
@@ -73,8 +88,9 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	}
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's social growth assistant.",
-		"Write one concise X/Twitter comment that can be posted as a reply to a target account's new tweet.",
+		"Write one concise X/Twitter comment draft for a target tweet.",
 		"The goal is to join the conversation naturally and earn exposure, without sounding spammy, generic, or manipulative.",
+		"The comment will go into a human review queue before publishing.",
 		"Output only the comment text.",
 	}, " ")
 
@@ -85,9 +101,28 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	user.WriteString("Target tweet:\n")
 	user.WriteString(targetTweet)
 	user.WriteString("\n\n")
-	user.WriteString("Tone: ")
-	user.WriteString(tone)
-	user.WriteString("\n")
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+		user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
+		user.WriteString("age_range: " + strings.TrimSpace(in.AgeRange) + "\n")
+		user.WriteString("gender: " + strings.TrimSpace(in.Gender) + "\n")
+		user.WriteString("education: " + strings.TrimSpace(in.Education) + "\n")
+		user.WriteString("mbti: " + strings.TrimSpace(in.MBTI) + "\n")
+		user.WriteString("personality_tags: " + strings.Join(in.PersonalityTags, ", ") + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	} else {
+		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: practical, natural, useful, and non-spammy.\n")
+		user.WriteString("Tone: ")
+		user.WriteString(tone)
+		user.WriteString("\n")
+	}
 	if len(in.BlockedWords) > 0 {
 		user.WriteString("Avoid these words or topics: ")
 		user.WriteString(strings.Join(in.BlockedWords, ", "))
@@ -95,9 +130,15 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	}
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
+	user.WriteString("- Prefer short, natural sentences suitable for X comments.\n")
+	user.WriteString("- Add a concrete point of view or a light question when useful.\n")
+	user.WriteString("- Do not repeat the target tweet verbatim.\n")
+	user.WriteString("- Do not sound like an ad and do not over-direct traffic.\n")
 	user.WriteString("- Do not use hashtags unless they are already central to the target tweet.\n")
 	user.WriteString("- Do not mention that you are an AI.\n")
+	user.WriteString("- Do not impersonate the target account, a project official, or an exchange.\n")
 	user.WriteString("- Do not ask for follows, likes, airdrops, giveaways, seed phrases, private keys, or wallet connections.\n")
+	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
 	user.WriteString("- Do not include surrounding quotes.\n")
 
 	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{

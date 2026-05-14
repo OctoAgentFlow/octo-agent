@@ -421,6 +421,29 @@ func (ctl *AutomationController) ListCommentTasks(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	targetID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid target id")
+		return
+	}
+	data, err := ctl.autoCommentService.GenerateDraft(c.Request.Context(), userID, targetID)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -433,6 +456,51 @@ func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoCommentService.ApproveTask(c.Request.Context(), userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RejectCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentTaskBlockRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoCommentService.RejectTask(userID, taskID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentDraftUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.UpdateDraft(userID, taskID, req.GeneratedComment)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

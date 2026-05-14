@@ -41,6 +41,24 @@ func (r *AutoCommentTargetRepository) GetByUserAndID(userID, id uint) (*model.Au
 	return &row, nil
 }
 
+func (r *AutoCommentTargetRepository) GetByUserAccountAndTweet(userID, xAccountID uint, tweetID string) (*model.AutoCommentTarget, error) {
+	var row model.AutoCommentTarget
+	err := r.DB.Where("user_id = ? AND x_account_id = ? AND target_tweet_id = ?", userID, xAccountID, strings.TrimSpace(tweetID)).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *AutoCommentTargetRepository) GetByUserAccountAndUsername(userID, xAccountID uint, username string) (*model.AutoCommentTarget, error) {
+	var row model.AutoCommentTarget
+	err := r.DB.Where("user_id = ? AND x_account_id = ? AND target_username = ?", userID, xAccountID, normalizeXUsername(username)).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *AutoCommentTargetRepository) Save(target *model.AutoCommentTarget) error {
 	target.TargetUsername = normalizeXUsername(target.TargetUsername)
 	return r.DB.Save(target).Error

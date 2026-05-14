@@ -25,6 +25,15 @@ func (r *AutoCommentTaskRepository) ListByUser(userID uint, limit int) ([]model.
 	return rows, err
 }
 
+func (r *AutoCommentTaskRepository) ListQueueByUser(userID uint, limit int) ([]model.AutoCommentTask, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	var rows []model.AutoCommentTask
+	err := r.DB.Where("user_id = ?", userID).Order("created_at DESC, id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 func (r *AutoCommentTaskRepository) GetByUserAndID(userID, id uint) (*model.AutoCommentTask, error) {
 	var row model.AutoCommentTask
 	err := r.DB.Where("user_id = ? AND id = ?", userID, id).First(&row).Error

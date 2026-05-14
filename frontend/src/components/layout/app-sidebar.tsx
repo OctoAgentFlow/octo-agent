@@ -10,6 +10,7 @@ import {
   Bot,
   FileText,
   LayoutDashboard,
+  ListChecks,
   MessageCircle,
   ReceiptText,
   Settings,
@@ -23,6 +24,7 @@ import { isAdminFrontend } from "@/lib/frontend-role";
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.activity", href: "/activity", icon: Activity },
+  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
   { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
   { labelKey: "sidebar.nav.autoComments", href: "/auto-comments", icon: MessageCircle },

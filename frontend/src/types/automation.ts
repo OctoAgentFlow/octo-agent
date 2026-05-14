@@ -1,5 +1,6 @@
 export type AutomationModuleType = "post" | "reply" | "dm" | "comment";
 export type AutomationTone = "Professional" | "Friendly" | "Degen" | "Web3-native";
+export type AutomationExecutionMode = "manual" | "review" | "autopilot";
 export type AutomationRunState = "Running" | "Queued" | "Paused" | "Needs Review";
 
 export type AutomationSafetyLimits = {
@@ -17,6 +18,7 @@ export type AutomationModuleConfig = {
   enabled: boolean;
   frequency: AutomationFrequency;
   tone: AutomationTone;
+  executionMode: AutomationExecutionMode;
   safety: AutomationSafetyLimits;
 };
 

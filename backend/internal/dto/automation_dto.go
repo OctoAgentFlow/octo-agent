@@ -12,10 +12,15 @@ type AutomationSafety struct {
 }
 
 type AutomationConfigPayload struct {
-	Enabled   bool                `json:"enabled"`
-	Frequency AutomationFrequency `json:"frequency" binding:"required"`
-	Tone      string              `json:"tone" binding:"required"`
-	Safety    AutomationSafety    `json:"safety" binding:"required"`
+	Enabled       bool                `json:"enabled"`
+	Frequency     AutomationFrequency `json:"frequency" binding:"required"`
+	Tone          string              `json:"tone" binding:"required"`
+	ExecutionMode string              `json:"execution_mode"`
+	Safety        AutomationSafety    `json:"safety" binding:"required"`
+}
+
+type AutomationExecutionModeRequest struct {
+	ExecutionMode string `json:"execution_mode" binding:"required"`
 }
 
 type AutomationReplyUsage struct {

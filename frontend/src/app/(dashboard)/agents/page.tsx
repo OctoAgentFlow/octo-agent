@@ -76,6 +76,7 @@ function mapModule(item: AutomationModuleApi): AutomationModule {
         dailyLimit: item.config.frequency.daily_limit,
       },
       tone: item.config.tone,
+      executionMode: item.config.execution_mode || "review",
       safety: {
         requireApproval: item.config.safety.require_approval,
         maxPerHour: item.config.safety.max_per_hour,
@@ -271,6 +272,7 @@ export default function AgentsPage() {
           daily_limit: config.frequency.dailyLimit,
         },
         tone: config.tone,
+        execution_mode: config.executionMode,
         safety: {
           require_approval: config.safety.requireApproval,
           max_per_hour: config.safety.maxPerHour,
@@ -869,7 +871,7 @@ function AutoCommentPanel({
           ) : (
             <div className="max-h-[560px] space-y-2 overflow-y-auto">
               {tasks.slice(0, 8).map((task) => {
-                const canApprove = task.status === "review";
+                const canApprove = task.status === "review" || task.status === "pending_review";
                 const canRetry = task.status === "failed" && task.retryable;
                 return (
                   <div key={task.id} className="rounded-md border border-white/8 bg-black/10 p-3">

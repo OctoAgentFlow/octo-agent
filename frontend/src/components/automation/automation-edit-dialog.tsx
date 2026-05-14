@@ -38,6 +38,7 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
       enabled: false,
       frequency: { intervalMinutes: 60, dailyLimit: 20 },
       tone: "Professional",
+      executionMode: "review",
       safety: { requireApproval: true, maxPerHour: 5, blockedKeywords: [] },
     }) as Values,
   });
@@ -102,6 +103,18 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-white/70 uppercase">{t("automation.edit.executionMode")}</p>
+          <select className="form-input" defaultValue={module.config.executionMode || "review"} {...form.register("executionMode")}>
+            {(["manual", "review", "autopilot"] as const).map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`automation.executionMode.${mode}`)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs leading-5 text-white/45">{t("automation.edit.executionModeHint")}</p>
         </div>
 
         <div className="space-y-2">

@@ -103,6 +103,26 @@ func (ctl *AutomationController) Toggle(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) UpdateExecutionMode(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	typ := strings.TrimSpace(strings.ToLower(c.Param("type")))
+	var req dto.AutomationExecutionModeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.automationService.UpdateExecutionMode(userID, typ, req.ExecutionMode)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) RuntimeStatus(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

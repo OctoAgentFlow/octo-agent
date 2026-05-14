@@ -71,6 +71,7 @@ function mapAutomation(item: AutomationModuleApi): AutomationModule {
         dailyLimit: item.config.frequency.daily_limit,
       },
       tone: item.config.tone,
+      executionMode: item.config.execution_mode || "review",
       safety: {
         requireApproval: item.config.safety.require_approval,
         maxPerHour: item.config.safety.max_per_hour,

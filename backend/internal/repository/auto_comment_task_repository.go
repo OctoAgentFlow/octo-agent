@@ -67,3 +67,12 @@ func (r *AutoCommentTaskRepository) CountSuccessBetween(userID uint, from, to ti
 		Count(&n).Error
 	return n, err
 }
+
+func (r *AutoCommentTaskRepository) CountCreatedBetween(userID uint, from, to time.Time) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.AutoCommentTask{}).
+		Where("user_id = ?", userID).
+		Where("created_at >= ? AND created_at <= ?", from, to).
+		Count(&n).Error
+	return n, err
+}

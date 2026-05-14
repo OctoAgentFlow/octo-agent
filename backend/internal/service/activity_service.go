@@ -36,7 +36,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	}
 
 	typ := strings.TrimSpace(strings.ToLower(query.Type))
-	if typ != "" && typ != "post" && typ != "reply" && typ != "dm" {
+	if typ != "" && typ != "post" && typ != "reply" && typ != "dm" && typ != "comment" {
 		return nil, errors.New("invalid activity type")
 	}
 	status := strings.TrimSpace(strings.ToLower(query.Status))

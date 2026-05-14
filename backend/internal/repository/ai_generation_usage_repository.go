@@ -33,6 +33,21 @@ func (r *AIGenerationUsageRepository) CountByUserMonth(userID uint, month string
 	return total, err
 }
 
+func (r *AIGenerationUsageRepository) ListByUserBot(userID, botID uint, limit int) ([]model.AIGenerationUsage, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var rows []model.AIGenerationUsage
+	err := r.DB.Where("user_id = ? AND bot_id = ?", userID, botID).
+		Order("month DESC, updated_at DESC, id DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string, at time.Time, delta int64) error {
 	if delta <= 0 {
 		delta = 1

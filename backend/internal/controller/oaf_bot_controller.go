@@ -119,6 +119,23 @@ func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) GenerationUsages(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	data, err := ctl.oafBotService.GenerationUsages(userID, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) userAndBotID(c *gin.Context) (uint, uint, bool) {
 	userID, ok := getUserID(c)
 	if !ok {

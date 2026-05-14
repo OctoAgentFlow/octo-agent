@@ -9,9 +9,10 @@ import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
+import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { oafBotService } from "@/services/oaf-bot.service";
-import type { OAFBot, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 
 const emptyLimits: PlanLimits = {
@@ -66,6 +67,7 @@ const emptyForm: OAFBotPayload = {
 };
 
 export default function OAFBotsPage() {
+  const { t } = useT();
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -75,6 +77,8 @@ export default function OAFBotsPage() {
   const [selectedID, setSelectedID] = useState<number | null>(null);
   const [form, setForm] = useState<OAFBotPayload>(emptyForm);
   const [samples, setSamples] = useState<OAFBotSamples | null>(null);
+  const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
+  const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -105,6 +109,27 @@ export default function OAFBotsPage() {
     void load();
   }, [load]);
 
+  const loadGenerationUsages = useCallback(async (botID: number) => {
+    setGenerationUsagesLoading(true);
+    try {
+      const data = await oafBotService.generationUsages(botID);
+      setGenerationUsages(data.items);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("oafBots.usages.loadFailed") : t("oafBots.usages.loadFailed"));
+      setGenerationUsages([]);
+    } finally {
+      setGenerationUsagesLoading(false);
+    }
+  }, [pushToast, t]);
+
+  useEffect(() => {
+    if (!selectedID) {
+      setGenerationUsages([]);
+      return;
+    }
+    void loadGenerationUsages(selectedID);
+  }, [loadGenerationUsages, selectedID]);
+
   const selectBot = (bot: OAFBot) => {
     setSelectedID(bot.id);
     setForm(botToPayload(bot));
@@ -115,6 +140,7 @@ export default function OAFBotsPage() {
     setSelectedID(null);
     setForm(emptyForm);
     setSamples(null);
+    setGenerationUsages([]);
   };
 
   const save = async () => {
@@ -141,6 +167,7 @@ export default function OAFBotsPage() {
     setGenerating(true);
     try {
       setSamples(await oafBotService.testGenerate(selectedID));
+      await loadGenerationUsages(selectedID);
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "生成示例失败" : "生成示例失败");
     } finally {
@@ -210,6 +237,7 @@ export default function OAFBotsPage() {
           </div>
         </SectionCard>
 
+        <div className="space-y-5">
         <SectionCard title={selectedBot ? "编辑 OAF Bot" : "新建 OAF Bot"} description="配置机器人画像、话题边界和增长目标。">
           <div className="grid gap-4 md:grid-cols-2">
             <TextField label="名称" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} />
@@ -262,6 +290,49 @@ export default function OAFBotsPage() {
             </div>
           ) : null}
         </SectionCard>
+
+        <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
+          {!selectedID ? (
+            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+              {t("oafBots.usages.selectBot")}
+            </p>
+          ) : generationUsagesLoading ? (
+            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+              {t("oafBots.usages.loading")}
+            </p>
+          ) : generationUsages.length === 0 ? (
+            <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+              {t("oafBots.usages.empty")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {generationUsages.map((item) => (
+                <div
+                  key={`${item.bot_id}-${item.scene}-${item.month}`}
+                  className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72 sm:grid-cols-[0.7fr_1.2fr_0.8fr_0.6fr]"
+                >
+                  <div>
+                    <p className="text-xs text-white/45">{t("oafBots.usages.botId")}</p>
+                    <p className="mt-1 font-medium text-white">#{item.bot_id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/45">{t("oafBots.usages.scene")}</p>
+                    <p className="mt-1 font-medium text-white">{t(`oafBots.usages.scene.${item.scene}`)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/45">{t("oafBots.usages.month")}</p>
+                    <p className="mt-1 text-white/78">{item.month}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/45">{t("oafBots.usages.count")}</p>
+                    <p className="mt-1 text-white/78">{item.count}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+        </div>
       </div>
     </div>
   );

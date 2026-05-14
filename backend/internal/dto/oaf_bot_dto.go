@@ -50,3 +50,15 @@ type OAFBotTestGenerateResponse struct {
 	Reply string `json:"reply"`
 	DM    string `json:"dm"`
 }
+
+type OAFBotGenerationUsageItem struct {
+	BotID     uint   `json:"bot_id"`
+	Scene     string `json:"scene"`
+	Month     string `json:"month"`
+	Count     int64  `json:"count"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type OAFBotGenerationUsageResponse struct {
+	Items []OAFBotGenerationUsageItem `json:"items"`
+}

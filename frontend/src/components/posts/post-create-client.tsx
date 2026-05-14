@@ -10,11 +10,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
+import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
 import { automationService } from "@/services/automation.service";
+import { oafBotService } from "@/services/oaf-bot.service";
 import { postService } from "@/services/post.service";
+import type { OAFBot } from "@/types/oaf-bot";
 import type { PostStatus } from "@/types/post";
 
 function localDatetimeToISO(local: string): string | undefined {
@@ -29,6 +32,7 @@ export function PostCreateClient() {
   const router = useRouter();
   const { pushToast } = useToast();
   const [accounts, setAccounts] = useState<{ id: number; username: string; status: string }[]>([]);
+  const [bots, setBots] = useState<OAFBot[]>([]);
   const [loadAccounts, setLoadAccounts] = useState<"loading" | "ready" | "error">("loading");
   const [submitting, setSubmitting] = useState(false);
   const [xAccountId, setXAccountId] = useState<number>(0);
@@ -37,6 +41,7 @@ export function PostCreateClient() {
   const [scheduledLocal, setScheduledLocal] = useState("");
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const selectedBot = bots.find((bot) => bot.twitter_account_id === xAccountId) ?? null;
 
   const load = useCallback(async () => {
     setLoadAccounts("loading");
@@ -45,6 +50,12 @@ export function PostCreateClient() {
       const opts = data.items.map((a) => ({ id: a.id, username: a.username, status: a.status }));
       const connected = opts.filter((account) => account.status === "connected");
       setAccounts(connected);
+      try {
+        const botData = await oafBotService.list();
+        setBots(botData.items);
+      } catch {
+        setBots([]);
+      }
       setAutoPostEnabled(Boolean(automationData.modules.find((module) => module.type === "post")?.config.enabled));
       if (connected.length > 0) {
         setXAccountId(connected[0].id);
@@ -114,13 +125,18 @@ export function PostCreateClient() {
       setContent(data.content);
       const used = data.usage?.ai_generations_month ?? 0;
       const limit = data.limits?.ai_generations_monthly ?? 0;
-      pushToast(data.bot_id ? `已根据 OAF Bot 生成人设内容。AI 用量 ${used}/${limit}` : `已使用默认风格生成内容。AI 用量 ${used}/${limit}`);
+      broadcastDataSynced(Date.now());
+      pushToast(
+        data.bot_id
+          ? t("posts.create.generateSuccessWithBot", { used, limit })
+          : t("posts.create.generateSuccessDefault", { used, limit })
+      );
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data as { message?: string; error_code?: string } | undefined : undefined;
       if (body?.error_code === "ai_generation_quota_exceeded") {
-        pushToast("AI 生成次数已达当前套餐上限，请前往 Billing 升级套餐。");
+        pushToast(t("posts.create.aiQuotaExceeded"));
       } else {
-        pushToast(body?.message || "AI 生成内容失败。");
+        pushToast(body?.message || t("posts.create.generateFailed"));
       }
     } finally {
       setGenerating(false);
@@ -198,9 +214,30 @@ export function PostCreateClient() {
                   onClick={() => void generateContent()}
                 >
                   <Sparkles className="size-3.5" />
-                  {generating ? "生成中..." : "AI 生成"}
+                  {generating ? t("posts.create.generating") : t("posts.create.aiGenerate")}
                 </Button>
               </span>
+              <div
+                className={`mt-2 rounded-xl border p-3 ${
+                  selectedBot ? "border-violet-300/25 bg-violet-500/10" : "border-white/10 bg-white/[0.04]"
+                }`}
+              >
+                {selectedBot ? (
+                  <div className="space-y-1 text-xs text-white/65">
+                    <p className="font-medium text-white">{t("posts.create.botBound", { name: selectedBot.name })}</p>
+                    <p>{t("posts.create.botVoice", { value: selectedBot.voice_tone || "—" })}</p>
+                    <p>{t("posts.create.botGoal", { value: selectedBot.growth_goal || "—" })}</p>
+                    <p className="text-violet-100/85">{t("posts.create.botWillUsePersona")}</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/65">
+                    <p>{t("posts.create.botUnbound")}</p>
+                    <Link href="/oaf-bots" className="text-blue-200 hover:text-blue-100">
+                      {t("posts.create.goOAFBots")}
+                    </Link>
+                  </div>
+                )}
+              </div>
               <textarea
                 className="form-input mt-1 min-h-[140px] w-full"
                 value={content}

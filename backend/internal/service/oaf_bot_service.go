@@ -140,6 +140,27 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto
 	return out, nil
 }
 
+func (s *OAFBotService) GenerationUsages(userID, id uint) (*dto.OAFBotGenerationUsageResponse, error) {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return nil, err
+	}
+	rows, err := s.usageRepo.ListByUserBot(userID, id, 24)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.OAFBotGenerationUsageItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, dto.OAFBotGenerationUsageItem{
+			BotID:     row.BotID,
+			Scene:     row.Scene,
+			Month:     row.Month,
+			Count:     row.Count,
+			UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return &dto.OAFBotGenerationUsageResponse{Items: items}, nil
+}
+
 func (s *OAFBotService) assertTwitterAccount(userID uint, accountID uint) error {
 	if accountID == 0 {
 		return nil

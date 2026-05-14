@@ -34,3 +34,11 @@ export type OAFBotSamples = {
   reply: string;
   dm: string;
 };
+
+export type OAFBotGenerationUsage = {
+  bot_id: number;
+  scene: string;
+  month: string;
+  count: number;
+  updated_at: string;
+};

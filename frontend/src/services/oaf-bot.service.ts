@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { OAFBot, OAFBotListData, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
 
 type ApiResponse<T> = {
   code: number;
@@ -40,6 +40,10 @@ type OAFBotListApi = {
     advanced_risk_rules: boolean;
     priority_support: boolean;
   };
+};
+
+type OAFBotGenerationUsagesApi = {
+  items: OAFBotGenerationUsage[];
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {
@@ -94,6 +98,10 @@ export const oafBotService = {
   },
   async testGenerate(id: number) {
     const res = await request.post<ApiResponse<OAFBotSamples>>(`/oaf-bots/${id}/test-generate`, {});
+    return res.data.data;
+  },
+  async generationUsages(id: number) {
+    const res = await request.get<ApiResponse<OAFBotGenerationUsagesApi>>(`/oaf-bots/${id}/generation-usages`);
     return res.data.data;
   },
 };

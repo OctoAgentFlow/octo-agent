@@ -10,6 +10,7 @@ import (
 func RegisterPublishing(rg *gin.RouterGroup, c *controller.PublishingController) {
 	group := rg.Group("/publishing")
 	group.Use(middleware.Auth())
+	group.GET("/status", c.Status)
 	group.GET("/jobs", c.List)
 	group.POST("/jobs/:id/retry", c.Retry)
 	group.POST("/jobs/:id/cancel", c.Cancel)

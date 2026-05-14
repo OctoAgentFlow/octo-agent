@@ -31,16 +31,24 @@ export type PublishJobApi = {
 
 export type PublishJobsData = {
   items: PublishJobApi[];
-  settings: {
-    real_publish_enabled: boolean;
-    manual_publish_enabled: boolean;
-    per_account_daily_limit: number;
-    per_account_min_interval_seconds: number;
-    dry_run: boolean;
-  };
+  settings: XPublisherStatusApi;
+};
+
+export type XPublisherStatusApi = {
+  real_publish_enabled: boolean;
+  manual_publish_enabled: boolean;
+  dry_run: boolean;
+  per_account_daily_limit: number;
+  per_account_min_interval_seconds: number;
+  current_user_connected_accounts_count: number;
+  accounts_missing_tweet_write_count: number;
 };
 
 export const publishingService = {
+  async status() {
+    const res = await request.get<ApiResponse<XPublisherStatusApi>>("/publishing/status");
+    return res.data.data;
+  },
   async jobs() {
     const res = await request.get<ApiResponse<PublishJobsData>>("/publishing/jobs");
     return res.data.data;

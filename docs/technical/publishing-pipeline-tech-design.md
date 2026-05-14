@@ -76,6 +76,7 @@ flowchart LR
 ## API
 
 - `GET /api/v1/publishing/jobs`
+- `GET /api/v1/publishing/status`
 - `POST /api/v1/publishing/jobs/:id/retry`
 - `POST /api/v1/publishing/jobs/:id/cancel`
 - `POST /api/v1/publishing/jobs/:id/publish-now`
@@ -110,7 +111,7 @@ x_publisher:
 
 语义：
 
-- `real_publish_enabled=false`：任何真实发布请求直接返回 `publisher_real_publish_disabled`。
+- `real_publish_enabled=false` 且 `dry_run=false`：任何真实发布请求直接返回 `publisher_real_publish_disabled`。
 - `manual_publish_enabled=true`：前端可以展示人工触发入口。
 - `dry_run=true`：通过发布前校验后只记录 dry-run 成功，不调用 X。
 - `per_account_daily_limit`：单个 X 账号每日手动真实发布或 dry-run 次数上限。
@@ -120,7 +121,7 @@ x_publisher:
 
 1. 校验 job 属于当前用户。
 2. 校验 job 状态为 `pending` 或 `failed`，source 状态为 `ready_to_publish` 或 `failed`。
-3. 校验 `manual_publish_enabled`、`real_publish_enabled`。
+3. 校验 `manual_publish_enabled`，并在 `dry_run=false` 时校验 `real_publish_enabled`。
 4. 校验用户订阅有效。
 5. 校验 X 账号 connected、access token 存在、OAuth scopes 包含 `tweet.write`。
 6. 校验 source_type 仅支持 `comment` / `reply`。
@@ -128,6 +129,22 @@ x_publisher:
 8. `dry_run=true` 时写入 `publish_mode=dry_run` 并标记 published，但不调用 X。
 9. `dry_run=false` 时调用 XPublisher，成功后写入 `external_id` / `external_url`。
 10. 失败时写入 `last_error`，同步 source 为 `failed`，并记录 Activity。
+
+## 灰度状态接口
+
+`GET /api/v1/publishing/status`
+
+返回：
+
+- `real_publish_enabled`
+- `manual_publish_enabled`
+- `dry_run`
+- `per_account_daily_limit`
+- `per_account_min_interval_seconds`
+- `current_user_connected_accounts_count`
+- `accounts_missing_tweet_write_count`
+
+该接口必须登录，不返回 access token 或 refresh token。
 
 ## 后续真实 X API 开启步骤
 

@@ -33,6 +33,7 @@ type AutoCommentService struct {
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
+	publishing     *PublishingService
 }
 
 func NewAutoCommentService(
@@ -45,6 +46,7 @@ func NewAutoCommentService(
 	oafBotRepo *repository.OAFBotRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
+	publishing *PublishingService,
 ) *AutoCommentService {
 	return &AutoCommentService{
 		accountRepo:    accountRepo,
@@ -56,6 +58,7 @@ func NewAutoCommentService(
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
+		publishing:     publishing,
 	}
 }
 
@@ -241,6 +244,11 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
 		if err := s.createAutopilotPreparedActivity(task, acc.Username, now); err != nil {
 			return nil, err
+		}
+		if s.publishing != nil {
+			if _, _, err := s.publishing.EnsureCommentJob(task, now); err != nil {
+				return nil, err
+			}
 		}
 	}
 	item := toAutoCommentTaskItem(*task)
@@ -540,6 +548,11 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
 		if err := s.createAutopilotPreparedActivity(task, target.TargetUsername, now); err != nil {
 			return nil, err
+		}
+		if s.publishing != nil {
+			if _, _, err := s.publishing.EnsureCommentJob(task, now); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return task, nil

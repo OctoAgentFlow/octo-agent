@@ -42,6 +42,7 @@ type AutoReplyService struct {
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
+	publishing     *PublishingService
 }
 
 func NewAutoReplyService(
@@ -54,6 +55,7 @@ func NewAutoReplyService(
 	oafBotRepo *repository.OAFBotRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
+	publishing *PublishingService,
 ) *AutoReplyService {
 	return &AutoReplyService{
 		accountRepo:    accountRepo,
@@ -65,6 +67,7 @@ func NewAutoReplyService(
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
+		publishing:     publishing,
 	}
 }
 
@@ -162,6 +165,11 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 	if mode == ExecutionModeAutopilot && draft.Status == "ready_to_publish" {
 		if err := s.createAutopilotPreparedActivity(draft, acc.Username, now); err != nil {
 			return nil, err
+		}
+		if s.publishing != nil {
+			if _, _, err := s.publishing.EnsureReplyJob(draft, now); err != nil {
+				return nil, err
+			}
 		}
 	}
 	item := toAutoReplyDraftItem(*draft)

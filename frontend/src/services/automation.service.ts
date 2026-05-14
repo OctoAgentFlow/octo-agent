@@ -168,7 +168,7 @@ export type AutoCommentTaskApi = {
   target_tweet_text?: string;
   target_tweet_author?: string;
   generated_comment?: string;
-  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "rejected" | "sending" | "blocked" | "failed" | "sent";
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;
@@ -201,7 +201,7 @@ export type AutoReplyDraftApi = {
   root_tweet_text?: string;
   comment_text: string;
   generated_reply?: string;
-  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "rejected" | "failed" | "sent";
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;

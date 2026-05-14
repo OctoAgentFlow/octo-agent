@@ -7,7 +7,7 @@ type ApiResponse<T> = {
 };
 
 export type ReviewQueueType = "all" | "post" | "comment" | "reply" | "dm";
-export type ReviewQueueStatus = "all" | "draft" | "pending_review" | "approved" | "ready_to_publish" | "published" | "rejected" | "failed";
+export type ReviewQueueStatus = "all" | "draft" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "failed";
 export type ReviewQueueExecutionMode = "all" | "manual" | "review" | "autopilot";
 
 export type ReviewQueueItemApi = {
@@ -23,6 +23,9 @@ export type ReviewQueueItemApi = {
   target_summary?: string;
   risk_level: string;
   risk_reasons: string[];
+  publish_job_id?: number;
+  publish_status?: string;
+  publish_last_error?: string;
   created_at: string;
   source_status?: string;
   source_id: number;

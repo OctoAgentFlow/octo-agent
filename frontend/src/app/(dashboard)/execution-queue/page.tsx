@@ -9,6 +9,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { automationService } from "@/services/automation.service";
+import { publishingService } from "@/services/publishing.service";
 import {
   reviewQueueService,
   type ReviewQueueExecutionMode,
@@ -20,7 +21,7 @@ import {
 type LoadState = "loading" | "ready" | "error";
 
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
-const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "approved", "rejected", "failed"];
+const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
 const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review", "autopilot"];
 
 function formatDate(value: string) {
@@ -32,6 +33,7 @@ function formatDate(value: string) {
 
 function statusTone(status: string) {
   if (status === "ready_to_publish") return "border-emerald-300/25 bg-emerald-500/10 text-emerald-100";
+  if (status === "processing") return "border-sky-300/25 bg-sky-500/10 text-sky-100";
   if (status === "pending_review" || status === "draft") return "border-amber-300/25 bg-amber-500/10 text-amber-100";
   if (status === "approved" || status === "published") return "border-blue-300/25 bg-blue-500/10 text-blue-100";
   if (status === "rejected" || status === "failed") return "border-rose-300/25 bg-rose-500/10 text-rose-100";
@@ -167,6 +169,20 @@ export default function ExecutionQueuePage() {
     }
   };
 
+  const retryPublish = async (item: ReviewQueueItemApi) => {
+    if (!item.publish_job_id) return;
+    setBusyID(item.id);
+    try {
+      await publishingService.retry(item.publish_job_id);
+      pushToast(t("executionQueue.toast.retryQueued"));
+      void loadQueue();
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.retry") : t("executionQueue.errors.retry"));
+    } finally {
+      setBusyID(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -260,13 +276,25 @@ export default function ExecutionQueuePage() {
                         <p className="md:col-span-2">{t("executionQueue.item.target")}: {item.target_summary || "—"}</p>
                         <p>{t("executionQueue.item.createdAt")}: {formatDate(item.created_at)}</p>
                         <p>{t("executionQueue.item.risk")}: {item.risk_level || "low"}{item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}</p>
+                        {item.publish_job_id ? (
+                          <p className="md:col-span-2">
+                            {t("executionQueue.item.publishJob")}: #{item.publish_job_id}
+                            {item.publish_status ? ` · ${t(`executionQueue.publishStatus.${item.publish_status}`)}` : ""}
+                            {item.publish_last_error ? ` · ${item.publish_last_error}` : ""}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
                       {item.status === "ready_to_publish" ? (
                         <span className="inline-flex h-8 items-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs text-emerald-100">
-                          {t("executionQueue.actions.waitingPublish")}
+                          {t("executionQueue.actions.simulatedMode")}
+                        </span>
+                      ) : null}
+                      {item.status === "processing" ? (
+                        <span className="inline-flex h-8 items-center rounded-xl border border-sky-300/20 bg-sky-500/10 px-3 text-xs text-sky-100">
+                          {t("executionQueue.actions.processing")}
                         </span>
                       ) : null}
                       {editing ? (
@@ -299,6 +327,12 @@ export default function ExecutionQueuePage() {
                             <Button size="sm" variant="outline" disabled={busyID === item.id} onClick={() => void reject(item)}>
                               <XCircle className="size-4" />
                               {t("executionQueue.actions.reject")}
+                            </Button>
+                          ) : null}
+                          {item.status === "failed" && item.publish_job_id ? (
+                            <Button size="sm" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
+                              <Send className="size-4" />
+                              {t("executionQueue.actions.retryPublish")}
                             </Button>
                           ) : null}
                         </>

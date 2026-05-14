@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { ArrowRight, FileText, Mail, MessageCircle, MessagesSquare } from "lucide-react";
 
 import { useToast } from "@/components/providers/toast-provider";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
@@ -460,7 +462,9 @@ export default function AgentsPage() {
         activityObserved={accountCount > 0 && activityCount > 0}
       />
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <AutomationEntryGrid />
+
+      <div id="automation-modules" className="grid gap-4 xl:grid-cols-2">
         {modules.map((module) => (
           <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} onEdit={onEdit} />
         ))}
@@ -503,6 +507,78 @@ export default function AgentsPage() {
         onSave={onSave}
       />
     </div>
+  );
+}
+
+function AutomationEntryGrid() {
+  const { t } = useT();
+  const entries = [
+    {
+      title: t("automation.entry.autoPost.title"),
+      description: t("automation.entry.autoPost.description"),
+      href: "/posts/create",
+      cta: t("automation.entry.autoPost.cta"),
+      icon: FileText,
+    },
+    {
+      title: t("automation.entry.autoReply.title"),
+      description: t("automation.entry.autoReply.description"),
+      href: "/auto-replies",
+      cta: t("automation.entry.autoReply.cta"),
+      icon: MessageCircle,
+    },
+    {
+      title: t("automation.entry.autoComment.title"),
+      description: t("automation.entry.autoComment.description"),
+      href: "/auto-comments",
+      cta: t("automation.entry.autoComment.cta"),
+      icon: MessagesSquare,
+    },
+    {
+      title: t("automation.entry.autoDm.title"),
+      description: t("automation.entry.autoDm.description"),
+      href: "#auto-dm-review",
+      cta: t("automation.entry.autoDm.cta"),
+      icon: Mail,
+    },
+  ];
+
+  return (
+    <Card className="p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-white">{t("automation.entry.title")}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-white/55">{t("automation.entry.description")}</p>
+        </div>
+        <Link href="/execution-queue" className="inline-flex">
+          <Button type="button" variant="outline">
+            {t("automation.entry.queueCta")}
+            <ArrowRight className="size-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {entries.map((entry) => (
+          <Link
+            key={entry.title}
+            href={entry.href}
+            className="group rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-300/25 hover:bg-white/[0.065]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/15 to-violet-500/15 text-blue-100">
+                <entry.icon className="size-5" />
+              </span>
+              <h4 className="font-semibold text-white">{entry.title}</h4>
+            </div>
+            <p className="mt-3 min-h-12 text-sm leading-relaxed text-white/55">{entry.description}</p>
+            <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-100 transition group-hover:text-white">
+              {entry.cta}
+              <ArrowRight className="size-4" />
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -572,6 +648,7 @@ function AutoDMReviewPanel({
   };
 
   return (
+    <div id="auto-dm-review">
     <Card>
       <CardHeader title={t("automation.dmReview.title")} description={t("automation.dmReview.description")} />
       <div className="space-y-2">
@@ -771,6 +848,7 @@ function AutoDMReviewPanel({
         </div>
       </div>
     </Card>
+    </div>
   );
 }
 

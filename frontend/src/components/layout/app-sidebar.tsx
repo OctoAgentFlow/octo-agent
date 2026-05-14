@@ -4,32 +4,28 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
-  Activity,
   BadgeDollarSign,
   BarChart3,
   Bot,
   FileText,
   LayoutDashboard,
   ListChecks,
-  MessageCircle,
   ReceiptText,
   Settings,
   ShieldCheck,
   UserCircle,
   Users,
+  Workflow,
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "sidebar.nav.activity", href: "/activity", icon: Activity },
-  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
-  { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
-  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
-  { labelKey: "sidebar.nav.autoReplies", href: "/auto-replies", icon: MessageCircle },
-  { labelKey: "sidebar.nav.autoComments", href: "/auto-comments", icon: MessageCircle },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+  { labelKey: "sidebar.nav.automations", href: "/agents", icon: Workflow },
+  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
@@ -42,7 +38,7 @@ const adminNavItems = [
   { label: "运营总览", href: "/admin?section=overview", section: "overview", icon: LayoutDashboard },
   { label: "用户管理", href: "/admin?section=users", section: "users", icon: Users },
   { label: "订单审核", href: "/admin?section=billing", section: "billing", icon: ReceiptText },
-  { label: "活动监控", href: "/admin?section=activity", section: "activity", icon: Activity },
+  { label: "活动监控", href: "/admin?section=activity", section: "activity", icon: ListChecks },
   { label: "系统配置", href: "/admin?section=system", section: "system", icon: Settings },
 ];
 

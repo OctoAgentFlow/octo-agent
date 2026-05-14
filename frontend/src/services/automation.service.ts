@@ -191,12 +191,49 @@ export type AutoCommentTasksData = {
   items: AutoCommentTaskApi[];
 };
 
+export type AutoReplyDraftApi = {
+  id: number;
+  bot_id: number;
+  x_account_id: number;
+  comment_tweet_id?: string;
+  comment_url?: string;
+  comment_author_handle: string;
+  root_tweet_text?: string;
+  comment_text: string;
+  generated_reply?: string;
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "rejected" | "failed" | "sent";
+  risk_level: "low" | "medium" | "high" | string;
+  capability_status: string;
+  failure_category?: string;
+  failure_reason?: string;
+  approval_required: boolean;
+  activity_log_id?: number;
+  created_at: string;
+  generated_at?: string;
+  approved_at?: string;
+  rejected_at?: string;
+  sent_at?: string;
+};
+
+export type AutoReplyDraftsData = {
+  items: AutoReplyDraftApi[];
+};
+
 export type AutoCommentTargetPayload = {
   x_account_id: number;
   target_tweet_url: string;
   target_tweet_id?: string;
   target_author_handle: string;
   target_text: string;
+};
+
+export type AutoReplyDraftPayload = {
+  x_account_id: number;
+  comment_author_handle: string;
+  root_tweet_text?: string;
+  comment_text: string;
+  comment_url?: string;
+  comment_tweet_id?: string;
 };
 
 export type AutomationSavePayload = {
@@ -348,6 +385,28 @@ export const automationService = {
   },
   async retryCommentTask(id: number) {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/retry`);
+    return res.data.data;
+  },
+  async replyDrafts() {
+    const res = await request.get<ApiResponse<AutoReplyDraftsData>>("/auto-replies/drafts");
+    return res.data.data;
+  },
+  async generateReplyDraft(payload: AutoReplyDraftPayload) {
+    const res = await request.post<ApiResponse<AutoReplyDraftApi>>("/auto-replies/drafts/generate", payload);
+    return res.data.data;
+  },
+  async updateReplyDraft(id: number, generatedReply: string) {
+    const res = await request.patch<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}`, {
+      generated_reply: generatedReply,
+    });
+    return res.data.data;
+  },
+  async approveReplyDraft(id: number) {
+    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/approve`);
+    return res.data.data;
+  },
+  async rejectReplyDraft(id: number, reason: string) {
+    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/reject`, { reason });
     return res.data.data;
   },
 };

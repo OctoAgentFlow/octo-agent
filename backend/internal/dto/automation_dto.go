@@ -58,6 +58,47 @@ type AutomationRuntimeStatusData struct {
 	NeedsReview   int    `json:"needs_review"`
 }
 
+type AutoReplyDraftRequest struct {
+	XAccountID          uint   `json:"x_account_id" binding:"required"`
+	CommentAuthorHandle string `json:"comment_author_handle" binding:"required"`
+	RootTweetText       string `json:"root_tweet_text"`
+	CommentText         string `json:"comment_text" binding:"required"`
+	CommentURL          string `json:"comment_url"`
+	CommentTweetID      string `json:"comment_tweet_id"`
+}
+
+type AutoReplyDraftItem struct {
+	ID                  uint   `json:"id"`
+	BotID               uint   `json:"bot_id"`
+	XAccountID          uint   `json:"x_account_id"`
+	CommentTweetID      string `json:"comment_tweet_id,omitempty"`
+	CommentURL          string `json:"comment_url,omitempty"`
+	CommentAuthorHandle string `json:"comment_author_handle"`
+	RootTweetText       string `json:"root_tweet_text,omitempty"`
+	CommentText         string `json:"comment_text"`
+	GeneratedReply      string `json:"generated_reply,omitempty"`
+	Status              string `json:"status"`
+	RiskLevel           string `json:"risk_level"`
+	CapabilityStatus    string `json:"capability_status"`
+	FailureCategory     string `json:"failure_category,omitempty"`
+	FailureReason       string `json:"failure_reason,omitempty"`
+	ApprovalRequired    bool   `json:"approval_required"`
+	ActivityLogID       uint   `json:"activity_log_id,omitempty"`
+	CreatedAt           string `json:"created_at"`
+	GeneratedAt         string `json:"generated_at,omitempty"`
+	ApprovedAt          string `json:"approved_at,omitempty"`
+	RejectedAt          string `json:"rejected_at,omitempty"`
+	SentAt              string `json:"sent_at,omitempty"`
+}
+
+type AutoReplyDraftsResponse struct {
+	Items []AutoReplyDraftItem `json:"items"`
+}
+
+type AutoReplyDraftUpdateRequest struct {
+	GeneratedReply string `json:"generated_reply" binding:"required"`
+}
+
 type AutoDMTaskItem struct {
 	ID                uint   `json:"id"`
 	XAccountID        uint   `json:"x_account_id,omitempty"`

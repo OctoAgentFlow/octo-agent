@@ -36,6 +36,29 @@ type GenerateAutoCommentInput struct {
 	SafetyMode      string
 }
 
+type GenerateAutoReplyInput struct {
+	CommentAuthor   string
+	RootTweet       string
+	CommentText     string
+	Tone            string
+	BlockedWords    []string
+	HasBot          bool
+	Name            string
+	Occupation      string
+	Industry        string
+	AgeRange        string
+	Gender          string
+	Education       string
+	MBTI            string
+	PersonalityTags []string
+	IdentitySummary string
+	VoiceTone       string
+	Topics          []string
+	ForbiddenTopics []string
+	GrowthGoal      string
+	SafetyMode      string
+}
+
 type GenerateOAFBotSamplesInput struct {
 	Name            string
 	Occupation      string
@@ -75,6 +98,81 @@ type GenerateAutoPostInput struct {
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
 	return &AIService{openai: openaiClient}
+}
+
+func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyInput) (string, error) {
+	commentText := strings.TrimSpace(in.CommentText)
+	if commentText == "" {
+		return "", fmt.Errorf("comment text is required")
+	}
+	tone := strings.TrimSpace(in.Tone)
+	if tone == "" {
+		tone = "Friendly"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's Auto Reply assistant.",
+		"Write one concise X/Twitter reply to a user's comment.",
+		"Directly address the user's comment and keep the account voice consistent.",
+		"Output only the reply text.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Comment author: @")
+	user.WriteString(strings.TrimPrefix(strings.TrimSpace(in.CommentAuthor), "@"))
+	user.WriteString("\n")
+	if strings.TrimSpace(in.RootTweet) != "" {
+		user.WriteString("Original post context:\n")
+		user.WriteString(strings.TrimSpace(in.RootTweet))
+		user.WriteString("\n\n")
+	}
+	user.WriteString("Comment to reply to:\n")
+	user.WriteString(commentText)
+	user.WriteString("\n\n")
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+		user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
+		user.WriteString("age_range: " + strings.TrimSpace(in.AgeRange) + "\n")
+		user.WriteString("gender: " + strings.TrimSpace(in.Gender) + "\n")
+		user.WriteString("education: " + strings.TrimSpace(in.Education) + "\n")
+		user.WriteString("mbti: " + strings.TrimSpace(in.MBTI) + "\n")
+		user.WriteString("personality_tags: " + strings.Join(in.PersonalityTags, ", ") + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	} else {
+		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: natural, practical, and calm.\n")
+		user.WriteString("Tone: " + tone + "\n")
+	}
+	if len(in.BlockedWords) > 0 {
+		user.WriteString("Avoid these words or topics: ")
+		user.WriteString(strings.Join(in.BlockedWords, ", "))
+		user.WriteString("\n")
+	}
+	user.WriteString("Hard rules:\n")
+	user.WriteString("- Maximum 220 characters.\n")
+	user.WriteString("- Directly respond to the comment; do not answer a different question.\n")
+	user.WriteString("- If the comment is negative, stay calm, professional, and non-defensive.\n")
+	user.WriteString("- Do not sound like an ad and do not over-direct traffic.\n")
+	user.WriteString("- You may ask a light follow-up question if it improves the interaction.\n")
+	user.WriteString("- Do not impersonate an official project, exchange, or support account.\n")
+	user.WriteString("- Do not insult, harass, or attack users.\n")
+	user.WriteString("- Do not ask for seed phrases, private keys, wallet connections, follows, likes, airdrops, or giveaways.\n")
+	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
+	user.WriteString("- Do not include surrounding quotes.\n")
+
+	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return "", err
+	}
+	return truncateRunes(strings.TrimSpace(text), 220), nil
 }
 
 func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoCommentInput) (string, error) {

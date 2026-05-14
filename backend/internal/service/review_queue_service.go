@@ -1,6 +1,7 @@
 package service
 
 import (
+	"sort"
 	"strings"
 
 	"octo-agent/backend/internal/dto"
@@ -10,13 +11,15 @@ import (
 
 type ReviewQueueService struct {
 	commentTaskRepo *repository.AutoCommentTaskRepository
+	replyDraftRepo  *repository.AutoReplyDraftRepository
 	botRepo         *repository.OAFBotRepository
 	accountRepo     *repository.TwitterAccountRepository
 }
 
-func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
+func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
 	return &ReviewQueueService{
 		commentTaskRepo: commentTaskRepo,
+		replyDraftRepo:  replyDraftRepo,
 		botRepo:         botRepo,
 		accountRepo:     accountRepo,
 	}
@@ -36,6 +39,10 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	}
 
 	tasks, err := s.commentTaskRepo.ListQueueByUser(userID, 500)
+	if err != nil {
+		return nil, err
+	}
+	replyDrafts, err := s.replyDraftRepo.ListByUser(userID, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +67,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	statusFilter := normalizeReviewQueueFilter(query.Status)
 	modeFilter := normalizeReviewQueueFilter(query.ExecutionMode)
 
-	allItems := make([]dto.ReviewQueueItem, 0, len(tasks))
+	allItems := make([]dto.ReviewQueueItem, 0, len(tasks)+len(replyDrafts))
 	stats := dto.ReviewQueueStats{}
 	for _, task := range tasks {
 		item := autoCommentTaskToReviewQueueItem(task, botNames[task.BotID], accountNames[task.XAccountID])
@@ -76,6 +83,23 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		}
 		allItems = append(allItems, item)
 	}
+	for _, draft := range replyDrafts {
+		item := autoReplyDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
+		incrementReviewQueueStats(&stats, item.Status)
+		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
+			continue
+		}
+		if statusFilter != "" && statusFilter != "all" && item.Status != statusFilter {
+			continue
+		}
+		if modeFilter != "" && modeFilter != "all" && item.ExecutionMode != modeFilter {
+			continue
+		}
+		allItems = append(allItems, item)
+	}
+	sort.SliceStable(allItems, func(i, j int) bool {
+		return allItems[i].CreatedAt > allItems[j].CreatedAt
+	})
 
 	total := len(allItems)
 	start := (page - 1) * pageSize
@@ -98,7 +122,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 
 func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string, accountName string) dto.ReviewQueueItem {
 	status := normalizeReviewQueueStatus(task.Status)
-	mode := inferReviewQueueExecutionMode(task)
+	mode := inferReviewQueueExecutionMode(task.CapabilityStatus)
 	reasons := make([]string, 0, 2)
 	if strings.TrimSpace(task.FailureCategory) != "" {
 		reasons = append(reasons, task.FailureCategory)
@@ -131,8 +155,41 @@ func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string
 
 const timeRFC3339 = "2006-01-02T15:04:05Z07:00"
 
-func inferReviewQueueExecutionMode(task model.AutoCommentTask) string {
-	switch task.CapabilityStatus {
+func autoReplyDraftToReviewQueueItem(draft model.AutoReplyDraft, botName string, accountName string) dto.ReviewQueueItem {
+	status := normalizeReviewQueueStatus(draft.Status)
+	mode := inferReviewQueueExecutionMode(draft.CapabilityStatus)
+	reasons := make([]string, 0, 2)
+	if strings.TrimSpace(draft.FailureCategory) != "" {
+		reasons = append(reasons, draft.FailureCategory)
+	}
+	if strings.TrimSpace(draft.FailureReason) != "" {
+		reasons = append(reasons, draft.FailureReason)
+	}
+	target := strings.TrimSpace(replyAuthorDisplay(draft.CommentAuthorHandle))
+	if draft.CommentText != "" {
+		target = target + ": " + truncateRunes(draft.CommentText, 120)
+	}
+	return dto.ReviewQueueItem{
+		ID:                 draft.ID,
+		Type:               "reply",
+		Content:            draft.GeneratedReply,
+		Status:             status,
+		ExecutionMode:      mode,
+		BotID:              draft.BotID,
+		BotName:            botName,
+		TwitterAccountID:   draft.XAccountID,
+		TwitterAccountName: accountName,
+		TargetSummary:      strings.TrimSpace(target),
+		RiskLevel:          draft.RiskLevel,
+		RiskReasons:        reasons,
+		CreatedAt:          draft.CreatedAt.UTC().Format(timeRFC3339),
+		SourceStatus:       draft.Status,
+		SourceID:           draft.ID,
+	}
+}
+
+func inferReviewQueueExecutionMode(capabilityStatus string) string {
+	switch capabilityStatus {
 	case "manual_suggestion":
 		return ExecutionModeManual
 	case "autopilot_prepared":

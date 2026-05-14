@@ -16,6 +16,7 @@ import (
 
 type AutomationController struct {
 	automationService  *service.AutomationService
+	autoReplyService   *service.AutoReplyService
 	autoDMService      *service.AutoDMService
 	autoCommentService *service.AutoCommentService
 }
@@ -29,8 +30,8 @@ func getUintParam(c *gin.Context, name string) (uint, bool) {
 	return uint(value), true
 }
 
-func NewAutomationController(automationService *service.AutomationService, autoDMService *service.AutoDMService, autoCommentService *service.AutoCommentService) *AutomationController {
-	return &AutomationController{automationService: automationService, autoDMService: autoDMService, autoCommentService: autoCommentService}
+func NewAutomationController(automationService *service.AutomationService, autoReplyService *service.AutoReplyService, autoDMService *service.AutoDMService, autoCommentService *service.AutoCommentService) *AutomationController {
+	return &AutomationController{automationService: automationService, autoReplyService: autoReplyService, autoDMService: autoDMService, autoCommentService: autoCommentService}
 }
 
 func (ctl *AutomationController) List(c *gin.Context) {
@@ -132,6 +133,107 @@ func (ctl *AutomationController) RuntimeStatus(c *gin.Context) {
 	data, err := ctl.automationService.RuntimeStatus(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListReplyDrafts(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoReplyService.ListDrafts(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) GenerateReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoReplyDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoReplyService.GenerateDraft(c.Request.Context(), userID, req)
+	if err != nil {
+		if strings.Contains(err.Error(), "ai_generation_quota_exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoReplyDraftUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoReplyService.UpdateDraft(userID, draftID, req.GeneratedReply)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ApproveReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	data, err := ctl.autoReplyService.ApproveDraft(userID, draftID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RejectReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentTaskBlockRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoReplyService.RejectDraft(userID, draftID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.OK(c, data)

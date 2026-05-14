@@ -54,9 +54,16 @@ export default function ExecutionQueuePage() {
   const [typeFilter, setTypeFilter] = useState<ReviewQueueType>("all");
   const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>("all");
   const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>("all");
-  const [editingID, setEditingID] = useState<number | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
+
+  useEffect(() => {
+    const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
+    if (type && typeOptions.includes(type)) {
+      setTypeFilter(type);
+    }
+  }, []);
 
   const loadQueue = useCallback(async () => {
     setLoadState("loading");
@@ -95,20 +102,28 @@ export default function ExecutionQueuePage() {
     [stats, t]
   );
 
-  const updateLocalItem = (updatedID: number, patch: Partial<ReviewQueueItemApi>) => {
-    setItems((current) => current.map((item) => (item.id === updatedID ? { ...item, ...patch } : item)));
+  const updateLocalItem = (updated: ReviewQueueItemApi, patch: Partial<ReviewQueueItemApi>) => {
+    setItems((current) => current.map((item) => (item.id === updated.id && item.type === updated.type ? { ...item, ...patch } : item)));
   };
 
   const saveEdit = async (item: ReviewQueueItemApi) => {
-    if (!editingContent.trim() || item.type !== "comment") return;
+    if (!editingContent.trim() || (item.type !== "comment" && item.type !== "reply")) return;
     setBusyID(item.id);
     try {
-      const updated = await automationService.updateCommentDraft(item.source_id, editingContent.trim());
-      updateLocalItem(item.id, {
-        content: updated.generated_comment || editingContent.trim(),
-        status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
-      });
-      setEditingID(null);
+      if (item.type === "comment") {
+        const updated = await automationService.updateCommentDraft(item.source_id, editingContent.trim());
+        updateLocalItem(item, {
+          content: updated.generated_comment || editingContent.trim(),
+          status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
+        });
+      } else {
+        const updated = await automationService.updateReplyDraft(item.source_id, editingContent.trim());
+        updateLocalItem(item, {
+          content: updated.generated_reply || editingContent.trim(),
+          status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
+        });
+      }
+      setEditingKey(null);
       setEditingContent("");
       pushToast(t("executionQueue.toast.saved"));
     } catch (error) {
@@ -119,11 +134,13 @@ export default function ExecutionQueuePage() {
   };
 
   const approve = async (item: ReviewQueueItemApi) => {
-    if (item.type !== "comment") return;
+    if (item.type !== "comment" && item.type !== "reply") return;
     setBusyID(item.id);
     try {
-      const updated = await automationService.approveCommentTask(item.source_id);
-      updateLocalItem(item.id, { status: updated.status === "review" ? "pending_review" : (updated.status as ReviewQueueItemApi["status"]) });
+      const updated = item.type === "comment"
+        ? await automationService.approveCommentTask(item.source_id)
+        : await automationService.approveReplyDraft(item.source_id);
+      updateLocalItem(item, { status: updated.status === "review" ? "pending_review" : (updated.status as ReviewQueueItemApi["status"]) });
       pushToast(t("executionQueue.toast.approved"));
       void loadQueue();
     } catch (error) {
@@ -134,11 +151,13 @@ export default function ExecutionQueuePage() {
   };
 
   const reject = async (item: ReviewQueueItemApi) => {
-    if (item.type !== "comment") return;
+    if (item.type !== "comment" && item.type !== "reply") return;
     setBusyID(item.id);
     try {
-      const updated = await automationService.rejectCommentDraft(item.source_id, "Rejected from execution queue.");
-      updateLocalItem(item.id, { status: updated.status as ReviewQueueItemApi["status"] });
+      const updated = item.type === "comment"
+        ? await automationService.rejectCommentDraft(item.source_id, "Rejected from execution queue.")
+        : await automationService.rejectReplyDraft(item.source_id, "Rejected from execution queue.");
+      updateLocalItem(item, { status: updated.status as ReviewQueueItemApi["status"] });
       pushToast(t("executionQueue.toast.rejected"));
       void loadQueue();
     } catch (error) {
@@ -198,8 +217,10 @@ export default function ExecutionQueuePage() {
           <div className="space-y-3">
             {items.map((item) => {
               const Icon = typeIcon(item.type);
-              const editing = editingID === item.id;
-              const canReview = item.type === "comment" && (item.status === "pending_review" || item.status === "draft");
+              const itemKey = `${item.type}-${item.id}`;
+              const editing = editingKey === itemKey;
+              const manageable = item.type === "comment" || item.type === "reply";
+              const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               return (
                 <div key={`${item.type}-${item.id}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -251,16 +272,16 @@ export default function ExecutionQueuePage() {
                       {editing ? (
                         <>
                           <Button size="sm" disabled={busyID === item.id} onClick={() => void saveEdit(item)}>{t("executionQueue.actions.save")}</Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingID(null)}>{t("common.cancel")}</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingKey(null)}>{t("common.cancel")}</Button>
                         </>
                       ) : (
                         <>
-                          {item.type === "comment" ? (
+                          {manageable ? (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setEditingID(item.id);
+                                setEditingKey(itemKey);
                                 setEditingContent(item.content || "");
                               }}
                             >
@@ -274,7 +295,7 @@ export default function ExecutionQueuePage() {
                               {t("executionQueue.actions.approve")}
                             </Button>
                           ) : null}
-                          {item.type === "comment" && item.status !== "rejected" && item.status !== "published" ? (
+                          {manageable && item.status !== "rejected" && item.status !== "published" ? (
                             <Button size="sm" variant="outline" disabled={busyID === item.id} onClick={() => void reject(item)}>
                               <XCircle className="size-4" />
                               {t("executionQueue.actions.reject")}

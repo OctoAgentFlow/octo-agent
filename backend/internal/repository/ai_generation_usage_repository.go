@@ -11,6 +11,7 @@ import (
 
 const (
 	AIGenerationSceneAutoPost           = "auto_post"
+	AIGenerationSceneAutoReply          = "auto_reply"
 	AIGenerationSceneAutoComment        = "auto_comment"
 	AIGenerationSceneOAFBotTestGenerate = "oaf_bot_test_generate"
 )

@@ -27,6 +27,7 @@ const navItems = [
   { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
   { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+  { labelKey: "sidebar.nav.autoReplies", href: "/auto-replies", icon: MessageCircle },
   { labelKey: "sidebar.nav.autoComments", href: "/auto-comments", icon: MessageCircle },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },

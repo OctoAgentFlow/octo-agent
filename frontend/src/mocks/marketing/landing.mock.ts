@@ -237,6 +237,26 @@ export const faqs: FAQItem[] = [
     qKey: "marketing.faq.q3.q",
     aKey: "marketing.faq.q3.a",
   },
+  {
+    qKey: "marketing.faq.q4.q",
+    aKey: "marketing.faq.q4.a",
+  },
+  {
+    qKey: "marketing.faq.q5.q",
+    aKey: "marketing.faq.q5.a",
+  },
+  {
+    qKey: "marketing.faq.q6.q",
+    aKey: "marketing.faq.q6.a",
+  },
+  {
+    qKey: "marketing.faq.q7.q",
+    aKey: "marketing.faq.q7.a",
+  },
+  {
+    qKey: "marketing.faq.q8.q",
+    aKey: "marketing.faq.q8.a",
+  },
 ];
 
 export const trustBadges: TrustBadge[] = [

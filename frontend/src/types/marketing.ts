@@ -1,3 +1,4 @@
+import type { PlanLimits } from "@/types/billing";
 import type { LucideIcon } from "lucide-react";
 
 export type NavItem = { labelKey: string; href: string };
@@ -22,9 +23,7 @@ export type PricingPlan = {
   monthlyPrice: number;
   yearlyPrice: number;
   unit: string;
-  audience: string;
-  badge?: string;
-  features: string[];
+  limits: PlanLimits;
   highlight: boolean;
 };
 

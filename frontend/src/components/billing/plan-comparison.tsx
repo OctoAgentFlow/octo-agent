@@ -6,44 +6,14 @@ import type { BillingCycle, Plan } from "@/types/billing";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
-
-function planKey(code: string) {
-  if (code === "pro_plus") return "proPlus";
-  if (code === "free_trial") return "freeTrial";
-  return code;
-}
-
-function planBadgeKey(code: string) {
-  if (code === "plus") return "billing.plans.plus.badge";
-  if (code === "pro") return "billing.plans.pro.badge";
-  return "";
-}
-
-function planTextKey(code: string, field: "audience" | "description") {
-  return `billing.plans.${planKey(code)}.${field}`;
-}
-
-function featureLabelKey(key: string) {
-  const map: Record<string, string> = {
-    full_persona_fields: "billing.features.fullPersonaFields",
-    auto_dm_import: "billing.features.autoDmImport",
-    advanced_bot_strategy: "billing.features.advancedBotStrategy",
-    bulk_review: "billing.features.bulkReview",
-    bot_performance: "billing.features.botPerformanceAnalytics",
-    bot_performance_analytics: "billing.features.botPerformanceAnalytics",
-    data_export: "billing.features.dataExport",
-    multi_bot_matrix: "billing.features.multiBotMatrix",
-    ab_testing: "billing.features.abTesting",
-    advanced_flow_builder: "billing.features.advancedFlowBuilder",
-    advanced_risk_rules: "billing.features.advancedRiskRules",
-    priority_support: "billing.features.prioritySupport",
-  };
-  return map[key] || "billing.features.additionalCapability";
-}
-
-function formatNumber(value: number, locale: string) {
-  return new Intl.NumberFormat(locale).format(value);
-}
+import {
+  getPlanBenefits,
+  planAudienceKey,
+  planBadgeKey,
+  planDescriptionKey,
+  planFeatureKey,
+  planUnitKey,
+} from "@/lib/plan-display";
 
 export function PlanComparison({
   plans,
@@ -59,36 +29,6 @@ export function PlanComparison({
   onUpgrade: (planCode: string) => void;
 }) {
   const { t, lang } = useT();
-
-  const buildBenefits = (plan: Plan) => {
-    const benefits = [
-      t(plan.limits.maxBots === 1 ? "billing.benefits.oafBots.one" : "billing.benefits.oafBots.other", {
-        count: formatNumber(plan.limits.maxBots, lang),
-      }),
-      t(
-        plan.limits.maxTwitterAccounts === 1
-          ? "billing.benefits.xAccounts.one"
-          : "billing.benefits.xAccounts.other",
-        { count: formatNumber(plan.limits.maxTwitterAccounts, lang) }
-      ),
-      t("billing.benefits.aiGenerationsMonthly", {
-        count: formatNumber(plan.limits.aiGenerationsMonthly, lang),
-      }),
-      t("billing.benefits.dailyAutomation", {
-        posts: formatNumber(plan.limits.dailyAutoPosts, lang),
-        replies: formatNumber(plan.limits.dailyAutoReplies, lang),
-        comments: formatNumber(plan.limits.dailyAutoComments, lang),
-        dms: formatNumber(plan.limits.dailyAutoDMs, lang),
-      }),
-      t("billing.benefits.analyticsDays", { days: formatNumber(plan.limits.analyticsDays, lang) }),
-      plan.limits.teamSeats > 0
-        ? t(plan.limits.teamSeats === 1 ? "billing.benefits.teamSeats.one" : "billing.benefits.teamSeats.other", {
-            count: formatNumber(plan.limits.teamSeats, lang),
-          })
-        : "",
-    ];
-    return benefits.filter((benefit): benefit is string => Boolean(benefit));
-  };
 
   return (
     <SectionCard title={t("billing.planComparison.title")} description={t("billing.planComparison.subtitle")}>
@@ -114,7 +54,7 @@ export function PlanComparison({
       <div className="grid gap-3 xl:grid-cols-4">
         {plans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
-          const benefits = buildBenefits(plan);
+          const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });
           return (
             <article
               key={plan.code}
@@ -133,25 +73,25 @@ export function PlanComparison({
                 ) : null}
               </div>
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <h4 className="text-base font-semibold text-white">{plan.name}</h4>
-                  <p className="mt-1 min-h-10 text-xs leading-relaxed text-white/55">{t(planTextKey(plan.code, "audience"))}</p>
+                  <p className="mt-1 min-h-10 text-xs leading-relaxed text-white/55">{t(planAudienceKey(plan.code))}</p>
                 </div>
-                <p className="text-right text-sm text-white/75">
+                <p className="shrink-0 text-right text-sm text-white/75">
                   <span className="text-xl font-semibold text-white">
                     {billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
-                  <span className="block text-xs text-white/50">
-                    {t(billingCycle === "yearly" ? "billing.units.usdtPerYear" : "billing.units.usdtPerMonth")}
+                  <span className="block whitespace-nowrap text-xs text-white/50">
+                    {t(planUnitKey(billingCycle))}
                   </span>
                 </p>
               </div>
-              <p className="mt-2 min-h-12 text-sm leading-relaxed text-white/60">{t(planTextKey(plan.code, "description"))}</p>
+              <p className="mt-2 min-h-12 text-sm leading-relaxed text-white/60">{t(planDescriptionKey(plan.code))}</p>
               <ul className="mt-4 space-y-2">
                 {benefits.map((benefit) => (
                   <li key={benefit} className="flex items-start gap-2 text-sm text-white/75">
-                    <span className="mt-2 inline-block size-1.5 shrink-0 rounded-full bg-blue-300/80" />
-                    <span>{benefit}</span>
+                    <span className="mt-[0.55em] inline-block size-1.5 shrink-0 rounded-full bg-blue-300/80" />
+                    <span className="leading-relaxed">{benefit}</span>
                   </li>
                 ))}
               </ul>
@@ -162,9 +102,9 @@ export function PlanComparison({
                     className={`flex items-center gap-2 text-xs ${feature.available ? "text-white/65" : "text-white/35"}`}
                   >
                     {feature.available ? <span className="size-1.5 rounded-full bg-emerald-300" /> : <Lock className="size-3" />}
-                    <span>{t(featureLabelKey(feature.key))}</span>
+                    <span className="leading-relaxed">{t(planFeatureKey(feature.key))}</span>
                     {!feature.available && feature.minPlan ? (
-                      <span className="ml-auto text-violet-200/70">{t("billing.actions.upgrade")}</span>
+                      <span className="ml-auto shrink-0 text-violet-200/70">{t("actions.upgrade")}</span>
                     ) : null}
                   </div>
                 ))}
@@ -180,7 +120,7 @@ export function PlanComparison({
                   disabled={currentPlan === plan.code}
                   onClick={() => onUpgrade(plan.code)}
                 >
-                  {currentPlan === plan.code ? t("billing.actions.currentPlan") : t("billing.actions.upgradeTo", { plan: plan.name })}
+                  {currentPlan === plan.code ? t("actions.currentPlan") : t("actions.upgradeTo", { plan: plan.name })}
                 </Button>
               </div>
             </article>

@@ -10,16 +10,17 @@ import (
 )
 
 type Config struct {
-	API       ServerConfig    `yaml:"api"`
-	Admin     ServerConfig    `yaml:"admin"`
-	MySQL     MySQLConfig     `yaml:"mysql"`
-	Log       LogConfig       `yaml:"log"`
-	Email     EmailConfig     `yaml:"email"`
-	App       AppConfig       `yaml:"app"`
-	AdminAuth AdminAuthConfig `yaml:"admin_auth"`
-	XOAuth    XOAuthConfig    `yaml:"x_oauth"`
-	LLM       LLMConfig       `yaml:"llm"`
-	Billing   BillingConfig   `yaml:"billing"`
+	API        ServerConfig     `yaml:"api"`
+	Admin      ServerConfig     `yaml:"admin"`
+	MySQL      MySQLConfig      `yaml:"mysql"`
+	Log        LogConfig        `yaml:"log"`
+	Email      EmailConfig      `yaml:"email"`
+	App        AppConfig        `yaml:"app"`
+	AdminAuth  AdminAuthConfig  `yaml:"admin_auth"`
+	XOAuth     XOAuthConfig     `yaml:"x_oauth"`
+	XPublisher XPublisherConfig `yaml:"x_publisher"`
+	LLM        LLMConfig        `yaml:"llm"`
+	Billing    BillingConfig    `yaml:"billing"`
 }
 
 // BillingConfig holds USDT payment settings (loaded from YAML; do not hardcode in code).
@@ -79,6 +80,15 @@ type XOAuthConfig struct {
 	RedirectURI  string `yaml:"redirect_uri"`
 	StateSecret  string `yaml:"state_secret"`
 	Scopes       string `yaml:"scopes"`
+}
+
+// XPublisherConfig controls manual real publishing through the unified publishing pipeline.
+type XPublisherConfig struct {
+	RealPublishEnabled        bool `yaml:"real_publish_enabled"`
+	ManualPublishEnabled      bool `yaml:"manual_publish_enabled"`
+	PerAccountDailyLimit      int  `yaml:"per_account_daily_limit"`
+	PerAccountMinIntervalSecs int  `yaml:"per_account_min_interval_seconds"`
+	DryRun                    bool `yaml:"dry_run"`
 }
 
 // LLMConfig is the shared LLM provider configuration for current and future AI features.
@@ -310,6 +320,16 @@ func Load() (*Config, error) {
 	}
 	if cfg.AdminAuth.CodeTTLSeconds <= 0 {
 		cfg.AdminAuth.CodeTTLSeconds = 300
+	}
+	if cfg.XPublisher.PerAccountDailyLimit <= 0 {
+		cfg.XPublisher.PerAccountDailyLimit = 20
+	}
+	if cfg.XPublisher.PerAccountMinIntervalSecs <= 0 {
+		cfg.XPublisher.PerAccountMinIntervalSecs = 300
+	}
+	if !cfg.XPublisher.ManualPublishEnabled && !cfg.XPublisher.RealPublishEnabled && !cfg.XPublisher.DryRun {
+		cfg.XPublisher.ManualPublishEnabled = true
+		cfg.XPublisher.DryRun = true
 	}
 	if cfg.Billing.OrderTTLMinutes <= 0 {
 		cfg.Billing.OrderTTLMinutes = 30

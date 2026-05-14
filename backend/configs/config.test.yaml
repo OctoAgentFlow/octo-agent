@@ -55,6 +55,14 @@ x_oauth:
   state_secret: "T9@vQ7#kL2!zX5$M8^pR"
   scopes: "tweet.read users.read offline.access"
 
+x_publisher:
+  # Test defaults: show manual publish controls, but do not send real requests to X.
+  real_publish_enabled: false
+  manual_publish_enabled: true
+  per_account_daily_limit: 20
+  per_account_min_interval_seconds: 300
+  dry_run: true
+
 billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"

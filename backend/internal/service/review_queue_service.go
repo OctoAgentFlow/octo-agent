@@ -156,7 +156,9 @@ func applyPublishJobToReviewQueueItem(item *dto.ReviewQueueItem, job model.Publi
 	}
 	item.PublishJobID = job.ID
 	item.PublishStatus = job.Status
+	item.PublishMode = job.PublishMode
 	item.PublishLastError = job.LastError
+	item.PublishExternalURL = job.ExternalURL
 	switch job.Status {
 	case repository.PublishStatusProcessing:
 		item.Status = repository.PublishStatusProcessing

@@ -7,27 +7,69 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
+	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/repository"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 const publishJobLimit = 20
 
-type XPublisher interface {
-	Publish(ctx context.Context, job model.PublishJob) error
+type PublishResult struct {
+	ExternalID  string
+	ExternalURL string
+	RawResponse string
+	PublishedAt time.Time
 }
 
-type SimulatedXPublisher struct{}
+type XPublisher interface {
+	PublishReply(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
+	PublishComment(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
+}
 
-func (SimulatedXPublisher) Publish(ctx context.Context, job model.PublishJob) error {
-	if strings.TrimSpace(job.Content) == "" {
-		return fmt.Errorf("publish content is empty")
+type RealXPublisher struct{}
+
+func (RealXPublisher) PublishReply(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error) {
+	return publishXReply(ctx, account, targetTweetID, content)
+}
+
+func (RealXPublisher) PublishComment(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error) {
+	return publishXReply(ctx, account, targetTweetID, content)
+}
+
+func publishXReply(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error) {
+	token := strings.TrimSpace(account.AccessToken)
+	if token == "" {
+		return PublishResult{}, fmt.Errorf("missing x access token")
 	}
-	return nil
+	tweetID, err := twitter.CreateReplyTweet(ctx, token, strings.TrimSpace(content), strings.TrimSpace(targetTweetID))
+	if err != nil {
+		return PublishResult{}, err
+	}
+	now := time.Now().UTC()
+	return PublishResult{
+		ExternalID:  tweetID,
+		ExternalURL: fmt.Sprintf("https://x.com/%s/status/%s", strings.TrimPrefix(strings.TrimSpace(account.Username), "@"), tweetID),
+		RawResponse: "x api publish succeeded",
+		PublishedAt: now,
+	}, nil
+}
+
+type PublishingError struct {
+	Code    string
+	Message string
+}
+
+func (e *PublishingError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
 }
 
 type PublishingService struct {
@@ -37,6 +79,7 @@ type PublishingService struct {
 	accountRepo *repository.TwitterAccountRepository
 	userRepo    *repository.UserRepository
 	activity    *repository.ActivityRepository
+	cfg         config.XPublisherConfig
 	publisher   XPublisher
 }
 
@@ -47,10 +90,11 @@ func NewPublishingService(
 	accountRepo *repository.TwitterAccountRepository,
 	userRepo *repository.UserRepository,
 	activity *repository.ActivityRepository,
+	cfg config.XPublisherConfig,
 	publisher XPublisher,
 ) *PublishingService {
 	if publisher == nil {
-		publisher = SimulatedXPublisher{}
+		publisher = RealXPublisher{}
 	}
 	return &PublishingService{
 		jobRepo:     jobRepo,
@@ -59,6 +103,7 @@ func NewPublishingService(
 		accountRepo: accountRepo,
 		userRepo:    userRepo,
 		activity:    activity,
+		cfg:         normalizeXPublisherConfig(cfg),
 		publisher:   publisher,
 	}
 }
@@ -72,7 +117,7 @@ func (s *PublishingService) ListJobs(userID uint) (*dto.PublishJobsResponse, err
 	for _, row := range rows {
 		items = append(items, publishJobToItem(row))
 	}
-	return &dto.PublishJobsResponse{Items: items}, nil
+	return &dto.PublishJobsResponse{Items: items, Settings: xPublisherSettingsToDTO(s.cfg)}, nil
 }
 
 func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now time.Time) (*model.PublishJob, bool, error) {
@@ -88,6 +133,7 @@ func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now ti
 		Content:          task.GeneratedComment,
 		Status:           repository.PublishStatusPending,
 		ExecutionMode:    ExecutionModeAutopilot,
+		PublishMode:      repository.PublishModeSimulated,
 		MaxAttempts:      3,
 		NextAttemptAt:    &now,
 	}
@@ -114,6 +160,7 @@ func (s *PublishingService) EnsureReplyJob(draft *model.AutoReplyDraft, now time
 		Content:          draft.GeneratedReply,
 		Status:           repository.PublishStatusPending,
 		ExecutionMode:    ExecutionModeAutopilot,
+		PublishMode:      repository.PublishModeSimulated,
 		MaxAttempts:      3,
 		NextAttemptAt:    &now,
 	}
@@ -190,6 +237,58 @@ func (s *PublishingService) CancelJob(userID, id uint) (*dto.PublishJobItem, err
 	return &item, nil
 }
 
+func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*dto.PublishJobItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	job, err := s.jobRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if !s.cfg.ManualPublishEnabled {
+		return nil, &PublishingError{Code: "publisher_manual_publish_disabled", Message: "manual x publishing is disabled"}
+	}
+	if job.Status != repository.PublishStatusPending && job.Status != repository.PublishStatusFailed {
+		return nil, fmt.Errorf("only pending or failed publish jobs can be manually published")
+	}
+	now := time.Now().UTC()
+	account, err := s.validateManualPublishJob(job, now)
+	if err != nil {
+		if pe := (&PublishingError{}); errors.As(err, &pe) {
+			return nil, err
+		}
+		_ = s.failJobWithPreview(job, "manual_publish_validation_failed", err.Error(), false, "activity.preview.realPublishFailed")
+		return nil, err
+	}
+	if err := s.enforceManualPublishLimits(job.TwitterAccountID, now); err != nil {
+		return nil, err
+	}
+	_ = s.createJobActivity(job, "activity.preview.manualPublishTriggered", "")
+
+	targetTweetID, err := s.sourceTargetTweetID(job)
+	if err != nil {
+		_ = s.failJobWithPreview(job, "manual_publish_target_missing", err.Error(), false, "activity.preview.realPublishFailed")
+		return nil, err
+	}
+	if err := s.markManualProcessing(job, now); err != nil {
+		return nil, err
+	}
+	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
+	if err != nil {
+		_ = s.failJobWithPreview(job, "manual_publish_failed", err.Error(), false, "activity.preview.realPublishFailed")
+		return nil, err
+	}
+	if err := s.completeJob(job, result, mode, previewKey); err != nil {
+		return nil, err
+	}
+	updated, err := s.jobRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	item := publishJobToItem(*updated)
+	return &item, nil
+}
+
 func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 	now := time.Now().UTC()
 	claimed, err := s.jobRepo.TryMarkProcessing(id, now)
@@ -206,10 +305,13 @@ func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 	if err := s.validateJob(job, now); err != nil {
 		return s.failJob(job, "validation_failed", err.Error(), false)
 	}
-	if err := s.publisher.Publish(ctx, *job); err != nil {
-		return s.failJob(job, "simulated_publish_failed", err.Error(), true)
+	if strings.TrimSpace(job.Content) == "" {
+		return s.failJob(job, "simulated_publish_failed", "publish content is empty", true)
 	}
-	return s.completeJob(job, now)
+	return s.completeJob(job, PublishResult{
+		RawResponse: "simulated publish succeeded",
+		PublishedAt: now,
+	}, repository.PublishModeSimulated, "activity.preview.simulatedPublishSuccess")
 }
 
 func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) error {
@@ -249,20 +351,170 @@ func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) er
 	return nil
 }
 
-func (s *PublishingService) completeJob(job *model.PublishJob, now time.Time) error {
-	job.Status = repository.PublishStatusPublished
+func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now time.Time) (*model.TwitterAccount, error) {
+	if strings.TrimSpace(job.Content) == "" {
+		return nil, fmt.Errorf("publish content is empty")
+	}
+	if !s.cfg.RealPublishEnabled {
+		return nil, &PublishingError{Code: "publisher_real_publish_disabled", Message: "real x publishing is disabled in this environment"}
+	}
+	u, err := s.userRepo.GetByID(job.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if err := subscription.AssertUserMayProduceContent(u, now); err != nil {
+		return nil, err
+	}
+	account, err := s.accountRepo.GetConnectedByUserAndAccountID(job.UserID, job.TwitterAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account is not connected")
+	}
+	if strings.TrimSpace(account.AccessToken) == "" {
+		return nil, fmt.Errorf("missing x access token")
+	}
+	if !strings.Contains(strings.ToLower(account.OAuthScopes), "tweet.write") {
+		return nil, fmt.Errorf("x account does not have tweet.write permission")
+	}
+	switch job.SourceType {
+	case repository.PublishSourceComment, repository.PublishSourceReply:
+		return account, s.ensureSourceReadyForManualPublish(job)
+	default:
+		return nil, fmt.Errorf("unsupported publish source type %s", job.SourceType)
+	}
+}
+
+func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.PublishJob) error {
+	switch job.SourceType {
+	case repository.PublishSourceComment:
+		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
+		if err != nil {
+			return err
+		}
+		if task.Status != "ready_to_publish" && task.Status != "failed" {
+			return fmt.Errorf("comment source status is %s", task.Status)
+		}
+	case repository.PublishSourceReply:
+		draft, err := s.replyRepo.GetByUserAndID(job.UserID, job.SourceID)
+		if err != nil {
+			return err
+		}
+		if draft.Status != "ready_to_publish" && draft.Status != "failed" {
+			return fmt.Errorf("reply source status is %s", draft.Status)
+		}
+	default:
+		return fmt.Errorf("unsupported publish source type %s", job.SourceType)
+	}
+	return nil
+}
+
+func (s *PublishingService) enforceManualPublishLimits(accountID uint, now time.Time) error {
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	count, err := s.jobRepo.CountManualPublishedByAccount(accountID, start, start.Add(24*time.Hour))
+	if err != nil {
+		return err
+	}
+	if count >= int64(s.cfg.PerAccountDailyLimit) {
+		return &PublishingError{Code: "publisher_daily_limit_exceeded", Message: "daily x publish limit exceeded for this account"}
+	}
+	last, err := s.jobRepo.LastManualPublishedByAccount(accountID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if last != nil && last.PublishedAt != nil {
+		wait := time.Duration(s.cfg.PerAccountMinIntervalSecs) * time.Second
+		if now.Sub(*last.PublishedAt) < wait {
+			remaining := wait - now.Sub(*last.PublishedAt)
+			seconds := int(remaining.Seconds())
+			if seconds < 1 {
+				seconds = 1
+			}
+			return &PublishingError{Code: "publisher_cooldown_active", Message: fmt.Sprintf("x publish cooldown is active, please wait %d seconds", seconds)}
+		}
+	}
+	return nil
+}
+
+func (s *PublishingService) sourceTargetTweetID(job *model.PublishJob) (string, error) {
+	switch job.SourceType {
+	case repository.PublishSourceComment:
+		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(task.TargetTweetID) == "" {
+			return "", fmt.Errorf("missing target tweet id")
+		}
+		return task.TargetTweetID, nil
+	case repository.PublishSourceReply:
+		draft, err := s.replyRepo.GetByUserAndID(job.UserID, job.SourceID)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(draft.CommentTweetID) == "" {
+			return "", fmt.Errorf("missing comment tweet id")
+		}
+		return draft.CommentTweetID, nil
+	default:
+		return "", fmt.Errorf("unsupported publish source type %s", job.SourceType)
+	}
+}
+
+func (s *PublishingService) markManualProcessing(job *model.PublishJob, now time.Time) error {
+	job.Status = repository.PublishStatusProcessing
+	job.AttemptCount++
+	job.NextAttemptAt = nil
 	job.LastError = ""
+	return s.jobRepo.Save(job)
+}
+
+func (s *PublishingService) publishWithAdapter(ctx context.Context, job *model.PublishJob, account model.TwitterAccount, targetTweetID string) (PublishResult, string, string, error) {
+	if s.cfg.DryRun {
+		now := time.Now().UTC()
+		return PublishResult{
+			ExternalID:  fmt.Sprintf("dry-run-%d", job.ID),
+			ExternalURL: "",
+			RawResponse: "dry-run publish completed; no request was sent to X",
+			PublishedAt: now,
+		}, repository.PublishModeDryRun, "activity.preview.manualPublishDryRunSuccess", nil
+	}
+	switch job.SourceType {
+	case repository.PublishSourceComment:
+		result, err := s.publisher.PublishComment(ctx, account, targetTweetID, job.Content)
+		return result, repository.PublishModeReal, "activity.preview.realPublishSuccess", err
+	case repository.PublishSourceReply:
+		result, err := s.publisher.PublishReply(ctx, account, targetTweetID, job.Content)
+		return result, repository.PublishModeReal, "activity.preview.realPublishSuccess", err
+	default:
+		return PublishResult{}, "", "", fmt.Errorf("unsupported publish source type %s", job.SourceType)
+	}
+}
+
+func (s *PublishingService) completeJob(job *model.PublishJob, result PublishResult, mode string, previewKey string) error {
+	now := result.PublishedAt
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	job.Status = repository.PublishStatusPublished
+	job.PublishMode = mode
+	job.LastError = ""
+	job.ExternalID = strings.TrimSpace(result.ExternalID)
+	job.ExternalURL = strings.TrimSpace(result.ExternalURL)
+	job.RawResponse = truncateErrMsg(result.RawResponse)
 	job.PublishedAt = &now
 	if err := s.jobRepo.Save(job); err != nil {
 		return err
 	}
-	if err := s.markSourcePublished(job, now); err != nil {
+	if err := s.markSourcePublished(job, now, mode); err != nil {
 		return err
 	}
-	return s.createJobActivity(job, "activity.preview.simulatedPublishSuccess", "")
+	return s.createJobActivity(job, previewKey, "")
 }
 
 func (s *PublishingService) failJob(job *model.PublishJob, category, reason string, retryable bool) error {
+	return s.failJobWithPreview(job, category, reason, retryable, "activity.preview.simulatedPublishFailed")
+}
+
+func (s *PublishingService) failJobWithPreview(job *model.PublishJob, category, reason string, retryable bool, previewKey string) error {
 	now := time.Now().UTC()
 	job.Status = repository.PublishStatusFailed
 	job.LastError = truncateErrMsg(reason)
@@ -278,11 +530,18 @@ func (s *PublishingService) failJob(job *model.PublishJob, category, reason stri
 	if err := s.markSourceFailed(job, category, reason); err != nil {
 		return err
 	}
-	_ = s.createJobActivity(job, "activity.preview.simulatedPublishFailed", reason)
+	_ = s.createJobActivity(job, previewKey, reason)
 	return errors.New(job.LastError)
 }
 
-func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.Time) error {
+func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.Time, mode string) error {
+	capabilityStatus := "simulated_published"
+	if mode == repository.PublishModeDryRun {
+		capabilityStatus = "dry_run_published"
+	}
+	if mode == repository.PublishModeReal {
+		capabilityStatus = "real_published"
+	}
 	switch job.SourceType {
 	case repository.PublishSourceComment:
 		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
@@ -290,8 +549,11 @@ func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.
 			return err
 		}
 		task.Status = "published"
-		task.CapabilityStatus = "simulated_published"
+		task.CapabilityStatus = capabilityStatus
 		task.SentAt = &now
+		if mode == repository.PublishModeReal {
+			task.CommentTweetID = strings.TrimSpace(job.ExternalID)
+		}
 		task.Retryable = false
 		task.FailureCategory = ""
 		task.FailureReason = ""
@@ -302,7 +564,7 @@ func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.
 			return err
 		}
 		draft.Status = "published"
-		draft.CapabilityStatus = "simulated_published"
+		draft.CapabilityStatus = capabilityStatus
 		draft.SentAt = &now
 		draft.FailureCategory = ""
 		draft.FailureReason = ""
@@ -409,9 +671,13 @@ func publishJobToItem(row model.PublishJob) dto.PublishJobItem {
 		Content:          row.Content,
 		Status:           row.Status,
 		ExecutionMode:    row.ExecutionMode,
+		PublishMode:      row.PublishMode,
 		AttemptCount:     row.AttemptCount,
 		MaxAttempts:      row.MaxAttempts,
 		LastError:        row.LastError,
+		ExternalID:       row.ExternalID,
+		ExternalURL:      row.ExternalURL,
+		RawResponse:      row.RawResponse,
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -422,4 +688,28 @@ func publishJobToItem(row model.PublishJob) dto.PublishJobItem {
 		item.PublishedAt = row.PublishedAt.UTC().Format(time.RFC3339)
 	}
 	return item
+}
+
+func normalizeXPublisherConfig(cfg config.XPublisherConfig) config.XPublisherConfig {
+	if cfg.PerAccountDailyLimit <= 0 {
+		cfg.PerAccountDailyLimit = 20
+	}
+	if cfg.PerAccountMinIntervalSecs <= 0 {
+		cfg.PerAccountMinIntervalSecs = 300
+	}
+	if !cfg.ManualPublishEnabled && !cfg.RealPublishEnabled && !cfg.DryRun {
+		cfg.ManualPublishEnabled = true
+		cfg.DryRun = true
+	}
+	return cfg
+}
+
+func xPublisherSettingsToDTO(cfg config.XPublisherConfig) dto.XPublisherSettings {
+	return dto.XPublisherSettings{
+		RealPublishEnabled:           cfg.RealPublishEnabled,
+		ManualPublishEnabled:         cfg.ManualPublishEnabled,
+		PerAccountDailyLimit:         cfg.PerAccountDailyLimit,
+		PerAccountMinIntervalSeconds: cfg.PerAccountMinIntervalSecs,
+		DryRun:                       cfg.DryRun,
+	}
 }

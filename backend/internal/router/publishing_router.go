@@ -13,4 +13,5 @@ func RegisterPublishing(rg *gin.RouterGroup, c *controller.PublishingController)
 	group.GET("/jobs", c.List)
 	group.POST("/jobs/:id/retry", c.Retry)
 	group.POST("/jobs/:id/cancel", c.Cancel)
+	group.POST("/jobs/:id/publish-now", c.PublishNow)
 }

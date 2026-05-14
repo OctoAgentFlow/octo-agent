@@ -72,7 +72,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	billingService := service.NewBillingService(userRepo, billingOrderRepo, twitterAccountRepo, oafBotRepo, aiGenerationUsageRepo, cfg)
 	oafBotService := service.NewOAFBotService(oafBotRepo, twitterAccountRepo, userRepo, aiGenerationUsageRepo, aiService)
 	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService)
-	publishingService := service.NewPublishingService(publishJobRepo, autoCommentTaskRepo, autoReplyDraftRepo, twitterAccountRepo, userRepo, activityRepo, nil)
+	publishingService := service.NewPublishingService(publishJobRepo, autoCommentTaskRepo, autoReplyDraftRepo, twitterAccountRepo, userRepo, activityRepo, cfg.XPublisher, nil)
 	autoReplyService := service.NewAutoReplyService(twitterAccountRepo, automationRepo, activityRepo, replyReservationRepo, userRepo, autoReplyDraftRepo, oafBotRepo, aiGenerationUsageRepo, aiService, publishingService)
 	autoDMService := service.NewAutoDMService(twitterAccountRepo, automationRepo, activityRepo, autoDMTaskRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, userRepo, cfg.App.FrontendBaseURL)
 	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService, publishingService)

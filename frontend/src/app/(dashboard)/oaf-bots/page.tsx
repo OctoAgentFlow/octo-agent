@@ -10,11 +10,14 @@ import {
   Bot,
   CheckCircle2,
   ChevronRight,
+  Copy,
+  FilePlus2,
   Info,
   Lock,
   Mail,
   MessageCircle,
   MessagesSquare,
+  RefreshCw,
   Save,
   Send,
   Sparkles,
@@ -791,6 +794,11 @@ export default function OAFBotsPage() {
                   selectedID={selectedID}
                   formChanged={formChanged}
                   previewDisabled={!canTestBot}
+                  form={form}
+                  account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
+                  occupationOptions={occupationOptions}
+                  industryOptions={industryOptions}
+                  safetyOptions={safetyOptions}
                 />
               </WizardPanel>
             ) : null}
@@ -1473,6 +1481,11 @@ function SamplePanel({
   selectedID,
   formChanged,
   previewDisabled,
+  form,
+  account,
+  occupationOptions,
+  industryOptions,
+  safetyOptions,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotSamples | null;
@@ -1483,24 +1496,33 @@ function SamplePanel({
   selectedID: number | null;
   formChanged: boolean;
   previewDisabled: boolean;
+  form: OAFBotPayload;
+  account?: AccountListItem;
+  occupationOptions: ChipOption[];
+  industryOptions: ChipOption[];
+  safetyOptions: SelectOption[];
 }) {
+  const normalizedSamples = useMemo(() => normalizeSamples(samples), [samples]);
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
     { id: "reply", icon: <MessageCircle className="size-4" />, title: t("oafBots.samples.reply"), description: t("oafBots.samples.replyContext") },
     { id: "comment", icon: <MessagesSquare className="size-4" />, title: t("oafBots.samples.comment"), description: t("oafBots.samples.commentContext") },
     { id: "dm", icon: <Mail className="size-4" />, title: t("oafBots.samples.dm"), description: t("oafBots.samples.dmContext") },
   ];
-  const selectedSample = samples?.[scene];
+  const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, t);
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm leading-relaxed text-cyan-50">
-        <div className="flex gap-2">
+        <div className="flex items-start gap-2">
           <Sparkles className="mt-0.5 size-4 shrink-0" />
-          <p>{t("oafBots.test.costHint")}</p>
+          <div>
+            <p>{generating ? t("oafBots.test.loading") : t("oafBots.test.costHint")}</p>
+            <p className="mt-1 text-xs text-cyan-50/65">{t("oafBots.test.sceneHint")}</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         {sceneItems.map((item) => (
           <button
             key={item.id}
@@ -1510,11 +1532,15 @@ function SamplePanel({
               scene === item.id ? "border-cyan-300/35 bg-cyan-400/12 text-white" : "border-white/10 bg-white/[0.035] text-white/60 hover:bg-white/[0.07]"
             }`}
           >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              {item.icon}
-              {item.title}
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-cyan-100">
+                {item.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="whitespace-nowrap text-sm font-medium">{item.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/45">{item.description}</p>
+              </div>
             </div>
-            <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-white/45">{item.description}</p>
           </button>
         ))}
       </div>
@@ -1533,19 +1559,26 @@ function SamplePanel({
           <p className="mt-1 text-xs text-white/45">{t("oafBots.test.panelDescription")}</p>
         </div>
         <Button type="button" onClick={onGenerate} disabled={generating || previewDisabled} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
-          <Sparkles className="size-4" />
-          {generating ? t("oafBots.actions.generating") : t("oafBots.actions.generate")}
+          {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          {generating ? t("oafBots.test.loadingShort") : t("oafBots.actions.generate")}
         </Button>
       </div>
 
       {samples ? (
-        <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-          <SampleCard title={t(`oafBots.samples.${scene}`)} text={selectedSample || t("oafBots.samples.empty")} highlight />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            {sceneItems.filter((item) => item.id !== scene).map((item) => (
-              <SampleCard key={item.id} title={item.title} text={samples[item.id] || t("oafBots.samples.empty")} />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="grid gap-3 md:grid-cols-2">
+            {sceneItems.map((item) => (
+              <SampleCard
+                key={item.id}
+                title={item.title}
+                text={normalizedSamples[item.id] || t("oafBots.samples.empty")}
+                highlight={scene === item.id}
+                onRegenerate={onGenerate}
+                t={t}
+              />
             ))}
           </div>
+          <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.025] p-6 text-center">
@@ -1558,13 +1591,172 @@ function SamplePanel({
   );
 }
 
-function SampleCard({ title, text, highlight = false }: { title: string; text: string; highlight?: boolean }) {
+function SampleCard({
+  title,
+  text,
+  highlight = false,
+  onRegenerate,
+  t,
+}: {
+  title: string;
+  text: string;
+  highlight?: boolean;
+  onRegenerate: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const content = cleanupGeneratedText(text);
+  const isLong = content.length > 260;
+  const visibleText = !expanded && isLong ? `${content.slice(0, 260).trim()}...` : content;
+  const copy = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
   return (
-    <div className={`rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/45">{title}</p>
-      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/78">{text}</p>
+    <div className={`flex min-h-[260px] flex-col rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 text-xs text-white/40">{t("oafBots.samples.characters", { count: content.length })}</p>
+        </div>
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/45">
+          {highlight ? t("oafBots.samples.selected") : t("oafBots.samples.generated")}
+        </span>
+      </div>
+      <div className="mt-4 flex-1 rounded-xl border border-white/10 bg-black/20 p-4">
+        <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/82">{visibleText || t("oafBots.samples.empty")}</p>
+        {isLong ? (
+          <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-3 text-xs font-medium text-cyan-100 hover:text-white">
+            {expanded ? t("oafBots.samples.collapse") : t("oafBots.samples.expand")}
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={copy}>
+          <Copy className="size-4" />
+          {copied ? t("oafBots.samples.copied") : t("oafBots.samples.copy")}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onRegenerate}>
+          <RefreshCw className="size-4" />
+          {t("oafBots.samples.regenerate")}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled title={t("oafBots.samples.saveDraftDisabled")}>
+          <FilePlus2 className="size-4" />
+          {t("oafBots.samples.saveDraft")}
+        </Button>
+      </div>
     </div>
   );
+}
+
+function PersonaBasisCard({ title, rows, empty }: { title: string; rows: Array<{ label: string; value: string }>; empty: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      <p className="text-sm font-semibold text-white">{title}</p>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm leading-relaxed text-white/50">{empty}</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {rows.map((row) => (
+            <div key={row.label} className="rounded-xl border border-white/10 bg-black/15 p-3">
+              <p className="text-xs text-white/40">{row.label}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/75">{row.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function normalizeSamples(samples: OAFBotSamples | null): OAFBotSamples {
+  const normalized: OAFBotSamples = { tweet: "", reply: "", comment: "", dm: "" };
+  if (!samples) return normalized;
+
+  (Object.keys(normalized) as SampleScene[]).forEach((scene) => {
+    const raw = samples[scene] || "";
+    const parsed = parseGeneratedPayload(raw);
+    if (typeof parsed === "string") {
+      normalized[scene] ||= parsed;
+      return;
+    }
+    normalized[scene] ||= stringifyGeneratedValue(parsed[scene]);
+    (Object.keys(normalized) as SampleScene[]).forEach((key) => {
+      const value = stringifyGeneratedValue(parsed[key]);
+      if (value) normalized[key] = value;
+    });
+  });
+
+  (Object.keys(normalized) as SampleScene[]).forEach((scene) => {
+    normalized[scene] = cleanupGeneratedText(normalized[scene] || samples[scene] || "");
+  });
+  return normalized;
+}
+
+function parseGeneratedPayload(raw: string): string | Partial<Record<SampleScene, unknown>> {
+  const text = cleanupCodeFence(raw);
+  if (!looksLikeJSON(text)) return text;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Partial<Record<SampleScene, unknown>>;
+    }
+    return stringifyGeneratedValue(parsed);
+  } catch {
+    return text;
+  }
+}
+
+function looksLikeJSON(value: string) {
+  const text = value.trim();
+  return (text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"));
+}
+
+function cleanupCodeFence(raw: string) {
+  return raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+}
+
+function stringifyGeneratedValue(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    const preferred = object.content ?? object.text ?? object.message ?? object.body;
+    if (typeof preferred === "string") return preferred;
+    return Object.values(object).filter((item): item is string => typeof item === "string").join("\n\n");
+  }
+  return String(value);
+}
+
+function cleanupGeneratedText(raw: string) {
+  const text = cleanupCodeFence(raw);
+  const parsed = parseGeneratedPayload(text);
+  if (typeof parsed === "string") return parsed.trim();
+  return stringifyGeneratedValue(parsed).trim();
+}
+
+function getSamplePersonaRows(
+  form: OAFBotPayload,
+  account: AccountListItem | undefined,
+  occupationOptions: ChipOption[],
+  industryOptions: ChipOption[],
+  safetyOptions: SelectOption[],
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  return [
+    { label: t("oafBots.fields.name"), value: form.name },
+    { label: t("oafBots.fields.twitterAccount"), value: account ? `@${account.username}` : "" },
+    { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
+    { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
+    { label: t("oafBots.fields.voiceTone"), value: form.voice_tone },
+    { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
+    { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
+    { label: t("oafBots.fields.safetyMode"), value: safetyOptions.find((option) => option.value === form.safety_mode)?.label || form.safety_mode },
+  ].filter((row) => row.value.trim());
 }
 
 function GenerationUsageCard({

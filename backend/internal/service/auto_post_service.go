@@ -39,9 +39,10 @@ type AutoPostService struct {
 	oafBotRepo   *repository.OAFBotRepository
 	usageRepo    *repository.AIGenerationUsageRepository
 	ai           *AIService
+	publishing   *PublishingService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:  accountRepo,
 		planRepo:     planRepo,
@@ -53,6 +54,7 @@ func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRe
 		oafBotRepo:   oafBotRepo,
 		usageRepo:    usageRepo,
 		ai:           ai,
+		publishing:   publishing,
 	}
 }
 
@@ -285,6 +287,11 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	if err := s.createGeneratedActivity(draft, acc.Username, now); err != nil {
 		return nil, err
 	}
+	if draft.Status == "ready_to_publish" && s.publishing != nil {
+		if _, _, err := s.publishing.EnsurePostJob(draft, now); err != nil {
+			return nil, err
+		}
+	}
 	item := s.toDraftItem(*draft)
 	return &item, nil
 }
@@ -459,6 +466,29 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 	draft.ApprovedAt = &now
 	draft.ApprovalRequired = false
 	if err := s.draftRepo.Save(draft); err != nil {
+		return nil, err
+	}
+	if s.publishing != nil {
+		if _, _, err := s.publishing.EnsurePostJob(draft, now); err != nil {
+			return nil, err
+		}
+	}
+	item := s.toDraftItem(*draft)
+	return &item, nil
+}
+
+func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftItem, error) {
+	draft, err := s.draftRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if draft.Status != "ready_to_publish" && draft.Status != "approved" {
+		return nil, fmt.Errorf("draft cannot prepare publish from status %s", draft.Status)
+	}
+	if s.publishing == nil {
+		return nil, fmt.Errorf("publishing pipeline is not available")
+	}
+	if _, _, err := s.publishing.EnsurePostJob(draft, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	item := s.toDraftItem(*draft)

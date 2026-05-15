@@ -935,6 +935,8 @@ export default function OAFBotsPage() {
               selectedID={selectedID}
               generationUsages={generationUsages}
               loading={generationUsagesLoading}
+              usage={usage}
+              limits={limits}
             />
           </div>
         </div>
@@ -1965,15 +1967,22 @@ function GenerationUsageCard({
   selectedID,
   generationUsages,
   loading,
+  usage,
+  limits,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   selectedID: number | null;
   generationUsages: OAFBotGenerationUsage[];
   loading: boolean;
+  usage: PlanUsage;
+  limits: PlanLimits;
 }) {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const usageByScene = useMemo(() => aggregateMonthlyUsage(generationUsages, currentMonth), [currentMonth, generationUsages]);
   const total = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
+  const planLimit = limits.aiGenerationsMonthly;
+  const planUsed = usage.aiGenerationsMonth;
+  const planRemaining = Math.max(planLimit - planUsed, 0);
   return (
     <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
       {!selectedID ? (
@@ -1990,11 +1999,18 @@ function GenerationUsageCard({
         </p>
       ) : (
         <div className="space-y-3">
-          <div className="rounded-xl border border-cyan-300/15 bg-cyan-400/10 p-3">
+          <div className="space-y-2 rounded-xl border border-cyan-300/15 bg-cyan-400/10 p-3">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-cyan-50/75">{t("oafBots.usages.total")}</span>
+              <span className="text-cyan-50/75">{t("oafBots.usages.botMonthlyTotal")}</span>
               <span className="font-semibold text-white">{t("oafBots.usages.countWithUnit", { count: total })}</span>
             </div>
+            <p className="text-xs leading-relaxed text-cyan-50/65">
+              {t("oafBots.usages.sharedQuotaHint", {
+                limit: planLimit,
+                used: planUsed,
+                remaining: planRemaining,
+              })}
+            </p>
           </div>
           {usageSceneOrder.map((scene) => {
             const item = usageByScene.get(scene);
@@ -2014,7 +2030,7 @@ function GenerationUsageCard({
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
                   <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${ratio}%` }} />
                 </div>
-                <p className="mt-2 text-xs text-white/40">{t("oafBots.usages.share", { percent: ratio })}</p>
+                <p className="mt-2 text-xs text-white/40">{t("oafBots.usages.sceneShare", { percent: ratio })}</p>
               </div>
             );
           })}

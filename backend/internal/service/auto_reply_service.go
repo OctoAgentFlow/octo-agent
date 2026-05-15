@@ -558,6 +558,8 @@ func autoReplyInputFromValues(author, rootTweet, comment, tone string, blocked [
 	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
 	in.GrowthGoal = bot.GrowthGoal
 	in.SafetyMode = bot.SafetyMode
+	in.PrimaryLanguage = bot.PrimaryLanguage
+	in.LanguageStrategy = bot.LanguageStrategy
 	return in
 }
 

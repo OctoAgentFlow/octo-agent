@@ -51,7 +51,7 @@ type ApiErrorBody = {
 };
 
 const wizardStepOrder: WizardStep[] = ["identity", "style", "topics", "goals", "test"];
-const personaChecklistKeys = ["name", "account", "role", "personality", "topics", "guardrails", "summary", "goal"] as const;
+const personaChecklistKeys = ["name", "account", "role", "language", "personality", "topics", "guardrails", "summary", "goal"] as const;
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const emptyLimits: PlanLimits = {
@@ -103,6 +103,8 @@ const emptyForm: OAFBotPayload = {
   forbidden_topics: [],
   growth_goal: "",
   safety_mode: "balanced",
+  primary_language: "zh-CN",
+  language_strategy: "follow_context",
 };
 
 const mbtiValues = [
@@ -337,6 +339,32 @@ export default function OAFBotsPage() {
       { value: "conservative", label: t("oafBots.safety.conservative") },
       { value: "balanced", label: t("oafBots.safety.balanced") },
       { value: "autopilot", label: t("oafBots.safety.autopilot") },
+    ],
+    [t],
+  );
+  const languageOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "zh-CN", label: t("oafBots.language.zhCN") },
+      { value: "zh-TW", label: t("oafBots.language.zhTW") },
+      { value: "en", label: t("oafBots.language.en") },
+      { value: "ja", label: t("oafBots.language.ja") },
+      { value: "ko", label: t("oafBots.language.ko") },
+      { value: "es", label: t("oafBots.language.es") },
+      { value: "pt", label: t("oafBots.language.pt") },
+      { value: "vi", label: t("oafBots.language.vi") },
+      { value: "id", label: t("oafBots.language.id") },
+      { value: "de", label: t("oafBots.language.de") },
+      { value: "fr", label: t("oafBots.language.fr") },
+      { value: "mixed_zh_en", label: t("oafBots.language.mixedZhEn") },
+    ],
+    [t],
+  );
+  const languageStrategyOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "always_primary", label: t("oafBots.languageStrategy.alwaysPrimary") },
+      { value: "follow_context", label: t("oafBots.languageStrategy.followContext") },
+      { value: "bilingual", label: t("oafBots.languageStrategy.bilingual") },
+      { value: "mixed_style", label: t("oafBots.languageStrategy.mixedStyle") },
     ],
     [t],
   );
@@ -695,6 +723,22 @@ export default function OAFBotsPage() {
 
             {activeStep === "style" ? (
               <WizardPanel title={t("oafBots.section.style")} description={t("oafBots.section.styleDesc")}>
+                <div className="mb-4 grid gap-4 md:grid-cols-2">
+                  <SelectField
+                    label={t("oafBots.fields.primaryLanguage")}
+                    value={form.primary_language}
+                    onChange={(value) => updateForm("primary_language", value)}
+                    options={languageOptions}
+                    helper={t("oafBots.helpers.primaryLanguage")}
+                  />
+                  <SelectField
+                    label={t("oafBots.fields.languageStrategy")}
+                    value={form.language_strategy}
+                    onChange={(value) => updateForm("language_strategy", value)}
+                    options={languageStrategyOptions}
+                    helper={t(`oafBots.languageStrategy.helper.${form.language_strategy || "follow_context"}`)}
+                  />
+                </div>
                 <TagPicker
                   label={t("oafBots.fields.personalityTags")}
                   values={form.personality_tags}
@@ -799,6 +843,8 @@ export default function OAFBotsPage() {
                   occupationOptions={occupationOptions}
                   industryOptions={industryOptions}
                   safetyOptions={safetyOptions}
+                  languageOptions={languageOptions}
+                  languageStrategyOptions={languageStrategyOptions}
                 />
               </WizardPanel>
             ) : null}
@@ -867,6 +913,8 @@ export default function OAFBotsPage() {
               canTest={canTestBot}
               occupationOptions={occupationOptions}
               industryOptions={industryOptions}
+              languageOptions={languageOptions}
+              languageStrategyOptions={languageStrategyOptions}
             />
             <GenerationUsageCard
               t={t}
@@ -898,6 +946,8 @@ function botToPayload(bot: OAFBot): OAFBotPayload {
     forbidden_topics: bot.forbidden_topics || [],
     growth_goal: bot.growth_goal,
     safety_mode: bot.safety_mode || "balanced",
+    primary_language: bot.primary_language || "zh-CN",
+    language_strategy: bot.language_strategy || "follow_context",
   };
 }
 
@@ -912,8 +962,9 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   let score = 0;
   if (form.name.trim()) score += 10;
   if (form.twitter_account_id) score += 10;
-  if (form.occupation.trim() || form.industry.trim()) score += 15;
-  if (form.personality_tags.length > 0) score += 15;
+  if (form.occupation.trim() || form.industry.trim()) score += 10;
+  if (form.primary_language.trim() && form.language_strategy.trim()) score += 10;
+  if (form.personality_tags.length > 0) score += 10;
   if (form.topics.length > 0) score += 15;
   if (form.forbidden_topics.length > 0) score += 10;
   if (form.identity_summary.trim()) score += 15;
@@ -924,7 +975,7 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
 function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
   return {
     identity: Boolean(form.name.trim() && form.twitter_account_id && (form.occupation.trim() || form.industry.trim())),
-    style: Boolean(form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
+    style: Boolean((form.primary_language.trim() && form.language_strategy.trim()) || form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
     topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
     goals: Boolean(form.identity_summary.trim() && form.growth_goal.trim()),
     test: hasSavedBot,
@@ -936,6 +987,7 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
   if (form.name.trim()) completed.add("name");
   if (form.twitter_account_id) completed.add("account");
   if (form.occupation.trim() || form.industry.trim()) completed.add("role");
+  if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
   if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
   if (form.topics.length > 0) completed.add("topics");
   if (form.forbidden_topics.length > 0 || form.safety_mode.trim()) completed.add("guardrails");
@@ -1349,6 +1401,10 @@ function getChipLabel(value: string, options: ChipOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
+function getSelectLabel(value: string, options: SelectOption[]) {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
 function BotPreview({
   t,
   form,
@@ -1359,6 +1415,8 @@ function BotPreview({
   canTest,
   occupationOptions,
   industryOptions,
+  languageOptions,
+  languageStrategyOptions,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   form: OAFBotPayload;
@@ -1373,6 +1431,8 @@ function BotPreview({
   canTest: boolean;
   occupationOptions: ChipOption[];
   industryOptions: ChipOption[];
+  languageOptions: SelectOption[];
+  languageStrategyOptions: SelectOption[];
 }) {
   const lowCompletion = completion < 60;
   const readyCompletion = completion >= 80;
@@ -1380,6 +1440,8 @@ function BotPreview({
   const previewRows = [
     { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
     { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
+    { label: t("oafBots.fields.primaryLanguage"), value: getSelectLabel(form.primary_language, languageOptions) },
+    { label: t("oafBots.fields.languageStrategy"), value: getSelectLabel(form.language_strategy, languageStrategyOptions) },
     { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
@@ -1486,6 +1548,8 @@ function SamplePanel({
   occupationOptions,
   industryOptions,
   safetyOptions,
+  languageOptions,
+  languageStrategyOptions,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotSamples | null;
@@ -1501,6 +1565,8 @@ function SamplePanel({
   occupationOptions: ChipOption[];
   industryOptions: ChipOption[];
   safetyOptions: SelectOption[];
+  languageOptions: SelectOption[];
+  languageStrategyOptions: SelectOption[];
 }) {
   const normalizedSamples = useMemo(() => normalizeSamples(samples), [samples]);
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
@@ -1509,7 +1575,7 @@ function SamplePanel({
     { id: "comment", icon: <MessagesSquare className="size-4" />, title: t("oafBots.samples.comment"), description: t("oafBots.samples.commentContext") },
     { id: "dm", icon: <Mail className="size-4" />, title: t("oafBots.samples.dm"), description: t("oafBots.samples.dmContext") },
   ];
-  const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, t);
+  const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, languageOptions, languageStrategyOptions, t);
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm leading-relaxed text-cyan-50">
@@ -1745,6 +1811,8 @@ function getSamplePersonaRows(
   occupationOptions: ChipOption[],
   industryOptions: ChipOption[],
   safetyOptions: SelectOption[],
+  languageOptions: SelectOption[],
+  languageStrategyOptions: SelectOption[],
   t: (key: string, params?: Record<string, string | number>) => string,
 ) {
   return [
@@ -1752,6 +1820,8 @@ function getSamplePersonaRows(
     { label: t("oafBots.fields.twitterAccount"), value: account ? `@${account.username}` : "" },
     { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
     { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
+    { label: t("oafBots.fields.primaryLanguage"), value: getSelectLabel(form.primary_language, languageOptions) },
+    { label: t("oafBots.fields.languageStrategy"), value: getSelectLabel(form.language_strategy, languageStrategyOptions) },
     { label: t("oafBots.fields.voiceTone"), value: form.voice_tone },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },

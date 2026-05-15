@@ -17,6 +17,8 @@ export type OAFBot = {
   forbidden_topics: string[];
   growth_goal: string;
   safety_mode: string;
+  primary_language: string;
+  language_strategy: string;
   created_at: string;
   updated_at: string;
 };

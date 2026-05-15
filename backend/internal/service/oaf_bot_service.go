@@ -117,20 +117,22 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto
 		return nil, err
 	}
 	out, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
-		Name:            bot.Name,
-		Occupation:      bot.Occupation,
-		Industry:        bot.Industry,
-		AgeRange:        bot.AgeRange,
-		Gender:          bot.Gender,
-		Education:       bot.Education,
-		MBTI:            bot.MBTI,
-		PersonalityTags: decodeStringList(bot.PersonalityTags),
-		IdentitySummary: bot.IdentitySummary,
-		VoiceTone:       bot.VoiceTone,
-		Topics:          decodeStringList(bot.Topics),
-		ForbiddenTopics: decodeStringList(bot.ForbiddenTopics),
-		GrowthGoal:      bot.GrowthGoal,
-		SafetyMode:      bot.SafetyMode,
+		Name:             bot.Name,
+		Occupation:       bot.Occupation,
+		Industry:         bot.Industry,
+		AgeRange:         bot.AgeRange,
+		Gender:           bot.Gender,
+		Education:        bot.Education,
+		MBTI:             bot.MBTI,
+		PersonalityTags:  decodeStringList(bot.PersonalityTags),
+		IdentitySummary:  bot.IdentitySummary,
+		VoiceTone:        bot.VoiceTone,
+		Topics:           decodeStringList(bot.Topics),
+		ForbiddenTopics:  decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:       bot.GrowthGoal,
+		SafetyMode:       bot.SafetyMode,
+		PrimaryLanguage:  normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy: normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 	})
 	if err != nil {
 		return nil, err
@@ -204,6 +206,8 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	if bot.SafetyMode == "" {
 		bot.SafetyMode = "balanced"
 	}
+	bot.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(req.PrimaryLanguage)
+	bot.LanguageStrategy = normalizeOAFBotLanguageStrategy(req.LanguageStrategy)
 }
 
 func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
@@ -224,8 +228,30 @@ func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 		ForbiddenTopics:  decodeStringList(bot.ForbiddenTopics),
 		GrowthGoal:       bot.GrowthGoal,
 		SafetyMode:       bot.SafetyMode,
+		PrimaryLanguage:  normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy: normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 		CreatedAt:        bot.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        bot.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func normalizeOAFBotPrimaryLanguage(value string) string {
+	v := strings.TrimSpace(value)
+	switch v {
+	case "zh-CN", "zh-TW", "en", "ja", "ko", "es", "pt", "vi", "id", "de", "fr", "mixed_zh_en":
+		return v
+	default:
+		return "zh-CN"
+	}
+}
+
+func normalizeOAFBotLanguageStrategy(value string) string {
+	v := strings.TrimSpace(value)
+	switch v {
+	case "always_primary", "follow_context", "bilingual", "mixed_style":
+		return v
+	default:
+		return "follow_context"
 	}
 }
 

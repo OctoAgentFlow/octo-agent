@@ -55,6 +55,8 @@ const wizardStepOrder: WizardStep[] = ["identity", "style", "topics", "goals", "
 const personaChecklistKeys = ["name", "account", "role", "language", "personality", "topics", "guardrails", "summary", "goal"] as const;
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
+const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
+
 const emptyLimits: PlanLimits = {
   maxBots: 1,
   maxTwitterAccounts: 1,
@@ -1955,6 +1957,9 @@ function GenerationUsageCard({
   generationUsages: OAFBotGenerationUsage[];
   loading: boolean;
 }) {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const usageByScene = useMemo(() => aggregateMonthlyUsage(generationUsages, currentMonth), [currentMonth, generationUsages]);
+  const total = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
   return (
     <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
       {!selectedID ? (
@@ -1965,26 +1970,67 @@ function GenerationUsageCard({
         <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
           {t("oafBots.usages.loading")}
         </p>
-      ) : generationUsages.length === 0 ? (
+      ) : total === 0 ? (
         <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
           {t("oafBots.usages.empty")}
         </p>
       ) : (
-        <div className="space-y-2">
-          {generationUsages.map((item) => (
-            <div key={`${item.bot_id}-${item.scene}-${item.month}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs text-white/45">{t("oafBots.usages.scene")}</p>
-                  <p className="mt-1 font-medium text-white">{t(`oafBots.usages.scene.${item.scene}`)}</p>
-                </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/65">{item.count}</span>
-              </div>
-              <p className="mt-3 text-xs text-white/45">{item.month}</p>
+        <div className="space-y-3">
+          <div className="rounded-xl border border-cyan-300/15 bg-cyan-400/10 p-3">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-cyan-50/75">{t("oafBots.usages.total")}</span>
+              <span className="font-semibold text-white">{t("oafBots.usages.countWithUnit", { count: total })}</span>
             </div>
-          ))}
+          </div>
+          {usageSceneOrder.map((scene) => {
+            const item = usageByScene.get(scene);
+            const count = item?.count ?? 0;
+            const ratio = total > 0 ? Math.round((count / total) * 100) : 0;
+            return (
+              <div key={scene} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{usageSceneLabel(scene, t)}</p>
+                    <p className="mt-1 text-xs text-white/45">{t("oafBots.usages.latestMonth", { month: item?.month ?? currentMonth })}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
+                    {t("oafBots.usages.countWithUnit", { count })}
+                  </span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${ratio}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-white/40">{t("oafBots.usages.share", { percent: ratio })}</p>
+              </div>
+            );
+          })}
         </div>
       )}
     </SectionCard>
   );
+}
+
+function normalizeUsageScene(scene: string) {
+  return scene === "test_generate" ? "oaf_bot_test_generate" : scene;
+}
+
+function aggregateMonthlyUsage(items: OAFBotGenerationUsage[], currentMonth: string) {
+  const usageByScene = new Map<string, OAFBotGenerationUsage>();
+  items.forEach((item) => {
+    const scene = normalizeUsageScene(item.scene);
+    if (item.month !== currentMonth) return;
+    const existing = usageByScene.get(scene);
+    usageByScene.set(scene, {
+      ...item,
+      scene,
+      count: (existing?.count ?? 0) + item.count,
+    });
+  });
+  return usageByScene;
+}
+
+function usageSceneLabel(scene: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  const key = `oafBots.usages.scene.${scene}`;
+  const label = t(key);
+  return label === key ? scene : label;
 }

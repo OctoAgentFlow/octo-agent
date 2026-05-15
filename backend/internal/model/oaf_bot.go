@@ -18,4 +18,6 @@ type OAFBot struct {
 	ForbiddenTopics  string `gorm:"type:text;comment:禁聊话题JSON" json:"forbidden_topics,omitempty"`
 	GrowthGoal       string `gorm:"type:text;comment:增长目标" json:"growth_goal,omitempty"`
 	SafetyMode       string `gorm:"size:64;default:balanced;comment:安全模式" json:"safety_mode,omitempty"`
+	PrimaryLanguage  string `gorm:"size:32;default:zh-CN;comment:主要输出语言" json:"primary_language,omitempty"`
+	LanguageStrategy string `gorm:"size:64;default:follow_context;comment:语言策略" json:"language_strategy,omitempty"`
 }

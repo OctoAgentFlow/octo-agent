@@ -17,6 +17,8 @@ type OAFBotItem struct {
 	ForbiddenTopics  []string `json:"forbidden_topics"`
 	GrowthGoal       string   `json:"growth_goal"`
 	SafetyMode       string   `json:"safety_mode"`
+	PrimaryLanguage  string   `json:"primary_language"`
+	LanguageStrategy string   `json:"language_strategy"`
 	CreatedAt        string   `json:"created_at"`
 	UpdatedAt        string   `json:"updated_at"`
 }
@@ -43,6 +45,8 @@ type OAFBotUpsertRequest struct {
 	ForbiddenTopics  []string `json:"forbidden_topics"`
 	GrowthGoal       string   `json:"growth_goal"`
 	SafetyMode       string   `json:"safety_mode"`
+	PrimaryLanguage  string   `json:"primary_language"`
+	LanguageStrategy string   `json:"language_strategy"`
 }
 
 type OAFBotTestGenerateResponse struct {

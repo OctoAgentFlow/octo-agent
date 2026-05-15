@@ -15,85 +15,93 @@ type AIService struct {
 }
 
 type GenerateAutoCommentInput struct {
-	TargetUsername  string
-	TargetTweet     string
-	Tone            string
-	BlockedWords    []string
-	HasBot          bool
-	Name            string
-	Occupation      string
-	Industry        string
-	AgeRange        string
-	Gender          string
-	Education       string
-	MBTI            string
-	PersonalityTags []string
-	IdentitySummary string
-	VoiceTone       string
-	Topics          []string
-	ForbiddenTopics []string
-	GrowthGoal      string
-	SafetyMode      string
+	TargetUsername   string
+	TargetTweet      string
+	Tone             string
+	BlockedWords     []string
+	HasBot           bool
+	Name             string
+	Occupation       string
+	Industry         string
+	AgeRange         string
+	Gender           string
+	Education        string
+	MBTI             string
+	PersonalityTags  []string
+	IdentitySummary  string
+	VoiceTone        string
+	Topics           []string
+	ForbiddenTopics  []string
+	GrowthGoal       string
+	SafetyMode       string
+	PrimaryLanguage  string
+	LanguageStrategy string
 }
 
 type GenerateAutoReplyInput struct {
-	CommentAuthor   string
-	RootTweet       string
-	CommentText     string
-	Tone            string
-	BlockedWords    []string
-	HasBot          bool
-	Name            string
-	Occupation      string
-	Industry        string
-	AgeRange        string
-	Gender          string
-	Education       string
-	MBTI            string
-	PersonalityTags []string
-	IdentitySummary string
-	VoiceTone       string
-	Topics          []string
-	ForbiddenTopics []string
-	GrowthGoal      string
-	SafetyMode      string
+	CommentAuthor    string
+	RootTweet        string
+	CommentText      string
+	Tone             string
+	BlockedWords     []string
+	HasBot           bool
+	Name             string
+	Occupation       string
+	Industry         string
+	AgeRange         string
+	Gender           string
+	Education        string
+	MBTI             string
+	PersonalityTags  []string
+	IdentitySummary  string
+	VoiceTone        string
+	Topics           []string
+	ForbiddenTopics  []string
+	GrowthGoal       string
+	SafetyMode       string
+	PrimaryLanguage  string
+	LanguageStrategy string
 }
 
 type GenerateOAFBotSamplesInput struct {
-	Name            string
-	Occupation      string
-	Industry        string
-	AgeRange        string
-	Gender          string
-	Education       string
-	MBTI            string
-	PersonalityTags []string
-	IdentitySummary string
-	VoiceTone       string
-	Topics          []string
-	ForbiddenTopics []string
-	GrowthGoal      string
-	SafetyMode      string
+	Name             string
+	Occupation       string
+	Industry         string
+	AgeRange         string
+	Gender           string
+	Education        string
+	MBTI             string
+	PersonalityTags  []string
+	IdentitySummary  string
+	VoiceTone        string
+	Topics           []string
+	ForbiddenTopics  []string
+	GrowthGoal       string
+	SafetyMode       string
+	PrimaryLanguage  string
+	LanguageStrategy string
 }
 
 type GenerateAutoPostInput struct {
-	AccountHandle   string
-	Topic           string
-	HasBot          bool
-	Name            string
-	Occupation      string
-	Industry        string
-	AgeRange        string
-	Gender          string
-	Education       string
-	MBTI            string
-	PersonalityTags []string
-	IdentitySummary string
-	VoiceTone       string
-	Topics          []string
-	ForbiddenTopics []string
-	GrowthGoal      string
-	SafetyMode      string
+	AccountHandle    string
+	Topic            string
+	HasBot           bool
+	Name             string
+	Occupation       string
+	Industry         string
+	AgeRange         string
+	Gender           string
+	Education        string
+	MBTI             string
+	PersonalityTags  []string
+	IdentitySummary  string
+	VoiceTone        string
+	Topics           []string
+	ForbiddenTopics  []string
+	GrowthGoal       string
+	SafetyMode       string
+	PrimaryLanguage  string
+	LanguageStrategy string
 }
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
@@ -144,6 +152,7 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
 		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: natural, practical, and calm.\n")
 		user.WriteString("Tone: " + tone + "\n")
@@ -215,6 +224,7 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
 		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: practical, natural, useful, and non-spammy.\n")
 		user.WriteString("Tone: ")
@@ -279,6 +289,7 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	user.WriteString("Forbidden topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 	user.WriteString("Growth goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
 	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	user.WriteString("Rules:\n")
 	user.WriteString("- tweet max 240 characters.\n")
 	user.WriteString("- reply max 180 characters.\n")
@@ -342,6 +353,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
 		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: practical, clear, useful, and non-spammy.\n")
 	}
@@ -360,6 +372,31 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		return "", err
 	}
 	return truncateRunes(strings.TrimSpace(text), 260), nil
+}
+
+func writeLanguageConfig(user *strings.Builder, primaryLanguage, strategy string) {
+	primary := strings.TrimSpace(primaryLanguage)
+	if primary == "" {
+		primary = "zh-CN"
+	}
+	langStrategy := strings.TrimSpace(strategy)
+	if langStrategy == "" {
+		langStrategy = "follow_context"
+	}
+	user.WriteString("primary_language: " + primary + "\n")
+	user.WriteString("language_strategy: " + langStrategy + "\n")
+	user.WriteString("Language rules:\n")
+	switch langStrategy {
+	case "always_primary":
+		user.WriteString("- Always output in the primary_language.\n")
+	case "bilingual":
+		user.WriteString("- Use bilingual output when helpful, but keep it concise and avoid making every message too long.\n")
+	case "mixed_style":
+		user.WriteString("- Use a natural Chinese-English mixed style suitable for Web3 / AI communities; do not sound like a literal translation.\n")
+	default:
+		user.WriteString("- For replies, comments, and DMs, follow the input context language when it is clear; otherwise use primary_language.\n")
+	}
+	user.WriteString("- Keep language choice stable and intentional according to the configured strategy.\n")
 }
 
 func truncateRunes(s string, max int) string {

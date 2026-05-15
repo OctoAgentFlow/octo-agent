@@ -44,6 +44,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoCommentTaskRepo := repository.NewAutoCommentTaskRepository(db)
 	autoPostPlanRepo := repository.NewAutoPostPlanRepository(db)
 	autoPostDraftRepo := repository.NewAutoPostDraftRepository(db)
+	autoPostRunRepo := repository.NewAutoPostGenerationRunRepository(db)
 	contentLibraryRepo := repository.NewContentLibraryRepository(db)
 	oafBotRepo := repository.NewOAFBotRepository(db)
 	aiGenerationUsageRepo := repository.NewAIGenerationUsageRepository(db)
@@ -80,7 +81,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoDMService := service.NewAutoDMService(twitterAccountRepo, automationRepo, activityRepo, autoDMTaskRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, userRepo, cfg.App.FrontendBaseURL)
 	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService, publishingService)
 	contentLibraryService := service.NewContentLibraryService(contentLibraryRepo, twitterAccountRepo, oafBotRepo)
-	autoPostService := service.NewAutoPostService(twitterAccountRepo, autoPostPlanRepo, autoPostDraftRepo, contentLibraryRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService)
+	autoPostService := service.NewAutoPostService(twitterAccountRepo, autoPostPlanRepo, autoPostDraftRepo, autoPostRunRepo, contentLibraryRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService)
 	reviewQueueService := service.NewReviewQueueService(autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, publishJobRepo, oafBotRepo, twitterAccountRepo)
 	a := controller.NewAuthController(authService)
 	wc := controller.NewWalletController(walletService)
@@ -118,7 +119,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterPublishing(v1, publishing)
 	RegisterPost(v1, p)
 	RegisterAgent(v1, ag)
-	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService, publishingService)
+	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService, autoPostService, publishingService)
 
 	return r
 }

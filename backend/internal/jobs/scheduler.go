@@ -17,6 +17,7 @@ func Start(
 	autoReply *service.AutoReplyService,
 	autoDM *service.AutoDMService,
 	autoComment *service.AutoCommentService,
+	autoPost *service.AutoPostService,
 	publishing *service.PublishingService,
 ) {
 	go func() {
@@ -34,6 +35,7 @@ func Start(
 		RunAutoReplyOnce(context.Background(), autoReply)
 		RunAutoDMOnce(context.Background(), autoDM)
 		RunAutoCommentOnce(context.Background(), autoComment)
+		RunAutoPostOnce(context.Background(), autoPost)
 		RunPublishingOnce(context.Background(), publishing)
 		for range ticker.C {
 			runEmail()
@@ -41,6 +43,7 @@ func Start(
 			RunAutoReplyOnce(context.Background(), autoReply)
 			RunAutoDMOnce(context.Background(), autoDM)
 			RunAutoCommentOnce(context.Background(), autoComment)
+			RunAutoPostOnce(context.Background(), autoPost)
 			RunPublishingOnce(context.Background(), publishing)
 		}
 	}()

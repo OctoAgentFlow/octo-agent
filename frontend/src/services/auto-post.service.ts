@@ -23,6 +23,7 @@ export type AutoPostPlanApi = {
   timezone: string;
   last_run_at?: string;
   next_run_at?: string;
+  processing_at?: string;
   created_at: string;
   updated_at: string;
 };
@@ -62,6 +63,27 @@ export type AutoPostDraftsData = {
   items: AutoPostDraftApi[];
 };
 
+export type AutoPostGenerationRunApi = {
+  id: number;
+  user_id: number;
+  plan_id: number;
+  x_account_id: number;
+  account_handle?: string;
+  bot_id: number;
+  bot_name?: string;
+  content_library_item_id?: number;
+  content_title?: string;
+  status: "completed" | "skipped" | "failed";
+  skip_reason?: string;
+  generated_draft_id?: number;
+  error_message?: string;
+  created_at: string;
+};
+
+export type AutoPostGenerationRunsData = {
+  items: AutoPostGenerationRunApi[];
+};
+
 export type AutoPostPlanPayload = {
   x_account_id: number;
   enabled: boolean;
@@ -94,6 +116,10 @@ export const autoPostService = {
   },
   async drafts() {
     const res = await request.get<ApiResponse<AutoPostDraftsData>>("/auto-post/drafts");
+    return res.data.data;
+  },
+  async runs() {
+    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs");
     return res.data.data;
   },
   async updateDraft(id: number, generatedContent: string) {

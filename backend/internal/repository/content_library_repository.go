@@ -73,3 +73,20 @@ func (r *ContentLibraryRepository) MarkUsed(item *model.ContentLibraryItem, at t
 	item.LastUsedAt = &at
 	return r.Save(item)
 }
+
+func (r *ContentLibraryRepository) PickActiveForAutoPost(userID, xAccountID, botID uint) (*model.ContentLibraryItem, error) {
+	q := r.DB.Where("user_id = ? AND status = ?", userID, "active").
+		Where("(twitter_account_id IS NULL OR twitter_account_id = ?)", xAccountID)
+	if botID > 0 {
+		q = q.Where("(bot_id IS NULL OR bot_id = ?)", botID)
+	} else {
+		q = q.Where("bot_id IS NULL")
+	}
+	var row model.ContentLibraryItem
+	err := q.Order("CASE WHEN last_used_at IS NULL THEN 0 ELSE 1 END ASC, usage_count ASC, priority DESC, last_used_at ASC, updated_at DESC, id ASC").
+		First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}

@@ -137,6 +137,10 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_post_daily_limit_exceeded")
 			return
 		}
+		if errors.Is(err, service.ErrAutoPostDuplicateContent) {
+			response.FailWithCode(c, http.StatusConflict, err.Error(), "auto_post_duplicate_content")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

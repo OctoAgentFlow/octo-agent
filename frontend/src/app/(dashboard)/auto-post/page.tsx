@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Loader2, Pencil, Power, Sparkles, Trash2, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -12,6 +12,13 @@ import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { autoPostService, type AutoPostDraftApi, type AutoPostExecutionMode, type AutoPostPlanApi } from "@/services/auto-post.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
+import {
+  contentLibraryService,
+  type ContentLibraryItemApi,
+  type ContentLibraryItemPayload,
+  type ContentLibraryItemType,
+  type ContentLibraryStatus,
+} from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -28,6 +35,19 @@ type PlannerForm = {
 
 const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
+const contentItemTypes: ContentLibraryItemType[] = ["idea", "product_update", "faq", "case_study", "announcement", "link", "thread_seed"];
+
+type LibraryForm = {
+  title: string;
+  itemType: ContentLibraryItemType;
+  body: string;
+  sourceURL: string;
+  topics: string;
+  growthGoal: string;
+  ctaPreference: string;
+  priority: number;
+  status: ContentLibraryStatus;
+};
 
 function defaultForm(limit?: number): PlannerForm {
   return {
@@ -37,6 +57,20 @@ function defaultForm(limit?: number): PlannerForm {
     minIntervalMinutes: 120,
     postingWindows: "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  };
+}
+
+function defaultLibraryForm(): LibraryForm {
+  return {
+    title: "",
+    itemType: "idea",
+    body: "",
+    sourceURL: "",
+    topics: "",
+    growthGoal: "",
+    ctaPreference: "",
+    priority: 50,
+    status: "active",
   };
 }
 
@@ -63,21 +97,28 @@ export default function AutoPostPage() {
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [plans, setPlans] = useState<AutoPostPlanApi[]>([]);
   const [drafts, setDrafts] = useState<AutoPostDraftApi[]>([]);
+  const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
+  const [selectedContentItemID, setSelectedContentItemID] = useState(0);
   const [form, setForm] = useState<PlannerForm>(() => defaultForm());
+  const [libraryForm, setLibraryForm] = useState<LibraryForm>(() => defaultLibraryForm());
+  const [editingLibraryID, setEditingLibraryID] = useState<number | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [contentDirection, setContentDirection] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [accountData, botData, planData, draftData, subscriptionData] = await Promise.all([
+      const [accountData, botData, planData, draftData, libraryData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
         autoPostService.plans(),
         autoPostService.drafts(),
+        contentLibraryService.list({ limit: 100 }),
         billingService.subscription(),
       ]);
       const connected = accountData.items.filter((account) => account.status !== "disconnected");
@@ -85,6 +126,7 @@ export default function AutoPostPage() {
       setBots(botData.items);
       setPlans(planData.items);
       setDrafts(draftData.items);
+      setContentItems(libraryData.items);
       setSubscription(subscriptionData);
       const firstAccountID = selectedAccountID || connected[0]?.id || 0;
       setSelectedAccountID(firstAccountID);
@@ -104,6 +146,20 @@ export default function AutoPostPage() {
 
   const selectedBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === selectedAccountID) || null, [bots, selectedAccountID]);
   const selectedPlan = useMemo(() => plans.find((plan) => plan.x_account_id === selectedAccountID) || null, [plans, selectedAccountID]);
+  const availableContentItems = useMemo(
+    () =>
+      contentItems.filter((item) => {
+        if (item.status === "archived") return false;
+        if (item.twitter_account_id && item.twitter_account_id !== selectedAccountID) return false;
+        if (item.bot_id && item.bot_id !== selectedBot?.id) return false;
+        return true;
+      }),
+    [contentItems, selectedAccountID, selectedBot?.id]
+  );
+  const selectedContentItem = useMemo(
+    () => availableContentItems.find((item) => item.id === selectedContentItemID) || null,
+    [availableContentItems, selectedContentItemID]
+  );
   const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID).slice(0, 5), [drafts, selectedAccountID]);
   const aiLimit = subscription?.limits.ai_generations_monthly || 0;
   const aiUsed = subscription?.usage.ai_generations_month || 0;
@@ -112,6 +168,7 @@ export default function AutoPostPage() {
 
   const onAccountChange = (accountID: number) => {
     setSelectedAccountID(accountID);
+    setSelectedContentItemID(0);
     const plan = plans.find((item) => item.x_account_id === accountID);
     setForm(plan ? formFromPlan(plan) : defaultForm(subscription?.limits.daily_auto_posts));
   };
@@ -119,6 +176,10 @@ export default function AutoPostPage() {
   const savePlan = async () => {
     if (!selectedAccountID) {
       pushToast(t("autoPost.errors.needAccount"));
+      return;
+    }
+    if (selectedContentItem && selectedContentItem.status !== "active") {
+      pushToast(t("autoPost.contentLibrary.errors.inactiveSelected"));
       return;
     }
     setSaving(true);
@@ -146,6 +207,100 @@ export default function AutoPostPage() {
     }
   };
 
+  const resetLibraryForm = () => {
+    setEditingLibraryID(null);
+    setLibraryForm(defaultLibraryForm());
+    setLibraryOpen(false);
+  };
+
+  const editLibraryItem = (item: ContentLibraryItemApi) => {
+    setEditingLibraryID(item.id);
+    setLibraryForm({
+      title: item.title,
+      itemType: item.item_type,
+      body: item.body,
+      sourceURL: item.source_url || "",
+      topics: item.topics.join(", "),
+      growthGoal: item.growth_goal || "",
+      ctaPreference: item.cta_preference || "",
+      priority: item.priority || 50,
+      status: item.status,
+    });
+    setLibraryOpen(true);
+  };
+
+  const saveLibraryItem = async () => {
+    if (!selectedAccountID) {
+      pushToast(t("autoPost.errors.needAccount"));
+      return;
+    }
+    if (!libraryForm.title.trim() || !libraryForm.body.trim()) {
+      pushToast(t("autoPost.contentLibrary.errors.required"));
+      return;
+    }
+    setSavingLibrary(true);
+    try {
+      const payload: ContentLibraryItemPayload = {
+        twitter_account_id: selectedAccountID,
+        title: libraryForm.title.trim(),
+        item_type: libraryForm.itemType,
+        body: libraryForm.body.trim(),
+        source_url: libraryForm.sourceURL.trim() || undefined,
+        topics: splitTopics(libraryForm.topics),
+        growth_goal: libraryForm.growthGoal.trim() || undefined,
+        cta_preference: libraryForm.ctaPreference.trim() || undefined,
+        priority: Number(libraryForm.priority) || 50,
+        status: libraryForm.status,
+      };
+      const wasEditing = Boolean(editingLibraryID);
+      const saved = editingLibraryID
+        ? await contentLibraryService.update(editingLibraryID, payload)
+        : await contentLibraryService.create(payload);
+      setContentItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setSelectedContentItemID(saved.id);
+      resetLibraryForm();
+      pushToast(t(wasEditing ? "autoPost.contentLibrary.toast.updated" : "autoPost.contentLibrary.toast.created"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.save") : t("autoPost.contentLibrary.errors.save"));
+    } finally {
+      setSavingLibrary(false);
+    }
+  };
+
+  const updateLibraryStatus = async (item: ContentLibraryItemApi, status: ContentLibraryStatus) => {
+    try {
+      const saved = await contentLibraryService.update(item.id, {
+        twitter_account_id: item.twitter_account_id,
+        bot_id: item.bot_id,
+        title: item.title,
+        item_type: item.item_type,
+        body: item.body,
+        source_url: item.source_url,
+        topics: item.topics,
+        growth_goal: item.growth_goal,
+        cta_preference: item.cta_preference,
+        priority: item.priority,
+        status,
+      });
+      setContentItems((current) => current.map((row) => (row.id === saved.id ? saved : row)));
+      pushToast(t("autoPost.contentLibrary.toast.updated"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.save") : t("autoPost.contentLibrary.errors.save"));
+    }
+  };
+
+  const deleteLibraryItem = async (item: ContentLibraryItemApi) => {
+    if (!window.confirm(t("autoPost.contentLibrary.confirmDelete"))) return;
+    try {
+      await contentLibraryService.delete(item.id);
+      setContentItems((current) => current.filter((row) => row.id !== item.id));
+      if (selectedContentItemID === item.id) setSelectedContentItemID(0);
+      pushToast(t("autoPost.contentLibrary.toast.deleted"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.delete") : t("autoPost.contentLibrary.errors.delete"));
+    }
+  };
+
   const generateDraft = async () => {
     let plan = selectedPlan;
     if (!selectedAccountID) {
@@ -167,7 +322,7 @@ export default function AutoPostPage() {
         plan = saved;
         setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
       }
-      const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim());
+      const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id);
       setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
       setContentDirection("");
       pushToast(t("autoPost.toast.generated"));
@@ -178,6 +333,8 @@ export default function AutoPostPage() {
         pushToast(t("autoPost.errors.aiQuotaExceeded"));
       } else if (code === "auto_post_daily_limit_exceeded") {
         pushToast(t("autoPost.errors.dailyLimitExceeded"));
+      } else if (code === "auto_post_duplicate_content") {
+        pushToast(t("autoPost.errors.duplicateContent"));
       } else {
         pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.generate") : t("autoPost.errors.generate"));
       }
@@ -366,7 +523,196 @@ export default function AutoPostPage() {
 
             <div className="space-y-5">
               <Card>
+                <CardHeader
+                  title={t("autoPost.contentLibrary.title")}
+                  description={t("autoPost.contentLibrary.description")}
+                  right={
+                    <Button size="sm" variant="outline" onClick={() => setLibraryOpen((open) => !open)}>
+                      {libraryOpen ? t("autoPost.contentLibrary.closeForm") : t("autoPost.contentLibrary.add")}
+                    </Button>
+                  }
+                />
+
+                {libraryOpen ? (
+                  <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.title")}</span>
+                        <input
+                          value={libraryForm.title}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, title: event.target.value }))}
+                          placeholder={t("autoPost.contentLibrary.fields.titlePlaceholder")}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.itemType")}</span>
+                        <select
+                          value={libraryForm.itemType}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, itemType: event.target.value as ContentLibraryItemType }))}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                        >
+                          {contentItemTypes.map((type) => (
+                            <option key={type} value={type}>
+                              {t(`autoPost.contentLibrary.itemType.${type}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <label className="mt-3 block space-y-2">
+                      <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.body")}</span>
+                      <textarea
+                        value={libraryForm.body}
+                        onChange={(event) => setLibraryForm((current) => ({ ...current, body: event.target.value }))}
+                        rows={4}
+                        placeholder={t("autoPost.contentLibrary.fields.bodyPlaceholder")}
+                        className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/30"
+                      />
+                    </label>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.topics")}</span>
+                        <input
+                          value={libraryForm.topics}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, topics: event.target.value }))}
+                          placeholder={t("autoPost.contentLibrary.fields.topicsPlaceholder")}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.sourceUrl")}</span>
+                        <input
+                          value={libraryForm.sourceURL}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, sourceURL: event.target.value }))}
+                          placeholder={t("autoPost.contentLibrary.fields.sourceUrlPlaceholder")}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.growthGoal")}</span>
+                        <input
+                          value={libraryForm.growthGoal}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, growthGoal: event.target.value }))}
+                          placeholder={t("autoPost.contentLibrary.fields.growthGoalPlaceholder")}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.ctaPreference")}</span>
+                        <input
+                          value={libraryForm.ctaPreference}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, ctaPreference: event.target.value }))}
+                          placeholder={t("autoPost.contentLibrary.fields.ctaPreferencePlaceholder")}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-xs text-white/60">
+                        {t("autoPost.contentLibrary.fields.status")}
+                        <select
+                          value={libraryForm.status}
+                          onChange={(event) => setLibraryForm((current) => ({ ...current, status: event.target.value as ContentLibraryStatus }))}
+                          className="h-9 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                        >
+                          <option value="active">{t("autoPost.contentLibrary.status.active")}</option>
+                          <option value="paused">{t("autoPost.contentLibrary.status.paused")}</option>
+                        </select>
+                      </label>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" onClick={resetLibraryForm}>
+                          {t("common.cancel")}
+                        </Button>
+                        <Button type="button" onClick={() => void saveLibraryItem()} disabled={savingLibrary}>
+                          {savingLibrary ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                          {editingLibraryID ? t("autoPost.contentLibrary.saveEdit") : t("autoPost.contentLibrary.saveNew")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {availableContentItems.length === 0 ? (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm leading-6 text-white/55">
+                    {t("autoPost.contentLibrary.empty")}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedContentItemID(0)}
+                      className={`w-full rounded-xl border p-3 text-left text-sm transition ${
+                        selectedContentItemID === 0 ? "border-blue-300/35 bg-blue-500/15 text-white" : "border-white/10 bg-white/[0.025] text-white/65 hover:border-blue-300/20"
+                      }`}
+                    >
+                      {t("autoPost.contentLibrary.noSelection")}
+                    </button>
+                    {availableContentItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`rounded-xl border p-4 transition ${
+                          selectedContentItemID === item.id ? "border-blue-300/35 bg-blue-500/15" : "border-white/10 bg-white/[0.035]"
+                        }`}
+                      >
+                        <button type="button" className="w-full text-left" onClick={() => setSelectedContentItemID(item.id)}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-white">{item.title}</span>
+                            <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">
+                              {t(`autoPost.contentLibrary.itemType.${item.item_type}`)}
+                            </span>
+                            <span className={`rounded-full border px-2 py-0.5 text-xs ${item.status === "active" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : "border-amber-300/20 bg-amber-500/10 text-amber-100"}`}>
+                              {t(`autoPost.contentLibrary.status.${item.status}`)}
+                            </span>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/55">{item.body}</p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/45">
+                            {item.topics.slice(0, 4).map((topic) => (
+                              <span key={topic} className="rounded-full bg-white/[0.05] px-2 py-0.5">{topic}</span>
+                            ))}
+                            <span>{t("autoPost.contentLibrary.usageCount", { count: item.usage_count })}</span>
+                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDate(item.last_used_at) })}</span> : null}
+                          </div>
+                        </button>
+                        <div className="mt-3 flex flex-wrap justify-end gap-2">
+                          <Button size="sm" variant="outline" type="button" onClick={() => editLibraryItem(item)}>
+                            <Pencil className="size-4" />
+                            {t("autoPost.contentLibrary.edit")}
+                          </Button>
+                          <Button size="sm" variant="outline" type="button" onClick={() => void updateLibraryStatus(item, item.status === "active" ? "paused" : "active")}>
+                            <Power className="size-4" />
+                            {item.status === "active" ? t("autoPost.contentLibrary.pause") : t("autoPost.contentLibrary.activate")}
+                          </Button>
+                          <Button size="sm" variant="outline" type="button" onClick={() => void deleteLibraryItem(item)}>
+                            <Trash2 className="size-4" />
+                            {t("autoPost.contentLibrary.delete")}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              <Card>
                 <CardHeader title={t("autoPost.generate.title")} description={t("autoPost.generate.description")} />
+                <label className="mb-4 block space-y-2">
+                  <span className="text-xs font-medium text-white/60">{t("autoPost.generate.contentItemLabel")}</span>
+                  <select
+                    value={selectedContentItemID}
+                    onChange={(event) => setSelectedContentItemID(Number(event.target.value))}
+                    className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                  >
+                    <option value={0}>{t("autoPost.generate.noContentItem")}</option>
+                    {availableContentItems
+                      .filter((item) => item.status === "active")
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-white/60">{t("autoPost.generate.directionLabel")}</span>
                   <textarea
@@ -405,6 +751,11 @@ export default function AutoPostPage() {
                       <div key={draft.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(draft.status)}`}>{t(`executionQueue.status.${draft.status}`)}</span>
+                          {draft.content_title ? (
+                            <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-100">
+                              {draft.content_title}
+                            </span>
+                          ) : null}
                           <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-white/60">
                             {t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
                           </span>
@@ -434,6 +785,14 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
     postingWindows: plan.posting_windows || "",
     timezone: plan.timezone || "UTC",
   };
+}
+
+function splitTopics(value: string) {
+  return value
+    .split(/[,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
 }
 
 function TextInput({

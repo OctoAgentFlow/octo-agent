@@ -58,7 +58,7 @@ export function PaymentMethodPanel({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-white/70">No payment method connected yet.</p>
+          <p className="text-sm text-white/70">{t("billing.payment.empty")}</p>
         )}
         <Button
           type="button"

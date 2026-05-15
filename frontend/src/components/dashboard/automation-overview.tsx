@@ -28,12 +28,12 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
       title={t("dashboard.automation.section.title")}
       description={t("dashboard.automation.section.description")}
     >
-      {loading ? <p className="text-sm text-white/70">Loading automation status...</p> : null}
+      {loading ? <p className="text-sm text-white/70">{t("dashboard.automation.loading")}</p> : null}
       {errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
           <button className="text-xs text-white underline underline-offset-2" onClick={onRetry} type="button">
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       ) : null}

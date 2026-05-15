@@ -149,7 +149,7 @@ export default function AutoCommentsPage() {
 
   const rejectDraft = async (id: number) => {
     try {
-      const updated = await automationService.rejectCommentDraft(id, "Rejected from Auto Comment review queue.");
+      const updated = await automationService.rejectCommentDraft(id, t("autoComment.review.rejectReason"));
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoComment.toast.rejected"));
     } catch (error) {
@@ -315,7 +315,7 @@ export default function AutoCommentsPage() {
               <input
                 value={tweetURL}
                 onChange={(event) => setTweetURL(event.target.value)}
-                placeholder="https://x.com/octo_agent_flow/status/1234567890"
+                placeholder={t("autoComment.target.urlPlaceholder")}
                 className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
               />
             </label>
@@ -324,7 +324,7 @@ export default function AutoCommentsPage() {
               <input
                 value={authorHandle}
                 onChange={(event) => setAuthorHandle(event.target.value)}
-                placeholder="@target_account"
+                placeholder={t("autoComment.target.authorPlaceholder")}
                 className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
               />
             </label>
@@ -368,10 +368,10 @@ export default function AutoCommentsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</span>
                           <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">{t(statusKey(draft.status))}</span>
-                          <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">auto_comment</span>
+                          <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">{t("autoComment.scene")}</span>
                           {draft.status === "ready_to_publish" ? <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-100">{t("autoComment.execution.autopilot.title")}</span> : null}
                           {draft.risk_level === "high" ? <span className="rounded-full border border-amber-300/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-100">{t("autoComment.review.riskIntercepted")}</span> : null}
-                          {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">Bot #{draft.bot_id}</span> : null}
+                          {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">{t("oafBots.botNumber", { id: draft.bot_id })}</span> : null}
                         </div>
                         <div className="rounded-lg border border-white/8 bg-black/15 p-3">
                           <p className="mb-1 text-xs text-white/40">{t("autoComment.review.targetTweet")}</p>
@@ -437,7 +437,7 @@ export default function AutoCommentsPage() {
               <div key={target.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="min-w-0 truncate text-sm font-semibold text-white">{formatHandle(target.target_author_handle || target.target_username)}</p>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/55">{target.status}</span>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/55">{t(`autoComment.targetStatus.${target.status}`)}</span>
                 </div>
                 <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/55">{target.target_text || target.target_tweet_url || target.target_username}</p>
               </div>

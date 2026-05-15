@@ -108,6 +108,7 @@ function mapRuntime(data: AutomationRuntimeStatusApi): AutomationRuntimeStatus {
 }
 
 export default function AgentsPage() {
+  const { t } = useT();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -176,8 +177,8 @@ export default function AgentsPage() {
         broadcastDataSynced(Date.now());
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to load automations."
-          : "Failed to load automations.";
+          ? error.response?.data?.message || t("dashboard.errors.loadAutomations")
+          : t("dashboard.errors.loadAutomations");
         setErrorMessage(msg);
         if (!quiet) {
           setLoadState("error");
@@ -186,7 +187,7 @@ export default function AgentsPage() {
         }
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   useEffect(() => {
@@ -221,16 +222,16 @@ export default function AgentsPage() {
       .catch((error) => {
         if (cancelled) return;
         if (axios.isAxiosError(error)) {
-          setErrorMessage(error.response?.data?.message || "Failed to load automations.");
+          setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
         } else {
-          setErrorMessage("Failed to load automations.");
+          setErrorMessage(t("dashboard.errors.loadAutomations"));
         }
         setLoadState("error");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -430,9 +431,9 @@ export default function AgentsPage() {
     try {
       const updated = await automationService.retryCommentTask(id);
       setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto Comment task retried.");
+      pushToast(t("automation.comment.retrySuccess"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to retry comment." : "Failed to retry comment.");
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("automation.comment.retryFailed") : t("automation.comment.retryFailed"));
     }
   };
 
@@ -442,15 +443,15 @@ export default function AgentsPage() {
 
       {loadState === "loading" ? (
         <Card>
-          <CardHeader title="Loading automations..." description="Fetching modules and runtime status." />
+          <CardHeader title={t("automation.loading.title")} description={t("automation.loading.description")} />
         </Card>
       ) : null}
 
       {loadState === "error" ? (
         <Card>
-          <CardHeader title="Failed to load automations" description={errorMessage || "Please retry."} />
+          <CardHeader title={t("automation.error.title")} description={errorMessage || t("common.retryHint")} />
           <div className="flex justify-end">
-            <Button onClick={() => void fetchAll()}>Retry</Button>
+            <Button onClick={() => void fetchAll()}>{t("common.retry")}</Button>
           </div>
         </Card>
       ) : null}

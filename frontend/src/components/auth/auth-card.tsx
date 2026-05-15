@@ -26,8 +26,8 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCar
   const { pushToast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
   const { bindWallet } = useWalletBinding({
-    unauthMessage: "Please login or register first, then bind wallet.",
-    bindSuccessMessage: "Wallet bound successfully.",
+    unauthMessage: t("wallet.toast.loginRequired"),
+    bindSuccessMessage: t("wallet.toast.bound"),
     onMessage: pushToast,
   });
 
@@ -67,7 +67,7 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCar
           <p className="text-xs tracking-wide text-blue-200/85 uppercase">{t("auth.card.kicker")}</p>
           <h2 className="text-2xl font-semibold text-white">{t("auth.card.title")}</h2>
           <p className="text-sm text-white/65">
-            {adminMode ? "请输入管理员邮箱并使用验证码登录后台。" : mode === "login" ? t("auth.card.subtitle.login") : t("auth.card.subtitle.register")}
+            {adminMode ? t("auth.card.subtitle.adminLogin") : mode === "login" ? t("auth.card.subtitle.login") : t("auth.card.subtitle.register")}
           </p>
         </div>
 
@@ -81,7 +81,7 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCar
                 <div className="absolute inset-0 flex items-center">
                   <span className="h-px w-full bg-white/10" />
                 </div>
-                <p className="relative mx-auto w-fit bg-[#0d1122] px-2 text-xs text-white/50">OR</p>
+                <p className="relative mx-auto w-fit bg-[#0d1122] px-2 text-xs text-white/50">{t("auth.card.or")}</p>
               </div>
 
               <ConnectWalletButton className="w-full" connectLabel={t("auth.card.connectWallet")} onConnected={handleWalletConnected} />

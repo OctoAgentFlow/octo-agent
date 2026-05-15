@@ -14,6 +14,7 @@ import {
 } from "@/lib/app-page-refresh";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useT } from "@/i18n/use-t";
 
 import { ActivityFilters } from "@/components/activity/activity-filters";
 import { ActivityList } from "@/components/activity/activity-list";
@@ -53,6 +54,7 @@ function readPage(value: string | null) {
 }
 
 export default function ActivityPage() {
+  const { t } = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -110,14 +112,14 @@ export default function ActivityPage() {
       broadcastDataSynced(Date.now());
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setErrorMessage(error.response?.data?.message || "Failed to load activities.");
+        setErrorMessage(error.response?.data?.message || t("activity.errors.load"));
       } else {
-        setErrorMessage("Failed to load activities.");
+        setErrorMessage(t("activity.errors.load"));
       }
     } finally {
       setLoading(false);
     }
-  }, [filters.errorReason, filters.range, filters.status, filters.type, page, pageSize, selectedAccountID]);
+  }, [filters.errorReason, filters.range, filters.status, filters.type, page, pageSize, selectedAccountID, t]);
 
   useEffect(() => {
     void fetchActivities();
@@ -187,9 +189,9 @@ export default function ActivityPage() {
         <ActivityLoading />
       ) : errorMessage ? (
         <Card>
-          <CardHeader title="Failed to load activities" description={errorMessage} />
+          <CardHeader title={t("activity.error.title")} description={errorMessage} />
           <div className="flex justify-end">
-            <Button onClick={() => void fetchActivities()}>Retry</Button>
+            <Button onClick={() => void fetchActivities()}>{t("common.retry")}</Button>
           </div>
         </Card>
       ) : records.length === 0 ? (

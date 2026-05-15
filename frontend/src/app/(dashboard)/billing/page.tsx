@@ -14,6 +14,7 @@ import {
 } from "@/lib/app-page-refresh";
 import { mapPaymentMethods } from "@/lib/billing-payment-methods";
 import { billingService, type BillingOrderListItemApi } from "@/services/billing.service";
+import { useT } from "@/i18n/use-t";
 import type { BillingPlanApi, BillingSubscriptionApi, PlanLimitsApi, PlanUsageApi } from "@/services/billing.service";
 import type {
   BillingOpsAction,
@@ -42,7 +43,7 @@ function mapPlanKey(code: string) {
 }
 
 function mapPlanName(code: string) {
-  if (code === "free_trial") return "免费试用";
+  if (code === "free_trial") return "Free Trial";
   if (code === "basic_monthly" || code === "basic") return "Basic";
   if (code === "plus") return "Plus";
   if (code === "pro") return "Pro";
@@ -202,6 +203,7 @@ const emptyOpsSummary: BillingOpsSummary = {
 };
 
 export default function BillingPage() {
+  const { t } = useT();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -242,8 +244,8 @@ export default function BillingPage() {
         broadcastDataSynced(Date.now());
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to load billing data."
-          : "Failed to load billing data.";
+          ? error.response?.data?.message || t("billing.errors.load")
+          : t("billing.errors.load");
         setErrorMessage(msg);
         if (!quiet) {
           setLoadState("error");
@@ -252,7 +254,7 @@ export default function BillingPage() {
         }
       }
     },
-    [paymentFilters, pushToast]
+    [paymentFilters, pushToast, t]
   );
 
   useEffect(() => {
@@ -276,21 +278,21 @@ export default function BillingPage() {
       try {
         const updated = await billingService.confirmOrder(orderId, txHash);
         if (updated.status === "paid") {
-          pushToast("Payment confirmed. Subscription is active.");
+          pushToast(t("billing.toast.paymentConfirmed"));
         } else {
-          pushToast("Order check completed.");
+          pushToast(t("billing.toast.orderChecked"));
         }
         await fetchBilling({ quiet: true });
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to confirm this transaction."
-          : "Failed to confirm this transaction.";
+          ? error.response?.data?.message || t("billing.errors.confirmTx")
+          : t("billing.errors.confirmTx");
         pushToast(msg);
         await fetchBilling({ quiet: true });
         throw new Error(msg);
       }
     },
-    [fetchBilling, pushToast]
+    [fetchBilling, pushToast, t]
   );
 
   const updateBillingOps = useCallback(
@@ -300,23 +302,23 @@ export default function BillingPage() {
           action,
           ops_note: payload?.opsNote,
         });
-        pushToast("Billing order updated.");
+        pushToast(t("billing.toast.orderUpdated"));
         await fetchBilling({ quiet: true });
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to update billing order."
-          : "Failed to update billing order.";
+          ? error.response?.data?.message || t("billing.errors.updateOrder")
+          : t("billing.errors.updateOrder");
         pushToast(msg);
         throw new Error(msg);
       }
     },
-    [fetchBilling, pushToast]
+    [fetchBilling, pushToast, t]
   );
 
   if (loadState === "loading") {
     return (
       <Card>
-        <CardHeader title="Loading billing data..." description="Fetching subscription, plans and payment methods." />
+        <CardHeader title={t("billing.loading.title")} description={t("billing.loading.description")} />
       </Card>
     );
   }
@@ -324,9 +326,9 @@ export default function BillingPage() {
   if (loadState === "error") {
     return (
       <Card>
-        <CardHeader title="Failed to load billing data" description={errorMessage || "Please retry."} />
+        <CardHeader title={t("billing.error.title")} description={errorMessage || t("common.retryHint")} />
         <div className="flex justify-end">
-          <Button onClick={() => void fetchBilling()}>Retry</Button>
+          <Button onClick={() => void fetchBilling()}>{t("common.retry")}</Button>
         </div>
       </Card>
     );

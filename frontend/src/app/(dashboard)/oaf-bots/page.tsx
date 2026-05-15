@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import axios from "axios";
+import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -15,6 +18,7 @@ import {
   Save,
   Send,
   Sparkles,
+  WalletCards,
 } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
@@ -40,6 +44,10 @@ type ApiErrorBody = {
   message?: string;
   error_code?: string;
 };
+
+const wizardStepOrder: WizardStep[] = ["identity", "style", "topics", "goals", "test"];
+const personaChecklistKeys = ["name", "account", "role", "personality", "topics", "guardrails", "summary", "goal"] as const;
+type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -153,6 +161,8 @@ export default function OAFBotsPage() {
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
+  const activeStepIndex = wizardStepOrder.indexOf(activeStep);
+  const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
 
   const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
     () => [
@@ -164,6 +174,7 @@ export default function OAFBotsPage() {
     ],
     [t],
   );
+  const activeStepMeta = wizardSteps.find((step) => step.id === activeStep);
 
   const occupationOptions = useMemo(
     () => optionKeys("occupation", [
@@ -312,6 +323,15 @@ export default function OAFBotsPage() {
     setGenerationUsages([]);
   };
 
+  const goStep = (direction: "previous" | "next") => {
+    const nextIndex = direction === "previous" ? Math.max(0, activeStepIndex - 1) : Math.min(wizardStepOrder.length - 1, activeStepIndex + 1);
+    setActiveStep(wizardStepOrder[nextIndex]);
+  };
+
+  const goTestStep = () => {
+    setActiveStep("test");
+  };
+
   const save = async () => {
     if (selectedAccountConflict) {
       pushToast(t("oafBots.toast.accountAlreadyBound", { name: selectedAccountConflict.name }));
@@ -398,6 +418,14 @@ export default function OAFBotsPage() {
         <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-300/15 bg-blue-400/10 px-4 py-3 text-sm text-blue-50">
+        <p>{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
+        <Link href="/billing" className="inline-flex items-center gap-1 font-medium text-white hover:text-blue-100">
+          {t("oafBots.planHintCta")}
+          <ArrowRight className="size-4" />
+        </Link>
+      </div>
+
       {!canCreate ? (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">
           <Lock className="size-4" />
@@ -409,9 +437,27 @@ export default function OAFBotsPage() {
         <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")}>
           <div className="space-y-2">
             {bots.length === 0 ? (
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
+                <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                  <Bot className="size-5" />
+                </div>
                 <p className="text-sm font-medium text-white">{t("oafBots.list.emptyTitle")}</p>
                 <p className="mt-2 text-sm leading-relaxed text-white/55">{t("oafBots.list.emptyDescription")}</p>
+                <div className="mt-4">
+                  {accounts.length === 0 ? (
+                    <Link href="/accounts" className="inline-flex">
+                      <Button type="button" size="sm" variant="outline">
+                        <WalletCards className="size-4" />
+                        {t("oafBots.list.bindAccountCta")}
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button type="button" size="sm" onClick={startCreate} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+                      <Sparkles className="size-4" />
+                      {t("oafBots.list.createFirstCta")}
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               bots.map((bot) => {
@@ -449,7 +495,28 @@ export default function OAFBotsPage() {
             title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
             description={t("oafBots.form.description")}
           >
-            <div className="mb-5 grid gap-2 md:grid-cols-5">
+            <div className="mb-5">
+              <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-white/45">{t("oafBots.wizard.progress", { current: activeStepIndex + 1, total: wizardStepOrder.length })}</p>
+                    <h2 className="mt-1 text-lg font-semibold text-white">{activeStepMeta?.label}</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-white/55">{activeStepMeta?.description}</p>
+                  </div>
+                  <div className="text-right text-xs text-white/45">
+                    <p>{t("oafBots.wizard.goal")}</p>
+                    <p className="mt-1 max-w-xs text-white/70">{t(`oafBots.wizard.goal.${activeStep}`)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-5 gap-2">
+                  {wizardStepOrder.map((step, index) => (
+                    <div key={step} className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div className={`h-full rounded-full ${index <= activeStepIndex ? "bg-gradient-to-r from-cyan-400 to-violet-400" : "bg-transparent"}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-5">
               {wizardSteps.map((step, index) => (
                 <button
                   key={step.id}
@@ -466,6 +533,7 @@ export default function OAFBotsPage() {
                   <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/45">{step.description}</p>
                 </button>
               ))}
+              </div>
             </div>
 
             {activeStep === "identity" ? (
@@ -506,6 +574,10 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.industry")}
                     options={industryOptions}
                   />
+                  <details className="md:col-span-2 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                    <summary className="cursor-pointer text-sm font-medium text-white">{t("oafBots.advancedIdentity.title")}</summary>
+                    <p className="mt-2 text-xs leading-relaxed text-white/45">{t("oafBots.advancedIdentity.description")}</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <SelectField
                     label={t("oafBots.fields.ageRange")}
                     value={form.age_range}
@@ -527,13 +599,8 @@ export default function OAFBotsPage() {
                     options={educationOptions}
                     helper={t("oafBots.helpers.education")}
                   />
-                  <SelectField
-                    label={t("oafBots.fields.mbti")}
-                    value={form.mbti}
-                    onChange={(value) => updateForm("mbti", value)}
-                    options={mbtiOptions}
-                    helper={t("oafBots.helpers.mbti")}
-                  />
+                    </div>
+                  </details>
                 </div>
               </WizardPanel>
             ) : null}
@@ -550,6 +617,13 @@ export default function OAFBotsPage() {
                   recommended
                 />
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <SelectField
+                    label={t("oafBots.fields.mbti")}
+                    value={form.mbti}
+                    onChange={(value) => updateForm("mbti", value)}
+                    options={mbtiOptions}
+                    helper={t("oafBots.helpers.mbti")}
+                  />
                   <ChipTextArea
                     label={t("oafBots.fields.voiceTone")}
                     value={form.voice_tone}
@@ -557,14 +631,6 @@ export default function OAFBotsPage() {
                     placeholder={t("oafBots.placeholders.voiceTone")}
                     helper={t("oafBots.helpers.voiceTone")}
                     options={voicePresetOptions}
-                    recommended
-                  />
-                  <TextArea
-                    label={t("oafBots.fields.identitySummary")}
-                    value={form.identity_summary}
-                    onChange={(value) => updateForm("identity_summary", value)}
-                    placeholder={t("oafBots.placeholders.identitySummary")}
-                    helper={t("oafBots.helpers.identitySummary")}
                     recommended
                   />
                 </div>
@@ -606,15 +672,25 @@ export default function OAFBotsPage() {
 
             {activeStep === "goals" ? (
               <WizardPanel title={t("oafBots.section.goals")} description={t("oafBots.section.goalsDesc")}>
-                <ChipTextArea
-                  label={t("oafBots.fields.growthGoal")}
-                  value={form.growth_goal}
-                  onChange={(value) => updateForm("growth_goal", value)}
-                  placeholder={t("oafBots.placeholders.growthGoal")}
-                  helper={t("oafBots.helpers.growthGoal")}
-                  options={growthGoalOptions}
-                  recommended
-                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextArea
+                    label={t("oafBots.fields.identitySummary")}
+                    value={form.identity_summary}
+                    onChange={(value) => updateForm("identity_summary", value)}
+                    placeholder={t("oafBots.placeholders.identitySummary")}
+                    helper={t("oafBots.helpers.identitySummary")}
+                    recommended
+                  />
+                  <ChipTextArea
+                    label={t("oafBots.fields.growthGoal")}
+                    value={form.growth_goal}
+                    onChange={(value) => updateForm("growth_goal", value)}
+                    placeholder={t("oafBots.placeholders.growthGoal")}
+                    helper={t("oafBots.helpers.growthGoal")}
+                    options={growthGoalOptions}
+                    recommended
+                  />
+                </div>
               </WizardPanel>
             ) : null}
 
@@ -651,10 +727,27 @@ export default function OAFBotsPage() {
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" onClick={testGenerate} disabled={generating}>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => goStep("previous")} disabled={activeStepIndex === 0}>
+                  <ArrowLeft className="size-4" />
+                  {t("oafBots.actions.previous")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => goStep("next")} disabled={activeStepIndex === wizardStepOrder.length - 1}>
+                  {t("oafBots.actions.next")}
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant={activeStep === "test" ? "default" : "outline"}
+                onClick={activeStep === "test" ? testGenerate : goTestStep}
+                disabled={generating}
+                className={activeStep === "test" ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white" : ""}
+              >
                 <Sparkles className="size-4" />
-                {generating ? t("oafBots.actions.generating") : t("oafBots.actions.generate")}
+                {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
               </Button>
               <Button
                 type="button"
@@ -665,6 +758,7 @@ export default function OAFBotsPage() {
                 <Save className="size-4" />
                 {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
               </Button>
+              </div>
             </div>
           </SectionCard>
 
@@ -674,6 +768,8 @@ export default function OAFBotsPage() {
               form={form}
               account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
               completion={personaCompleteness}
+              checklist={personaChecklist}
+              onTest={goTestStep}
             />
             <GenerationUsageCard
               t={t}
@@ -723,6 +819,32 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   if (form.identity_summary.trim()) score += 15;
   if (form.growth_goal.trim()) score += 10;
   return score;
+}
+
+function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
+  const completed = new Set<PersonaChecklistKey>();
+  if (form.name.trim()) completed.add("name");
+  if (form.twitter_account_id) completed.add("account");
+  if (form.occupation.trim() || form.industry.trim()) completed.add("role");
+  if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
+  if (form.topics.length > 0) completed.add("topics");
+  if (form.forbidden_topics.length > 0 || form.safety_mode.trim()) completed.add("guardrails");
+  if (form.identity_summary.trim()) completed.add("summary");
+  if (form.growth_goal.trim()) completed.add("goal");
+
+  const configured = personaChecklistKeys
+    .filter((key) => completed.has(key))
+    .map((key) => t(`oafBots.checklist.${key}`));
+  const missing = personaChecklistKeys
+    .filter((key) => !completed.has(key))
+    .map((key) => t(`oafBots.checklist.${key}`));
+  const nextKey = personaChecklistKeys.find((key) => !completed.has(key)) ?? "test";
+
+  return {
+    configured,
+    missing,
+    nextSuggestion: t(`oafBots.preview.next.${nextKey}`),
+  };
 }
 
 function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string) {
@@ -1013,10 +1135,16 @@ function TagPicker({
   );
 }
 
-function ChipOptions({ options, selected, onPick }: { options: string[]; selected: string[]; onPick: (value: string) => void }) {
+function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: string[]; selected: string[]; onPick: (value: string) => void; maxInitial?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const orderedOptions = useMemo(() => {
+    return [...options].sort((a, b) => Number(selected.includes(b)) - Number(selected.includes(a)));
+  }, [options, selected]);
+  const visibleOptions = expanded ? orderedOptions : orderedOptions.slice(0, maxInitial);
+  const hasMore = orderedOptions.length > maxInitial;
   return (
     <div className="flex flex-wrap gap-2">
-      {options.map((option) => {
+      {visibleOptions.map((option) => {
         const active = selected.includes(option);
         return (
           <button
@@ -1031,6 +1159,15 @@ function ChipOptions({ options, selected, onPick }: { options: string[]; selecte
           </button>
         );
       })}
+      {hasMore ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-xs text-white/55 hover:bg-white/[0.07]"
+        >
+          {expanded ? "−" : "+"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1040,13 +1177,22 @@ function BotPreview({
   form,
   account,
   completion,
+  checklist,
+  onTest,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   form: OAFBotPayload;
   account?: AccountListItem;
   completion: number;
+  checklist: {
+    configured: string[];
+    missing: string[];
+    nextSuggestion: string;
+  };
+  onTest: () => void;
 }) {
   const lowCompletion = completion < 60;
+  const readyCompletion = completion >= 80;
   return (
     <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")}>
       <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
@@ -1071,7 +1217,22 @@ function BotPreview({
               style={{ width: `${completion}%` }}
             />
           </div>
-          {lowCompletion ? <p className="mt-2 text-xs leading-relaxed text-amber-100/85">{t("oafBots.preview.lowCompleteness")}</p> : null}
+          <p className={`mt-2 text-xs leading-relaxed ${readyCompletion ? "text-emerald-100/85" : "text-amber-100/85"}`}>
+            {readyCompletion ? t("oafBots.preview.readyCompleteness") : lowCompletion ? t("oafBots.preview.lowCompleteness") : t("oafBots.preview.mediumCompleteness")}
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" />
+          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" />
+          <div className="rounded-xl border border-blue-300/15 bg-blue-400/10 p-3">
+            <p className="text-xs text-blue-100/70">{t("oafBots.preview.nextSuggestion")}</p>
+            <p className="mt-1 text-sm leading-relaxed text-white/78">{checklist.nextSuggestion}</p>
+          </div>
+          <Button type="button" onClick={onTest} className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+            <Sparkles className="size-4" />
+            {t("oafBots.actions.testBot")}
+          </Button>
         </div>
 
         <div className="mt-5 space-y-3">
@@ -1083,6 +1244,26 @@ function BotPreview({
         </div>
       </div>
     </SectionCard>
+  );
+}
+
+function ChecklistBlock({ title, items, empty, tone }: { title: string; items: string[]; empty: string; tone: "success" | "warning" }) {
+  const toneClass = tone === "success" ? "border-emerald-300/15 bg-emerald-400/10 text-emerald-100" : "border-amber-300/15 bg-amber-400/10 text-amber-100";
+  return (
+    <div className={`rounded-xl border p-3 ${toneClass}`}>
+      <p className="text-xs opacity-75">{title}</p>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-white/70">{empty}</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.slice(0, 5).map((item) => (
+            <span key={item} className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/78">
+              {item}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ArrowRight, FileText, Mail, MessageCircle, MessagesSquare } from "lucide-react";
+import { ArrowRight, FileText, ListChecks, Mail, MessageCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 
 import { useToast } from "@/components/providers/toast-provider";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
@@ -116,10 +116,8 @@ export default function AgentsPage() {
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
-  const [dmImportCSV, setDMImportCSV] = useState("");
   const [commentTargets, setCommentTargets] = useState<AutoCommentTargetApi[]>([]);
   const [commentTasks, setCommentTasks] = useState<AutoCommentTaskApi[]>([]);
-  const [commentTargetInput, setCommentTargetInput] = useState("");
   const [accountCount, setAccountCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
   const [activityCount, setActivityCount] = useState(0);
@@ -251,12 +249,12 @@ export default function AgentsPage() {
       setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
       const runtime = await automationService.runtimeStatus();
       setRuntimeStatus(mapRuntime(runtime));
-      pushToast(`Automation ${type} ${enabled ? "enabled" : "disabled"} successfully.`);
+      pushToast(t(enabled ? "automation.toast.enabled" : "automation.toast.disabled", { module: t(`automation.module.${type}.name`) }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        pushToast(error.response?.data?.message || "Failed to toggle automation.");
+        pushToast(error.response?.data?.message || t("automation.toast.toggleFailed"));
       } else {
-        pushToast("Failed to toggle automation.");
+        pushToast(t("automation.toast.toggleFailed"));
       }
     }
   };
@@ -285,161 +283,21 @@ export default function AgentsPage() {
       setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
       const runtime = await automationService.runtimeStatus();
       setRuntimeStatus(mapRuntime(runtime));
-      pushToast(`Automation ${type} config saved.`);
+      pushToast(t("automation.toast.configSaved", { module: t(`automation.module.${type}.name`) }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        pushToast(error.response?.data?.message || "Failed to save automation config.");
+        pushToast(error.response?.data?.message || t("automation.toast.configFailed"));
       } else {
-        pushToast("Failed to save automation config.");
+        pushToast(t("automation.toast.configFailed"));
       }
       throw error;
-    }
-  };
-
-  const approveDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.approveDMTask(id);
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task approved.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to approve DM task." : "Failed to approve DM task.");
-    }
-  };
-
-  const blockDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.blockDMTask(id, "Blocked from Auto DM review queue.");
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task blocked.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to block DM task." : "Failed to block DM task.");
-    }
-  };
-
-  const retryDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.retryDMTask(id);
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task queued for retry.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to retry DM task." : "Failed to retry DM task.");
-    }
-  };
-
-  const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const rule = await automationService.setDMRecipientRule(id, status, `Marked ${status} from Auto DM queue.`);
-      setDMRecipients((items) => [rule, ...items.filter((item) => item.id !== rule.id)]);
-      if (status === "blocked" || status === "unsubscribed") {
-        const dmTaskData = await automationService.dmTasks();
-        setDMTasks(dmTaskData.items);
-      }
-      pushToast(`Auto DM recipient marked ${status}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
-    }
-  };
-
-  const updateDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const rule = await automationService.updateDMRecipientRule(id, status, `Marked ${status} from Auto DM recipient manager.`);
-      setDMRecipients((items) => items.map((item) => (item.id === id ? rule : item)));
-      pushToast(`Auto DM recipient marked ${status}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
-    }
-  };
-
-  const bulkUpdateDMRecipientRules = async (ids: number[], status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const data = await automationService.bulkUpdateDMRecipientRules(ids, status, `Marked ${status} from Auto DM recipient manager bulk action.`);
-      setDMRecipients((items) =>
-        items.map((item) => data.items.find((next) => next.id === item.id) ?? item)
-      );
-      pushToast(`Updated ${data.updated} Auto DM recipients.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to bulk update recipient rules." : "Failed to bulk update recipient rules.");
-    }
-  };
-
-  const importDMRecipients = async () => {
-    try {
-      const data = await automationService.importDMRecipients(dmImportCSV);
-      setDMRecipients((items) => [...data.items, ...items.filter((item) => !data.items.some((next) => next.id === item.id))]);
-      if (data.batch) {
-        setDMImports((items) => [data.batch!, ...items.filter((item) => item.id !== data.batch!.id)]);
-      }
-      setDMImportCSV("");
-      pushToast(`Imported ${data.imported} Auto DM recipients. Skipped ${data.skipped}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to import recipients." : "Failed to import recipients.");
-    }
-  };
-
-  const addCommentTarget = async () => {
-    try {
-      const created = await automationService.createCommentTarget(commentTargetInput);
-      setCommentTargets((items) => [created, ...items.filter((item) => item.id !== created.id)]);
-      setCommentTargetInput("");
-      pushToast("Auto Comment target added.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to add target." : "Failed to add target.");
-    }
-  };
-
-  const updateCommentTargetStatus = async (id: number, status: AutoCommentTargetApi["status"]) => {
-    try {
-      const updated = await automationService.updateCommentTargetStatus(id, status);
-      setCommentTargets((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto Comment target updated.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update target." : "Failed to update target.");
-    }
-  };
-
-  const deleteCommentTarget = async (id: number) => {
-    try {
-      await automationService.deleteCommentTarget(id);
-      setCommentTargets((items) => items.filter((item) => item.id !== id));
-      pushToast("Auto Comment target deleted.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to delete target." : "Failed to delete target.");
-    }
-  };
-
-  const approveCommentTask = async (id: number) => {
-    try {
-      const updated = await automationService.approveCommentTask(id);
-      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto Comment task approved.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to approve comment." : "Failed to approve comment.");
-    }
-  };
-
-  const blockCommentTask = async (id: number) => {
-    try {
-      const updated = await automationService.blockCommentTask(id, "Blocked from Auto Comment review queue.");
-      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto Comment task blocked.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to block comment." : "Failed to block comment.");
-    }
-  };
-
-  const retryCommentTask = async (id: number) => {
-    try {
-      const updated = await automationService.retryCommentTask(id);
-      setCommentTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast(t("automation.comment.retrySuccess"));
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("automation.comment.retryFailed") : t("automation.comment.retryFailed"));
     }
   };
 
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
+      <AutomationTabs />
 
       {loadState === "loading" ? (
         <Card>
@@ -463,7 +321,13 @@ export default function AgentsPage() {
         activityObserved={accountCount > 0 && activityCount > 0}
       />
 
-      <AutomationEntryGrid />
+      <AutomationEntryGrid
+        commentTargetCount={commentTargets.length}
+        commentTaskCount={commentTasks.length}
+        dmTaskCount={dmTasks.length}
+        dmRecipientCount={dmRecipients.length}
+        dmImportCount={dmImports.length}
+      />
 
       <div id="automation-modules" className="grid gap-4 xl:grid-cols-2">
         {modules.map((module) => (
@@ -472,34 +336,6 @@ export default function AgentsPage() {
       </div>
 
       <AutomationStatusPanel status={runtimeStatus} />
-
-      <AutoDMReviewPanel
-        tasks={dmTasks}
-        recipients={dmRecipients}
-        imports={dmImports}
-        onApprove={approveDMTask}
-        onBlock={blockDMTask}
-        onRetry={retryDMTask}
-        onRule={setDMRecipientRule}
-        onUpdateRule={updateDMRecipientRule}
-        onBulkRule={bulkUpdateDMRecipientRules}
-        importCSV={dmImportCSV}
-        onImportCSVChange={setDMImportCSV}
-        onImport={importDMRecipients}
-      />
-
-      <AutoCommentPanel
-        targets={commentTargets}
-        tasks={commentTasks}
-        targetInput={commentTargetInput}
-        onTargetInputChange={setCommentTargetInput}
-        onAddTarget={addCommentTarget}
-        onTargetStatus={updateCommentTargetStatus}
-        onDeleteTarget={deleteCommentTarget}
-        onApproveTask={approveCommentTask}
-        onBlockTask={blockCommentTask}
-        onRetryTask={retryCommentTask}
-      />
 
       <AutomationEditDialog
         module={editing}
@@ -511,7 +347,51 @@ export default function AgentsPage() {
   );
 }
 
-function AutomationEntryGrid() {
+function AutomationTabs() {
+  const { t } = useT();
+  const tabs = [
+    { href: "/automations", label: t("automation.tabs.overview"), icon: ListChecks },
+    { href: "/posts/create", label: t("automation.tabs.autoPost"), icon: FileText },
+    { href: "/auto-replies", label: t("automation.tabs.autoReply"), icon: MessageCircle },
+    { href: "/auto-comments", label: t("automation.tabs.autoComment"), icon: MessagesSquare },
+    { href: "/auto-dms", label: t("automation.tabs.autoDm"), icon: Mail },
+    { href: "/execution-queue", label: t("automation.tabs.executionQueue"), icon: ShieldCheck },
+  ];
+  return (
+    <div className="-mx-1 overflow-x-auto px-1 pb-1">
+      <div className="flex min-w-max gap-2">
+        {tabs.map((tab, index) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+              index === 0
+                ? "border-blue-300/30 bg-blue-500/15 text-white"
+                : "border-white/10 bg-white/[0.035] text-white/65 hover:border-blue-300/20 hover:text-white"
+            }`}
+          >
+            <tab.icon className="size-4" />
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AutomationEntryGrid({
+  commentTargetCount,
+  commentTaskCount,
+  dmTaskCount,
+  dmRecipientCount,
+  dmImportCount,
+}: {
+  commentTargetCount: number;
+  commentTaskCount: number;
+  dmTaskCount: number;
+  dmRecipientCount: number;
+  dmImportCount: number;
+}) {
   const { t } = useT();
   const entries = [
     {
@@ -520,6 +400,7 @@ function AutomationEntryGrid() {
       href: "/posts/create",
       cta: t("automation.entry.autoPost.cta"),
       icon: FileText,
+      stats: t("automation.entry.autoPost.stats"),
     },
     {
       title: t("automation.entry.autoReply.title"),
@@ -527,6 +408,7 @@ function AutomationEntryGrid() {
       href: "/auto-replies",
       cta: t("automation.entry.autoReply.cta"),
       icon: MessageCircle,
+      stats: t("automation.entry.autoReply.stats"),
     },
     {
       title: t("automation.entry.autoComment.title"),
@@ -534,13 +416,15 @@ function AutomationEntryGrid() {
       href: "/auto-comments",
       cta: t("automation.entry.autoComment.cta"),
       icon: MessagesSquare,
+      stats: t("automation.entry.autoComment.stats", { targets: commentTargetCount, tasks: commentTaskCount }),
     },
     {
       title: t("automation.entry.autoDm.title"),
       description: t("automation.entry.autoDm.description"),
-      href: "#auto-dm-review",
+      href: "/auto-dms",
       cta: t("automation.entry.autoDm.cta"),
       icon: Mail,
+      stats: t("automation.entry.autoDm.stats", { tasks: dmTaskCount, rules: dmRecipientCount, imports: dmImportCount }),
     },
   ];
 
@@ -572,6 +456,7 @@ function AutomationEntryGrid() {
               <h4 className="font-semibold text-white">{entry.title}</h4>
             </div>
             <p className="mt-3 min-h-12 text-sm leading-relaxed text-white/55">{entry.description}</p>
+            <p className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/50">{entry.stats}</p>
             <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-100 transition group-hover:text-white">
               {entry.cta}
               <ArrowRight className="size-4" />
@@ -583,6 +468,8 @@ function AutomationEntryGrid() {
   );
 }
 
+// Kept as a legacy reference while Auto DM moves to /auto-dms.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AutoDMReviewPanel({
   tasks,
   recipients,
@@ -853,6 +740,8 @@ function AutoDMReviewPanel({
   );
 }
 
+// Kept as a legacy reference while Auto Comment moves to /auto-comments.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AutoCommentPanel({
   targets,
   tasks,

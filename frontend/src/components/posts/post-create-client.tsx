@@ -27,10 +27,15 @@ function localDatetimeToISO(local: string): string | undefined {
   return d.toISOString();
 }
 
-export function PostCreateClient() {
+type PostCreateClientProps = {
+  source?: "auto_post";
+};
+
+export function PostCreateClient({ source }: PostCreateClientProps) {
   const { t } = useT();
   const router = useRouter();
   const { pushToast } = useToast();
+  const isAutoPostSource = source === "auto_post";
   const [accounts, setAccounts] = useState<{ id: number; username: string; status: string }[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [loadAccounts, setLoadAccounts] = useState<"loading" | "ready" | "error">("loading");
@@ -147,13 +152,25 @@ export function PostCreateClient() {
     <div className="space-y-4 md:space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-title">{t("posts.create.title")}</h2>
-          <p className="text-subtitle mt-2">{t("posts.create.subtitle")}</p>
+          <h2 className="text-title">{t(isAutoPostSource ? "posts.create.autoPostTitle" : "posts.create.title")}</h2>
+          <p className="text-subtitle mt-2">{t(isAutoPostSource ? "posts.create.autoPostSubtitle" : "posts.create.subtitle")}</p>
         </div>
         <Link href="/posts" className={cn(buttonVariants({ variant: "outline" }))}>
           {t("posts.detail.back")}
         </Link>
       </div>
+
+      {isAutoPostSource ? (
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
+          <div className="flex items-start gap-3">
+            <CalendarClock className="mt-0.5 size-5 shrink-0 text-cyan-100" />
+            <div>
+              <p className="text-sm font-semibold text-white">{t("posts.create.autoPostContextTitle")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-cyan-50/72">{t("posts.create.autoPostContextDescription")}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {loadAccounts === "loading" ? (
         <Card>

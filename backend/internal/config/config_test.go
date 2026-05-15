@@ -41,3 +41,48 @@ func TestConfigFilePath(t *testing.T) {
 		t.Fatalf("admin path = %q", got)
 	}
 }
+
+func TestApplyJWTConfigRequiresStableSecretOutsideLocal(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("JWT_ACCESS_EXPIRE_SECONDS", "")
+	t.Setenv("JWT_REFRESH_EXPIRE_SECONDS", "")
+
+	if err := applyJWTConfig("test", &JWTConfig{}); err == nil {
+		t.Fatal("expected missing jwt secret to fail for test environment")
+	}
+}
+
+func TestApplyJWTConfigAllowsLocalFallback(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("JWT_ACCESS_EXPIRE_SECONDS", "")
+	t.Setenv("JWT_REFRESH_EXPIRE_SECONDS", "")
+
+	var cfg JWTConfig
+	if err := applyJWTConfig("local", &cfg); err != nil {
+		t.Fatalf("expected local jwt fallback, got error: %v", err)
+	}
+	if cfg.Secret == "" {
+		t.Fatal("expected local fallback secret")
+	}
+	if cfg.RefreshExpireSeconds < cfg.AccessExpireSeconds {
+		t.Fatal("expected refresh expiry to be >= access expiry")
+	}
+}
+
+func TestApplyJWTConfigUsesFixedSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("JWT_ACCESS_EXPIRE_SECONDS", "")
+	t.Setenv("JWT_REFRESH_EXPIRE_SECONDS", "")
+
+	cfg := JWTConfig{
+		Secret:               "stable-test-secret",
+		AccessExpireSeconds:  60,
+		RefreshExpireSeconds: 120,
+	}
+	if err := applyJWTConfig("test", &cfg); err != nil {
+		t.Fatalf("expected fixed test secret to pass, got error: %v", err)
+	}
+	if cfg.Secret != "stable-test-secret" {
+		t.Fatalf("unexpected secret %q", cfg.Secret)
+	}
+}

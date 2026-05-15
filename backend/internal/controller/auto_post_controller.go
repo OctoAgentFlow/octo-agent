@@ -227,6 +227,25 @@ func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	data, err := ctl.autoPostService.PreparePublish(userID, draftID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutoPostController) RejectDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

@@ -137,6 +137,10 @@ export const autoPostService = {
     const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/approve`);
     return res.data.data;
   },
+  async preparePublish(id: number) {
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/prepare-publish`);
+    return res.data.data;
+  },
   async rejectDraft(id: number, reason: string) {
     const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/reject`, { reason });
     return res.data.data;

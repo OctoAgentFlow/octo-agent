@@ -157,7 +157,7 @@ export default function ExecutionQueuePage() {
           ? await automationService.approveReplyDraft(item.source_id)
           : await autoPostService.approveDraft(item.source_id);
       updateLocalItem(item, { status: updated.status === "review" ? "pending_review" : (updated.status as ReviewQueueItemApi["status"]) });
-      pushToast(t("executionQueue.toast.approved"));
+      pushToast(t(item.type === "post" ? "executionQueue.toast.postPublishJobCreated" : "executionQueue.toast.approved"));
       void loadQueue();
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.approve") : t("executionQueue.errors.approve"));
@@ -194,6 +194,20 @@ export default function ExecutionQueuePage() {
       void loadQueue();
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.retry") : t("executionQueue.errors.retry"));
+    } finally {
+      setBusyID(null);
+    }
+  };
+
+  const preparePostPublish = async (item: ReviewQueueItemApi) => {
+    if (item.type !== "post") return;
+    setBusyID(item.id);
+    try {
+      await autoPostService.preparePublish(item.source_id);
+      pushToast(t("executionQueue.toast.postPublishJobCreated"));
+      void loadQueue();
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.preparePublish") : t("executionQueue.errors.preparePublish"));
     } finally {
       setBusyID(null);
     }
@@ -402,6 +416,12 @@ export default function ExecutionQueuePage() {
                             <Button size="sm" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
                               <Send className="size-4" />
                               {t("executionQueue.actions.retryPublish")}
+                            </Button>
+                          ) : null}
+                          {item.type === "post" && !item.publish_job_id && (item.status === "ready_to_publish" || item.status === "approved") ? (
+                            <Button size="sm" disabled={busyID === item.id} onClick={() => void preparePostPublish(item)}>
+                              <Send className="size-4" />
+                              {t("executionQueue.actions.preparePublish")}
                             </Button>
                           ) : null}
                           {(item.status === "ready_to_publish" || item.status === "failed") && item.publish_job_id ? (

@@ -1703,13 +1703,13 @@ function SamplePanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         {sceneItems.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => onSceneChange(item.id)}
-            className={`rounded-2xl border p-4 text-left transition ${
+            className={`min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition ${
               scene === item.id ? "border-cyan-300/35 bg-cyan-400/12 text-white" : "border-white/10 bg-white/[0.035] text-white/60 hover:bg-white/[0.07]"
             }`}
           >
@@ -1718,8 +1718,8 @@ function SamplePanel({
                 {item.icon}
               </span>
               <div className="min-w-0">
-                <p className="whitespace-nowrap text-sm font-medium">{item.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/45">{item.description}</p>
+                <p className="truncate whitespace-nowrap text-sm font-medium">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/45 [overflow-wrap:anywhere]">{item.description}</p>
               </div>
             </div>
           </button>
@@ -1746,8 +1746,8 @@ function SamplePanel({
       </div>
 
       {samples ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4">
+          <div className="grid min-w-0 grid-cols-1 gap-3">
             {sceneItems.map((item) => (
               <SampleCard
                 key={item.id}
@@ -1798,25 +1798,25 @@ function SampleCard({
   };
 
   return (
-    <div className={`flex min-h-[260px] flex-col rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
+    <div className={`flex min-h-[260px] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate whitespace-nowrap text-sm font-semibold text-white">{title}</p>
           <p className="mt-1 text-xs text-white/40">{t("oafBots.samples.characters", { count: content.length })}</p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/45">
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/45">
           {highlight ? t("oafBots.samples.selected") : t("oafBots.samples.generated")}
         </span>
       </div>
-      <div className="mt-4 flex-1 rounded-xl border border-white/10 bg-black/20 p-4">
-        <p className="whitespace-pre-wrap break-words text-sm leading-7 text-white/82">{visibleText || t("oafBots.samples.empty")}</p>
+      <div className="mt-4 max-w-full flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/20 p-4">
+        <p className="max-h-[280px] whitespace-pre-wrap break-words text-sm leading-7 text-white/82 [overflow-wrap:anywhere] overflow-y-auto">{visibleText || t("oafBots.samples.empty")}</p>
         {isLong ? (
           <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-3 text-xs font-medium text-cyan-100 hover:text-white">
             {expanded ? t("oafBots.samples.collapse") : t("oafBots.samples.expand")}
           </button>
         ) : null}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex min-w-0 flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" onClick={copy}>
           <Copy className="size-4" />
           {copied ? t("oafBots.samples.copied") : t("oafBots.samples.copy")}
@@ -1836,16 +1836,16 @@ function SampleCard({
 
 function PersonaBasisCard({ title, rows, empty }: { title: string; rows: Array<{ label: string; value: string }>; empty: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-4">
       <p className="text-sm font-semibold text-white">{title}</p>
       {rows.length === 0 ? (
         <p className="mt-3 text-sm leading-relaxed text-white/50">{empty}</p>
       ) : (
         <div className="mt-4 space-y-3">
           {rows.map((row) => (
-            <div key={row.label} className="rounded-xl border border-white/10 bg-black/15 p-3">
+            <div key={row.label} className="min-w-0 rounded-xl border border-white/10 bg-black/15 p-3">
               <p className="text-xs text-white/40">{row.label}</p>
-              <p className="mt-1 text-sm leading-relaxed text-white/75">{row.value}</p>
+              <p className="mt-1 break-words text-sm leading-relaxed text-white/75 [overflow-wrap:anywhere]">{row.value}</p>
             </div>
           ))}
         </div>

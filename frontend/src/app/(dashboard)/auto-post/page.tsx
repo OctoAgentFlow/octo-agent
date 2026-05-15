@@ -10,7 +10,13 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
-import { autoPostService, type AutoPostDraftApi, type AutoPostExecutionMode, type AutoPostPlanApi } from "@/services/auto-post.service";
+import {
+  autoPostService,
+  type AutoPostDraftApi,
+  type AutoPostExecutionMode,
+  type AutoPostGenerationRunApi,
+  type AutoPostPlanApi,
+} from "@/services/auto-post.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import {
   contentLibraryService,
@@ -89,6 +95,13 @@ function statusTone(status: string) {
   return "border-white/10 bg-white/[0.05] text-white/65";
 }
 
+function runTone(status: string) {
+  if (status === "completed") return "border-emerald-300/25 bg-emerald-500/10 text-emerald-100";
+  if (status === "skipped") return "border-amber-300/25 bg-amber-500/10 text-amber-100";
+  if (status === "failed") return "border-rose-300/25 bg-rose-500/10 text-rose-100";
+  return "border-white/10 bg-white/[0.05] text-white/65";
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -97,6 +110,7 @@ export default function AutoPostPage() {
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [plans, setPlans] = useState<AutoPostPlanApi[]>([]);
   const [drafts, setDrafts] = useState<AutoPostDraftApi[]>([]);
+  const [runs, setRuns] = useState<AutoPostGenerationRunApi[]>([]);
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
@@ -113,11 +127,12 @@ export default function AutoPostPage() {
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [accountData, botData, planData, draftData, libraryData, subscriptionData] = await Promise.all([
+      const [accountData, botData, planData, draftData, runData, libraryData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
         autoPostService.plans(),
         autoPostService.drafts(),
+        autoPostService.runs(),
         contentLibraryService.list({ limit: 100 }),
         billingService.subscription(),
       ]);
@@ -126,6 +141,7 @@ export default function AutoPostPage() {
       setBots(botData.items);
       setPlans(planData.items);
       setDrafts(draftData.items);
+      setRuns(runData.items);
       setContentItems(libraryData.items);
       setSubscription(subscriptionData);
       const firstAccountID = selectedAccountID || connected[0]?.id || 0;
@@ -161,6 +177,8 @@ export default function AutoPostPage() {
     [availableContentItems, selectedContentItemID]
   );
   const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID).slice(0, 5), [drafts, selectedAccountID]);
+  const accountRuns = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID).slice(0, 5), [runs, selectedAccountID]);
+  const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
   const aiLimit = subscription?.limits.ai_generations_monthly || 0;
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
@@ -429,14 +447,25 @@ export default function AutoPostPage() {
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${form.executionMode}`)} />
                 <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDate(selectedPlan.last_run_at) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDate(selectedPlan.next_run_at) : t("autoPost.common.emptyValue")} />
               </div>
             </Card>
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-            <Card>
-              <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
-              <div className="space-y-4">
+              <Card>
+                <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
+                <div className="space-y-4">
+                {form.enabled && activeContentCount === 0 ? (
+                  <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85">
+                    {t("autoPost.scheduler.noActiveContentHint")}
+                  </div>
+                ) : null}
+                {aiRemaining <= 0 ? (
+                  <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 p-3 text-sm leading-6 text-rose-50/85">
+                    {t("autoPost.scheduler.aiQuotaHint")}
+                  </div>
+                ) : null}
                 <label className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.035] p-4">
                   <span>
                     <span className="block text-sm font-medium text-white">{t("autoPost.fields.enabled")}</span>
@@ -763,6 +792,39 @@ export default function AutoPostPage() {
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-white/85">{draft.generated_content}</p>
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              <Card>
+                <CardHeader title={t("autoPost.runs.title")} description={t("autoPost.runs.description")} />
+                {accountRuns.length === 0 ? (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/55">
+                    {t("autoPost.runs.empty")}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {accountRuns.map((run) => (
+                      <div key={run.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full border px-2.5 py-1 text-xs ${runTone(run.status)}`}>
+                            {t(`autoPost.runs.status.${run.status}`)}
+                          </span>
+                          {run.content_title ? (
+                            <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-100">
+                              {run.content_title}
+                            </span>
+                          ) : null}
+                          <span className="text-xs text-white/40">{formatDate(run.created_at)}</span>
+                        </div>
+                        {run.skip_reason ? (
+                          <p className="mt-2 text-sm leading-6 text-white/60">
+                            {t(`autoPost.runs.skipReason.${run.skip_reason}`)}
+                          </p>
+                        ) : null}
+                        {run.error_message ? <p className="mt-2 break-words text-xs text-rose-100">{run.error_message}</p> : null}
                       </div>
                     ))}
                   </div>

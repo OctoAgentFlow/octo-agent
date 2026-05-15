@@ -137,6 +137,7 @@ type AutoPostPlanItem struct {
 	Timezone           string `json:"timezone"`
 	LastRunAt          string `json:"last_run_at,omitempty"`
 	NextRunAt          string `json:"next_run_at,omitempty"`
+	ProcessingAt       string `json:"processing_at,omitempty"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
 }
@@ -174,6 +175,27 @@ type AutoPostPlansResponse struct {
 
 type AutoPostDraftsResponse struct {
 	Items []AutoPostDraftItem `json:"items"`
+}
+
+type AutoPostGenerationRunItem struct {
+	ID               uint   `json:"id"`
+	UserID           uint   `json:"user_id"`
+	PlanID           uint   `json:"plan_id"`
+	XAccountID       uint   `json:"x_account_id"`
+	AccountHandle    string `json:"account_handle,omitempty"`
+	BotID            uint   `json:"bot_id"`
+	BotName          string `json:"bot_name,omitempty"`
+	ContentLibraryID uint   `json:"content_library_item_id,omitempty"`
+	ContentTitle     string `json:"content_title,omitempty"`
+	Status           string `json:"status"`
+	SkipReason       string `json:"skip_reason,omitempty"`
+	GeneratedDraftID uint   `json:"generated_draft_id,omitempty"`
+	ErrorMessage     string `json:"error_message,omitempty"`
+	CreatedAt        string `json:"created_at"`
+}
+
+type AutoPostGenerationRunsResponse struct {
+	Items []AutoPostGenerationRunItem `json:"items"`
 }
 
 type AutoDMTaskItem struct {

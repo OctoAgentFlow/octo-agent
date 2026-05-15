@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/repository"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +28,7 @@ type AutoPostService struct {
 	accountRepo  *repository.TwitterAccountRepository
 	planRepo     *repository.AutoPostPlanRepository
 	draftRepo    *repository.AutoPostDraftRepository
+	runRepo      *repository.AutoPostGenerationRunRepository
 	contentRepo  *repository.ContentLibraryRepository
 	activityRepo *repository.ActivityRepository
 	userRepo     *repository.UserRepository
@@ -34,11 +37,12 @@ type AutoPostService struct {
 	ai           *AIService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:  accountRepo,
 		planRepo:     planRepo,
 		draftRepo:    draftRepo,
+		runRepo:      runRepo,
 		contentRepo:  contentRepo,
 		activityRepo: activityRepo,
 		userRepo:     userRepo,
@@ -131,6 +135,21 @@ func (s *AutoPostService) ListDrafts(userID uint) (*dto.AutoPostDraftsResponse, 
 		items = append(items, s.toDraftItem(row))
 	}
 	return &dto.AutoPostDraftsResponse{Items: items}, nil
+}
+
+func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResponse, error) {
+	if s.runRepo == nil {
+		return &dto.AutoPostGenerationRunsResponse{Items: []dto.AutoPostGenerationRunItem{}}, nil
+	}
+	rows, err := s.runRepo.ListByUser(userID, 50)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AutoPostGenerationRunItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, s.toRunItem(row))
+	}
+	return &dto.AutoPostGenerationRunsResponse{Items: items}, nil
 }
 
 func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint, req dto.AutoPostGenerateRequest) (*dto.AutoPostDraftItem, error) {
@@ -241,6 +260,134 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	}
 	item := s.toDraftItem(*draft)
 	return &item, nil
+}
+
+func (s *AutoPostService) RunTick(ctx context.Context) {
+	if s == nil || s.planRepo == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now().UTC()
+	plans, err := s.planRepo.ListDueEnabled(20, now)
+	if err != nil {
+		zap.L().Warn("auto post scheduler: list due plans failed", zap.Error(err))
+		return
+	}
+	staleBefore := now.Add(-10 * time.Minute)
+	for _, plan := range plans {
+		claimed, err := s.planRepo.TryClaimDue(plan.ID, now, staleBefore)
+		if err != nil {
+			zap.L().Warn("auto post scheduler: claim failed", zap.Uint("plan_id", plan.ID), zap.Error(err))
+			continue
+		}
+		if !claimed {
+			continue
+		}
+		if err := s.runSchedulerPlan(ctx, plan.ID); err != nil {
+			zap.L().Warn("auto post scheduler: plan tick failed", zap.Uint("plan_id", plan.ID), zap.Error(err))
+		}
+	}
+}
+
+func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) error {
+	now := time.Now().UTC()
+	plan, err := s.planRepo.GetByID(planID)
+	if err != nil {
+		return err
+	}
+	next := s.nextAutoPostRun(*plan, now)
+	finish := func(lastRun *time.Time) error {
+		return s.planRepo.FinishScheduler(plan.ID, lastRun, next)
+	}
+	recordSkip := func(reason string) error {
+		run := s.newAutoPostRun(*plan, "skipped", reason, 0, 0, "")
+		_ = s.createSchedulerActivity(*plan, "failed", "activity.preview.autoPostSchedulerSkipped", reason)
+		if s.runRepo != nil {
+			if err := s.runRepo.Create(run); err != nil {
+				_ = finish(nil)
+				return err
+			}
+		}
+		return finish(nil)
+	}
+	recordFailure := func(reason string, err error) error {
+		msg := reason
+		if err != nil {
+			msg = err.Error()
+		}
+		run := s.newAutoPostRun(*plan, "failed", reason, 0, 0, msg)
+		_ = s.createSchedulerActivity(*plan, "failed", "activity.preview.autoPostSchedulerFailed", msg)
+		if s.runRepo != nil {
+			if createErr := s.runRepo.Create(run); createErr != nil {
+				_ = finish(nil)
+				return createErr
+			}
+		}
+		return finish(nil)
+	}
+
+	if !s.isWithinAutoPostWindow(*plan, now) {
+		next = s.nextAutoPostRun(*plan, now)
+		return recordSkip("outside_posting_window")
+	}
+	if plan.LastRunAt != nil && plan.MinIntervalMinutes > 0 && now.Sub(*plan.LastRunAt) < time.Duration(plan.MinIntervalMinutes)*time.Minute {
+		next = s.nextAutoPostRun(*plan, *plan.LastRunAt)
+		return recordSkip("min_interval_active")
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(plan.UserID, plan.XAccountID)
+	if err != nil {
+		return recordSkip("x_account_not_connected")
+	}
+	user, err := s.userRepo.GetByID(plan.UserID)
+	if err != nil {
+		return recordFailure("user_load_failed", err)
+	}
+	if err := subscription.AssertUserMayProduceContent(user, now); err != nil {
+		return recordSkip("subscription_inactive")
+	}
+	bot, err := s.botForAccount(plan.UserID, plan.XAccountID)
+	if err != nil {
+		return recordFailure("bot_load_failed", err)
+	}
+	botID := botIDForUsage(bot)
+	contentItem, err := s.contentRepo.PickActiveForAutoPost(plan.UserID, plan.XAccountID, botID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return recordSkip("no_active_content_source")
+		}
+		return recordFailure("content_source_load_failed", err)
+	}
+	draft, err := s.GenerateDraft(ctx, plan.UserID, plan.ID, dto.AutoPostGenerateRequest{ContentLibraryItemID: contentItem.ID})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAIGenerationQuotaExceeded):
+			return recordSkip("ai_generation_quota_exceeded")
+		case errors.Is(err, ErrAutoPostDailyLimitExceeded):
+			return recordSkip("daily_auto_post_limit_exceeded")
+		case errors.Is(err, ErrAutoPostDuplicateContent):
+			return recordSkip("duplicate_content")
+		default:
+			return recordFailure("generation_failed", err)
+		}
+	}
+	run := s.newAutoPostRun(*plan, "completed", "", contentItem.ID, draft.ID, "")
+	run.BotID = draft.BotID
+	if s.runRepo != nil {
+		if err := s.runRepo.Create(run); err != nil {
+			_ = finish(&now)
+			return err
+		}
+	}
+	zap.L().Info("auto post scheduler: draft generated",
+		zap.Uint("user_id", plan.UserID),
+		zap.Uint("plan_id", plan.ID),
+		zap.Uint("x_account_id", acc.ID),
+		zap.Uint("draft_id", draft.ID),
+		zap.Uint("content_library_item_id", contentItem.ID))
+	last := now
+	return finish(&last)
 }
 
 func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.AutoPostDraftItem, error) {
@@ -435,6 +582,74 @@ func (s *AutoPostService) createGeneratedActivity(draft *model.AutoPostDraft, ac
 	return s.draftRepo.Save(draft)
 }
 
+func (s *AutoPostService) createSchedulerActivity(plan model.AutoPostPlan, status string, previewKey string, errMsg string) error {
+	if s.activityRepo == nil {
+		return nil
+	}
+	handle := ""
+	if s.accountRepo != nil && plan.XAccountID != 0 {
+		if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(plan.UserID, plan.XAccountID); err == nil {
+			handle = formatXAccountHandle(acc.Username)
+		}
+	}
+	log := &model.ActivityLog{
+		UserID:        plan.UserID,
+		XAccountID:    plan.XAccountID,
+		Type:          "post",
+		Status:        status,
+		PreviewKey:    previewKey,
+		AccountHandle: handle,
+		ExecutedAt:    time.Now().UTC(),
+		ErrorMessage:  truncateErrMsg(errMsg),
+	}
+	return s.activityRepo.DB.Create(log).Error
+}
+
+func (s *AutoPostService) newAutoPostRun(plan model.AutoPostPlan, status string, skipReason string, contentID uint, draftID uint, errMsg string) *model.AutoPostGenerationRun {
+	return &model.AutoPostGenerationRun{
+		UserID:           plan.UserID,
+		PlanID:           plan.ID,
+		XAccountID:       plan.XAccountID,
+		BotID:            plan.BotID,
+		ContentLibraryID: contentID,
+		Status:           status,
+		SkipReason:       truncateRunes(skipReason, 128),
+		GeneratedDraftID: draftID,
+		ErrorMessage:     truncateErrMsg(errMsg),
+	}
+}
+
+func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPostGenerationRunItem {
+	accountHandle := ""
+	if s.accountRepo != nil && row.XAccountID != 0 {
+		if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(row.UserID, row.XAccountID); err == nil {
+			accountHandle = formatXAccountHandle(acc.Username)
+		}
+	}
+	botName := ""
+	if s.oafBotRepo != nil && row.BotID != 0 {
+		if bot, err := s.oafBotRepo.GetByUserAndID(row.UserID, row.BotID); err == nil {
+			botName = bot.Name
+		}
+	}
+	return dto.AutoPostGenerationRunItem{
+		ID:               row.ID,
+		UserID:           row.UserID,
+		PlanID:           row.PlanID,
+		XAccountID:       row.XAccountID,
+		AccountHandle:    accountHandle,
+		BotID:            row.BotID,
+		BotName:          botName,
+		ContentLibraryID: row.ContentLibraryID,
+		ContentTitle:     s.contentTitle(row.UserID, row.ContentLibraryID),
+		Status:           row.Status,
+		SkipReason:       row.SkipReason,
+		GeneratedDraftID: row.GeneratedDraftID,
+		ErrorMessage:     row.ErrorMessage,
+		CreatedAt:        row.CreatedAt.UTC().Format(timeRFC3339),
+	}
+}
+
 func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanItem {
 	accountHandle := ""
 	if s.accountRepo != nil && row.XAccountID != 0 {
@@ -463,6 +678,7 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		Timezone:           row.Timezone,
 		LastRunAt:          formatOptionalTime(row.LastRunAt),
 		NextRunAt:          formatOptionalTime(row.NextRunAt),
+		ProcessingAt:       formatOptionalTime(row.ProcessingAt),
 		CreatedAt:          row.CreatedAt.UTC().Format(timeRFC3339),
 		UpdatedAt:          row.UpdatedAt.UTC().Format(timeRFC3339),
 	}
@@ -540,6 +756,15 @@ func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequ
 	if plan.Timezone == "" {
 		plan.Timezone = "UTC"
 	}
+	if plan.Enabled && plan.NextRunAt == nil {
+		now := time.Now().UTC()
+		next := computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
+		plan.NextRunAt = &next
+	}
+	if !plan.Enabled {
+		plan.NextRunAt = nil
+		plan.ProcessingAt = nil
+	}
 }
 
 func formatOptionalTime(t *time.Time) string {
@@ -547,4 +772,119 @@ func formatOptionalTime(t *time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(timeRFC3339)
+}
+
+type autoPostTimeWindow struct {
+	start int
+	end   int
+}
+
+func (s *AutoPostService) isWithinAutoPostWindow(plan model.AutoPostPlan, now time.Time) bool {
+	windows := parseAutoPostWindows(plan.PostingWindows)
+	if len(windows) == 0 {
+		return true
+	}
+	loc := autoPostLocation(plan.Timezone)
+	local := now.In(loc)
+	minute := local.Hour()*60 + local.Minute()
+	for _, window := range windows {
+		if window.start <= window.end {
+			if minute >= window.start && minute <= window.end {
+				return true
+			}
+			continue
+		}
+		if minute >= window.start || minute <= window.end {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *AutoPostService) nextAutoPostRun(plan model.AutoPostPlan, now time.Time) time.Time {
+	return computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
+}
+
+func computeAutoPostNextRun(minInterval int, postingWindows string, timezone string, from time.Time) time.Time {
+	if minInterval <= 0 {
+		minInterval = 120
+	}
+	candidate := from.UTC().Add(time.Duration(minInterval) * time.Minute)
+	windows := parseAutoPostWindows(postingWindows)
+	if len(windows) == 0 {
+		return candidate
+	}
+	loc := autoPostLocation(timezone)
+	local := candidate.In(loc)
+	localMinute := local.Hour()*60 + local.Minute()
+	for _, window := range windows {
+		if windowContainsMinute(window, localMinute) {
+			return candidate
+		}
+	}
+	for day := 0; day <= 7; day++ {
+		base := time.Date(local.Year(), local.Month(), local.Day()+day, 0, 0, 0, 0, loc)
+		for _, window := range windows {
+			nextLocal := base.Add(time.Duration(window.start) * time.Minute)
+			if nextLocal.After(local) || nextLocal.Equal(local) {
+				return nextLocal.UTC()
+			}
+		}
+	}
+	return candidate
+}
+
+func parseAutoPostWindows(value string) []autoPostTimeWindow {
+	value = strings.ReplaceAll(value, "，", ",")
+	value = strings.ReplaceAll(value, ";", ",")
+	parts := strings.Split(value, ",")
+	windows := make([]autoPostTimeWindow, 0, len(parts))
+	for _, raw := range parts {
+		part := strings.TrimSpace(raw)
+		if part == "" {
+			continue
+		}
+		bounds := strings.Split(part, "-")
+		if len(bounds) != 2 {
+			continue
+		}
+		start, okStart := parseAutoPostClock(bounds[0])
+		end, okEnd := parseAutoPostClock(bounds[1])
+		if !okStart || !okEnd {
+			continue
+		}
+		windows = append(windows, autoPostTimeWindow{start: start, end: end})
+	}
+	return windows
+}
+
+func parseAutoPostClock(value string) (int, bool) {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) != 2 {
+		return 0, false
+	}
+	hour, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, false
+	}
+	minute, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, false
+	}
+	return hour*60 + minute, true
+}
+
+func windowContainsMinute(window autoPostTimeWindow, minute int) bool {
+	if window.start <= window.end {
+		return minute >= window.start && minute <= window.end
+	}
+	return minute >= window.start || minute <= window.end
+}
+
+func autoPostLocation(timezone string) *time.Location {
+	loc, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }

@@ -15,4 +15,5 @@ type AutoPostPlan struct {
 	Timezone           string     `gorm:"size:64;not null;default:UTC;comment:时区" json:"timezone"`
 	LastRunAt          *time.Time `gorm:"comment:最近生成时间" json:"last_run_at,omitempty"`
 	NextRunAt          *time.Time `gorm:"index;comment:下一次生成时间" json:"next_run_at,omitempty"`
+	ProcessingAt       *time.Time `gorm:"index;comment:Scheduler处理中时间，用于并发保护" json:"processing_at,omitempty"`
 }

@@ -31,11 +31,21 @@ export type OAFBotListData = {
   limits: PlanLimits;
 };
 
+export type OAFBotSampleScene = "tweet" | "reply" | "comment" | "dm";
+
 export type OAFBotSamples = {
   tweet: string;
   reply: string;
   comment: string;
   dm: string;
+};
+
+export type OAFBotTestGenerateResult = Partial<OAFBotSamples> & {
+  scene: OAFBotSampleScene;
+  content: string;
+  provider: string;
+  usage_consumed: number;
+  raw_result?: string;
 };
 
 export type OAFBotGenerationUsage = {

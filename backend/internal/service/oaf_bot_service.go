@@ -107,16 +107,21 @@ func (s *OAFBotService) Update(userID, id uint, req dto.OAFBotUpsertRequest) (*d
 	return &item, nil
 }
 
-func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto.OAFBotTestGenerateResponse, error) {
+func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
+	}
+	scene = normalizeOAFBotSampleScene(scene)
+	if scene == "" {
+		return nil, fmt.Errorf("invalid sample scene")
 	}
 	now := time.Now().UTC()
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
 	out, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
+		Scene:            scene,
 		Name:             bot.Name,
 		Occupation:       bot.Occupation,
 		Industry:         bot.Industry,
@@ -140,6 +145,8 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint) (*dto
 	if err := s.usageRepo.Increment(userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, 1); err != nil {
 		return nil, err
 	}
+	out.BotID = bot.ID
+	out.UsageConsumed = 1
 	return out, nil
 }
 
@@ -252,6 +259,18 @@ func normalizeOAFBotLanguageStrategy(value string) string {
 		return v
 	default:
 		return "follow_context"
+	}
+}
+
+func normalizeOAFBotSampleScene(value string) string {
+	v := strings.TrimSpace(value)
+	switch v {
+	case "", "tweet":
+		return "tweet"
+	case "reply", "comment", "dm":
+		return v
+	default:
+		return ""
 	}
 }
 

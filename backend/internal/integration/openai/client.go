@@ -55,6 +55,10 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+func (c *Client) IsConfigured() bool {
+	return c != nil && strings.TrimSpace(c.apiKey) != ""
+}
+
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

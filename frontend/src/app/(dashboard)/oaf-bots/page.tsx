@@ -163,6 +163,8 @@ export default function OAFBotsPage() {
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
   const activeStepIndex = wizardStepOrder.indexOf(activeStep);
   const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
+  const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
+  const canTestBot = personaCompleteness >= 40;
 
   const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
     () => [
@@ -433,15 +435,15 @@ export default function OAFBotsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
-        <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")}>
+      <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
+        <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")} className="border-white/[0.08] bg-white/[0.025] p-4 md:p-5">
           <div className="space-y-2">
             {bots.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
-                <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+                <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
                   <Bot className="size-5" />
                 </div>
-                <p className="text-sm font-medium text-white">{t("oafBots.list.emptyTitle")}</p>
+                <p className="mt-3 text-sm font-medium text-white">{t("oafBots.list.emptyTitle")}</p>
                 <p className="mt-2 text-sm leading-relaxed text-white/55">{t("oafBots.list.emptyDescription")}</p>
                 <div className="mt-4">
                   {accounts.length === 0 ? (
@@ -467,7 +469,7 @@ export default function OAFBotsPage() {
                     key={bot.id}
                     type="button"
                     onClick={() => selectBot(bot)}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
+                    className={`w-full rounded-xl border p-3.5 text-left transition ${
                       selectedID === bot.id ? "border-violet-300/45 bg-violet-500/12" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
                     }`}
                   >
@@ -490,49 +492,53 @@ export default function OAFBotsPage() {
           </div>
         </SectionCard>
 
-        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
           <SectionCard
             title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
             description={t("oafBots.form.description")}
           >
-            <div className="mb-5">
-              <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-white/45">{t("oafBots.wizard.progress", { current: activeStepIndex + 1, total: wizardStepOrder.length })}</p>
-                    <h2 className="mt-1 text-lg font-semibold text-white">{activeStepMeta?.label}</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-white/55">{activeStepMeta?.description}</p>
-                  </div>
-                  <div className="text-right text-xs text-white/45">
-                    <p>{t("oafBots.wizard.goal")}</p>
-                    <p className="mt-1 max-w-xs text-white/70">{t(`oafBots.wizard.goal.${activeStep}`)}</p>
-                  </div>
+            <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-white/45">{t("oafBots.wizard.progress", { current: activeStepIndex + 1, total: wizardStepOrder.length })}</p>
+                  <h2 className="mt-1 text-base font-semibold text-white md:text-lg">{activeStepMeta?.label}</h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-white/62">{t(`oafBots.wizard.goal.${activeStep}`)}</p>
                 </div>
-                <div className="mt-4 grid grid-cols-5 gap-2">
-                  {wizardStepOrder.map((step, index) => (
-                    <div key={step} className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div className={`h-full rounded-full ${index <= activeStepIndex ? "bg-gradient-to-r from-cyan-400 to-violet-400" : "bg-transparent"}`} />
-                    </div>
-                  ))}
-                </div>
+                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/55">
+                  {Math.round(((activeStepIndex + 1) / wizardStepOrder.length) * 100)}%
+                </span>
               </div>
-              <div className="grid gap-2 md:grid-cols-5">
-              {wizardSteps.map((step, index) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => setActiveStep(step.id)}
-                  className={`rounded-2xl border px-3 py-3 text-left transition ${
-                    activeStep === step.id
-                      ? "border-violet-300/45 bg-violet-500/15 text-white"
-                      : "border-white/10 bg-white/[0.035] text-white/55 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  <p className="text-xs">{t("oafBots.wizard.step", { count: index + 1 })}</p>
-                  <p className="mt-1 whitespace-nowrap text-sm font-semibold">{step.label}</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/45">{step.description}</p>
-                </button>
-              ))}
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-all"
+                  style={{ width: `${((activeStepIndex + 1) / wizardStepOrder.length) * 100}%` }}
+                />
+              </div>
+              <div className="-mx-1 mt-4 overflow-x-auto px-1 pb-1">
+                <div className="flex min-w-max gap-2">
+                  {wizardSteps.map((step, index) => {
+                    const completed = stepCompletion[step.id];
+                    const active = activeStep === step.id;
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setActiveStep(step.id)}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${
+                          active
+                            ? "border-violet-300/45 bg-violet-500/18 text-white shadow-[0_0_22px_rgba(139,92,246,0.16)]"
+                            : completed
+                              ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/14"
+                              : "border-white/10 bg-white/[0.025] text-white/55 hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        {completed ? <CheckCircle2 className="size-3.5 shrink-0" /> : <span className="size-1.5 shrink-0 rounded-full bg-current opacity-60" />}
+                        <span className="whitespace-nowrap">{step.label}</span>
+                        <span className="text-xs opacity-50">{index + 1}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -705,6 +711,7 @@ export default function OAFBotsPage() {
                   onGenerate={testGenerate}
                   selectedID={selectedID}
                   formChanged={formChanged}
+                  previewDisabled={!canTestBot}
                 />
               </WizardPanel>
             ) : null}
@@ -743,7 +750,7 @@ export default function OAFBotsPage() {
                 type="button"
                 variant={activeStep === "test" ? "default" : "outline"}
                 onClick={activeStep === "test" ? testGenerate : goTestStep}
-                disabled={generating}
+                disabled={generating || !canTestBot}
                 className={activeStep === "test" ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white" : ""}
               >
                 <Sparkles className="size-4" />
@@ -770,6 +777,7 @@ export default function OAFBotsPage() {
               completion={personaCompleteness}
               checklist={personaChecklist}
               onTest={goTestStep}
+              canTest={canTestBot}
             />
             <GenerationUsageCard
               t={t}
@@ -819,6 +827,16 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   if (form.identity_summary.trim()) score += 15;
   if (form.growth_goal.trim()) score += 10;
   return score;
+}
+
+function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
+  return {
+    identity: Boolean(form.name.trim() && form.twitter_account_id && (form.occupation.trim() || form.industry.trim())),
+    style: Boolean(form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
+    topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
+    goals: Boolean(form.identity_summary.trim() && form.growth_goal.trim()),
+    test: hasSavedBot,
+  };
 }
 
 function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
@@ -1084,6 +1102,7 @@ function TagPicker({
   placeholder?: string;
   recommended?: boolean;
 }) {
+  const { t } = useT();
   const [input, setInput] = useState("");
   const addValue = (value: string) => {
     const next = value.trim();
@@ -1125,7 +1144,7 @@ function TagPicker({
               }}
             />
             <button type="button" className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/10" onClick={() => addValue(input)}>
-              +
+              {t("oafBots.chips.addCustom")}
             </button>
           </div>
         </div>
@@ -1136,6 +1155,7 @@ function TagPicker({
 }
 
 function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: string[]; selected: string[]; onPick: (value: string) => void; maxInitial?: number }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const orderedOptions = useMemo(() => {
     return [...options].sort((a, b) => Number(selected.includes(b)) - Number(selected.includes(a)));
@@ -1151,8 +1171,8 @@ function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: s
             key={option}
             type="button"
             onClick={() => onPick(option)}
-            className={`rounded-full border px-3 py-1 text-xs transition ${
-              active ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-50" : "border-white/10 bg-white/[0.035] text-white/55 hover:bg-white/[0.07]"
+            className={`rounded-full border px-3 py-1.5 text-xs transition ${
+              active ? "border-cyan-200/55 bg-cyan-400/18 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.14)]" : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.07]"
             }`}
           >
             {option}
@@ -1163,9 +1183,9 @@ function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: s
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-xs text-white/55 hover:bg-white/[0.07]"
+          className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/65 hover:bg-white/[0.07]"
         >
-          {expanded ? "−" : "+"}
+          {expanded ? t("oafBots.chips.less") : t("oafBots.chips.more")}
         </button>
       ) : null}
     </div>
@@ -1179,6 +1199,7 @@ function BotPreview({
   completion,
   checklist,
   onTest,
+  canTest,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   form: OAFBotPayload;
@@ -1190,11 +1211,20 @@ function BotPreview({
     nextSuggestion: string;
   };
   onTest: () => void;
+  canTest: boolean;
 }) {
   const lowCompletion = completion < 60;
   const readyCompletion = completion >= 80;
+  const showDetails = completion >= 30;
+  const previewRows = [
+    { label: t("oafBots.fields.occupation"), value: [form.occupation, form.industry].filter(Boolean).join(" · ") },
+    { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
+    { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
+    { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
+    { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
+  ].filter((row) => row.value.trim());
   return (
-    <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")}>
+    <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")} className="border-white/[0.08] bg-white/[0.025] p-4 md:p-5">
       <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100 shadow-[0_0_24px_rgba(56,189,248,0.18)]">
@@ -1223,31 +1253,34 @@ function BotPreview({
         </div>
 
         <div className="mt-5 grid gap-3">
-          <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" />
-          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" />
+          {showDetails ? (
+            <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" />
+          ) : null}
+          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={4} />
           <div className="rounded-xl border border-blue-300/15 bg-blue-400/10 p-3">
             <p className="text-xs text-blue-100/70">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-white/78">{checklist.nextSuggestion}</p>
           </div>
-          <Button type="button" onClick={onTest} className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+          <Button type="button" onClick={onTest} disabled={!canTest} className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white disabled:opacity-50">
             <Sparkles className="size-4" />
             {t("oafBots.actions.testBot")}
           </Button>
+          {!canTest ? <p className="text-xs leading-relaxed text-white/45">{t("oafBots.test.disabledHint")}</p> : null}
         </div>
 
-        <div className="mt-5 space-y-3">
-          <PreviewRow label={t("oafBots.fields.occupation")} value={[form.occupation, form.industry].filter(Boolean).join(" · ") || t("oafBots.preview.notSet")} />
-          <PreviewRow label={t("oafBots.fields.personalityTags")} value={form.personality_tags.join(" / ") || t("oafBots.preview.notSet")} />
-          <PreviewRow label={t("oafBots.fields.topics")} value={form.topics.join(" / ") || t("oafBots.preview.notSet")} />
-          <PreviewRow label={t("oafBots.fields.safetyMode")} value={form.safety_mode || t("oafBots.preview.notSet")} />
-          <PreviewRow label={t("oafBots.fields.growthGoal")} value={form.growth_goal || t("oafBots.preview.notSet")} />
-        </div>
+        {showDetails && previewRows.length > 0 ? (
+          <div className="mt-5 space-y-3">
+            {previewRows.map((row) => (
+              <PreviewRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </SectionCard>
   );
 }
 
-function ChecklistBlock({ title, items, empty, tone }: { title: string; items: string[]; empty: string; tone: "success" | "warning" }) {
+function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: string; items: string[]; empty: string; tone: "success" | "warning"; maxItems?: number }) {
   const toneClass = tone === "success" ? "border-emerald-300/15 bg-emerald-400/10 text-emerald-100" : "border-amber-300/15 bg-amber-400/10 text-amber-100";
   return (
     <div className={`rounded-xl border p-3 ${toneClass}`}>
@@ -1256,7 +1289,7 @@ function ChecklistBlock({ title, items, empty, tone }: { title: string; items: s
         <p className="mt-2 text-sm text-white/70">{empty}</p>
       ) : (
         <div className="mt-2 flex flex-wrap gap-2">
-          {items.slice(0, 5).map((item) => (
+          {items.slice(0, maxItems).map((item) => (
             <span key={item} className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/78">
               {item}
             </span>
@@ -1285,6 +1318,7 @@ function SamplePanel({
   onGenerate,
   selectedID,
   formChanged,
+  previewDisabled,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotSamples | null;
@@ -1294,6 +1328,7 @@ function SamplePanel({
   onGenerate: () => void;
   selectedID: number | null;
   formChanged: boolean;
+  previewDisabled: boolean;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -1334,6 +1369,8 @@ function SamplePanel({
         <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.saveFirst")}</p>
       ) : formChanged ? (
         <p className="rounded-xl border border-blue-300/20 bg-blue-400/10 p-4 text-sm text-blue-100">{t("oafBots.test.saveChangesFirst")}</p>
+      ) : previewDisabled ? (
+        <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.disabledHint")}</p>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
@@ -1341,7 +1378,7 @@ function SamplePanel({
           <p className="text-sm font-medium text-white">{t("oafBots.test.panelTitle")}</p>
           <p className="mt-1 text-xs text-white/45">{t("oafBots.test.panelDescription")}</p>
         </div>
-        <Button type="button" onClick={onGenerate} disabled={generating} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+        <Button type="button" onClick={onGenerate} disabled={generating || previewDisabled} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
           <Sparkles className="size-4" />
           {generating ? t("oafBots.actions.generating") : t("oafBots.actions.generate")}
         </Button>

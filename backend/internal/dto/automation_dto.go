@@ -99,6 +99,79 @@ type AutoReplyDraftUpdateRequest struct {
 	GeneratedReply string `json:"generated_reply" binding:"required"`
 }
 
+type AutoPostPlanRequest struct {
+	XAccountID         uint   `json:"x_account_id" binding:"required"`
+	Enabled            bool   `json:"enabled"`
+	ExecutionMode      string `json:"execution_mode"`
+	DailyLimit         int    `json:"daily_limit"`
+	MinIntervalMinutes int    `json:"min_interval_minutes"`
+	PostingWindows     string `json:"posting_windows"`
+	Timezone           string `json:"timezone"`
+}
+
+type AutoPostGenerateRequest struct {
+	ContentDirection string `json:"content_direction"`
+}
+
+type AutoPostDraftUpdateRequest struct {
+	GeneratedContent string `json:"generated_content" binding:"required"`
+}
+
+type AutoPostDraftRejectRequest struct {
+	Reason string `json:"reason"`
+}
+
+type AutoPostPlanItem struct {
+	ID                 uint   `json:"id"`
+	UserID             uint   `json:"user_id"`
+	XAccountID         uint   `json:"x_account_id"`
+	AccountHandle      string `json:"account_handle,omitempty"`
+	BotID              uint   `json:"bot_id"`
+	BotName            string `json:"bot_name,omitempty"`
+	Enabled            bool   `json:"enabled"`
+	ExecutionMode      string `json:"execution_mode"`
+	DailyLimit         int    `json:"daily_limit"`
+	MinIntervalMinutes int    `json:"min_interval_minutes"`
+	PostingWindows     string `json:"posting_windows"`
+	Timezone           string `json:"timezone"`
+	LastRunAt          string `json:"last_run_at,omitempty"`
+	NextRunAt          string `json:"next_run_at,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+}
+
+type AutoPostDraftItem struct {
+	ID               uint   `json:"id"`
+	UserID           uint   `json:"user_id"`
+	PlanID           uint   `json:"plan_id"`
+	BotID            uint   `json:"bot_id"`
+	BotName          string `json:"bot_name,omitempty"`
+	XAccountID       uint   `json:"x_account_id"`
+	AccountHandle    string `json:"account_handle,omitempty"`
+	ContentDirection string `json:"content_direction,omitempty"`
+	GeneratedContent string `json:"generated_content"`
+	Status           string `json:"status"`
+	RiskLevel        string `json:"risk_level"`
+	CapabilityStatus string `json:"capability_status"`
+	FailureCategory  string `json:"failure_category,omitempty"`
+	FailureReason    string `json:"failure_reason,omitempty"`
+	ApprovalRequired bool   `json:"approval_required"`
+	ActivityLogID    uint   `json:"activity_log_id,omitempty"`
+	CreatedAt        string `json:"created_at"`
+	GeneratedAt      string `json:"generated_at,omitempty"`
+	ApprovedAt       string `json:"approved_at,omitempty"`
+	RejectedAt       string `json:"rejected_at,omitempty"`
+	PublishedAt      string `json:"published_at,omitempty"`
+}
+
+type AutoPostPlansResponse struct {
+	Items []AutoPostPlanItem `json:"items"`
+}
+
+type AutoPostDraftsResponse struct {
+	Items []AutoPostDraftItem `json:"items"`
+}
+
 type AutoDMTaskItem struct {
 	ID                uint   `json:"id"`
 	XAccountID        uint   `json:"x_account_id,omitempty"`

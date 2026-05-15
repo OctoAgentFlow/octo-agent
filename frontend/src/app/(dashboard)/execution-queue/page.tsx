@@ -162,8 +162,8 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
-        ? await automationService.rejectCommentDraft(item.source_id, "Rejected from execution queue.")
-        : await automationService.rejectReplyDraft(item.source_id, "Rejected from execution queue.");
+        ? await automationService.rejectCommentDraft(item.source_id, t("executionQueue.rejectReason"))
+        : await automationService.rejectReplyDraft(item.source_id, t("executionQueue.rejectReason"));
       updateLocalItem(item, { status: updated.status as ReviewQueueItemApi["status"] });
       pushToast(t("executionQueue.toast.rejected"));
       void loadQueue();

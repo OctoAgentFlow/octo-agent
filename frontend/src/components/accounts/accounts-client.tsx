@@ -232,15 +232,15 @@ export function AccountsClient() {
 
       {loadState === "loading" ? (
         <Card>
-          <CardHeader title="Loading accounts..." description="Fetching your connected X accounts." />
+          <CardHeader title={t("accounts.loading.title")} description={t("accounts.loading.description")} />
         </Card>
       ) : null}
 
       {loadState === "error" ? (
         <Card>
-          <CardHeader title="Failed to load accounts" description={errorMessage || "Please try again."} />
+          <CardHeader title={t("accounts.error.title")} description={errorMessage || t("common.retryHint")} />
           <div className="flex justify-end">
-            <Button onClick={() => void fetchAccounts()}>Retry</Button>
+            <Button onClick={() => void fetchAccounts()}>{t("common.retry")}</Button>
           </div>
         </Card>
       ) : null}

@@ -100,7 +100,7 @@ export function BillingCheckoutDialog({
       setOrderId(order.order_id);
       setPhase("pay");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to create order";
+      const msg = e instanceof Error ? e.message : t("billing.checkout.createOrderFailed");
       pushToast(msg);
     }
   };

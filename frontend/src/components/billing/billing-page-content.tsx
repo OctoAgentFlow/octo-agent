@@ -104,14 +104,14 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
   const aiPct = limitAI > 0 ? Math.min(100, Math.round((usedAI / limitAI) * 100)) : 0;
   const aiBlocked = aiPct >= 100;
   const aiWarning = aiPct >= 80;
-  const items = [
-    ["OAF Bots", subscription.usage.oafBots, subscription.limits.maxBots],
-    ["X Accounts", subscription.usage.twitterAccounts, subscription.limits.maxTwitterAccounts],
-    ["AI 生成次数", subscription.usage.aiGenerationsMonth, subscription.limits.aiGenerationsMonthly],
-    ["自动发推/日", subscription.usage.autoPostsToday, subscription.limits.dailyAutoPosts],
-    ["自动回复/日", subscription.usage.autoRepliesToday, subscription.limits.dailyAutoReplies],
-    ["自动评论/日", subscription.usage.autoCommentsToday, subscription.limits.dailyAutoComments],
-    ["自动私信/日", subscription.usage.autoDMsToday, subscription.limits.dailyAutoDMs],
+  const items: Array<[string, number, number]> = [
+    ["billing.usage.items.oafBots", subscription.usage.oafBots, subscription.limits.maxBots],
+    ["billing.usage.items.xAccounts", subscription.usage.twitterAccounts, subscription.limits.maxTwitterAccounts],
+    ["billing.usage.items.aiGenerations", subscription.usage.aiGenerationsMonth, subscription.limits.aiGenerationsMonthly],
+    ["billing.usage.items.autoPosts", subscription.usage.autoPostsToday, subscription.limits.dailyAutoPosts],
+    ["billing.usage.items.autoReplies", subscription.usage.autoRepliesToday, subscription.limits.dailyAutoReplies],
+    ["billing.usage.items.autoComments", subscription.usage.autoCommentsToday, subscription.limits.dailyAutoComments],
+    ["billing.usage.items.autoDMs", subscription.usage.autoDMsToday, subscription.limits.dailyAutoDMs],
   ];
   return (
     <section className="surface-card p-5 md:p-6">
@@ -161,11 +161,11 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {items.map(([label, used, limit]) => {
+        {items.map(([labelKey, used, limit]) => {
           const pct = typeof used === "number" && typeof limit === "number" && limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
           return (
-            <div key={label} className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs text-white/55">{label}</p>
+            <div key={labelKey} className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs text-white/55">{t(String(labelKey))}</p>
               <p className="mt-2 text-lg font-semibold text-white">
                 {used} <span className="text-sm font-normal text-white/45">/ {limit}</span>
               </p>

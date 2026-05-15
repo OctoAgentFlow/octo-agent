@@ -35,11 +35,11 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { label: "运营总览", href: "/admin?section=overview", section: "overview", icon: LayoutDashboard },
-  { label: "用户管理", href: "/admin?section=users", section: "users", icon: Users },
-  { label: "订单审核", href: "/admin?section=billing", section: "billing", icon: ReceiptText },
-  { label: "活动监控", href: "/admin?section=activity", section: "activity", icon: ListChecks },
-  { label: "系统配置", href: "/admin?section=system", section: "system", icon: Settings },
+  { labelKey: "sidebar.admin.overview", href: "/admin?section=overview", section: "overview", icon: LayoutDashboard },
+  { labelKey: "sidebar.admin.users", href: "/admin?section=users", section: "users", icon: Users },
+  { labelKey: "sidebar.admin.billing", href: "/admin?section=billing", section: "billing", icon: ReceiptText },
+  { labelKey: "sidebar.admin.activity", href: "/admin?section=activity", section: "activity", icon: ListChecks },
+  { labelKey: "sidebar.admin.system", href: "/admin?section=system", section: "system", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -86,7 +86,7 @@ export function AppSidebar() {
               }`}
             >
               <item.icon className="size-4" />
-              {"label" in item ? item.label : t(item.labelKey)}
+              {t(item.labelKey)}
             </Link>
           );
         })}

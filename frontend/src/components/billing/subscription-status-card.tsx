@@ -25,9 +25,9 @@ export function SubscriptionStatusCard({ subscription }: { subscription: Current
             <p className="text-sm font-medium text-white">{subscription.planName}</p>
           </div>
           <div>
-            <p className="text-xs text-white/55">计费周期</p>
+            <p className="text-xs text-white/55">{t("billing.subscription.fields.billingCycle")}</p>
             <p className="text-sm font-medium text-white">
-              {subscription.billingCycle === "yearly" ? "年付" : "月付"}
+              {t(subscription.billingCycle === "yearly" ? "billing.billingCycle.yearly" : "billing.billingCycle.monthly")}
             </p>
           </div>
           <div>

@@ -74,7 +74,7 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
               email: values.email,
               password: values.password || "",
             });
-        pushToast("Login success.");
+        pushToast(t("auth.toast.loginSuccess"));
         onSuccess?.(mode, {
           accessToken: data.tokens.access_token,
           refreshToken: data.tokens.refresh_token,
@@ -89,18 +89,18 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
         name: registerValues.name,
         verification_code: registerValues.verificationCode,
       });
-      pushToast("Account created.");
+      pushToast(t("auth.toast.accountCreated"));
       onSuccess?.(mode, {
         accessToken: data.tokens.access_token,
         refreshToken: data.tokens.refresh_token,
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const message = error.response?.data?.message || "Request failed.";
+        const message = error.response?.data?.message || t("auth.toast.requestFailed");
         pushToast(message);
         return;
       }
-      pushToast("Request failed.");
+      pushToast(t("auth.toast.requestFailed"));
     }
   });
 
@@ -108,22 +108,22 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
     if (sendingCode || codeCooldown > 0) return;
     const email = adminMode && mode === "login" ? loginForm.getValues("email") : registerForm.getValues("email");
     if (!email) {
-      pushToast("Please input email first.");
+      pushToast(t("auth.toast.emailRequired"));
       return;
     }
     setSendingCode(true);
     try {
       await authService.sendEmailCode({ email, purpose: adminMode && mode === "login" ? "admin_login" : "register" });
-      pushToast("Verification code sent.");
+      pushToast(t("auth.toast.codeSent"));
       const cooldownUntil = Date.now() + CODE_COOLDOWN_SECONDS * 1000;
       window.localStorage.setItem(codeCooldownKey, String(cooldownUntil));
       setCodeCooldown(CODE_COOLDOWN_SECONDS);
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const message = error.response?.data?.message || "Failed to send code.";
+        const message = error.response?.data?.message || t("auth.toast.codeSendFailed");
         pushToast(message);
       } else {
-        pushToast("Failed to send code.");
+        pushToast(t("auth.toast.codeSendFailed"));
       }
     } finally {
       setSendingCode(false);
@@ -192,13 +192,13 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
       {adminMode && mode === "login" ? (
         <div className="space-y-1.5">
           <label htmlFor="adminVerificationCode" className="text-xs text-white/70">
-            管理员验证码
+            {t("auth.form.adminCode.label")}
           </label>
           <div className="flex gap-2">
             <Input
               id="adminVerificationCode"
               type="text"
-              placeholder="6 位验证码"
+              placeholder={t("auth.form.adminCode.placeholder")}
               error={loginCodeError}
               {...loginCodeRegister}
             />
@@ -209,7 +209,7 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
               onClick={sendEmailCode}
               disabled={sendingCode || codeCooldown > 0}
             >
-              {sendingCode ? "发送中..." : codeCooldown > 0 ? `${codeCooldown}s` : "发送验证码"}
+              {sendingCode ? t("auth.form.code.sending") : codeCooldown > 0 ? `${codeCooldown}s` : t("auth.form.code.send")}
             </Button>
           </div>
         </div>
@@ -219,19 +219,19 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
         <>
           <div className="space-y-1.5">
             <label htmlFor="name" className="text-xs text-white/70">
-              Name
+              {t("auth.form.name.label")}
             </label>
-            <Input id="name" type="text" placeholder="Your name" error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
+            <Input id="name" type="text" placeholder={t("auth.form.name.placeholder")} error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="verificationCode" className="text-xs text-white/70">
-              Verification code
+              {t("auth.form.verificationCode.label")}
             </label>
             <div className="flex gap-2">
               <Input
                 id="verificationCode"
                 type="text"
-                placeholder="6-digit code"
+                placeholder={t("auth.form.verificationCode.placeholder")}
                 error={registerForm.formState.errors.verificationCode?.message}
                 {...registerForm.register("verificationCode")}
               />
@@ -242,7 +242,7 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
                 onClick={sendEmailCode}
                 disabled={sendingCode || codeCooldown > 0}
               >
-                {sendingCode ? "Sending..." : codeCooldown > 0 ? `${codeCooldown}s` : "Send code"}
+                {sendingCode ? t("auth.form.code.sending") : codeCooldown > 0 ? `${codeCooldown}s` : t("auth.form.code.send")}
               </Button>
             </div>
           </div>

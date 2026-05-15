@@ -146,7 +146,7 @@ export default function AutoRepliesPage() {
 
   const rejectDraft = async (id: number) => {
     try {
-      const updated = await automationService.rejectReplyDraft(id, "Rejected from Auto Reply review queue.");
+      const updated = await automationService.rejectReplyDraft(id, t("autoReply.review.rejectReason"));
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoReply.toast.rejected"));
     } catch (error) {
@@ -312,7 +312,7 @@ export default function AutoRepliesPage() {
               <input
                 value={commentURL}
                 onChange={(event) => setCommentURL(event.target.value)}
-                placeholder="https://x.com/user/status/1234567890"
+                placeholder={t("autoReply.target.urlPlaceholder")}
                 className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
               />
             </label>
@@ -321,7 +321,7 @@ export default function AutoRepliesPage() {
               <input
                 value={authorHandle}
                 onChange={(event) => setAuthorHandle(event.target.value)}
-                placeholder="@comment_author"
+                placeholder={t("autoReply.target.authorPlaceholder")}
                 className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
               />
             </label>
@@ -375,10 +375,10 @@ export default function AutoRepliesPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-white">{formatHandle(draft.comment_author_handle)}</span>
                           <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">{t(statusKey(draft.status))}</span>
-                          <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">auto_reply</span>
+                          <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-100">{t("autoReply.scene")}</span>
                           {draft.status === "ready_to_publish" ? <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-100">{t("autoReply.execution.autopilot.title")}</span> : null}
                           {draft.risk_level === "high" ? <span className="rounded-full border border-amber-300/20 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-100">{t("autoReply.review.riskIntercepted")}</span> : null}
-                          {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">Bot #{draft.bot_id}</span> : null}
+                          {draft.bot_id ? <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2 py-0.5 text-xs text-violet-100">{t("oafBots.botNumber", { id: draft.bot_id })}</span> : null}
                         </div>
                         <div className="rounded-lg border border-white/8 bg-black/15 p-3">
                           <p className="mb-1 text-xs text-white/40">{t("autoReply.review.comment")}</p>

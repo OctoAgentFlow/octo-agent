@@ -15,6 +15,7 @@ func RegisterAutoPost(rg *gin.RouterGroup, c *controller.AutoPostController) {
 	group.GET("/plans/:id", c.GetPlan)
 	group.PUT("/plans/:id", c.UpdatePlan)
 	group.POST("/plans/:id/generate", c.GenerateDraft)
+	group.POST("/plans/:id/run-now", c.RunPlanNow)
 	group.GET("/runs", c.ListRuns)
 	group.GET("/drafts", c.ListDrafts)
 	group.PATCH("/drafts/:id", c.UpdateDraft)

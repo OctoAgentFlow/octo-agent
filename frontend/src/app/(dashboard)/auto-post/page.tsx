@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Loader2, Pencil, Power, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Loader2, Pencil, PlayCircle, Power, Sparkles, Trash2, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -123,6 +123,7 @@ export default function AutoPostPage() {
   const [saving, setSaving] = useState(false);
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [runningPlanner, setRunningPlanner] = useState(false);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -183,6 +184,16 @@ export default function AutoPostPage() {
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
+
+  const skipReasonLabel = useCallback(
+    (reason?: string) => {
+      if (!reason) return t("autoPost.runs.skipReason.unknown");
+      const key = `autoPost.runs.skipReason.${reason}`;
+      const translated = t(key);
+      return translated === key ? reason : translated;
+    },
+    [t]
+  );
 
   const onAccountChange = (accountID: number) => {
     setSelectedAccountID(accountID);
@@ -361,6 +372,31 @@ export default function AutoPostPage() {
     }
   };
 
+  const runPlannerNow = async () => {
+    if (!selectedPlan) {
+      pushToast(t("autoPost.runNow.needPlanner"));
+      return;
+    }
+    if (!window.confirm(t("autoPost.runNow.confirm"))) return;
+    setRunningPlanner(true);
+    try {
+      const run = await autoPostService.runNow(selectedPlan.id);
+      setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
+      if (run.status === "completed") {
+        pushToast(t("autoPost.runNow.toast.completed"));
+      } else if (run.status === "skipped") {
+        pushToast(t("autoPost.runNow.toast.skipped", { reason: skipReasonLabel(run.skip_reason) }));
+      } else {
+        pushToast(t("autoPost.runNow.toast.failed"));
+      }
+      void load();
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runNow.errors.failed") : t("autoPost.runNow.errors.failed"));
+    } finally {
+      setRunningPlanner(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -442,12 +478,25 @@ export default function AutoPostPage() {
             </Card>
 
             <Card>
-              <CardHeader title={t("autoPost.status.title")} description={t("autoPost.status.description")} />
+              <CardHeader
+                title={t("autoPost.status.title")}
+                description={t("autoPost.status.description")}
+                right={
+                  <Button size="sm" type="button" onClick={() => void runPlannerNow()} disabled={runningPlanner || !selectedAccountID}>
+                    {runningPlanner ? <Loader2 className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
+                    {t("autoPost.runNow.button")}
+                  </Button>
+                }
+              />
               <div className="space-y-3 text-sm">
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
-                <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${form.executionMode}`)} />
+                <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
+                <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
                 <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDate(selectedPlan.last_run_at) : t("autoPost.common.emptyValue")} />
                 <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDate(selectedPlan.next_run_at) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.dailyLimit")} value={String(selectedPlan?.daily_limit || form.dailyLimit)} />
+                <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
+                <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
               </div>
             </Card>
           </div>
@@ -459,6 +508,11 @@ export default function AutoPostPage() {
                 {form.enabled && activeContentCount === 0 ? (
                   <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85">
                     {t("autoPost.scheduler.noActiveContentHint")}
+                  </div>
+                ) : null}
+                {form.enabled && selectedPlan && !selectedPlan.next_run_at ? (
+                  <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm leading-6 text-blue-50/85">
+                    {t("autoPost.scheduler.noNextRunHint")}
                   </div>
                 ) : null}
                 {aiRemaining <= 0 ? (
@@ -821,10 +875,22 @@ export default function AutoPostPage() {
                         </div>
                         {run.skip_reason ? (
                           <p className="mt-2 text-sm leading-6 text-white/60">
-                            {t(`autoPost.runs.skipReason.${run.skip_reason}`)}
+                            {skipReasonLabel(run.skip_reason)}
                           </p>
                         ) : null}
                         {run.error_message ? <p className="mt-2 break-words text-xs text-rose-100">{run.error_message}</p> : null}
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/45">
+                          <span>
+                            {run.content_library_item_title || run.content_title
+                              ? t("autoPost.runs.contentItem", { title: run.content_library_item_title || run.content_title || "" })
+                              : t("autoPost.runs.noContentItem")}
+                          </span>
+                          {run.generated_draft_id ? (
+                            <Link href="/execution-queue?type=post" className="text-blue-100 hover:text-white">
+                              {t("autoPost.runs.openQueue")}
+                            </Link>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>

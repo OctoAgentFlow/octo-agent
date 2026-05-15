@@ -73,6 +73,7 @@ export type AutoPostGenerationRunApi = {
   bot_name?: string;
   content_library_item_id?: number;
   content_title?: string;
+  content_library_item_title?: string;
   status: "completed" | "skipped" | "failed";
   skip_reason?: string;
   generated_draft_id?: number;
@@ -120,6 +121,10 @@ export const autoPostService = {
   },
   async runs() {
     const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs");
+    return res.data.data;
+  },
+  async runNow(planID: number) {
+    const res = await request.post<ApiResponse<AutoPostGenerationRunApi>>(`/auto-post/plans/${planID}/run-now`);
     return res.data.data;
   },
   async updateDraft(id: number, generatedContent: string) {

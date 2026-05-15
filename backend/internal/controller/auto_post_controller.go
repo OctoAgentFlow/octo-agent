@@ -161,6 +161,29 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	planID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid plan id")
+		return
+	}
+	data, err := ctl.autoPostService.RunPlanNow(c.Request.Context(), userID, planID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "auto post plan not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutoPostController) UpdateDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

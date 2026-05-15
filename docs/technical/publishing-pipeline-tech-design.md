@@ -91,10 +91,13 @@ flowchart LR
 type XPublisher interface {
     PublishReply(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
     PublishComment(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
+    PublishPost(ctx context.Context, account model.TwitterAccount, content string) (PublishResult, error)
 }
 ```
 
-`reply` 和 `comment` 当前都映射到 X API v2 reply tweet 能力，但业务层保留两种语义，便于后续分别扩展风控、文案和额度。
+`reply` 和 `comment` 当前都映射到 X API v2 reply tweet 能力，但业务层保留两种语义，便于后续分别扩展风控、文案和额度。`post` 映射到 X API v2 create tweet 能力，用于发布普通推文，不需要 `targetTweetID`。
+
+真实 adapter 只在手动 `publish-now` 且 `real_publish_enabled=true`、`dry_run=false` 时调用。API scheduler 永远不走真实 adapter，只执行 simulated publish。
 
 ## 手动真实发布开关
 
@@ -104,7 +107,7 @@ type XPublisher interface {
 x_publisher:
   real_publish_enabled: false
   manual_publish_enabled: true
-  per_account_daily_limit: 20
+  per_account_daily_limit: 1
   per_account_min_interval_seconds: 300
   dry_run: true
 ```
@@ -124,10 +127,10 @@ x_publisher:
 3. 校验 `manual_publish_enabled`，并在 `dry_run=false` 时校验 `real_publish_enabled`。
 4. 校验用户订阅有效。
 5. 校验 X 账号 connected、access token 存在、OAuth scopes 包含 `tweet.write`。
-6. 校验 source_type 仅支持 `comment` / `reply`。
+6. 校验 source_type 仅支持 `post` / `comment` / `reply`。
 7. 校验每日限流和冷却时间。
 8. `dry_run=true` 时写入 `publish_mode=dry_run` 并标记 published，但不调用 X。
-9. `dry_run=false` 时调用 XPublisher，成功后写入 `external_id` / `external_url`。
+9. `dry_run=false` 时调用 XPublisher：`post` 调用 `PublishPost`，`comment` 调用 `PublishComment`，`reply` 调用 `PublishReply`。成功后写入 `external_id` / `external_url`。
 10. 失败时写入 `last_error`，同步 source 为 `failed`，并记录 Activity。
 
 ## 灰度状态接口

@@ -77,3 +77,18 @@ func (r *AutoPostDraftRepository) CountCreatedBetweenForAccount(userID, xAccount
 		Count(&n).Error
 	return n, err
 }
+
+func (r *AutoPostDraftRepository) ExistsContentHashForAccountSince(userID, xAccountID uint, contentHash string, since time.Time) (bool, error) {
+	if contentHash == "" {
+		return false, nil
+	}
+	var n int64
+	err := r.DB.Model(&model.AutoPostDraft{}).
+		Where("user_id = ? AND x_account_id = ? AND content_hash = ?", userID, xAccountID, contentHash).
+		Where("created_at >= ?", since).
+		Count(&n).Error
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}

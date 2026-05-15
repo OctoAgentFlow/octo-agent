@@ -84,27 +84,34 @@ type GenerateOAFBotSamplesInput struct {
 }
 
 type GenerateAutoPostInput struct {
-	AccountHandle    string
-	Topic            string
-	ContentDirection string
-	RecentPosts      []string
-	HasBot           bool
-	Name             string
-	Occupation       string
-	Industry         string
-	AgeRange         string
-	Gender           string
-	Education        string
-	MBTI             string
-	PersonalityTags  []string
-	IdentitySummary  string
-	VoiceTone        string
-	Topics           []string
-	ForbiddenTopics  []string
-	GrowthGoal       string
-	SafetyMode       string
-	PrimaryLanguage  string
-	LanguageStrategy string
+	AccountHandle     string
+	Topic             string
+	ContentDirection  string
+	ContentItemTitle  string
+	ContentItemType   string
+	ContentItemBody   string
+	ContentItemURL    string
+	ContentItemTopics []string
+	ContentItemGoal   string
+	ContentItemCTA    string
+	RecentPosts       []string
+	HasBot            bool
+	Name              string
+	Occupation        string
+	Industry          string
+	AgeRange          string
+	Gender            string
+	Education         string
+	MBTI              string
+	PersonalityTags   []string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	ForbiddenTopics   []string
+	GrowthGoal        string
+	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
 }
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
@@ -354,6 +361,24 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	user.WriteString("Account: " + handle + "\n")
 	if direction != "" {
 		user.WriteString("Content direction: " + direction + "\n")
+	}
+	if strings.TrimSpace(in.ContentItemTitle) != "" || strings.TrimSpace(in.ContentItemBody) != "" {
+		user.WriteString("Primary content library item:\n")
+		user.WriteString("title: " + strings.TrimSpace(in.ContentItemTitle) + "\n")
+		user.WriteString("type: " + strings.TrimSpace(in.ContentItemType) + "\n")
+		user.WriteString("body: " + strings.TrimSpace(in.ContentItemBody) + "\n")
+		if strings.TrimSpace(in.ContentItemURL) != "" {
+			user.WriteString("source_url: " + strings.TrimSpace(in.ContentItemURL) + "\n")
+		}
+		if len(in.ContentItemTopics) > 0 {
+			user.WriteString("topics: " + strings.Join(in.ContentItemTopics, ", ") + "\n")
+		}
+		if strings.TrimSpace(in.ContentItemGoal) != "" {
+			user.WriteString("growth_goal_from_content_item: " + strings.TrimSpace(in.ContentItemGoal) + "\n")
+		}
+		if strings.TrimSpace(in.ContentItemCTA) != "" {
+			user.WriteString("cta_preference_from_content_item: " + strings.TrimSpace(in.ContentItemCTA) + "\n")
+		}
 	}
 	if in.HasBot {
 		user.WriteString("Use this OAF Bot persona:\n")

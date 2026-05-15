@@ -33,9 +33,12 @@ export type AutoPostDraftApi = {
   plan_id: number;
   bot_id: number;
   x_account_id: number;
+  content_library_item_id?: number;
+  content_title?: string;
   bot_name?: string;
   account_handle?: string;
   content_direction?: string;
+  content_hash?: string;
   generated_content: string;
   status: "draft" | "pending_review" | "approved" | "ready_to_publish" | "published" | "rejected" | "failed";
   risk_level: string;
@@ -82,9 +85,10 @@ export const autoPostService = {
     const res = await request.put<ApiResponse<AutoPostPlanApi>>(`/auto-post/plans/${id}`, payload);
     return res.data.data;
   },
-  async generateDraft(planID: number, contentDirection: string) {
+  async generateDraft(planID: number, contentDirection: string, contentLibraryItemID?: number) {
     const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/plans/${planID}/generate`, {
       content_direction: contentDirection,
+      content_library_item_id: contentLibraryItemID || 0,
     });
     return res.data.data;
   },

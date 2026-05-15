@@ -287,6 +287,9 @@ func autoPostDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, a
 		reasons = append(reasons, draft.FailureReason)
 	}
 	target := strings.TrimSpace(draft.ContentDirection)
+	if target == "" && draft.ContentLibraryID != 0 {
+		target = "Content Library Item"
+	}
 	if target == "" {
 		target = "Auto Post"
 	}

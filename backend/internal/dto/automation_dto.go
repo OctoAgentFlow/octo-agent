@@ -110,7 +110,8 @@ type AutoPostPlanRequest struct {
 }
 
 type AutoPostGenerateRequest struct {
-	ContentDirection string `json:"content_direction"`
+	ContentDirection     string `json:"content_direction"`
+	ContentLibraryItemID uint   `json:"content_library_item_id"`
 }
 
 type AutoPostDraftUpdateRequest struct {
@@ -147,8 +148,11 @@ type AutoPostDraftItem struct {
 	BotID            uint   `json:"bot_id"`
 	BotName          string `json:"bot_name,omitempty"`
 	XAccountID       uint   `json:"x_account_id"`
+	ContentLibraryID uint   `json:"content_library_item_id,omitempty"`
+	ContentTitle     string `json:"content_title,omitempty"`
 	AccountHandle    string `json:"account_handle,omitempty"`
 	ContentDirection string `json:"content_direction,omitempty"`
+	ContentHash      string `json:"content_hash,omitempty"`
 	GeneratedContent string `json:"generated_content"`
 	Status           string `json:"status"`
 	RiskLevel        string `json:"risk_level"`

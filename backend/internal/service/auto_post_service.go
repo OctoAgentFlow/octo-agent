@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,6 +18,7 @@ import (
 )
 
 var ErrAutoPostDailyLimitExceeded = errors.New("daily auto post quota exceeded")
+var ErrAutoPostDuplicateContent = errors.New("auto_post_duplicate_content")
 
 const autoPostPreviewRunes = 280
 
@@ -23,6 +26,7 @@ type AutoPostService struct {
 	accountRepo  *repository.TwitterAccountRepository
 	planRepo     *repository.AutoPostPlanRepository
 	draftRepo    *repository.AutoPostDraftRepository
+	contentRepo  *repository.ContentLibraryRepository
 	activityRepo *repository.ActivityRepository
 	userRepo     *repository.UserRepository
 	oafBotRepo   *repository.OAFBotRepository
@@ -30,11 +34,12 @@ type AutoPostService struct {
 	ai           *AIService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:  accountRepo,
 		planRepo:     planRepo,
 		draftRepo:    draftRepo,
+		contentRepo:  contentRepo,
 		activityRepo: activityRepo,
 		userRepo:     userRepo,
 		oafBotRepo:   oafBotRepo,
@@ -161,10 +166,39 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 			recent = append(recent, draft.GeneratedContent)
 		}
 	}
+	var contentItem *model.ContentLibraryItem
+	if req.ContentLibraryItemID > 0 {
+		if s.contentRepo == nil {
+			return nil, fmt.Errorf("content library is not available")
+		}
+		contentItem, err = s.contentRepo.GetByUserAndID(userID, req.ContentLibraryItemID)
+		if err != nil {
+			return nil, err
+		}
+		if !s.contentItemAllowedForPlan(contentItem, acc.ID, botIDForUsage(bot)) {
+			return nil, fmt.Errorf("content item is not available for this account")
+		}
+		if contentItem.Status != "active" {
+			return nil, fmt.Errorf("content item is not active")
+		}
+	}
 	input := autoPostInputFromBot(acc, bot, "")
 	input.ContentDirection = strings.TrimSpace(req.ContentDirection)
 	input.RecentPosts = recent
-	content, err := s.ai.GenerateAutoPost(ctx, input)
+	if contentItem != nil {
+		input.ContentItemTitle = contentItem.Title
+		input.ContentItemType = contentItem.ItemType
+		input.ContentItemBody = contentItem.Body
+		input.ContentItemURL = contentItem.SourceURL
+		input.ContentItemTopics = decodeStringList(contentItem.Topics)
+		input.ContentItemGoal = contentItem.GrowthGoal
+		input.ContentItemCTA = contentItem.CTAPreference
+	}
+	contentDirection := strings.TrimSpace(req.ContentDirection)
+	if contentDirection == "" && contentItem != nil {
+		contentDirection = contentItem.Title
+	}
+	content, contentHash, err := s.generateUniqueAutoPost(ctx, userID, acc.ID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +210,9 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 		PlanID:           plan.ID,
 		BotID:            botIDForUsage(bot),
 		XAccountID:       acc.ID,
-		ContentDirection: truncateRunes(req.ContentDirection, 512),
+		ContentLibraryID: req.ContentLibraryItemID,
+		ContentDirection: truncateRunes(contentDirection, 512),
+		ContentHash:      contentHash,
 		GeneratedContent: truncateRunes(content, autoPostPreviewRunes),
 		Status:           status,
 		RiskLevel:        risk.Level,
@@ -192,6 +228,11 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	}
 	if err := s.usageRepo.Increment(userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, 1); err != nil {
 		return nil, err
+	}
+	if contentItem != nil {
+		if err := s.contentRepo.MarkUsed(contentItem, now); err != nil {
+			return nil, err
+		}
 	}
 	plan.BotID = draft.BotID
 	_ = s.planRepo.TouchRun(plan, now)
@@ -285,6 +326,59 @@ func (s *AutoPostService) assertDailyQuota(userID, xAccountID uint, plan *model.
 		return ErrAutoPostDailyLimitExceeded
 	}
 	return nil
+}
+
+func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, error) {
+	since := time.Now().UTC().AddDate(0, 0, -30)
+	var lastContent string
+	var lastHash string
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			input.RecentPosts = append(input.RecentPosts, lastContent)
+			if strings.TrimSpace(input.ContentDirection) == "" {
+				input.ContentDirection = "Generate a different angle from the same content source."
+			} else {
+				input.ContentDirection += "\nGenerate a different angle from the same content source."
+			}
+		}
+		content, err := s.ai.GenerateAutoPost(ctx, input)
+		if err != nil {
+			return "", "", err
+		}
+		hash := autoPostContentHash(content)
+		exists, err := s.draftRepo.ExistsContentHashForAccountSince(userID, xAccountID, hash, since)
+		if err != nil {
+			return "", "", err
+		}
+		lastContent = content
+		lastHash = hash
+		if !exists {
+			return content, hash, nil
+		}
+	}
+	return "", lastHash, ErrAutoPostDuplicateContent
+}
+
+func autoPostContentHash(content string) string {
+	normalized := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(content)), " "))
+	sum := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *AutoPostService) contentItemAllowedForPlan(item *model.ContentLibraryItem, xAccountID, botID uint) bool {
+	if item == nil {
+		return false
+	}
+	if item.TwitterAccountID != nil && *item.TwitterAccountID != xAccountID {
+		return false
+	}
+	if item.BotID != nil && botID > 0 && *item.BotID != botID {
+		return false
+	}
+	if item.BotID != nil && botID == 0 {
+		return false
+	}
+	return true
 }
 
 func (s *AutoPostService) defaultDailyLimit(userID uint) int {
@@ -396,7 +490,10 @@ func (s *AutoPostService) toDraftItem(row model.AutoPostDraft) dto.AutoPostDraft
 		ActivityLogID:    row.ActivityLogID,
 		BotName:          botName,
 		AccountHandle:    accountHandle,
+		ContentLibraryID: row.ContentLibraryID,
+		ContentTitle:     s.contentTitle(row.UserID, row.ContentLibraryID),
 		ContentDirection: row.ContentDirection,
+		ContentHash:      row.ContentHash,
 		GeneratedContent: row.GeneratedContent,
 		Status:           row.Status,
 		RiskLevel:        row.RiskLevel,
@@ -410,6 +507,17 @@ func (s *AutoPostService) toDraftItem(row model.AutoPostDraft) dto.AutoPostDraft
 		RejectedAt:       formatOptionalTime(row.RejectedAt),
 		PublishedAt:      formatOptionalTime(row.PublishedAt),
 	}
+}
+
+func (s *AutoPostService) contentTitle(userID, contentID uint) string {
+	if s.contentRepo == nil || contentID == 0 {
+		return ""
+	}
+	item, err := s.contentRepo.GetByUserAndID(userID, contentID)
+	if err != nil {
+		return ""
+	}
+	return item.Title
 }
 
 func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, defaultDailyLimit int) {

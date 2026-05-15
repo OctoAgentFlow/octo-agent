@@ -39,6 +39,13 @@ email:
 app:
   frontend_base_url: "https://test.octo-agent.com"
 
+jwt:
+  # TEST-ONLY stable JWT secret. Keep api/admin-api identical so restarts do not invalidate sessions.
+  # TODO: Before production, move JWT secrets to server private config or secret manager.
+  secret: "octo-agent-test-jwt-secret-2026-keep-api-admin-in-sync"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
 admin_auth:
   emails:
     - "wang13704032425@163.com"

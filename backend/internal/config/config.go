@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -16,6 +17,7 @@ type Config struct {
 	Log        LogConfig        `yaml:"log"`
 	Email      EmailConfig      `yaml:"email"`
 	App        AppConfig        `yaml:"app"`
+	JWT        JWTConfig        `yaml:"jwt"`
 	AdminAuth  AdminAuthConfig  `yaml:"admin_auth"`
 	XOAuth     XOAuthConfig     `yaml:"x_oauth"`
 	XPublisher XPublisherConfig `yaml:"x_publisher"`
@@ -65,6 +67,14 @@ type AppConfig struct {
 	FrontendBaseURL string `yaml:"frontend_base_url"`
 	OfficialXURL    string `yaml:"official_x_url"`
 	TelegramURL     string `yaml:"telegram_url"`
+}
+
+// JWTConfig controls access/refresh token signing. Non-local deployments must
+// provide a stable secret so service restarts do not invalidate active sessions.
+type JWTConfig struct {
+	Secret               string `yaml:"secret"`
+	AccessExpireSeconds  int64  `yaml:"access_expire_seconds"`
+	RefreshExpireSeconds int64  `yaml:"refresh_expire_seconds"`
 }
 
 // AdminAuthConfig controls passwordless admin-console login.
@@ -285,6 +295,9 @@ func Load() (*Config, error) {
 	if strings.TrimSpace(cfg.App.FrontendBaseURL) == "" {
 		cfg.App.FrontendBaseURL = "http://localhost:3000"
 	}
+	if err := applyJWTConfig(env, &cfg.JWT); err != nil {
+		return nil, err
+	}
 	if cfg.LLM.DefaultProvider == "" {
 		cfg.LLM.DefaultProvider = "openai"
 	}
@@ -344,6 +357,57 @@ func Load() (*Config, error) {
 		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
 	return &cfg, nil
+}
+
+func applyJWTConfig(env string, cfg *JWTConfig) error {
+	const (
+		defaultAccessExpireSeconds  int64 = 7200
+		defaultRefreshExpireSeconds int64 = 2592000
+	)
+
+	secret := strings.TrimSpace(cfg.Secret)
+	if v := strings.TrimSpace(os.Getenv("JWT_SECRET")); v != "" {
+		secret = v
+	}
+	if strings.HasPrefix(secret, "TODO_") {
+		secret = ""
+	}
+	if secret == "" {
+		if env != "local" {
+			return fmt.Errorf("jwt.secret is required for APP_ENV=%s; set a stable test/prod secret", env)
+		}
+		secret = "octo-agent-local-secret"
+	}
+	cfg.Secret = secret
+	_ = os.Setenv("JWT_SECRET", secret)
+
+	accessExp := cfg.AccessExpireSeconds
+	if v := strings.TrimSpace(os.Getenv("JWT_ACCESS_EXPIRE_SECONDS")); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			accessExp = parsed
+		}
+	}
+	if accessExp <= 0 {
+		accessExp = defaultAccessExpireSeconds
+	}
+	cfg.AccessExpireSeconds = accessExp
+	_ = os.Setenv("JWT_ACCESS_EXPIRE_SECONDS", strconv.FormatInt(accessExp, 10))
+
+	refreshExp := cfg.RefreshExpireSeconds
+	if v := strings.TrimSpace(os.Getenv("JWT_REFRESH_EXPIRE_SECONDS")); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			refreshExp = parsed
+		}
+	}
+	if refreshExp <= 0 {
+		refreshExp = defaultRefreshExpireSeconds
+	}
+	if refreshExp < accessExp {
+		return fmt.Errorf("jwt.refresh_expire_seconds must be greater than or equal to jwt.access_expire_seconds")
+	}
+	cfg.RefreshExpireSeconds = refreshExp
+	_ = os.Setenv("JWT_REFRESH_EXPIRE_SECONDS", strconv.FormatInt(refreshExp, 10))
+	return nil
 }
 
 func normalizeConfigService(v string) (string, error) {

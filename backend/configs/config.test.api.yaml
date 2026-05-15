@@ -41,6 +41,13 @@ app:
   official_x_url: "https://x.com/octo_agent_flow"
   telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
 
+jwt:
+  # TEST-ONLY stable JWT secret. Keep api/admin-api identical so restarts do not invalidate sessions.
+  # TODO: Before production, move JWT secrets to server private config or secret manager.
+  secret: "octo-agent-test-jwt-secret-2026-keep-api-admin-in-sync"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
 x_oauth:
   client_id: "TEtuVzdUZ21RNEV2bTlIWVBjZXE6MTpjaQ"
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"

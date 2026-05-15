@@ -111,7 +111,14 @@ func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data, err := ctl.oafBotService.TestGenerate(c.Request.Context(), userID, id)
+	var req dto.OAFBotTestGenerateRequest
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	data, err := ctl.oafBotService.TestGenerate(c.Request.Context(), userID, id, req.Scene)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "oaf bot not found")

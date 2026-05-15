@@ -64,6 +64,7 @@ type GenerateAutoReplyInput struct {
 }
 
 type GenerateOAFBotSamplesInput struct {
+	Scene            string
 	Name             string
 	Occupation       string
 	Industry         string
@@ -106,6 +107,13 @@ type GenerateAutoPostInput struct {
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
 	return &AIService{openai: openaiClient}
+}
+
+func (s *AIService) providerSource() string {
+	if s != nil && s.openai != nil && s.openai.IsConfigured() {
+		return "openai"
+	}
+	return "unconfigured"
 }
 
 func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyInput) (string, error) {
@@ -264,18 +272,27 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	if name == "" {
 		name = "OAF Bot"
 	}
+	scene := normalizeSampleScene(in.Scene)
+	if scene == "" {
+		scene = "tweet"
+	}
 	tone := strings.TrimSpace(in.VoiceTone)
 	if tone == "" {
 		tone = "clear, helpful and confident"
 	}
+	sceneInstruction, maxChars := sampleSceneInstruction(scene)
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's OAF Bot persona simulator.",
 		"Generate safe example content for an AI social persona on X/Twitter.",
-		"Return strict JSON with keys tweet, reply, comment, dm. Do not include markdown fences.",
+		"Generate only one output for the requested scene.",
+		"Return plain text only. Do not return JSON, markdown, labels, field names, or surrounding quotes.",
 	}, " ")
 
 	var user strings.Builder
-	user.WriteString("Persona name: " + name + "\n")
+	user.WriteString("Requested scene: " + scene + "\n")
+	user.WriteString(sceneInstruction + "\n")
+	user.WriteString("Internal bot name: " + name + "\n")
+	user.WriteString("Important: The internal bot name is only for dashboard identification. Do not mention the bot name in generated content unless the user's persona fields explicitly instruct self-introduction with that exact name.\n")
 	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
 	user.WriteString("Industry: " + strings.TrimSpace(in.Industry) + "\n")
 	user.WriteString("Age range: " + strings.TrimSpace(in.AgeRange) + "\n")
@@ -290,13 +307,14 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	user.WriteString("Growth goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
 	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	user.WriteString("No external input context is provided for this sample. If language_strategy is follow_context, use primary_language for this sample.\n")
 	user.WriteString("Rules:\n")
-	user.WriteString("- tweet max 240 characters.\n")
-	user.WriteString("- reply max 180 characters.\n")
-	user.WriteString("- comment max 180 characters.\n")
-	user.WriteString("- dm max 220 characters.\n")
+	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
+	user.WriteString("- Generate only the requested scene and no other scene.\n")
+	user.WriteString("- Output format: plain text only. No JSON. No markdown. No field names.\n")
 	user.WriteString("- Avoid forbidden topics and do not mention that you are AI.\n")
 	user.WriteString("- Keep the examples specific to the persona.\n")
+	user.WriteString("- Do not mention the bot name in the content unless explicitly instructed by the user.\n")
 
 	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
@@ -305,19 +323,15 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	if err != nil {
 		return nil, err
 	}
-	var out dto.OAFBotTestGenerateResponse
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return &dto.OAFBotTestGenerateResponse{
-			Tweet:   truncateRunes(strings.TrimSpace(text), 240),
-			Reply:   truncateRunes(fmt.Sprintf("%s brings a practical angle here. I'd add one more point: durable growth comes from consistent useful interaction, not one-off spikes.", name), 180),
-			Comment: truncateRunes("Useful angle. The real test is whether this can turn into repeatable interaction instead of a one-time content spike.", 180),
-			DM:      truncateRunes(fmt.Sprintf("Hey, this is %s. I liked your recent thoughts and wanted to connect around practical social growth workflows.", name), 220),
-		}, nil
+	content := extractSceneContent(text, scene)
+	content = truncateRunes(stripGeneratedJSONWrapper(content, scene), maxChars)
+	out := dto.OAFBotTestGenerateResponse{
+		Scene:     scene,
+		Content:   content,
+		Provider:  s.providerSource(),
+		RawResult: strings.TrimSpace(text),
 	}
-	out.Tweet = truncateRunes(out.Tweet, 240)
-	out.Reply = truncateRunes(out.Reply, 180)
-	out.Comment = truncateRunes(out.Comment, 180)
-	out.DM = truncateRunes(out.DM, 220)
+	setSampleSceneContent(&out, scene, content)
 	return &out, nil
 }
 
@@ -384,6 +398,7 @@ func writeLanguageConfig(user *strings.Builder, primaryLanguage, strategy string
 		langStrategy = "follow_context"
 	}
 	user.WriteString("primary_language: " + primary + "\n")
+	user.WriteString("primary_language_meaning: " + languageLabelForPrompt(primary) + "\n")
 	user.WriteString("language_strategy: " + langStrategy + "\n")
 	user.WriteString("Language rules:\n")
 	switch langStrategy {
@@ -396,7 +411,145 @@ func writeLanguageConfig(user *strings.Builder, primaryLanguage, strategy string
 	default:
 		user.WriteString("- For replies, comments, and DMs, follow the input context language when it is clear; otherwise use primary_language.\n")
 	}
+	user.WriteString("- If there is no explicit external input context, output in primary_language.\n")
 	user.WriteString("- Keep language choice stable and intentional according to the configured strategy.\n")
+}
+
+func languageLabelForPrompt(value string) string {
+	switch strings.TrimSpace(value) {
+	case "zh-CN":
+		return "Simplified Chinese"
+	case "zh-TW":
+		return "Traditional Chinese"
+	case "en":
+		return "English"
+	case "ja":
+		return "Japanese"
+	case "ko":
+		return "Korean"
+	case "es":
+		return "Spanish"
+	case "pt":
+		return "Portuguese"
+	case "vi":
+		return "Vietnamese"
+	case "id":
+		return "Indonesian"
+	case "de":
+		return "German"
+	case "fr":
+		return "French"
+	case "mixed_zh_en":
+		return "Natural Chinese-English mixed style"
+	default:
+		return value
+	}
+}
+
+func normalizeSampleScene(scene string) string {
+	switch strings.TrimSpace(scene) {
+	case "tweet", "":
+		return "tweet"
+	case "reply", "comment", "dm":
+		return strings.TrimSpace(scene)
+	default:
+		return ""
+	}
+}
+
+func sampleSceneInstruction(scene string) (string, int) {
+	switch scene {
+	case "reply":
+		return "Scene: reply. Generate one X reply only. Use a generic sample context internally, but do not mention the context or return labels.", 180
+	case "comment":
+		return "Scene: comment. Generate one X comment only. It should feel natural, non-spammy, and suitable for a target tweet.", 180
+	case "dm":
+		return "Scene: dm. Generate one lightweight DM only. It should be personalized, respectful, and not pushy.", 220
+	default:
+		return "Scene: tweet. Generate one original X post only.", 240
+	}
+}
+
+func extractSceneContent(raw, scene string) string {
+	text := cleanupGeneratedPayload(raw)
+	if text == "" {
+		return ""
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(text), &obj); err != nil {
+		return text
+	}
+	if value := stringifySceneValue(obj[scene]); value != "" {
+		return value
+	}
+	if value := stringifySceneValue(obj["content"]); value != "" {
+		return value
+	}
+	if value := stringifySceneValue(obj["text"]); value != "" {
+		return value
+	}
+	if value := stringifySceneValue(obj["message"]); value != "" {
+		return value
+	}
+	return text
+}
+
+func cleanupGeneratedPayload(raw string) string {
+	text := strings.TrimSpace(raw)
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	return strings.TrimSpace(text)
+}
+
+func stringifySceneValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case map[string]any:
+		for _, key := range []string{"content", "text", "message", "body"} {
+			if text := stringifySceneValue(v[key]); text != "" {
+				return text
+			}
+		}
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if text := stringifySceneValue(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
+}
+
+func stripGeneratedJSONWrapper(content, scene string) string {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return ""
+	}
+	if !strings.Contains(text, "{") || !strings.Contains(text, "}") {
+		return text
+	}
+	extracted := extractSceneContent(text, scene)
+	if extracted != text {
+		return extracted
+	}
+	return text
+}
+
+func setSampleSceneContent(out *dto.OAFBotTestGenerateResponse, scene, content string) {
+	switch scene {
+	case "reply":
+		out.Reply = content
+	case "comment":
+		out.Comment = content
+	case "dm":
+		out.DM = content
+	default:
+		out.Tweet = content
+	}
 }
 
 func truncateRunes(s string, max int) string {

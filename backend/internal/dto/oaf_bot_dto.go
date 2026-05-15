@@ -49,11 +49,21 @@ type OAFBotUpsertRequest struct {
 	LanguageStrategy string   `json:"language_strategy"`
 }
 
+type OAFBotTestGenerateRequest struct {
+	Scene string `json:"scene"`
+}
+
 type OAFBotTestGenerateResponse struct {
-	Tweet   string `json:"tweet"`
-	Reply   string `json:"reply"`
-	Comment string `json:"comment"`
-	DM      string `json:"dm"`
+	BotID         uint   `json:"bot_id"`
+	Scene         string `json:"scene"`
+	Content       string `json:"content"`
+	Provider      string `json:"provider"`
+	UsageConsumed int    `json:"usage_consumed"`
+	RawResult     string `json:"raw_result,omitempty"`
+	Tweet         string `json:"tweet"`
+	Reply         string `json:"reply"`
+	Comment       string `json:"comment"`
+	DM            string `json:"dm"`
 }
 
 type OAFBotGenerationUsageItem struct {

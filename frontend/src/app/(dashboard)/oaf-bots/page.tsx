@@ -34,10 +34,10 @@ import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "style" | "topics" | "goals" | "test";
-type SampleScene = keyof OAFBotSamples;
+type SampleScene = OAFBotSampleScene;
 
 type SelectOption = {
   value: string;
@@ -220,7 +220,7 @@ export default function OAFBotsPage() {
   const [form, setForm] = useState<OAFBotPayload>(() => createEmptyForm(defaultPrimaryLanguage));
   const [activeStep, setActiveStep] = useState<WizardStep>("identity");
   const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
-  const [samples, setSamples] = useState<OAFBotSamples | null>(null);
+  const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -494,9 +494,10 @@ export default function OAFBotsPage() {
     }
     setGenerating(true);
     try {
-      setSamples(await oafBotService.testGenerate(selectedID));
+      const result = await oafBotService.testGenerate(selectedID, sampleScene);
+      setSamples(result);
       await loadGenerationUsages(selectedID);
-      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + 1 }));
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
       pushToast(t("oafBots.test.success"));
     } catch (error) {
       const body = getErrorBody(error);
@@ -508,6 +509,11 @@ export default function OAFBotsPage() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleSampleSceneChange = (scene: SampleScene) => {
+    setSampleScene(scene);
+    setSamples(null);
   };
 
   if (loading) {
@@ -838,7 +844,7 @@ export default function OAFBotsPage() {
                   t={t}
                   samples={samples}
                   scene={sampleScene}
-                  onSceneChange={setSampleScene}
+                  onSceneChange={handleSampleSceneChange}
                   generating={generating}
                   onGenerate={testGenerate}
                   selectedID={selectedID}
@@ -1669,7 +1675,7 @@ function SamplePanel({
   languageStrategyOptions,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
-  samples: OAFBotSamples | null;
+  samples: OAFBotTestGenerateResult | null;
   scene: SampleScene;
   onSceneChange: (scene: SampleScene) => void;
   generating: boolean;
@@ -1685,7 +1691,6 @@ function SamplePanel({
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
 }) {
-  const normalizedSamples = useMemo(() => normalizeSamples(samples), [samples]);
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
     { id: "reply", icon: <MessageCircle className="size-4" />, title: t("oafBots.samples.reply"), description: t("oafBots.samples.replyContext") },
@@ -1693,6 +1698,9 @@ function SamplePanel({
     { id: "dm", icon: <Mail className="size-4" />, title: t("oafBots.samples.dm"), description: t("oafBots.samples.dmContext") },
   ];
   const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, languageOptions, languageStrategyOptions, t);
+  const selectedSceneItem = sceneItems.find((item) => item.id === scene) ?? sceneItems[0];
+  const selectedContent = useMemo(() => normalizeSampleContent(samples, scene), [samples, scene]);
+  const providerLabel = samples?.provider ? providerSourceLabel(samples.provider, t) : "";
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm leading-relaxed text-cyan-50">
@@ -1750,16 +1758,14 @@ function SamplePanel({
       {samples ? (
         <div className="grid min-w-0 grid-cols-1 gap-4">
           <div className="grid min-w-0 grid-cols-1 gap-3">
-            {sceneItems.map((item) => (
-              <SampleCard
-                key={item.id}
-                title={item.title}
-                text={normalizedSamples[item.id] || t("oafBots.samples.empty")}
-                highlight={scene === item.id}
-                onRegenerate={onGenerate}
-                t={t}
-              />
-            ))}
+            <SampleCard
+              title={selectedSceneItem.title}
+              text={selectedContent || t("oafBots.samples.empty")}
+              providerLabel={providerLabel}
+              highlight
+              onRegenerate={onGenerate}
+              t={t}
+            />
           </div>
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
@@ -1777,12 +1783,14 @@ function SamplePanel({
 function SampleCard({
   title,
   text,
+  providerLabel,
   highlight = false,
   onRegenerate,
   t,
 }: {
   title: string;
   text: string;
+  providerLabel?: string;
   highlight?: boolean;
   onRegenerate: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -1804,7 +1812,10 @@ function SampleCard({
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate whitespace-nowrap text-sm font-semibold text-white">{title}</p>
-          <p className="mt-1 text-xs text-white/40">{t("oafBots.samples.characters", { count: content.length })}</p>
+          <p className="mt-1 text-xs text-white/40">
+            {t("oafBots.samples.characters", { count: content.length })}
+            {providerLabel ? ` · ${t("oafBots.samples.providerMeta", { provider: providerLabel })}` : ""}
+          </p>
         </div>
         <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/45">
           {highlight ? t("oafBots.samples.selected") : t("oafBots.samples.generated")}
@@ -1856,31 +1867,13 @@ function PersonaBasisCard({ title, rows, empty }: { title: string; rows: Array<{
   );
 }
 
-function normalizeSamples(samples: OAFBotSamples | null): OAFBotSamples {
-  const normalized: OAFBotSamples = { tweet: "", reply: "", comment: "", dm: "" };
-  if (!samples) return normalized;
-
-  (Object.keys(normalized) as SampleScene[]).forEach((scene) => {
-    const raw = samples[scene] || "";
-    const parsed = parseGeneratedPayload(raw);
-    if (typeof parsed === "string") {
-      normalized[scene] ||= parsed;
-      return;
-    }
-    normalized[scene] ||= stringifyGeneratedValue(parsed[scene]);
-    (Object.keys(normalized) as SampleScene[]).forEach((key) => {
-      const value = stringifyGeneratedValue(parsed[key]);
-      if (value) normalized[key] = value;
-    });
-  });
-
-  (Object.keys(normalized) as SampleScene[]).forEach((scene) => {
-    normalized[scene] = cleanupGeneratedText(normalized[scene] || samples[scene] || "");
-  });
-  return normalized;
+function normalizeSampleContent(sample: OAFBotTestGenerateResult | null, scene: SampleScene): string {
+  if (!sample) return "";
+  const direct = sample.scene === scene ? sample.content : "";
+  return cleanupGeneratedTextForScene(direct || sample[scene] || sample.content || sample.raw_result || "", scene);
 }
 
-function parseGeneratedPayload(raw: string): string | Partial<Record<SampleScene, unknown>> {
+function parseGeneratedPayload(raw: string): string | Partial<Record<SampleScene | "content" | "text" | "message" | "body", unknown>> {
   const text = cleanupCodeFence(raw);
   if (!looksLikeJSON(text)) return text;
   try {
@@ -1920,6 +1913,27 @@ function cleanupGeneratedText(raw: string) {
   const parsed = parseGeneratedPayload(text);
   if (typeof parsed === "string") return parsed.trim();
   return stringifyGeneratedValue(parsed).trim();
+}
+
+function cleanupGeneratedTextForScene(raw: string, scene: SampleScene) {
+  const text = cleanupCodeFence(raw);
+  const parsed = parseGeneratedPayload(text);
+  if (typeof parsed === "string") return parsed.trim();
+  return (
+    stringifyGeneratedValue(parsed[scene]) ||
+    stringifyGeneratedValue(parsed.content) ||
+    stringifyGeneratedValue(parsed.text) ||
+    stringifyGeneratedValue(parsed.message) ||
+    stringifyGeneratedValue(parsed.body) ||
+    stringifyGeneratedValue(parsed)
+  ).trim();
+}
+
+function providerSourceLabel(provider: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  const normalized = provider.trim() || "unknown";
+  const key = `oafBots.samples.provider.${normalized}`;
+  const label = t(key);
+  return label === key ? normalized : label;
 }
 
 function getSamplePersonaRows(

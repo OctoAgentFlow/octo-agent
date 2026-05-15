@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotSamples } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type ApiResponse<T> = {
   code: number;
@@ -96,8 +96,8 @@ export const oafBotService = {
     const res = await request.put<ApiResponse<OAFBot>>(`/oaf-bots/${id}`, body);
     return res.data.data;
   },
-  async testGenerate(id: number) {
-    const res = await request.post<ApiResponse<OAFBotSamples>>(`/oaf-bots/${id}/test-generate`, {});
+  async testGenerate(id: number, scene: OAFBotSampleScene) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene });
     return res.data.data;
   },
   async generationUsages(id: number) {

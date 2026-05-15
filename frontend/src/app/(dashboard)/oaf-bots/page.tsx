@@ -641,7 +641,7 @@ export default function OAFBotsPage() {
                     connectedLabel={t("oafBots.account.connected")}
                     boundLabel={t("oafBots.account.bound")}
                   />
-                  <ChipTextField
+                  <SingleChipField
                     label={t("oafBots.fields.occupation")}
                     value={form.occupation}
                     onChange={(value) => updateForm("occupation", value)}
@@ -649,13 +649,15 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.occupation")}
                     options={occupationOptions}
                   />
-                  <ChipTextField
+                  <TagPicker
                     label={t("oafBots.fields.industry")}
-                    value={form.industry}
-                    onChange={(value) => updateForm("industry", value)}
+                    values={splitMultiValue(form.industry)}
+                    onChange={(values) => updateForm("industry", joinMultiValues(values))}
                     placeholder={t("oafBots.placeholders.industry")}
                     helper={t("oafBots.helpers.industry")}
                     options={industryOptions}
+                    maxValues={5}
+                    limitText={t("oafBots.industry.maxHint")}
                   />
                   <details className="md:col-span-2 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
                     <summary className="cursor-pointer text-sm font-medium text-white">{t("oafBots.advancedIdentity.title")}</summary>
@@ -855,6 +857,8 @@ export default function OAFBotsPage() {
               checklist={personaChecklist}
               onTest={goTestStep}
               canTest={canTestBot}
+              occupationOptions={occupationOptions}
+              industryOptions={industryOptions}
             />
             <GenerationUsageCard
               t={t}
@@ -950,6 +954,17 @@ function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string)
   if (form.topics.length === 0) return t("oafBots.test.needTopic");
   if (!form.identity_summary.trim() && !form.voice_tone.trim()) return t("oafBots.test.needPersona");
   return "";
+}
+
+function splitMultiValue(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function joinMultiValues(values: string[]) {
+  return values.map((item) => item.trim()).filter(Boolean).join(",");
 }
 
 function getErrorBody(error: unknown): ApiErrorBody | undefined {
@@ -1117,7 +1132,7 @@ function AccountSelect({
   );
 }
 
-function ChipTextField({
+function SingleChipField({
   label,
   value,
   onChange,
@@ -1132,9 +1147,29 @@ function ChipTextField({
   placeholder?: string;
   helper?: string;
 }) {
+  const selectedLabel = getChipLabel(value, options);
+  const hasRecommendedValue = Boolean(value && selectedLabel !== value);
   return (
     <div className="space-y-2">
-      <TextField label={label} value={value} onChange={onChange} placeholder={placeholder} helper={helper} />
+      <FieldShell label={label} helper={helper}>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          {hasRecommendedValue ? (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="mb-3 rounded-full border border-violet-300/25 bg-violet-400/10 px-3 py-1 text-xs text-violet-50 hover:bg-violet-400/18"
+            >
+              {selectedLabel} ×
+            </button>
+          ) : null}
+          <input
+            className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+            value={hasRecommendedValue ? "" : value}
+            placeholder={placeholder}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </div>
+      </FieldShell>
       <ChipOptions options={options} onPick={onChange} selected={value ? [value] : []} />
     </div>
   );
@@ -1173,6 +1208,8 @@ function TagPicker({
   helper,
   placeholder,
   recommended,
+  maxValues,
+  limitText,
 }: {
   label: string;
   values: string[];
@@ -1181,12 +1218,16 @@ function TagPicker({
   helper?: string;
   placeholder?: string;
   recommended?: boolean;
+  maxValues?: number;
+  limitText?: string;
 }) {
   const { t } = useT();
   const [input, setInput] = useState("");
+  const maxReached = Boolean(maxValues && values.length >= maxValues);
   const addValue = (value: string) => {
     const next = value.trim();
     if (!next || values.includes(next)) return;
+    if (maxValues && values.length >= maxValues) return;
     onChange([...values, next]);
     setInput("");
   };
@@ -1223,18 +1264,36 @@ function TagPicker({
                 }
               }}
             />
-            <button type="button" className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/10" onClick={() => addValue(input)}>
+            <button
+              type="button"
+              disabled={maxReached}
+              className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={() => addValue(input)}
+            >
               {t("oafBots.chips.addCustom")}
             </button>
           </div>
         </div>
       </FieldShell>
-      <ChipOptions options={options} onPick={addValue} selected={values} />
+      <ChipOptions options={options} onPick={addValue} selected={values} disableUnselected={maxReached} />
+      {limitText ? <p className={`text-xs leading-relaxed ${maxReached ? "text-amber-100/80" : "text-white/42"}`}>{limitText}</p> : null}
     </div>
   );
 }
 
-function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: ChipOption[]; selected: string[]; onPick: (value: string) => void; maxInitial?: number }) {
+function ChipOptions({
+  options,
+  selected,
+  onPick,
+  maxInitial = 6,
+  disableUnselected,
+}: {
+  options: ChipOption[];
+  selected: string[];
+  onPick: (value: string) => void;
+  maxInitial?: number;
+  disableUnselected?: boolean;
+}) {
   const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const orderedOptions = useMemo(() => {
@@ -1246,13 +1305,19 @@ function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: C
     <div className="flex flex-wrap gap-2">
       {visibleOptions.map((option) => {
         const active = selected.includes(option.value);
+        const disabled = Boolean(disableUnselected && !active);
         return (
           <button
             key={option.value}
             type="button"
+            disabled={disabled}
             onClick={() => onPick(option.value)}
             className={`rounded-full border px-3 py-1.5 text-xs transition ${
-              active ? "border-cyan-200/55 bg-cyan-400/18 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.14)]" : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.07]"
+              active
+                ? "border-cyan-200/55 bg-cyan-400/18 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.14)]"
+                : disabled
+                  ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-white/28"
+                  : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.07]"
             }`}
           >
             {option.label}
@@ -1284,6 +1349,8 @@ function BotPreview({
   checklist,
   onTest,
   canTest,
+  occupationOptions,
+  industryOptions,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   form: OAFBotPayload;
@@ -1296,12 +1363,15 @@ function BotPreview({
   };
   onTest: () => void;
   canTest: boolean;
+  occupationOptions: ChipOption[];
+  industryOptions: ChipOption[];
 }) {
   const lowCompletion = completion < 60;
   const readyCompletion = completion >= 80;
   const showDetails = completion >= 30;
   const previewRows = [
-    { label: t("oafBots.fields.occupation"), value: [form.occupation, form.industry].filter(Boolean).join(" · ") },
+    { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
+    { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
     { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },

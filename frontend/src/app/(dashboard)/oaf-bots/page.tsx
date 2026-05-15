@@ -40,6 +40,8 @@ type SelectOption = {
   label: string;
 };
 
+type ChipOption = SelectOption;
+
 type ApiErrorBody = {
   message?: string;
   error_code?: string;
@@ -119,6 +121,81 @@ const mbtiValues = [
   "ESTP",
   "ESFP",
 ];
+
+const recommendedOptionValues: Record<string, Record<string, string>> = {
+  occupation: {
+    web3GrowthManager: "Web3 Growth Manager",
+    aiProductManager: "AI Product Manager",
+    cryptoResearcher: "Crypto Researcher",
+    communityManager: "Community Manager",
+    founder: "Founder",
+    developerAdvocate: "Developer Advocate",
+    contentCreator: "Content Creator",
+    kolAssistant: "KOL Assistant",
+  },
+  industry: {
+    ai: "AI",
+    web3: "Web3",
+    defi: "DeFi",
+    socialfi: "SocialFi",
+    nft: "NFT / Digital Collectibles",
+    gaming: "Gaming",
+    saas: "SaaS",
+    creatorEconomy: "Creator Economy",
+    cryptoTrading: "Crypto Trading",
+    developerTools: "Developer Tools",
+  },
+  personality: {
+    professional: "Professional",
+    casual: "Casual",
+    humorous: "Humorous",
+    restrained: "Restrained",
+    direct: "Direct",
+    warm: "Warm",
+    sharp: "Sharp",
+    curious: "Curious",
+    helpful: "Helpful",
+    growth: "Growth-oriented",
+  },
+  topics: {
+    aiAgent: "AI Agent",
+    web3Growth: "Web3 Growth",
+    socialfi: "SocialFi",
+    xMarketing: "X Marketing",
+    communityBuilding: "Community Building",
+    tokenEconomy: "Token Economy",
+    productLaunch: "Product Launch",
+    cryptoTrends: "Crypto Trends",
+    startup: "Startup",
+  },
+  forbidden: {
+    investmentAdvice: "Investment advice",
+    profitPromise: "Profit promises",
+    politics: "Political controversy",
+    adult: "Adult content",
+    attacks: "Aggressive language",
+    impersonation: "Impersonating officials",
+    pricePrediction: "Price predictions",
+  },
+  growthGoals: {
+    activity: "Increase account activity",
+    followers: "Grow followers",
+    website: "Drive website visits",
+    trial: "Drive free trials",
+    leads: "Capture leads",
+    brandAuthority: "Build brand authority",
+    dmConversion: "Convert through DMs",
+  },
+  voicePresets: {
+    concise: "Concise and professional",
+    natural: "Relaxed and natural",
+    web3Native: "Web3-native",
+    founder: "Founder perspective",
+    technical: "Technical explainer",
+    growth: "Growth conversion",
+    community: "Community operations",
+  },
+};
 
 export default function OAFBotsPage() {
   const { t } = useT();
@@ -812,8 +889,11 @@ function botToPayload(bot: OAFBot): OAFBotPayload {
   };
 }
 
-function optionKeys(namespace: string, keys: string[], t: (key: string, params?: Record<string, string | number>) => string): string[] {
-  return keys.map((key) => t(`oafBots.options.${namespace}.${key}`));
+function optionKeys(namespace: string, keys: string[], t: (key: string, params?: Record<string, string | number>) => string): ChipOption[] {
+  return keys.map((key) => ({
+    value: recommendedOptionValues[namespace]?.[key] ?? key,
+    label: t(`oafBots.options.${namespace}.${key}`),
+  }));
 }
 
 function calculatePersonaCompleteness(form: OAFBotPayload) {
@@ -1048,7 +1128,7 @@ function ChipTextField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: ChipOption[];
   placeholder?: string;
   helper?: string;
 }) {
@@ -1072,7 +1152,7 @@ function ChipTextArea({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: ChipOption[];
   placeholder?: string;
   helper?: string;
   recommended?: boolean;
@@ -1096,7 +1176,7 @@ function TagPicker({
 }: {
   label: string;
   values: string[];
-  options: string[];
+  options: ChipOption[];
   onChange: (values: string[]) => void;
   helper?: string;
   placeholder?: string;
@@ -1126,7 +1206,7 @@ function TagPicker({
                 onClick={() => removeValue(value)}
                 className="rounded-full border border-violet-300/25 bg-violet-400/10 px-3 py-1 text-xs text-violet-50 hover:bg-violet-400/18"
               >
-                {value} ×
+                {getChipLabel(value, options)} ×
               </button>
             ))}
           </div>
@@ -1154,28 +1234,28 @@ function TagPicker({
   );
 }
 
-function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: string[]; selected: string[]; onPick: (value: string) => void; maxInitial?: number }) {
+function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: ChipOption[]; selected: string[]; onPick: (value: string) => void; maxInitial?: number }) {
   const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const orderedOptions = useMemo(() => {
-    return [...options].sort((a, b) => Number(selected.includes(b)) - Number(selected.includes(a)));
+    return [...options].sort((a, b) => Number(selected.includes(b.value)) - Number(selected.includes(a.value)));
   }, [options, selected]);
   const visibleOptions = expanded ? orderedOptions : orderedOptions.slice(0, maxInitial);
   const hasMore = orderedOptions.length > maxInitial;
   return (
     <div className="flex flex-wrap gap-2">
       {visibleOptions.map((option) => {
-        const active = selected.includes(option);
+        const active = selected.includes(option.value);
         return (
           <button
-            key={option}
+            key={option.value}
             type="button"
-            onClick={() => onPick(option)}
+            onClick={() => onPick(option.value)}
             className={`rounded-full border px-3 py-1.5 text-xs transition ${
               active ? "border-cyan-200/55 bg-cyan-400/18 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.14)]" : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.07]"
             }`}
           >
-            {option}
+            {option.label}
           </button>
         );
       })}
@@ -1190,6 +1270,10 @@ function ChipOptions({ options, selected, onPick, maxInitial = 6 }: { options: s
       ) : null}
     </div>
   );
+}
+
+function getChipLabel(value: string, options: ChipOption[]) {
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function BotPreview({

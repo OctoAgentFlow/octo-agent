@@ -86,6 +86,8 @@ type GenerateOAFBotSamplesInput struct {
 type GenerateAutoPostInput struct {
 	AccountHandle    string
 	Topic            string
+	ContentDirection string
+	RecentPosts      []string
 	HasBot           bool
 	Name             string
 	Occupation       string
@@ -340,20 +342,22 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	if handle == "" {
 		handle = "@account"
 	}
+	direction := strings.TrimSpace(firstNonEmpty(in.ContentDirection, in.Topic))
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's Auto Post content generator.",
 		"Write one original X/Twitter post for the provided account.",
-		"Output only the post text. Do not include markdown, labels, or surrounding quotes.",
+		"Generate exactly one tweet.",
+		"Output plain text only. Do not include JSON, markdown, labels, field names, or surrounding quotes.",
 	}, " ")
 
 	var user strings.Builder
 	user.WriteString("Account: " + handle + "\n")
-	if strings.TrimSpace(in.Topic) != "" {
-		user.WriteString("User requested topic: " + strings.TrimSpace(in.Topic) + "\n")
+	if direction != "" {
+		user.WriteString("Content direction: " + direction + "\n")
 	}
 	if in.HasBot {
 		user.WriteString("Use this OAF Bot persona:\n")
-		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("internal_bot_name: " + strings.TrimSpace(in.Name) + "\n")
 		user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
 		user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
 		user.WriteString("age_range: " + strings.TrimSpace(in.AgeRange) + "\n")
@@ -371,10 +375,24 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	} else {
 		user.WriteString("No OAF Bot is bound to this account. Use the default Octo-Agent Flow voice: practical, clear, useful, and non-spammy.\n")
 	}
+	if len(in.RecentPosts) > 0 {
+		user.WriteString("Recent generated posts to avoid repeating:\n")
+		for _, post := range in.RecentPosts {
+			post = strings.TrimSpace(post)
+			if post == "" {
+				continue
+			}
+			user.WriteString("- ")
+			user.WriteString(truncateRunes(post, 180))
+			user.WriteString("\n")
+		}
+	}
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 260 characters.\n")
 	user.WriteString("- Make it useful and specific, not hype.\n")
 	user.WriteString("- Do not mention that you are AI.\n")
+	user.WriteString("- Do not mention the bot name in generated content unless the user explicitly instructed it in identity_summary, voice_tone, or growth_goal.\n")
+	user.WriteString("- Avoid repeating recent posts or using the same opening pattern.\n")
 	user.WriteString("- Do not ask for private keys, seed phrases, wallet connections, airdrops, or guaranteed returns.\n")
 	user.WriteString("- Avoid forbidden topics if any are listed.\n")
 

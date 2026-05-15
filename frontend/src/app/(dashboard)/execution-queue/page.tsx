@@ -9,6 +9,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { automationService } from "@/services/automation.service";
+import { autoPostService } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
 import {
   reviewQueueService,
@@ -114,7 +115,7 @@ export default function ExecutionQueuePage() {
   };
 
   const saveEdit = async (item: ReviewQueueItemApi) => {
-    if (!editingContent.trim() || (item.type !== "comment" && item.type !== "reply")) return;
+    if (!editingContent.trim() || (item.type !== "comment" && item.type !== "reply" && item.type !== "post")) return;
     setBusyID(item.id);
     try {
       if (item.type === "comment") {
@@ -123,11 +124,17 @@ export default function ExecutionQueuePage() {
           content: updated.generated_comment || editingContent.trim(),
           status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
         });
-      } else {
+      } else if (item.type === "reply") {
         const updated = await automationService.updateReplyDraft(item.source_id, editingContent.trim());
         updateLocalItem(item, {
           content: updated.generated_reply || editingContent.trim(),
           status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
+        });
+      } else {
+        const updated = await autoPostService.updateDraft(item.source_id, editingContent.trim());
+        updateLocalItem(item, {
+          content: updated.generated_content || editingContent.trim(),
+          status: updated.status as ReviewQueueItemApi["status"],
         });
       }
       setEditingKey(null);
@@ -141,12 +148,14 @@ export default function ExecutionQueuePage() {
   };
 
   const approve = async (item: ReviewQueueItemApi) => {
-    if (item.type !== "comment" && item.type !== "reply") return;
+    if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return;
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
         ? await automationService.approveCommentTask(item.source_id)
-        : await automationService.approveReplyDraft(item.source_id);
+        : item.type === "reply"
+          ? await automationService.approveReplyDraft(item.source_id)
+          : await autoPostService.approveDraft(item.source_id);
       updateLocalItem(item, { status: updated.status === "review" ? "pending_review" : (updated.status as ReviewQueueItemApi["status"]) });
       pushToast(t("executionQueue.toast.approved"));
       void loadQueue();
@@ -158,12 +167,14 @@ export default function ExecutionQueuePage() {
   };
 
   const reject = async (item: ReviewQueueItemApi) => {
-    if (item.type !== "comment" && item.type !== "reply") return;
+    if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return;
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
         ? await automationService.rejectCommentDraft(item.source_id, t("executionQueue.rejectReason"))
-        : await automationService.rejectReplyDraft(item.source_id, t("executionQueue.rejectReason"));
+        : item.type === "reply"
+          ? await automationService.rejectReplyDraft(item.source_id, t("executionQueue.rejectReason"))
+          : await autoPostService.rejectDraft(item.source_id, t("executionQueue.rejectReason"));
       updateLocalItem(item, { status: updated.status as ReviewQueueItemApi["status"] });
       pushToast(t("executionQueue.toast.rejected"));
       void loadQueue();
@@ -287,7 +298,7 @@ export default function ExecutionQueuePage() {
               const Icon = typeIcon(item.type);
               const itemKey = `${item.type}-${item.id}`;
               const editing = editingKey === itemKey;
-              const manageable = item.type === "comment" || item.type === "reply";
+              const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               return (
                 <div key={`${item.type}-${item.id}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">

@@ -12,15 +12,17 @@ import (
 type ReviewQueueService struct {
 	commentTaskRepo *repository.AutoCommentTaskRepository
 	replyDraftRepo  *repository.AutoReplyDraftRepository
+	postDraftRepo   *repository.AutoPostDraftRepository
 	publishJobRepo  *repository.PublishJobRepository
 	botRepo         *repository.OAFBotRepository
 	accountRepo     *repository.TwitterAccountRepository
 }
 
-func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, publishJobRepo *repository.PublishJobRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
+func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, postDraftRepo *repository.AutoPostDraftRepository, publishJobRepo *repository.PublishJobRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *ReviewQueueService {
 	return &ReviewQueueService{
 		commentTaskRepo: commentTaskRepo,
 		replyDraftRepo:  replyDraftRepo,
+		postDraftRepo:   postDraftRepo,
 		publishJobRepo:  publishJobRepo,
 		botRepo:         botRepo,
 		accountRepo:     accountRepo,
@@ -48,6 +50,13 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	if err != nil {
 		return nil, err
 	}
+	postDrafts := []model.AutoPostDraft{}
+	if s.postDraftRepo != nil {
+		postDrafts, err = s.postDraftRepo.ListByUser(userID, 500)
+		if err != nil {
+			return nil, err
+		}
+	}
 	bots, err := s.botRepo.ListByUserID(userID)
 	if err != nil {
 		return nil, err
@@ -66,6 +75,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	}
 	commentJobs := map[uint]model.PublishJob{}
 	replyJobs := map[uint]model.PublishJob{}
+	postJobs := map[uint]model.PublishJob{}
 	if s.publishJobRepo != nil {
 		commentIDs := make([]uint, 0, len(tasks))
 		for _, task := range tasks {
@@ -89,13 +99,24 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		for _, job := range jobs {
 			replyJobs[job.SourceID] = job
 		}
+		postIDs := make([]uint, 0, len(postDrafts))
+		for _, draft := range postDrafts {
+			postIDs = append(postIDs, draft.ID)
+		}
+		jobs, err = s.publishJobRepo.ListBySources(userID, repository.PublishSourcePost, postIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, job := range jobs {
+			postJobs[job.SourceID] = job
+		}
 	}
 
 	typeFilter := normalizeReviewQueueFilter(query.Type)
 	statusFilter := normalizeReviewQueueFilter(query.Status)
 	modeFilter := normalizeReviewQueueFilter(query.ExecutionMode)
 
-	allItems := make([]dto.ReviewQueueItem, 0, len(tasks)+len(replyDrafts))
+	allItems := make([]dto.ReviewQueueItem, 0, len(tasks)+len(replyDrafts)+len(postDrafts))
 	stats := dto.ReviewQueueStats{}
 	for _, task := range tasks {
 		item := autoCommentTaskToReviewQueueItem(task, botNames[task.BotID], accountNames[task.XAccountID])
@@ -115,6 +136,21 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 	for _, draft := range replyDrafts {
 		item := autoReplyDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
 		applyPublishJobToReviewQueueItem(&item, replyJobs[draft.ID])
+		incrementReviewQueueStats(&stats, item.Status)
+		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
+			continue
+		}
+		if statusFilter != "" && statusFilter != "all" && item.Status != statusFilter {
+			continue
+		}
+		if modeFilter != "" && modeFilter != "all" && item.ExecutionMode != modeFilter {
+			continue
+		}
+		allItems = append(allItems, item)
+	}
+	for _, draft := range postDrafts {
+		item := autoPostDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
+		applyPublishJobToReviewQueueItem(&item, postJobs[draft.ID])
 		incrementReviewQueueStats(&stats, item.Status)
 		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
 			continue
@@ -232,6 +268,39 @@ func autoReplyDraftToReviewQueueItem(draft model.AutoReplyDraft, botName string,
 		TwitterAccountID:   draft.XAccountID,
 		TwitterAccountName: accountName,
 		TargetSummary:      strings.TrimSpace(target),
+		RiskLevel:          draft.RiskLevel,
+		RiskReasons:        reasons,
+		CreatedAt:          draft.CreatedAt.UTC().Format(timeRFC3339),
+		SourceStatus:       draft.Status,
+		SourceID:           draft.ID,
+	}
+}
+
+func autoPostDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, accountName string) dto.ReviewQueueItem {
+	status := normalizeReviewQueueStatus(draft.Status)
+	mode := inferReviewQueueExecutionMode(draft.CapabilityStatus)
+	reasons := make([]string, 0, 2)
+	if strings.TrimSpace(draft.FailureCategory) != "" {
+		reasons = append(reasons, draft.FailureCategory)
+	}
+	if strings.TrimSpace(draft.FailureReason) != "" {
+		reasons = append(reasons, draft.FailureReason)
+	}
+	target := strings.TrimSpace(draft.ContentDirection)
+	if target == "" {
+		target = "Auto Post"
+	}
+	return dto.ReviewQueueItem{
+		ID:                 draft.ID,
+		Type:               "post",
+		Content:            draft.GeneratedContent,
+		Status:             status,
+		ExecutionMode:      mode,
+		BotID:              draft.BotID,
+		BotName:            botName,
+		TwitterAccountID:   draft.XAccountID,
+		TwitterAccountName: accountName,
+		TargetSummary:      truncateRunes(target, 120),
 		RiskLevel:          draft.RiskLevel,
 		RiskReasons:        reasons,
 		CreatedAt:          draft.CreatedAt.UTC().Format(timeRFC3339),

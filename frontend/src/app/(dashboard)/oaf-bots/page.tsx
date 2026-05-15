@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Copy,
   FilePlus2,
+  Globe2,
   Info,
   Lock,
   Mail,
@@ -87,25 +88,27 @@ const emptyUsage: PlanUsage = {
   autoDMsToday: 0,
 };
 
-const emptyForm: OAFBotPayload = {
-  name: "",
-  twitter_account_id: 0,
-  occupation: "",
-  industry: "",
-  age_range: "",
-  gender: "",
-  education: "",
-  mbti: "",
-  personality_tags: [],
-  identity_summary: "",
-  voice_tone: "",
-  topics: [],
-  forbidden_topics: [],
-  growth_goal: "",
-  safety_mode: "balanced",
-  primary_language: "zh-CN",
-  language_strategy: "follow_context",
-};
+function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
+  return {
+    name: "",
+    twitter_account_id: 0,
+    occupation: "",
+    industry: "",
+    age_range: "",
+    gender: "",
+    education: "",
+    mbti: "",
+    personality_tags: [],
+    identity_summary: "",
+    voice_tone: "",
+    topics: [],
+    forbidden_topics: [],
+    growth_goal: "",
+    safety_mode: "balanced",
+    primary_language: defaultPrimaryLanguage,
+    language_strategy: "follow_context",
+  };
+}
 
 const mbtiValues = [
   "not_set",
@@ -203,15 +206,16 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
 };
 
 export default function OAFBotsPage() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { pushToast } = useToast();
+  const defaultPrimaryLanguage = lang === "en" ? "en" : "zh-CN";
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(emptyLimits);
   const [usage, setUsage] = useState<PlanUsage>(emptyUsage);
   const [selectedID, setSelectedID] = useState<number | null>(null);
-  const [form, setForm] = useState<OAFBotPayload>(emptyForm);
+  const [form, setForm] = useState<OAFBotPayload>(() => createEmptyForm(defaultPrimaryLanguage));
   const [activeStep, setActiveStep] = useState<WizardStep>("identity");
   const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
   const [samples, setSamples] = useState<OAFBotSamples | null>(null);
@@ -224,8 +228,8 @@ export default function OAFBotsPage() {
   const canCreate = usage.oafBots < limits.maxBots;
   const formChanged = useMemo(() => {
     if (!selectedBot) return false;
-    return JSON.stringify(botToPayload(selectedBot)) !== JSON.stringify(form);
-  }, [form, selectedBot]);
+    return JSON.stringify(botToPayload(selectedBot, defaultPrimaryLanguage)) !== JSON.stringify(form);
+  }, [defaultPrimaryLanguage, form, selectedBot]);
 
   const accountByID = useMemo(() => {
     return new Map(accounts.map((account) => [account.id, account]));
@@ -243,6 +247,8 @@ export default function OAFBotsPage() {
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
+  const isDefaultLanguageConfig =
+    (form.primary_language || defaultPrimaryLanguage) === defaultPrimaryLanguage && (form.language_strategy || "follow_context") === "follow_context";
   const activeStepIndex = wizardStepOrder.indexOf(activeStep);
   const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
@@ -349,12 +355,6 @@ export default function OAFBotsPage() {
       { value: "en", label: t("oafBots.language.en") },
       { value: "ja", label: t("oafBots.language.ja") },
       { value: "ko", label: t("oafBots.language.ko") },
-      { value: "es", label: t("oafBots.language.es") },
-      { value: "pt", label: t("oafBots.language.pt") },
-      { value: "vi", label: t("oafBots.language.vi") },
-      { value: "id", label: t("oafBots.language.id") },
-      { value: "de", label: t("oafBots.language.de") },
-      { value: "fr", label: t("oafBots.language.fr") },
       { value: "mixed_zh_en", label: t("oafBots.language.mixedZhEn") },
     ],
     [t],
@@ -379,7 +379,7 @@ export default function OAFBotsPage() {
       setAccounts(accountData.items);
       if (!selectedID && botData.items[0]) {
         setSelectedID(botData.items[0].id);
-        setForm(botToPayload(botData.items[0]));
+        setForm(botToPayload(botData.items[0], defaultPrimaryLanguage));
       }
       broadcastDataSynced(Date.now());
     } catch (error) {
@@ -387,11 +387,20 @@ export default function OAFBotsPage() {
     } finally {
       setLoading(false);
     }
-  }, [pushToast, selectedID, t]);
+  }, [defaultPrimaryLanguage, pushToast, selectedID, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (selectedID) return;
+    setForm((prev) => {
+      if (!isUnconfiguredDraft(prev)) return prev;
+      if (prev.primary_language === defaultPrimaryLanguage && prev.language_strategy === "follow_context") return prev;
+      return createEmptyForm(defaultPrimaryLanguage);
+    });
+  }, [defaultPrimaryLanguage, selectedID]);
 
   const loadGenerationUsages = useCallback(async (botID: number) => {
     setGenerationUsagesLoading(true);
@@ -420,14 +429,14 @@ export default function OAFBotsPage() {
 
   const selectBot = (bot: OAFBot) => {
     setSelectedID(bot.id);
-    setForm(botToPayload(bot));
+    setForm(botToPayload(bot, defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
   };
 
   const startCreate = () => {
     setSelectedID(null);
-    setForm(emptyForm);
+    setForm(createEmptyForm(defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
     setGenerationUsages([]);
@@ -452,7 +461,7 @@ export default function OAFBotsPage() {
       const saved = selectedID ? await oafBotService.update(selectedID, form) : await oafBotService.create(form);
       setBots((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
       setSelectedID(saved.id);
-      setForm(botToPayload(saved));
+      setForm(botToPayload(saved, defaultPrimaryLanguage));
       setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
       pushToast(t("oafBots.toast.saved"));
     } catch (error) {
@@ -723,22 +732,17 @@ export default function OAFBotsPage() {
 
             {activeStep === "style" ? (
               <WizardPanel title={t("oafBots.section.style")} description={t("oafBots.section.styleDesc")}>
-                <div className="mb-4 grid gap-4 md:grid-cols-2">
-                  <SelectField
-                    label={t("oafBots.fields.primaryLanguage")}
-                    value={form.primary_language}
-                    onChange={(value) => updateForm("primary_language", value)}
-                    options={languageOptions}
-                    helper={t("oafBots.helpers.primaryLanguage")}
-                  />
-                  <SelectField
-                    label={t("oafBots.fields.languageStrategy")}
-                    value={form.language_strategy}
-                    onChange={(value) => updateForm("language_strategy", value)}
-                    options={languageStrategyOptions}
-                    helper={t(`oafBots.languageStrategy.helper.${form.language_strategy || "follow_context"}`)}
-                  />
-                </div>
+                <LanguageConfigPanel
+                  t={t}
+                  primaryLanguage={form.primary_language || defaultPrimaryLanguage}
+                  languageStrategy={form.language_strategy || "follow_context"}
+                  defaultPrimaryLanguage={defaultPrimaryLanguage}
+                  isDefault={isDefaultLanguageConfig}
+                  languageOptions={languageOptions}
+                  languageStrategyOptions={languageStrategyOptions}
+                  onPrimaryLanguageChange={(value) => updateForm("primary_language", value)}
+                  onLanguageStrategyChange={(value) => updateForm("language_strategy", value)}
+                />
                 <TagPicker
                   label={t("oafBots.fields.personalityTags")}
                   values={form.personality_tags}
@@ -915,6 +919,8 @@ export default function OAFBotsPage() {
               industryOptions={industryOptions}
               languageOptions={languageOptions}
               languageStrategyOptions={languageStrategyOptions}
+              defaultPrimaryLanguage={defaultPrimaryLanguage}
+              isDefaultLanguageConfig={isDefaultLanguageConfig}
             />
             <GenerationUsageCard
               t={t}
@@ -929,7 +935,7 @@ export default function OAFBotsPage() {
   );
 }
 
-function botToPayload(bot: OAFBot): OAFBotPayload {
+function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayload {
   return {
     name: bot.name,
     twitter_account_id: bot.twitter_account_id,
@@ -946,9 +952,29 @@ function botToPayload(bot: OAFBot): OAFBotPayload {
     forbidden_topics: bot.forbidden_topics || [],
     growth_goal: bot.growth_goal,
     safety_mode: bot.safety_mode || "balanced",
-    primary_language: bot.primary_language || "zh-CN",
+    primary_language: bot.primary_language || defaultPrimaryLanguage,
     language_strategy: bot.language_strategy || "follow_context",
   };
+}
+
+function isUnconfiguredDraft(form: OAFBotPayload) {
+  return (
+    !form.name.trim() &&
+    !form.twitter_account_id &&
+    !form.occupation.trim() &&
+    !form.industry.trim() &&
+    !form.age_range.trim() &&
+    !form.gender.trim() &&
+    !form.education.trim() &&
+    !form.mbti.trim() &&
+    form.personality_tags.length === 0 &&
+    !form.identity_summary.trim() &&
+    !form.voice_tone.trim() &&
+    form.topics.length === 0 &&
+    form.forbidden_topics.length === 0 &&
+    !form.growth_goal.trim() &&
+    form.safety_mode === "balanced"
+  );
 }
 
 function optionKeys(namespace: string, keys: string[], t: (key: string, params?: Record<string, string | number>) => string): ChipOption[] {
@@ -1081,6 +1107,80 @@ function FieldShell({
       {children}
       {helper ? <span className="block text-xs leading-relaxed text-white/42">{helper}</span> : null}
     </label>
+  );
+}
+
+function LanguageConfigPanel({
+  t,
+  primaryLanguage,
+  languageStrategy,
+  defaultPrimaryLanguage,
+  isDefault,
+  languageOptions,
+  languageStrategyOptions,
+  onPrimaryLanguageChange,
+  onLanguageStrategyChange,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  primaryLanguage: string;
+  languageStrategy: string;
+  defaultPrimaryLanguage: string;
+  isDefault: boolean;
+  languageOptions: SelectOption[];
+  languageStrategyOptions: SelectOption[];
+  onPrimaryLanguageChange: (value: string) => void;
+  onLanguageStrategyChange: (value: string) => void;
+}) {
+  const currentPrimaryLanguage = primaryLanguage || defaultPrimaryLanguage;
+  const currentLanguageStrategy = languageStrategy || "follow_context";
+  return (
+    <div className="mb-5 rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-400/10 via-white/[0.035] to-violet-500/10 p-4 shadow-[0_18px_60px_rgba(56,189,248,0.08)]">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+            <Globe2 className="size-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-white">{t("oafBots.languageConfig.title")}</h3>
+              {isDefault ? (
+                <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] text-white/55">
+                  {t("oafBots.languageConfig.defaultBadge")}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-white/52">{t("oafBots.languageConfig.description")}</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <SelectField
+          label={t("oafBots.fields.primaryLanguage")}
+          value={currentPrimaryLanguage}
+          onChange={onPrimaryLanguageChange}
+          options={languageOptions}
+          helper={t("oafBots.helpers.primaryLanguage")}
+        />
+        <SelectField
+          label={t("oafBots.fields.languageStrategy")}
+          value={currentLanguageStrategy}
+          onChange={onLanguageStrategyChange}
+          options={languageStrategyOptions}
+          helper={t("oafBots.helpers.languageStrategy")}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+          <p className="text-xs text-white/40">{t("oafBots.languageConfig.primaryHint")}</p>
+          <p className="mt-1 text-sm font-medium text-white">{getSelectLabel(currentPrimaryLanguage, languageOptions)}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+          <p className="text-xs text-white/40">{t("oafBots.languageConfig.strategyHint")}</p>
+          <p className="mt-1 text-sm font-medium text-white">{getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/50">{t(`oafBots.languageStrategy.helper.${currentLanguageStrategy}`)}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1417,6 +1517,8 @@ function BotPreview({
   industryOptions,
   languageOptions,
   languageStrategyOptions,
+  defaultPrimaryLanguage,
+  isDefaultLanguageConfig,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   form: OAFBotPayload;
@@ -1433,15 +1535,22 @@ function BotPreview({
   industryOptions: ChipOption[];
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
+  defaultPrimaryLanguage: string;
+  isDefaultLanguageConfig: boolean;
 }) {
   const lowCompletion = completion < 60;
   const readyCompletion = completion >= 80;
   const showDetails = completion >= 30;
+  const currentPrimaryLanguage = form.primary_language || defaultPrimaryLanguage;
+  const currentLanguageStrategy = form.language_strategy || "follow_context";
+  const defaultBadge = isDefaultLanguageConfig ? ` · ${t("oafBots.languageConfig.defaultBadge")}` : "";
+  const languageSummaryRows = [
+    { label: t("oafBots.fields.primaryLanguage"), value: `${getSelectLabel(currentPrimaryLanguage, languageOptions)}${defaultBadge}` },
+    { label: t("oafBots.fields.languageStrategy"), value: `${getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}${defaultBadge}` },
+  ];
   const previewRows = [
     { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
     { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
-    { label: t("oafBots.fields.primaryLanguage"), value: getSelectLabel(form.primary_language, languageOptions) },
-    { label: t("oafBots.fields.languageStrategy"), value: getSelectLabel(form.language_strategy, languageStrategyOptions) },
     { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
@@ -1474,6 +1583,12 @@ function BotPreview({
           <p className={`mt-2 text-xs leading-relaxed ${readyCompletion ? "text-emerald-100/85" : "text-amber-100/85"}`}>
             {readyCompletion ? t("oafBots.preview.readyCompleteness") : lowCompletion ? t("oafBots.preview.lowCompleteness") : t("oafBots.preview.mediumCompleteness")}
           </p>
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {languageSummaryRows.map((row) => (
+            <PreviewRow key={row.label} label={row.label} value={row.value} />
+          ))}
         </div>
 
         <div className="mt-5 grid gap-3">

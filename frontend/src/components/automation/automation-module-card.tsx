@@ -39,7 +39,7 @@ export function AutomationModuleCard({ module, onToggle, onEdit }: Props) {
       {module.type === "post" ? (
         <div className="mt-3 rounded-lg border border-violet-300/25 bg-violet-500/10 p-3">
           <p className="text-xs text-violet-100/90">{t("automation.module.post.contentHint")}</p>
-          <Link href="/posts/create" className="mt-2 inline-flex">
+          <Link href="/posts/create?source=auto_post" className="mt-2 inline-flex">
             <Button size="sm" variant="outline" type="button">
               {t("automation.module.post.createCta")}
             </Button>
@@ -49,4 +49,3 @@ export function AutomationModuleCard({ module, onToggle, onEdit }: Props) {
     </Card>
   );
 }
-

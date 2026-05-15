@@ -351,7 +351,7 @@ function AutomationTabs() {
   const { t } = useT();
   const tabs = [
     { href: "/automations", label: t("automation.tabs.overview"), icon: ListChecks },
-    { href: "/posts/create", label: t("automation.tabs.autoPost"), icon: FileText },
+    { href: "/posts/create?source=auto_post", label: t("automation.tabs.autoPost"), icon: FileText },
     { href: "/auto-replies", label: t("automation.tabs.autoReply"), icon: MessageCircle },
     { href: "/auto-comments", label: t("automation.tabs.autoComment"), icon: MessagesSquare },
     { href: "/auto-dms", label: t("automation.tabs.autoDm"), icon: Mail },
@@ -397,7 +397,7 @@ function AutomationEntryGrid({
     {
       title: t("automation.entry.autoPost.title"),
       description: t("automation.entry.autoPost.description"),
-      href: "/posts/create",
+      href: "/posts/create?source=auto_post",
       cta: t("automation.entry.autoPost.cta"),
       icon: FileText,
       stats: t("automation.entry.autoPost.stats"),

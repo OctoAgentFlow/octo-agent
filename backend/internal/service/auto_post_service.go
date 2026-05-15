@@ -24,6 +24,10 @@ var ErrAutoPostDuplicateContent = errors.New("auto_post_duplicate_content")
 
 const autoPostPreviewRunes = 280
 
+type autoPostPlannerRunOptions struct {
+	RespectSchedule bool
+}
+
 type AutoPostService struct {
 	accountRepo  *repository.TwitterAccountRepository
 	planRepo     *repository.AutoPostPlanRepository
@@ -150,6 +154,29 @@ func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResp
 		items = append(items, s.toRunItem(row))
 	}
 	return &dto.AutoPostGenerationRunsResponse{Items: items}, nil
+}
+
+func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (*dto.AutoPostGenerationRunItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, err := s.planRepo.GetByUserAndID(userID, planID); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	claimed, err := s.planRepo.TryClaimManual(userID, planID, now, now.Add(-10*time.Minute))
+	if err != nil {
+		return nil, err
+	}
+	if !claimed {
+		return nil, fmt.Errorf("auto post planner is already running")
+	}
+	run, err := s.runPlannerOnce(ctx, planID, autoPostPlannerRunOptions{RespectSchedule: false})
+	if err != nil {
+		return nil, err
+	}
+	item := s.toRunItem(*run)
+	return &item, nil
 }
 
 func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint, req dto.AutoPostGenerateRequest) (*dto.AutoPostDraftItem, error) {
@@ -292,27 +319,32 @@ func (s *AutoPostService) RunTick(ctx context.Context) {
 }
 
 func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) error {
+	_, err := s.runPlannerOnce(ctx, planID, autoPostPlannerRunOptions{RespectSchedule: true})
+	return err
+}
+
+func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, options autoPostPlannerRunOptions) (*model.AutoPostGenerationRun, error) {
 	now := time.Now().UTC()
 	plan, err := s.planRepo.GetByID(planID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	next := s.nextAutoPostRun(*plan, now)
 	finish := func(lastRun *time.Time) error {
 		return s.planRepo.FinishScheduler(plan.ID, lastRun, next)
 	}
-	recordSkip := func(reason string) error {
+	recordSkip := func(reason string) (*model.AutoPostGenerationRun, error) {
 		run := s.newAutoPostRun(*plan, "skipped", reason, 0, 0, "")
 		_ = s.createSchedulerActivity(*plan, "failed", "activity.preview.autoPostSchedulerSkipped", reason)
 		if s.runRepo != nil {
 			if err := s.runRepo.Create(run); err != nil {
 				_ = finish(nil)
-				return err
+				return nil, err
 			}
 		}
-		return finish(nil)
+		return run, finish(nil)
 	}
-	recordFailure := func(reason string, err error) error {
+	recordFailure := func(reason string, err error) (*model.AutoPostGenerationRun, error) {
 		msg := reason
 		if err != nil {
 			msg = err.Error()
@@ -322,23 +354,27 @@ func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) err
 		if s.runRepo != nil {
 			if createErr := s.runRepo.Create(run); createErr != nil {
 				_ = finish(nil)
-				return createErr
+				return nil, createErr
 			}
 		}
-		return finish(nil)
+		return run, finish(nil)
 	}
 
-	if !s.isWithinAutoPostWindow(*plan, now) {
+	if !plan.Enabled {
+		next = time.Time{}
+		return recordSkip("planner_disabled")
+	}
+	if options.RespectSchedule && !s.isWithinAutoPostWindow(*plan, now) {
 		next = s.nextAutoPostRun(*plan, now)
 		return recordSkip("outside_posting_window")
 	}
-	if plan.LastRunAt != nil && plan.MinIntervalMinutes > 0 && now.Sub(*plan.LastRunAt) < time.Duration(plan.MinIntervalMinutes)*time.Minute {
+	if options.RespectSchedule && plan.LastRunAt != nil && plan.MinIntervalMinutes > 0 && now.Sub(*plan.LastRunAt) < time.Duration(plan.MinIntervalMinutes)*time.Minute {
 		next = s.nextAutoPostRun(*plan, *plan.LastRunAt)
 		return recordSkip("min_interval_active")
 	}
 	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(plan.UserID, plan.XAccountID)
 	if err != nil {
-		return recordSkip("x_account_not_connected")
+		return recordSkip("account_not_connected")
 	}
 	user, err := s.userRepo.GetByID(plan.UserID)
 	if err != nil {
@@ -377,7 +413,7 @@ func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) err
 	if s.runRepo != nil {
 		if err := s.runRepo.Create(run); err != nil {
 			_ = finish(&now)
-			return err
+			return nil, err
 		}
 	}
 	zap.L().Info("auto post scheduler: draft generated",
@@ -387,7 +423,7 @@ func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) err
 		zap.Uint("draft_id", draft.ID),
 		zap.Uint("content_library_item_id", contentItem.ID))
 	last := now
-	return finish(&last)
+	return run, finish(&last)
 }
 
 func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.AutoPostDraftItem, error) {
@@ -632,6 +668,7 @@ func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPos
 			botName = bot.Name
 		}
 	}
+	contentTitle := s.contentTitle(row.UserID, row.ContentLibraryID)
 	return dto.AutoPostGenerationRunItem{
 		ID:               row.ID,
 		UserID:           row.UserID,
@@ -641,7 +678,8 @@ func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPos
 		BotID:            row.BotID,
 		BotName:          botName,
 		ContentLibraryID: row.ContentLibraryID,
-		ContentTitle:     s.contentTitle(row.UserID, row.ContentLibraryID),
+		ContentTitle:     contentTitle,
+		ContentItemTitle: contentTitle,
 		Status:           row.Status,
 		SkipReason:       row.SkipReason,
 		GeneratedDraftID: row.GeneratedDraftID,

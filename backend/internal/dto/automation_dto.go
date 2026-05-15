@@ -187,6 +187,7 @@ type AutoPostGenerationRunItem struct {
 	BotName          string `json:"bot_name,omitempty"`
 	ContentLibraryID uint   `json:"content_library_item_id,omitempty"`
 	ContentTitle     string `json:"content_title,omitempty"`
+	ContentItemTitle string `json:"content_library_item_title,omitempty"`
 	Status           string `json:"status"`
 	SkipReason       string `json:"skip_reason,omitempty"`
 	GeneratedDraftID uint   `json:"generated_draft_id,omitempty"`

@@ -82,11 +82,26 @@ func (r *AutoPostPlanRepository) TryClaimDue(id uint, now time.Time, staleBefore
 	return tx.RowsAffected == 1, tx.Error
 }
 
+func (r *AutoPostPlanRepository) TryClaimManual(userID, id uint, now time.Time, staleBefore time.Time) (bool, error) {
+	tx := r.DB.Model(&model.AutoPostPlan{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Where("(processing_at IS NULL OR processing_at < ?)", staleBefore).
+		Updates(map[string]any{
+			"processing_at": now,
+			"updated_at":    now,
+		})
+	return tx.RowsAffected == 1, tx.Error
+}
+
 func (r *AutoPostPlanRepository) FinishScheduler(id uint, lastRunAt *time.Time, nextRunAt time.Time) error {
 	updates := map[string]any{
 		"processing_at": nil,
-		"next_run_at":   nextRunAt,
 		"updated_at":    time.Now().UTC(),
+	}
+	if nextRunAt.IsZero() {
+		updates["next_run_at"] = nil
+	} else {
+		updates["next_run_at"] = nextRunAt
 	}
 	if lastRunAt != nil {
 		updates["last_run_at"] = *lastRunAt

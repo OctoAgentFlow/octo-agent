@@ -10,7 +10,7 @@
 x_publisher:
   real_publish_enabled: false
   manual_publish_enabled: true
-  per_account_daily_limit: 20
+  per_account_daily_limit: 1
   per_account_min_interval_seconds: 300
   dry_run: true
 ```
@@ -21,7 +21,7 @@ x_publisher:
 
    - 进入 X Developer Portal。
    - 确认 App permissions 至少包含 `Read and write`。
-   - 如果未来需要私信，再确认包含 Direct Message 权限；本次 reply/comment 只要求 `tweet.write`。
+   - 如果未来需要私信，再确认包含 Direct Message 权限；本次 post/reply/comment 只要求 `tweet.write`。
    - 确认 Type of App 为 Web App / Automated App or Bot。
    - 确认 callback URL 包含测试环境：
 
@@ -59,7 +59,7 @@ curl -H "Authorization: Bearer <USER_JWT>" \
   "real_publish_enabled": false,
   "manual_publish_enabled": true,
   "dry_run": true,
-  "per_account_daily_limit": 20,
+  "per_account_daily_limit": 1,
   "per_account_min_interval_seconds": 300,
   "current_user_connected_accounts_count": 1,
   "accounts_missing_tweet_write_count": 0
@@ -96,14 +96,23 @@ x_publisher:
 
 2. 生成 `ready_to_publish` job
 
-推荐路径：
+推荐路径 A：Auto Post 普通发推灰度
+
+- 打开用户端 `/auto-post`。
+- 选择已绑定的测试 X 账号。
+- 确认该账号已绑定 OAF Bot，并且内容池至少有一条启用素材。
+- 执行模式选择全托管，或在审核模式下生成草稿后手动批准。
+- 点击“立即生成草稿”或“立即运行一次”。
+- 确认 Execution Queue 中出现 `type=post`、`ready_to_publish` 内容和 `publish_job`。
+
+推荐路径 B：回复/评论灰度
 
 - 打开用户端 `/auto-comments` 或 `/auto-replies`。
 - 选择已绑定的测试 X 账号。
 - 执行模式选择全托管。
 - 录入目标推文或待回复评论。
 - 点击生成评论/回复草稿。
-- 确认 Execution Queue 中出现 `ready_to_publish` 内容和 `publish_job`。
+- 确认 Execution Queue 中出现 `type=comment` 或 `type=reply`、`ready_to_publish` 内容和 `publish_job`。
 
 3. 执行 dry-run
 
@@ -131,9 +140,9 @@ curl -X POST \
 
 - `publish_jobs.status = published`
 - `publish_jobs.publish_mode = dry_run`
-- `auto_comment_tasks` 或 `auto_reply_drafts` 状态变为 `published`
+- 对应 source draft 状态变为 `published`：`auto_post_drafts`、`auto_comment_tasks` 或 `auto_reply_drafts`
 - Activity 出现 `activity.preview.manualPublishDryRunSuccess`
-- X 上不应出现真实评论或回复。
+- X 上不应出现真实推文、评论或回复。
 
 ## 阶段 3：单账号真实发布
 
@@ -183,7 +192,7 @@ curl -H "Authorization: Bearer <USER_JWT>" \
 
 - 在 Execution Queue 中点击“真实发布”。
 - 二次确认文案必须出现：`这将真实发布到 X，操作不可撤销。`
-- 发布后检查 X 上是否出现真实回复/评论。
+- 发布后检查 X 上是否出现真实推文、回复或评论。
 
 6. 验收结果
 
@@ -191,6 +200,7 @@ curl -H "Authorization: Bearer <USER_JWT>" \
 - `publish_jobs.publish_mode = real`
 - `publish_jobs.external_id` 有值
 - `publish_jobs.external_url` 有值
+- 如果 source_type 为 `post`，`external_url` 应指向测试账号的新推文。
 - Activity 出现 `activity.preview.realPublishSuccess`
 - Execution Queue 显示已发布和 external URL。
 

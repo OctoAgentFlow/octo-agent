@@ -32,10 +32,12 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
 
   return (
     <Card className="bg-[#0f1419] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="grid flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <label className="space-y-1">
+            <span className="text-xs text-[#71767b]">{t("activity.filters.typeLabel")}</span>
           <select
-            className="form-input w-[180px]"
+              className="form-input w-full"
             value={value.type}
             onChange={(e) => onChange({ ...value, type: e.target.value as Filters["type"], errorReason: "" })}
           >
@@ -45,8 +47,11 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
             <option value="comment">{t("activity.type.comment")}</option>
             <option value="dm">{t("activity.type.dm")}</option>
           </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-[#71767b]">{t("activity.filters.statusLabel")}</span>
           <select
-            className="form-input w-[160px]"
+              className="form-input w-full"
             value={value.status}
             onChange={(e) => onChange({ ...value, status: e.target.value as Filters["status"], errorReason: "" })}
           >
@@ -55,8 +60,11 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
             <option value="review">{t("activity.status.review")}</option>
             <option value="failed">{t("activity.status.failed")}</option>
           </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-[#71767b]">{t("activity.filters.rangeLabel")}</span>
           <select
-            className="form-input w-[160px]"
+              className="form-input w-full"
             value={value.range}
             onChange={(e) => onChange({ ...value, range: e.target.value as ActivityRange, errorReason: "" })}
           >
@@ -64,8 +72,11 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
             <option value="7d">{t("activity.filters.range.7d")}</option>
             <option value="30d">{t("activity.filters.range.30d")}</option>
           </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-[#71767b]">{t("activity.filters.accountLabel")}</span>
           <select
-            className="form-input w-[190px]"
+              className="form-input w-full"
             value={value.accountID}
             onChange={(e) => onChange({ ...value, accountID: e.target.value, errorReason: "" })}
           >
@@ -76,10 +87,21 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
               </option>
             ))}
           </select>
+          </label>
+          <label className="space-y-1 sm:col-span-2 xl:col-span-1">
+            <span className="text-xs text-[#71767b]">{t("activity.filters.errorReasonLabel")}</span>
+            <input
+              className="form-input w-full"
+              value={value.errorReason}
+              placeholder={t("activity.filters.errorReasonPlaceholder")}
+              onChange={(event) => onChange({ ...value, errorReason: event.target.value })}
+            />
+          </label>
         </div>
         {hasActive ? (
           <Button
             variant="ghost"
+            className="h-10"
             onClick={() => onChange({ type: "all", status: "all", range: "24h", accountID: "all", errorReason: "" })}
           >
             {t("activity.filters.clear")}

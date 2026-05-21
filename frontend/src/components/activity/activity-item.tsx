@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send } from "lucide-react";
 
 import type { ActivityRecord } from "@/types/activity";
 import { Badge } from "@/components/ui/badge";
@@ -53,29 +54,46 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
   };
 
   return (
-    <article className="border-b border-[#2f3336] bg-black p-4 transition-colors last:border-b-0 hover:bg-[#080808]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span className="inline-flex size-10 items-center justify-center rounded-full border border-[#2f3336] bg-[#16181c]">
+    <article className="relative border-b border-[#2f3336] bg-black p-4 transition-colors last:border-b-0 hover:bg-[#080808] md:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#16181c]">
             <Icon className="size-4 text-[#1d9bf0]" />
+            <span className="absolute -bottom-1 -right-1 inline-flex size-5 items-center justify-center rounded-full border border-black bg-[#0f1419]">
+              {record.status === "success" ? <CheckCircle2 className="size-3 text-[#e7e9ea]" /> : null}
+              {record.status === "review" ? <Bot className="size-3 text-[#e7e9ea]" /> : null}
+              {record.status === "failed" ? <AlertTriangle className="size-3 text-[#e7e9ea]" /> : null}
+            </span>
           </span>
-          <div className="space-y-1">
+          <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
+              <span className="text-xs text-[#71767b]">{relativeTime(record.executedAt, t)}</span>
             </div>
             <p className="line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]">{activityNarrativeLine(record, t)}</p>
             {record.errorMessage ? (
-              <p className="line-clamp-2 break-words text-xs leading-snug text-[#ff8a91]">{record.errorMessage}</p>
+              <p className="rounded-2xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-3 py-2 text-xs leading-relaxed text-[#ffb6bb]">
+                {record.errorMessage}
+              </p>
             ) : null}
-            <div className="flex flex-wrap gap-4 text-xs text-[#71767b]">
-              <span>{record.accountHandle}</span>
-              <span>{relativeTime(record.executedAt, t)}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{record.accountHandle || t("activity.detail.noAccount")}</span>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{new Date(record.executedAt).toLocaleString()}</span>
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <span className="text-xs text-[#71767b]">{new Date(record.executedAt).toLocaleString()}</span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {record.status === "review" ? (
+            <Link href="/execution-queue" className="text-sm font-semibold text-[#1d9bf0] hover:underline">
+              {t("activity.actions.openQueue")}
+            </Link>
+          ) : null}
+          {record.status === "failed" ? (
+            <Link href="/automations" className="text-sm font-semibold text-[#ff8a91] hover:underline">
+              {t("activity.actions.troubleshoot")}
+            </Link>
+          ) : null}
           {canInspect ? (
             <Button
               type="button"
@@ -97,6 +115,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             <DetailField label={t("activity.detail.fields.id")} value={`#${record.id}`} />
             <DetailField label={t("activity.detail.fields.account")} value={record.accountHandle || "—"} />
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
+            <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
             <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />
             {record.xAccountId ? (
               <DetailField label={t("activity.detail.fields.accountId")} value={String(record.xAccountId)} />

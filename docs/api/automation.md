@@ -181,7 +181,7 @@ Base path: `/api/v1`
 
 ### POST /api/v1/auto-replies/drafts/:id/approve
 
-- **用途**：批准回复草稿，后续进入发布任务。
+- **用途**：批准回复草稿；若草稿进入待发布状态，会由 Publishing Pipeline 创建或处理发布任务。
 
 ### POST /api/v1/auto-replies/drafts/:id/reject
 

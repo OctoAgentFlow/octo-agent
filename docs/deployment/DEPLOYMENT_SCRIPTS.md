@@ -47,6 +47,23 @@
 ./scripts/deploy-admin-front-test.sh
 ```
 
+测试服务器常用流程：
+
+```bash
+cd /home/ubuntu/octo/octo-agent
+git checkout test
+git pull --ff-only origin test
+bash scripts/deploy-backend-api-test.sh
+bash scripts/deploy-api-front-test.sh
+```
+
+如果改动涉及 Admin API 或后台前端，再部署：
+
+```bash
+bash scripts/deploy-backend-admin-test.sh
+bash scripts/deploy-admin-front-test.sh
+```
+
 ## 日志与 PID
 
 脚本运行后会在项目根目录生成运行时文件：
@@ -84,6 +101,48 @@ ALLOW_KILL_PORT=1 ./scripts/deploy-backend-api-test.sh
 - `TODO_BILLING_WEBHOOK_SECRET`
 - `TODO_BSC_RPC_URL`
 - `TODO_PROD_RECEIVER_ADDRESS`
+
+## X Publisher 灰度配置
+
+测试环境默认应保持：
+
+```yaml
+x_publisher:
+  real_publish_enabled: false
+  manual_publish_enabled: true
+  per_account_daily_limit: 1
+  per_account_min_interval_seconds: 300
+  dry_run: true
+```
+
+这表示：
+
+- Execution Queue 可以展示人工发布入口。
+- `publish-now` 只能执行发布演练，不会真实发 X。
+- scheduler 只执行 simulated publish，不会自动真实发布。
+
+单账号真实发布灰度时，才临时把 API 私有配置改为：
+
+```yaml
+x_publisher:
+  real_publish_enabled: true
+  manual_publish_enabled: true
+  per_account_daily_limit: 1
+  per_account_min_interval_seconds: 300
+  dry_run: false
+```
+
+完成灰度后必须恢复 `dry_run=true` 或 `real_publish_enabled=false`。完整流程见 [x-publisher-gray-release.md](./x-publisher-gray-release.md)。
+
+部署后检查：
+
+```bash
+curl -fsS http://127.0.0.1:11001/health
+curl -sS -o /dev/null -w "%{http_code}" https://test.octo-agent.com/api/v1/publishing/status
+curl -sS -X POST -o /dev/null -w "%{http_code}" https://test.octo-agent.com/api/v1/publishing/jobs/1/publish-now
+```
+
+未登录访问 publishing 接口应返回 `401`。
 
 Resend API Key 不写入 YAML，建议放在 `backend/configs/.env` 或服务器环境变量中：
 

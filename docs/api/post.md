@@ -6,6 +6,24 @@ Base path: `/api/v1`
 
 统一响应：`{ "code", "message", "data" }`。
 
+## 与 Auto Post Planner 的边界
+
+`posts` 是传统帖子 CRUD / 手动执行 / 定时发布接口，仍然可用。
+
+新版 OAF Bot 自动发推闭环优先使用：
+
+- `/api/v1/auto-post/plans`
+- `/api/v1/content-library/items`
+- `/api/v1/auto-post/drafts`
+- `/api/v1/review-queue`
+- `/api/v1/publishing/jobs`
+
+也就是说：
+
+- `posts` 适合用户手动创建固定内容。
+- Auto Post Planner 适合让 OAF Bot 根据人设、内容池和发推规则自动生成草稿。
+- Auto Post Planner 生成的内容通过 Execution Queue / Publishing Pipeline 发布，不直接复用 `POST /posts/:id/execute`。
+
 ## 数据模型（`posts` 表）
 
 | 字段 | 说明 |
@@ -87,7 +105,7 @@ Base path: `/api/v1`
 
 **OAuth 范围**：绑定 X 账号时需包含 `tweet.write`（与发帖一致）。
 
-## 自动调度（服务端）
+## 传统 Posts 自动调度（服务端）
 
 - API 进程内 **每分钟** 扫描一次（与分布式/队列无关）。
 - 条件：`status = scheduled` 且 `scheduled_at <=` 当前 UTC，且该用户在 `automation_configs` 中 **`type = post` 且 `enabled = true`**。
@@ -97,3 +115,7 @@ Base path: `/api/v1`
 - **限流（与 `automation_configs` 中 Post 模块一致）**：调度执行前会检查当日已成功发帖数（`frequency_daily_limit`）与最近 1 小时成功数（`safety_max_per_hour`），超出则 **推迟 1 分钟再试**（不写失败 Activity）。
 - **X 频率限制（429 等）**：帖子 **改回 `scheduled`**，并按 `Retry-After`（缺省约 15 分钟，有上限）延后 `scheduled_at`；Activity 记一条失败说明（含 `error_message`），帖子记录 `last_error_message`。
 - 若 **Post 自动化未启用**，该用户的计划帖 **不会** 被自动执行。
+
+## Auto Post Planner 调度
+
+Auto Post Planner 的 scheduler 使用 `auto_post_plans`、`content_library_items` 和 `auto_post_drafts`，不写入 `posts` 表。详见 [automation.md](./automation.md)。

@@ -1,5 +1,7 @@
 # MVP_ACCEPTANCE_CHECKLIST
 
+> 历史快照：本文档是早期 MVP 本地验收清单，保留用于追溯。当前继续开发和调试请使用 `CURRENT_ACCEPTANCE_CHECKLIST.md`。
+
 ## 验收状态定义
 
 - `可直接验收`：只依赖本地 MySQL、本地 API、本地前端即可完成。

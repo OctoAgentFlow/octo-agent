@@ -2,9 +2,9 @@
 
 ## 目标
 
-在不破坏当前 OAF Bot、Auto Comment、Billing 和 AI 生成计量的前提下，为自动化链路增加执行模式基础能力。
+在不破坏当前 OAF Bot、Auto Post、Auto Reply、Auto Comment、Billing 和 AI 生成计量的前提下，为自动化链路提供统一执行模式。
 
-本阶段只完成配置和状态流转，不接入真实 X 评论发布。
+当前已完成配置和状态流转，并接入 Execution Queue / Publishing Pipeline。scheduler 不自动真实发布；真实发布仅允许人工灰度触发。
 
 ## 数据结构
 
@@ -22,7 +22,7 @@
 user_id + type -> execution_mode
 ```
 
-其中 `type=comment` 对应 Auto Comment。
+其中 `type=post/reply/comment` 分别对应 Auto Post、Auto Reply、Auto Comment。
 
 OAF Bot 绑定规则保持 one bot per account：
 
@@ -31,9 +31,9 @@ OAF Bot 绑定规则保持 one bot per account：
 - 自动化生成时按 `twitter_account_id` 查询绑定 Bot，不通过 Bot 反查多个账号。
 - 多账号复用人设未来通过 Bot Template / Clone 实现，本阶段不新增多账号绑定关系表。
 
-### auto_comment_tasks
+### source drafts/tasks
 
-扩展状态语义：
+Auto Post、Auto Reply、Auto Comment 使用一致的状态语义：
 
 | 状态 | 含义 |
 | --- | --- |
@@ -44,7 +44,7 @@ OAF Bot 绑定规则保持 one bot per account：
 | `rejected` | 人工拒绝 |
 | `blocked` | 安全拦截 |
 | `failed` | 生成或执行失败 |
-| `sent` | 未来真实发布成功 |
+| `published` | simulated / dry-run / real publish 完成后的统一发布状态 |
 
 ## 后端接口
 
@@ -69,15 +69,15 @@ PATCH /api/v1/automations/:type/execution-mode
 - 设置 `autopilot` 时校验当前用户套餐必须是 Plus / Pro / Pro+
 - 不设置时兼容旧配置，默认按 `review` 返回
 
-## Auto Comment 生成流程
+## 通用生成流程
 
 ```mermaid
 flowchart TD
-  A["Generate Auto Comment"] --> B["Check AI monthly quota"]
-  B --> C["Load comment automation config"]
+  A["Generate automation content"] --> B["Check AI monthly quota"]
+  B --> C["Load automation config"]
   C --> D["Resolve effective execution_mode"]
   D --> E["Load OAF Bot by X account"]
-  E --> F["Generate comment with OAF Bot persona"]
+  E --> F["Generate content with OAF Bot persona"]
   F --> G["Evaluate safety risk"]
   G --> H{"Risk hit?"}
   H -- yes --> I["status=pending_review"]
@@ -85,7 +85,7 @@ flowchart TD
   J -- manual --> K["status=draft"]
   J -- review --> L["status=pending_review"]
   J -- autopilot --> M["status=ready_to_publish"]
-  M --> N["Create Activity: commentAutopilotPrepared"]
+  M --> N["Create publish job if needed"]
 ```
 
 ## 风控规则
@@ -103,9 +103,9 @@ flowchart TD
 
 ## 前端改动
 
-### Auto Comment 页面
+### 前端页面
 
-新增执行模式选择卡：
+Auto Post、Auto Reply、Auto Comment 页面都应展示执行模式：
 
 - 手动模式
 - 审核后发布
@@ -119,7 +119,7 @@ flowchart TD
 保存执行模式调用：
 
 ```ts
-automationService.updateExecutionMode("comment", mode)
+automationService.updateExecutionMode(scene, mode)
 ```
 
 ### Automations 编辑弹窗
@@ -130,8 +130,8 @@ automationService.updateExecutionMode("comment", mode)
 
 - 老用户没有 `execution_mode` 时，后端返回 `review`。
 - Auto Comment 已有 `review` 状态仍可批准，新增 `pending_review` 不破坏旧记录。
-- 当前不会调用真实 X 评论发布接口。
-- AI 生成次数、OAF Bot 最近生成记录、Billing 使用量沿用现有 `scene=auto_comment` 记录。
+- scheduler 不会调用真实 X 发布接口。
+- AI 生成次数、OAF Bot 本月生成用量、Billing 使用量分别记录 `scene=auto_post`、`scene=auto_reply`、`scene=auto_comment`。
 
 ## 验收要点
 
@@ -139,5 +139,5 @@ automationService.updateExecutionMode("comment", mode)
 - review 模式生成 `pending_review`。
 - autopilot 模式生成 `ready_to_publish`。
 - 风险命中时 autopilot 降级 `pending_review`。
-- 全托管不会真实发到 X。
+- scheduler 全托管不会真实发到 X。
 - Plus 以下无法设置 autopilot。

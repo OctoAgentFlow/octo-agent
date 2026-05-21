@@ -17,7 +17,9 @@ import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
+import { oafBotService } from "@/services/oaf-bot.service";
 import type { ConnectedXAccount } from "@/types/accounts";
+import type { OAFBot } from "@/types/oaf-bot";
 
 import { AccountsEmptyState } from "./accounts-empty-state";
 import { AccountsPageHeader } from "./accounts-page-header";
@@ -63,6 +65,7 @@ export function AccountsClient() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedXAccount[]>([]);
+  const [bots, setBots] = useState<OAFBot[]>([]);
   const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
 
@@ -97,6 +100,19 @@ export function AccountsClient() {
     void fetchAccounts();
   }, [fetchAccounts]);
 
+  const fetchBots = useCallback(async () => {
+    try {
+      const data = await oafBotService.list();
+      setBots(data.items);
+    } catch {
+      setBots([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchBots();
+  }, [fetchBots]);
+
   useEffect(() => {
     let cancelled = false;
     billingService
@@ -117,12 +133,13 @@ export function AccountsClient() {
       void (async () => {
         try {
           await fetchAccounts({ quiet: true });
+          await fetchBots();
         } finally {
           broadcastPageRefreshComplete();
         }
       })();
     });
-  }, [fetchAccounts]);
+  }, [fetchAccounts, fetchBots]);
 
   /** When OAuth finishes in a popup, it notifies this tab so we refresh without navigating away. */
   useEffect(() => {
@@ -133,6 +150,7 @@ export function AccountsClient() {
       if (data.status === "success") {
         pushToast(t("accounts.toast.connected"));
         void fetchAccounts({ quiet: true });
+        void fetchBots();
         broadcastDashboardRefresh();
         setDialogOpen(false);
       } else if (data.status === "failed") {
@@ -141,7 +159,7 @@ export function AccountsClient() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [fetchAccounts, pushToast, t]);
+  }, [fetchAccounts, fetchBots, pushToast, t]);
 
   useEffect(() => {
     const oauth = searchParams.get("oauth");
@@ -164,12 +182,13 @@ export function AccountsClient() {
     if (oauth === "success") {
       pushToast(t("accounts.toast.connected"));
       void fetchAccounts();
+      void fetchBots();
       broadcastDashboardRefresh();
     } else if (oauth === "failed") {
       pushToast(t("accounts.toast.authorizationFailed"));
     }
     router.replace(pathname);
-  }, [fetchAccounts, pathname, pushToast, router, searchParams, t]);
+  }, [fetchAccounts, fetchBots, pathname, pushToast, router, searchParams, t]);
 
   const onDisconnect = useCallback(
     async (id: string) => {
@@ -180,6 +199,7 @@ export function AccountsClient() {
         await accountService.disconnect(accountID);
         pushToast(t("accounts.toast.disconnected"));
         await fetchAccounts();
+        void fetchBots();
         broadcastDashboardRefresh();
       } catch (error) {
         if (axios.isAxiosError(error)) {
@@ -191,11 +211,15 @@ export function AccountsClient() {
         setDisconnectingAccountId(null);
       }
     },
-    [fetchAccounts, pushToast, t]
+    [fetchAccounts, fetchBots, pushToast, t]
   );
 
   const isFreeAccountLimitReached = subscription?.plan === "free_trial" && accounts.length >= 1;
   const freeAccountLimitReason = t("accounts.limit.freeTrialOneAccount");
+  const connectedCount = accounts.filter((account) => account.status === "connected").length;
+  const needsActionCount = accounts.filter((account) => account.status !== "connected").length;
+  const boundBotCount = bots.filter((bot) => accounts.some((account) => Number(account.id) === bot.twitter_account_id)).length;
+  const accountLimit = subscription?.limits.max_twitter_accounts ?? 1;
 
   const startOAuth = useCallback(async (options?: { bypassFreeLimit?: boolean }) => {
     if (isFreeAccountLimitReached && !options?.bypassFreeLimit) {
@@ -260,8 +284,15 @@ export function AccountsClient() {
 
       {loadState === "ready" && accounts.length > 0 ? (
         <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <AccountMetricCard label={t("accounts.overview.connected")} value={`${connectedCount}/${accountLimit}`} />
+            <AccountMetricCard label={t("accounts.overview.boundBots")} value={`${boundBotCount}/${accounts.length}`} />
+            <AccountMetricCard label={t("accounts.overview.needsAction")} value={String(needsActionCount)} tone={needsActionCount > 0 ? "warning" : "success"} />
+            <AccountMetricCard label={t("accounts.overview.automationReady")} value={String(Math.min(connectedCount, boundBotCount))} />
+          </div>
           <AccountList
             accounts={accounts}
+            bots={bots}
             onReconnect={onReconnect}
             onDisconnect={onDisconnect}
             disconnectingAccountId={disconnectingAccountId}
@@ -271,5 +302,20 @@ export function AccountsClient() {
 
       <BindAccountDialog open={dialogOpen} onOpenChange={setDialogOpen} onAuthorize={startOAuth} />
     </div>
+  );
+}
+
+function AccountMetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "success" | "warning" }) {
+  const toneClass = {
+    default: "text-[#e7e9ea]",
+    success: "text-emerald-200",
+    warning: "text-amber-200",
+  }[tone];
+
+  return (
+    <Card className="bg-[#0f1419] p-4">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</p>
+    </Card>
   );
 }

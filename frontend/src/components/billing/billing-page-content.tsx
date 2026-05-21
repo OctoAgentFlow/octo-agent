@@ -129,10 +129,10 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
               : "border-[#2f3336] bg-black"
         }`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-white">{t("billing.usage.ai.title")}</p>
-            <p className="mt-1 text-xs text-[#71767b]">
+            <p className="mt-1 break-words text-xs text-[#71767b]">
               {t("billing.usage.ai.summary", {
                 used: usedAI,
                 limit: limitAI,
@@ -141,7 +141,7 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
               })}
             </p>
           </div>
-          <Button type="button" size="sm" variant={aiWarning ? "default" : "outline"} onClick={onUpgrade}>
+          <Button type="button" size="sm" className="w-full sm:w-auto" variant={aiWarning ? "default" : "outline"} onClick={onUpgrade}>
             {t("actions.upgrade")}
           </Button>
         </div>

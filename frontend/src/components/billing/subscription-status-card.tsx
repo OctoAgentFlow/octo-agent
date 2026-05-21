@@ -16,7 +16,7 @@ export function SubscriptionStatusCard({ subscription }: { subscription: Current
       <CardHeader
         title={t("billing.subscription.title")}
         description={t("billing.subscription.description")}
-        right={<Button variant="outline">{t("billing.subscription.manage")}</Button>}
+        right={<Button variant="outline" className="w-full sm:w-auto">{t("billing.subscription.manage")}</Button>}
       />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="grid gap-3 sm:grid-cols-2">

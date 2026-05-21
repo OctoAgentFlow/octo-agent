@@ -51,43 +51,51 @@ export function PlanComparison({
           {t("billing.billingCycle.yearlySave")}
         </span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
           const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });
+          const isCurrentPlan = currentPlan === plan.code;
           return (
             <article
               key={plan.code}
-              className={`relative flex h-full flex-col rounded-2xl border p-4 transition-colors ${
+              className={`relative flex h-full min-h-[560px] flex-col rounded-[26px] border p-5 transition-colors ${
                 plan.highlight
                   ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10 shadow-[0_0_24px_rgba(29,155,240,0.12)]"
                   : "border-[#2f3336] bg-black hover:bg-[#080808]"
               }`}
             >
-              <div className="mb-3 h-7">
+              <div className="mb-3 flex h-7 items-center justify-between gap-2">
                 {badgeKey ? (
                   <span className="inline-flex h-7 items-center gap-1 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 text-xs text-[#8ecdf8]">
                     <Star className="size-3" />
                     {t(badgeKey)}
                   </span>
+                ) : (
+                  <span />
+                )}
+                {isCurrentPlan ? (
+                  <span className="inline-flex h-7 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 text-xs text-[#7ee0b5]">
+                    {t("actions.currentPlan")}
+                  </span>
                 ) : null}
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-h-[128px] flex-col justify-between gap-4">
                 <div className="min-w-0">
                   <h4 className="text-base font-semibold text-white">{plan.name}</h4>
                   <p className="mt-1 min-h-10 text-xs leading-relaxed text-[#71767b]">{t(planAudienceKey(plan.code))}</p>
                 </div>
-                <p className="shrink-0 text-left text-sm text-[#71767b] sm:text-right">
-                  <span className="text-xl font-semibold text-white">
+                <p className="shrink-0 text-left text-sm text-[#71767b]">
+                  <span className="text-4xl font-bold tracking-[-0.03em] text-white">
                     {billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
-                  <span className="block whitespace-nowrap text-xs text-[#71767b]">
+                  <span className="ml-2 whitespace-nowrap text-xs text-[#71767b]">
                     {t(planUnitKey(billingCycle))}
                   </span>
                 </p>
               </div>
               <p className="mt-2 min-h-12 text-sm leading-relaxed text-[#71767b]">{t(planDescriptionKey(plan.code))}</p>
-              <ul className="mt-4 space-y-2">
+              <ul className="mt-4 flex-1 space-y-2">
                 {benefits.map((benefit) => (
                   <li key={benefit} className="flex items-start gap-2 text-sm text-[#d5d9dc]">
                     <span className="mt-[0.55em] inline-block size-1.5 shrink-0 rounded-full bg-[#1d9bf0]" />
@@ -117,10 +125,10 @@ export function PlanComparison({
                       ? ""
                       : "border border-[#2f3336] bg-transparent text-white hover:bg-[#16181c]"
                   }`}
-                  disabled={currentPlan === plan.code}
+                  disabled={isCurrentPlan}
                   onClick={() => onUpgrade(plan.code)}
                 >
-                  {currentPlan === plan.code ? t("actions.currentPlan") : t("actions.upgradeTo", { plan: plan.name })}
+                  {isCurrentPlan ? t("actions.currentPlan") : t("actions.upgradeTo", { plan: plan.name })}
                 </Button>
               </div>
             </article>

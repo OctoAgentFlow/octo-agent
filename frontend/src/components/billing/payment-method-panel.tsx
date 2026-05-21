@@ -1,24 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { ArrowUpRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { PaymentMethodOption } from "@/types/billing";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useT } from "@/i18n/use-t";
 
-import { BillingCheckoutDialog } from "./billing-checkout-dialog";
-
 export function PaymentMethodPanel({
   paymentMethods,
-  onPaid,
+  onUpgrade,
 }: {
   paymentMethods: PaymentMethodOption[];
-  /** Called after on-chain payment is confirmed (order status paid). */
-  onPaid?: () => void;
+  onUpgrade: () => void;
 }) {
   const { t } = useT();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   return (
     <SectionCard className="bg-[#0f1419]" title={t("billing.payment.title")} description={t("billing.payment.description")}>
       <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
@@ -35,7 +31,7 @@ export function PaymentMethodPanel({
                   ) : null}
                   {pm.chainId > 0 ? (
                     <span className="text-[#71767b]">
-                      chain_id {pm.chainId}
+                      {t("billing.payment.fields.chainId", { chainId: pm.chainId })}
                     </span>
                   ) : null}
                 </div>
@@ -64,17 +60,12 @@ export function PaymentMethodPanel({
           type="button"
           className="mt-4"
           disabled={paymentMethods.length === 0}
-          onClick={() => setCheckoutOpen(true)}
+          onClick={onUpgrade}
         >
           {t("billing.payment.upgradeCta")}
+          <ArrowUpRight className="size-4" />
         </Button>
       </div>
-      <BillingCheckoutDialog
-        open={checkoutOpen}
-        onOpenChange={setCheckoutOpen}
-        paymentMethods={paymentMethods}
-        onPaid={onPaid}
-      />
     </SectionCard>
   );
 }

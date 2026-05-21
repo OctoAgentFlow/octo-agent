@@ -103,14 +103,14 @@ function MetricCard({
   icon: typeof Activity;
 }) {
   return (
-    <Card className="min-h-[140px]">
+    <Card className="min-h-[140px] bg-[#0f1419] transition-colors hover:bg-[#16181c]">
       <div className="flex h-full items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm text-white/58">{label}</p>
+          <p className="text-sm text-[#71767b]">{label}</p>
           <p className="mt-3 text-3xl font-semibold tracking-normal text-white">{value}</p>
-          <p className="mt-2 text-xs text-white/52">{detail}</p>
+          <p className="mt-2 text-xs text-[#71767b]">{detail}</p>
         </div>
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-cyan-200">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#2f3336] bg-[#16181c] text-[#1d9bf0]">
           <Icon className="h-5 w-5" />
         </span>
       </div>
@@ -200,7 +200,7 @@ export default function AnalyticsPage() {
           <h2 className="text-title">{t("analytics.page.title")}</h2>
           <p className="text-subtitle mt-2">{t("analytics.page.subtitle")}</p>
         </section>
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader title={t("analytics.loading.title")} description={t("analytics.loading.description")} />
         </Card>
       </div>
@@ -237,29 +237,29 @@ export default function AnalyticsPage() {
           </label>
           <select
             id="analytics-account-filter"
-            className="h-10 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-white/[0.08] focus:border-cyan-300/50"
+            className="form-input h-10 py-0"
             value={accountID}
             onChange={(event) => setAccountID(event.target.value)}
           >
-            <option className="bg-[#0b1020] text-white" value="all">
+            <option className="bg-black text-white" value="all">
               {t("analytics.accountFilter.all")}
             </option>
             {accounts.map((account) => (
-              <option className="bg-[#0b1020] text-white" key={account.id} value={account.id}>
+              <option className="bg-black text-white" key={account.id} value={account.id}>
                 @{account.username || account.display_name || account.id}
               </option>
             ))}
           </select>
-          <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1">
+          <div className="inline-flex rounded-full border border-[#2f3336] bg-black p-1">
             {analyticsRanges.map((item) => (
               <button
                 key={item}
                 type="button"
                 aria-pressed={range === item}
-                className={`h-8 rounded-md px-3 text-sm font-medium transition-colors ${
+                className={`h-8 rounded-full px-3 text-sm font-medium transition-colors ${
                   range === item
-                    ? "bg-white/14 text-white"
-                    : "text-white/58 hover:bg-white/[0.08] hover:text-white"
+                    ? "bg-[#1d9bf0] text-white"
+                    : "text-[#71767b] hover:bg-[#16181c] hover:text-white"
                 }`}
                 onClick={() => setRange(item)}
               >
@@ -267,7 +267,7 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
-          <p className="text-sm text-white/55">
+          <p className="text-sm text-[#71767b]">
             {t("analytics.generatedAt", { time: formatDateTime(overview.generated_at) })}
           </p>
         </div>
@@ -321,14 +321,14 @@ export default function AnalyticsPage() {
                 const height = Math.max(8, Math.round((item.total / maxDailyTotal) * 132));
                 return (
                   <div key={item.date} className="min-w-0">
-                    <div className="flex h-36 items-end rounded-md border border-white/8 bg-white/[0.025] px-1.5 py-2">
+                    <div className="flex h-36 items-end rounded-xl border border-[#2f3336] bg-black px-1.5 py-2">
                       <div
-                        className="w-full rounded-sm bg-cyan-300/75"
+                        className="w-full rounded-sm bg-[#1d9bf0]"
                         style={{ height }}
                         title={`${formatDate(item.date)}: ${item.total}`}
                       />
                     </div>
-                    <p className="mt-2 truncate text-center text-xs text-white/55">{formatDate(item.date)}</p>
+                    <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date)}</p>
                     <p className="text-center text-xs font-semibold text-white">{item.total}</p>
                   </div>
                 );
@@ -337,7 +337,7 @@ export default function AnalyticsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader title={t("analytics.posts.title")} description={t("analytics.posts.description")} />
           <div className="space-y-3">
             {[
@@ -347,8 +347,8 @@ export default function AnalyticsPage() {
               ["published", overview.post_summary.published],
               ["failed", overview.post_summary.failed],
             ].map(([key, value]) => (
-              <div key={key} className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-2">
-                <span className="text-sm text-white/68">{t(`analytics.posts.${key}`)}</span>
+              <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+                <span className="text-sm text-[#b6bec5]">{t(`analytics.posts.${key}`)}</span>
                 <span className="text-sm font-semibold text-white">{value}</span>
               </div>
             ))}
@@ -356,13 +356,13 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader
           title={t("analytics.contentEffect.title")}
           description={t("analytics.contentEffect.description")}
           right={
             <Link
-              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
               href="/posts"
             >
               {t("analytics.contentEffect.manage")}
@@ -370,11 +370,11 @@ export default function AnalyticsPage() {
           }
         />
         <div className="grid gap-3 xl:grid-cols-[1.05fr_1.2fr]">
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{t("analytics.contentEffect.conversion")}</p>
-                <p className="mt-1 text-xs text-white/50">{t("analytics.contentEffect.conversionDetail")}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{t("analytics.contentEffect.conversionDetail")}</p>
               </div>
               <p className="text-2xl font-semibold text-white">{overview.content_effect.conversion.publish_rate_pct}%</p>
             </div>
@@ -388,7 +388,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <p className="mb-3 text-sm font-semibold text-white">{t("analytics.contentEffect.dailyTitle")}</p>
             <div className="-mx-1 overflow-x-auto px-1 pb-1">
               <div
@@ -401,57 +401,57 @@ export default function AnalyticsPage() {
                   const failedHeight = Math.max(2, Math.round((item.failed / maxContentDailyTotal) * 120));
                   return (
                     <div key={item.date} className="min-w-0">
-                      <div className="flex h-32 items-end gap-0.5 rounded-md border border-white/8 bg-white/[0.025] px-1 py-2">
-                        <div className="w-full rounded-sm bg-emerald-300/75" style={{ height: item.published ? publishedHeight : 0 }} title={`${formatDate(item.date)} published: ${item.published}`} />
-                        <div className="w-full rounded-sm bg-cyan-300/55" style={{ height: item.scheduled ? scheduledHeight : 0 }} title={`${formatDate(item.date)} scheduled: ${item.scheduled}`} />
-                        <div className="w-full rounded-sm bg-rose-300/70" style={{ height: item.failed ? failedHeight : 0 }} title={`${formatDate(item.date)} failed: ${item.failed}`} />
+                      <div className="flex h-32 items-end gap-0.5 rounded-xl border border-[#2f3336] bg-[#0f1419] px-1 py-2">
+                        <div className="w-full rounded-sm bg-[#00ba7c]" style={{ height: item.published ? publishedHeight : 0 }} title={`${formatDate(item.date)} published: ${item.published}`} />
+                        <div className="w-full rounded-sm bg-[#1d9bf0]" style={{ height: item.scheduled ? scheduledHeight : 0 }} title={`${formatDate(item.date)} scheduled: ${item.scheduled}`} />
+                        <div className="w-full rounded-sm bg-[#f4212e]" style={{ height: item.failed ? failedHeight : 0 }} title={`${formatDate(item.date)} failed: ${item.failed}`} />
                       </div>
-                      <p className="mt-2 truncate text-center text-xs text-white/55">{formatDate(item.date)}</p>
+                      <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date)}</p>
                       <p className="text-center text-xs font-semibold text-white">{item.total}</p>
                     </div>
                   );
                 })}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/55">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-300/75" />{t("analytics.posts.published")}</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-cyan-300/55" />{t("analytics.posts.scheduled")}</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-300/70" />{t("analytics.posts.failed")}</span>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-[#71767b]">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#00ba7c]" />{t("analytics.posts.published")}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#1d9bf0]" />{t("analytics.posts.scheduled")}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#f4212e]" />{t("analytics.posts.failed")}</span>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 rounded-md border border-white/8 bg-white/[0.02] p-4">
+        <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-white">{t("analytics.contentEffect.recentPosts")}</p>
             <Link
-              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
               href={activityHref({ range, type: "post", accountID: selectedAccountID })}
             >
               {t("analytics.viewInActivity")}
             </Link>
           </div>
           {overview.content_effect.recent_posts.length === 0 ? (
-            <p className="text-sm text-white/50">{t("analytics.contentEffect.noRecentPosts")}</p>
+            <p className="text-sm text-[#71767b]">{t("analytics.contentEffect.noRecentPosts")}</p>
           ) : (
             <div className="grid gap-2 lg:grid-cols-2">
               {overview.content_effect.recent_posts.map((post) => (
-                <Link key={post.id} href={`/posts/${post.id}`} className="rounded-md border border-white/8 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.06]">
+                <Link key={post.id} href={`/posts/${post.id}`} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 transition-colors hover:bg-[#16181c]">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="line-clamp-2 min-w-0 text-sm text-white/82">{post.content}</p>
+                    <p className="line-clamp-2 min-w-0 break-words text-sm text-[#e7e9ea]">{post.content}</p>
                     <span
                       className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold ${
                         post.status === "failed"
-                          ? "bg-rose-400/10 text-rose-100"
+                          ? "border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"
                           : post.status === "published"
-                            ? "bg-emerald-400/10 text-emerald-100"
-                            : "bg-white/[0.06] text-white/70"
+                            ? "border border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+                            : "border border-[#2f3336] bg-[#16181c] text-[#71767b]"
                       }`}
                     >
                       {t(`analytics.posts.${post.status}`)}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-white/45">
+                  <p className="mt-2 text-xs text-[#71767b]">
                     {t("analytics.contentEffect.updatedAt", { time: formatDateTime(post.updated_at) })}
                   </p>
                 </Link>
@@ -461,16 +461,16 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader title={t("analytics.automation.title")} description={t("analytics.automation.description")} />
         <div className="grid gap-3 md:grid-cols-3">
           {overview.automation_breakdown.map((item) => {
             const Icon = automationIcon[item.type] ?? Activity;
             return (
-              <div key={item.type} className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+              <div key={item.type} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition-colors hover:bg-[#080808]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="grid h-9 w-9 place-items-center rounded-md bg-white/[0.06] text-cyan-200">
+                    <span className="grid h-9 w-9 place-items-center rounded-full border border-[#2f3336] bg-[#16181c] text-[#1d9bf0]">
                       <Icon className="h-4 w-4" />
                     </span>
                     <p className="font-semibold text-white">{t(`automation.module.${item.type}.name`)}</p>
@@ -478,17 +478,17 @@ export default function AnalyticsPage() {
                   <p className="text-2xl font-semibold text-white">{item.total}</p>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-md bg-emerald-400/10 px-2 py-2">
-                    <p className="text-xs text-emerald-100/70">{t("analytics.status.success")}</p>
-                    <p className="font-semibold text-emerald-100">{item.success}</p>
+                  <div className="rounded-xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 px-2 py-2">
+                    <p className="text-xs text-[#7ee0b5]/80">{t("analytics.status.success")}</p>
+                    <p className="font-semibold text-[#7ee0b5]">{item.success}</p>
                   </div>
-                  <div className="rounded-md bg-rose-400/10 px-2 py-2">
-                    <p className="text-xs text-rose-100/70">{t("analytics.status.failed")}</p>
-                    <p className="font-semibold text-rose-100">{item.failed}</p>
+                  <div className="rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-2 py-2">
+                    <p className="text-xs text-[#ff8a91]/80">{t("analytics.status.failed")}</p>
+                    <p className="font-semibold text-[#ff8a91]">{item.failed}</p>
                   </div>
-                  <div className="rounded-md bg-amber-400/10 px-2 py-2">
-                    <p className="text-xs text-amber-100/70">{t("analytics.status.review")}</p>
-                    <p className="font-semibold text-amber-100">{item.review}</p>
+                  <div className="rounded-xl border border-[#ffd400]/20 bg-[#ffd400]/10 px-2 py-2">
+                    <p className="text-xs text-[#f6d96b]/80">{t("analytics.status.review")}</p>
+                    <p className="font-semibold text-[#f6d96b]">{item.review}</p>
                   </div>
                 </div>
               </div>
@@ -497,13 +497,13 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader
           title={t("analytics.autoDMOps.title")}
           description={t("analytics.autoDMOps.description")}
           right={
             <Link
-              className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
               href="/agents"
             >
               {t("analytics.autoDMOps.manage")}
@@ -511,11 +511,11 @@ export default function AnalyticsPage() {
           }
         />
         <div className="grid gap-3 xl:grid-cols-3">
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.recipients")}</p>
-                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.recipientsDetail")}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{t("analytics.autoDMOps.recipientsDetail")}</p>
               </div>
               <p className="text-2xl font-semibold text-white">{overview.auto_dm_operations.recipients.total}</p>
             </div>
@@ -529,10 +529,10 @@ export default function AnalyticsPage() {
                 return (
                   <div key={key}>
                     <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                      <span className="text-white/65">{t(`analytics.autoDMOps.${key}`)}</span>
+                      <span className="text-[#b6bec5]">{t(`analytics.autoDMOps.${key}`)}</span>
                       <span className="font-semibold text-white">{n}</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className="h-2 overflow-hidden rounded-full bg-[#2f3336]">
                       <div className={`h-full rounded-full ${color}`} style={{ width: `${percent(n, overview.auto_dm_operations.recipients.total)}%` }} />
                     </div>
                   </div>
@@ -541,13 +541,13 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.taskRisk")}</p>
-                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.taskRiskDetail")}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{t("analytics.autoDMOps.taskRiskDetail")}</p>
               </div>
-              <p className="text-2xl font-semibold text-amber-100">{overview.auto_dm_operations.tasks.needs_attention}</p>
+              <p className="text-2xl font-semibold text-[#f6d96b]">{overview.auto_dm_operations.tasks.needs_attention}</p>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <AccountMetric label={t("analytics.status.review")} value={overview.auto_dm_operations.tasks.review} tone="amber" />
@@ -557,11 +557,11 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{t("analytics.autoDMOps.importQuality")}</p>
-                <p className="mt-1 text-xs text-white/50">{t("analytics.autoDMOps.importQualityDetail")}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{t("analytics.autoDMOps.importQualityDetail")}</p>
               </div>
               <p className="text-2xl font-semibold text-white">{overview.auto_dm_operations.imports.batches}</p>
             </div>
@@ -575,38 +575,38 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          <div className="rounded-md border border-white/8 bg-white/[0.02] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.failureCategories")}</p>
             {overview.auto_dm_operations.failure_categories.length === 0 ? (
-              <p className="text-sm text-white/50">{t("analytics.autoDMOps.noFailures")}</p>
+              <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noFailures")}</p>
             ) : (
               <div className="space-y-2">
                 {overview.auto_dm_operations.failure_categories.map((item) => (
-                  <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-md bg-white/[0.03] px-3 py-2">
+                  <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
                     <div className="min-w-0">
                       <p className="break-words text-sm font-medium text-white">{item.category || t("analytics.failureReasons.unknown")}</p>
-                      {item.last_at ? <p className="mt-1 text-xs text-white/45">{formatDateTime(item.last_at)}</p> : null}
+                      {item.last_at ? <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.last_at)}</p> : null}
                     </div>
-                    <span className="shrink-0 rounded-md bg-rose-400/10 px-2 py-1 text-xs font-semibold text-rose-100">{item.count}</span>
+                    <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">{item.count}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="rounded-md border border-white/8 bg-white/[0.02] p-4">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.recentEvents")}</p>
             {overview.auto_dm_operations.recent_events.length === 0 ? (
-              <p className="text-sm text-white/50">{t("analytics.autoDMOps.noEvents")}</p>
+              <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noEvents")}</p>
             ) : (
               <div className="space-y-2">
                 {overview.auto_dm_operations.recent_events.map((item) => (
-                  <div key={item.id} className="rounded-md bg-white/[0.03] px-3 py-2">
+                  <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
-                      <span className="text-xs text-white/45">{formatDateTime(item.executed_at)}</span>
+                      <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at)}</span>
                     </div>
-                    <p className="mt-1 line-clamp-2 break-words text-xs text-white/55">{item.message || item.account_handle || "—"}</p>
+                    <p className="mt-1 line-clamp-2 break-words text-xs text-[#71767b]">{item.message || item.account_handle || "—"}</p>
                   </div>
                 ))}
               </div>
@@ -615,11 +615,11 @@ export default function AnalyticsPage() {
         </div>
 
         {overview.auto_dm_operations.imports.recent_errors.length > 0 ? (
-          <div className="mt-4 rounded-md border border-amber-300/15 bg-amber-300/[0.04] p-4">
-            <p className="mb-3 text-sm font-semibold text-amber-100">{t("analytics.autoDMOps.recentImportErrors")}</p>
+          <div className="mt-4 rounded-2xl border border-[#ffd400]/20 bg-[#ffd400]/10 p-4">
+            <p className="mb-3 text-sm font-semibold text-[#f6d96b]">{t("analytics.autoDMOps.recentImportErrors")}</p>
             <div className="space-y-2">
               {overview.auto_dm_operations.imports.recent_errors.map((item) => (
-                <div key={item.id} className="text-xs text-amber-100/80">
+                <div key={item.id} className="text-xs text-[#f6d96b]">
                   {formatDateTime(item.imported_at)} · {compactText(item.errors.join(" · "), 180)}
                 </div>
               ))}
@@ -628,34 +628,34 @@ export default function AnalyticsPage() {
         ) : null}
       </Card>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader
           title={t("analytics.accounts.title")}
           description={t("analytics.accounts.description")}
           right={
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-cyan-400/10 text-cyan-100">
+            <span className="grid h-9 w-9 place-items-center rounded-full border border-[#2f3336] bg-[#16181c] text-[#1d9bf0]">
               <Users className="h-4 w-4" />
             </span>
           }
         />
         {overview.account_breakdown.length === 0 ? (
-          <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+          <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
             {t("analytics.accounts.empty")}
           </div>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {overview.account_breakdown.map((account) => (
-              <div key={account.account_id} className="rounded-md border border-white/8 bg-white/[0.03] p-4">
+              <div key={account.account_id} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition-colors hover:bg-[#080808]">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-white">
                       {account.display_name || account.username || `#${account.account_id}`}
                     </p>
-                    <p className="mt-1 text-xs text-white/50">@{account.username || account.account_id}</p>
+                    <p className="mt-1 text-xs text-[#71767b]">@{account.username || account.account_id}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-semibold text-white">{account.success_rate_pct}%</p>
-                    <p className="text-xs text-white/45">{t("analytics.accounts.successRate")}</p>
+                    <p className="text-xs text-[#71767b]">{t("analytics.accounts.successRate")}</p>
                   </div>
                 </div>
 
@@ -667,11 +667,11 @@ export default function AnalyticsPage() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-white/45">
+                  <p className="text-xs text-[#71767b]">
                     {t("analytics.accounts.lastActivity", { time: formatDateTime(account.last_activity_at) })}
                   </p>
                   <Link
-                    className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                    className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
                     href={activityHref({ range, accountID: account.account_id })}
                   >
                     {t("analytics.viewInActivity")}
@@ -684,40 +684,40 @@ export default function AnalyticsPage() {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("analytics.failureReasons.title")}
             description={t("analytics.failureReasons.description")}
             right={
-              <span className="grid h-9 w-9 place-items-center rounded-md bg-rose-400/10 text-rose-100">
+              <span className="grid h-9 w-9 place-items-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]">
                 <AlertTriangle className="h-4 w-4" />
               </span>
             }
           />
           {overview.failure_reasons.length === 0 ? (
-            <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+            <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
               {t("analytics.failureReasons.empty")}
             </div>
           ) : (
             <div className="space-y-3">
               {overview.failure_reasons.map((item) => (
-                <div key={`${item.reason}-${item.last_at ?? ""}`} className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+                <div key={`${item.reason}-${item.last_at ?? ""}`} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <p className="min-w-0 break-words text-sm font-medium text-white">
                       {compactText(item.reason || t("analytics.failureReasons.unknown"))}
                     </p>
-                    <span className="shrink-0 rounded-md bg-rose-400/10 px-2 py-1 text-xs font-semibold text-rose-100">
+                    <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">
                       {t("analytics.failureReasons.count", { count: item.count })}
                     </span>
                   </div>
                   {item.last_at ? (
-                    <p className="mt-2 text-xs text-white/45">
+                    <p className="mt-2 text-xs text-[#71767b]">
                       {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
                     </p>
                   ) : null}
                   <div className="mt-3 flex justify-end">
                     <Link
-                      className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
                       href={activityHref({
                         range,
                         status: "failed",
@@ -734,18 +734,18 @@ export default function AnalyticsPage() {
           )}
         </Card>
 
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("analytics.attention.title")}
             description={t("analytics.attention.description")}
             right={
-              <span className="grid h-9 w-9 place-items-center rounded-md bg-amber-400/10 text-amber-100">
+              <span className="grid h-9 w-9 place-items-center rounded-full border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]">
                 <ListChecks className="h-4 w-4" />
               </span>
             }
           />
           {overview.attention_items.length === 0 ? (
-            <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+            <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
               {t("analytics.attention.empty")}
             </div>
           ) : (
@@ -753,7 +753,7 @@ export default function AnalyticsPage() {
               {overview.attention_items.map((item) => {
                 const record = attentionRecord(item);
                 return (
-                  <div key={item.id} className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+                  <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -763,24 +763,24 @@ export default function AnalyticsPage() {
                           <span
                             className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
                               item.status === "failed"
-                                ? "bg-rose-400/10 text-rose-100"
-                                : "bg-amber-400/10 text-amber-100"
+                                ? "border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"
+                                : "border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]"
                             }`}
                           >
                             {t(`analytics.status.${item.status}`)}
                           </span>
                         </div>
-                        <p className="line-clamp-2 break-words text-sm text-white/72">{activityNarrativeLine(record, t)}</p>
+                        <p className="line-clamp-2 break-words text-sm text-[#b6bec5]">{activityNarrativeLine(record, t)}</p>
                         {item.error_message ? (
-                          <p className="line-clamp-2 break-words text-xs text-rose-100/80">{compactText(item.error_message, 160)}</p>
+                          <p className="line-clamp-2 break-words text-xs text-[#ff8a91]">{compactText(item.error_message, 160)}</p>
                         ) : null}
-                        <div className="flex flex-wrap gap-3 text-xs text-white/45">
+                        <div className="flex flex-wrap gap-3 text-xs text-[#71767b]">
                           <span>{item.account_handle}</span>
                           <span>{formatDateTime(item.executed_at)}</span>
                         </div>
                       </div>
                       <Link
-                        className="shrink-0 rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                        className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
                         href={activityHref({
                           range,
                           status: item.status,
@@ -813,12 +813,12 @@ function AccountMetric({
 }) {
   const toneClass =
     tone === "rose"
-      ? "bg-rose-400/10 text-rose-100"
+      ? "border-[#f4212e]/20 bg-[#f4212e]/10 text-[#ff8a91]"
       : tone === "amber"
-        ? "bg-amber-400/10 text-amber-100"
-        : "bg-white/[0.05] text-white";
+        ? "border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]"
+        : "border-[#2f3336] bg-[#0f1419] text-white";
   return (
-    <div className={`rounded-md px-3 py-2 ${toneClass}`}>
+    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
       <p className="text-xs opacity-70">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>

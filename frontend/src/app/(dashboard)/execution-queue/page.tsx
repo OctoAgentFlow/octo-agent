@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, Send, ShieldAlert, XCircle } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, Send, ShieldAlert, Sparkles, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -46,6 +46,60 @@ function typeIcon(type: string) {
   if (type === "post") return FileText;
   if (type === "dm") return Send;
   return Bot;
+}
+
+function sourceTone(type: string) {
+  if (type === "post") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  if (type === "comment") return "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]";
+  if (type === "reply") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+}
+
+function sourceLabelKey(type: string) {
+  if (type === "post") return "executionQueue.source.autoPost";
+  if (type === "comment") return "executionQueue.source.autoComment";
+  if (type === "reply") return "executionQueue.source.autoReply";
+  return "executionQueue.source.autoDm";
+}
+
+function sourceDescriptionKey(type: string) {
+  if (type === "post") return "executionQueue.sourceDesc.post";
+  if (type === "comment") return "executionQueue.sourceDesc.comment";
+  if (type === "reply") return "executionQueue.sourceDesc.reply";
+  return "executionQueue.sourceDesc.dm";
+}
+
+function targetLabelKey(type: string) {
+  if (type === "post") return "executionQueue.item.contentSource";
+  if (type === "comment") return "executionQueue.item.targetTweet";
+  if (type === "reply") return "executionQueue.item.replyTarget";
+  return "executionQueue.item.target";
+}
+
+function normalizeTargetSummary(type: string, value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
+  const summary = (value || "").trim();
+  if (!summary) return "—";
+  if (type === "post" && summary === "Content Library Item") return t("executionQueue.target.contentLibraryItem");
+  if (type === "post" && summary === "Auto Post") return t("executionQueue.target.autoPostPlanner");
+  return summary;
+}
+
+function publishStatusKey(status?: string) {
+  if (!status) return "executionQueue.publishState.notCreated";
+  if (status === "pending") return "executionQueue.publishState.pending";
+  if (status === "processing") return "executionQueue.publishState.processing";
+  if (status === "published") return "executionQueue.publishState.published";
+  if (status === "failed") return "executionQueue.publishState.failed";
+  if (status === "cancelled") return "executionQueue.publishState.cancelled";
+  return "executionQueue.publishState.unknown";
+}
+
+function publishTone(status?: string) {
+  if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (status === "processing") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  if (status === "failed" || status === "cancelled") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+  if (status === "pending") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+  return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
 }
 
 export default function ExecutionQueuePage() {
@@ -292,7 +346,7 @@ export default function ExecutionQueuePage() {
 
       <Card className="overflow-hidden bg-[#0f1419] p-0">
         <div className="border-b border-[#2f3336] p-5 md:p-6">
-        <CardHeader title={t("executionQueue.list.title")} description={t("executionQueue.list.description")} />
+          <CardHeader title={t("executionQueue.list.title")} description={t("executionQueue.list.description")} />
         </div>
         {loadState === "loading" ? (
           <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("executionQueue.loading")}</div>
@@ -316,14 +370,16 @@ export default function ExecutionQueuePage() {
               const editing = editingKey === itemKey;
               const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
+              const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
+              const publishStatusLabel = t(publishStatusKey(item.publish_status));
               return (
                 <div key={`${item.type}-${item.id}`} className="bg-black p-4 transition-colors hover:bg-[#080808] md:p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${sourceTone(item.type)}`}>
                           <Icon className="size-3.5" />
-                          {t(`executionQueue.type.${item.type}`)}
+                          {t(sourceLabelKey(item.type))}
                         </span>
                         <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(item.status)}`}>{t(`executionQueue.status.${item.status}`)}</span>
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-xs text-[#71767b]">
@@ -334,6 +390,30 @@ export default function ExecutionQueuePage() {
                             {t("executionQueue.riskFallback")}
                           </span>
                         ) : null}
+                      </div>
+
+                      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                        <QueueInfoCard
+                          icon={Sparkles}
+                          label={t("executionQueue.item.source")}
+                          title={t(sourceLabelKey(item.type))}
+                          description={t(sourceDescriptionKey(item.type))}
+                          tone={sourceTone(item.type)}
+                        />
+                        <QueueInfoCard
+                          icon={ShieldAlert}
+                          label={t("executionQueue.item.executionPath")}
+                          title={t(`executionQueue.executionMode.${item.execution_mode}`)}
+                          description={t(`executionQueue.executionPath.${item.execution_mode}`)}
+                          tone={statusTone(item.status)}
+                        />
+                        <QueueInfoCard
+                          icon={Send}
+                          label={t("executionQueue.item.publishState")}
+                          title={publishStatusLabel}
+                          description={item.publish_job_id ? t("executionQueue.publishState.withJob", { id: item.publish_job_id }) : t("executionQueue.publishState.withoutJob")}
+                          tone={publishTone(item.publish_status)}
+                        />
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
@@ -350,18 +430,25 @@ export default function ExecutionQueuePage() {
                       </div>
 
                       <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
-                        <p>{t("executionQueue.item.bot")}: {item.bot_name || (item.bot_id ? `Bot #${item.bot_id}` : "—")}</p>
-                        <p>{t("executionQueue.item.account")}: {item.twitter_account_name || `#${item.twitter_account_id}`}</p>
-                        <p className="md:col-span-2">{t("executionQueue.item.target")}: {item.target_summary || "—"}</p>
-                        <p>{t("executionQueue.item.createdAt")}: {formatDate(item.created_at)}</p>
-                        <p>{t("executionQueue.item.risk")}: {item.risk_level || "low"}{item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}</p>
+                        <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
+                        <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
+                        <MetaLine className="md:col-span-2" label={t(targetLabelKey(item.type))} value={displayTarget} />
+                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDate(item.created_at)} />
+                        <MetaLine
+                          label={t("executionQueue.item.risk")}
+                          value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
+                        />
                         {item.publish_job_id ? (
-                          <p className="md:col-span-2">
-                            {t("executionQueue.item.publishJob")}: #{item.publish_job_id}
-                            {item.publish_status ? ` · ${t(`executionQueue.publishStatus.${item.publish_status}`)}` : ""}
-                            {item.publish_mode ? ` · ${t(`executionQueue.publishMode.${item.publish_mode}`)}` : ""}
-                            {item.publish_last_error ? ` · ${item.publish_last_error}` : ""}
-                          </p>
+                          <MetaLine
+                            className="md:col-span-2"
+                            label={t("executionQueue.item.publishJob")}
+                            value={[
+                              `#${item.publish_job_id}`,
+                              item.publish_status ? t(`executionQueue.publishStatus.${item.publish_status}`) : "",
+                              item.publish_mode ? t(`executionQueue.publishMode.${item.publish_mode}`) : "",
+                              item.publish_last_error || "",
+                            ].filter(Boolean).join(" · ")}
+                          />
                         ) : null}
                         {item.publish_external_url ? (
                           <a className="md:col-span-2 break-words text-[#1d9bf0] hover:underline" href={item.publish_external_url} target="_blank" rel="noreferrer">
@@ -374,7 +461,7 @@ export default function ExecutionQueuePage() {
                     <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:justify-start xl:max-w-[300px] xl:justify-end">
                       {item.status === "ready_to_publish" ? (
                         <span className="inline-flex h-8 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs text-[#7ee0b5]">
-                          {t("executionQueue.actions.simulatedMode")}
+                          {item.publish_job_id ? t("executionQueue.actions.inPublishQueue") : t("executionQueue.actions.readyForPublishJob")}
                         </span>
                       ) : null}
                       {item.status === "processing" ? (
@@ -483,5 +570,44 @@ function FilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function QueueInfoCard({
+  icon: Icon,
+  label,
+  title,
+  description,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  description: string;
+  tone: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border ${tone}`}>
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#71767b]">{label}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetaLine({ label, value, className = "" }: { label: string; value: string; className?: string }) {
+  return (
+    <p className={`min-w-0 break-words [overflow-wrap:anywhere] ${className}`}>
+      <span className="text-[#71767b]">{label}</span>
+      <ArrowRight className="mx-1.5 inline size-3 text-[#2f3336]" />
+      <span className="text-[#aeb4bb]">{value || "—"}</span>
+    </p>
   );
 }

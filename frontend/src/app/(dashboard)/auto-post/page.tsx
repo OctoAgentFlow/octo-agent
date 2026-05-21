@@ -401,9 +401,9 @@ export default function AutoPostPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-sm text-blue-100/75">{t("autoPost.kicker")}</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">{t("autoPost.title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{t("autoPost.subtitle")}</p>
+          <p className="text-sm font-medium text-[#1d9bf0]">{t("autoPost.kicker")}</p>
+          <h1 className="mt-2 text-3xl font-bold text-[#e7e9ea]">{t("autoPost.title")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("autoPost.subtitle")}</p>
         </div>
         <Link href="/execution-queue?type=post" className="inline-flex">
           <Button variant="outline">
@@ -414,7 +414,7 @@ export default function AutoPostPage() {
       </div>
 
       {loadState === "loading" ? (
-        <Card className="flex items-center gap-3 text-sm text-white/60">
+        <Card className="flex items-center gap-3 text-sm text-[#71767b]">
           <Loader2 className="size-4 animate-spin" />
           {t("common.loading")}
         </Card>
@@ -427,11 +427,11 @@ export default function AutoPostPage() {
               <CardHeader title={t("autoPost.account.title")} description={t("autoPost.account.description")} />
               {accounts.length > 0 ? (
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-white/60">{t("autoPost.account.label")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.label")}</span>
                   <select
                     value={selectedAccountID}
                     onChange={(event) => onAccountChange(Number(event.target.value))}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                   >
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
@@ -445,14 +445,14 @@ export default function AutoPostPage() {
                   {t("autoPost.account.empty")}
                 </div>
               )}
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.035] p-4">
+              <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-blue-300/20 bg-blue-500/10">
-                    <Bot className="size-5 text-blue-100" />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black">
+                    <Bot className="size-5 text-[#1d9bf0]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">{selectedBot ? selectedBot.name : t("autoPost.bot.defaultTitle")}</p>
-                    <p className="mt-1 text-sm leading-6 text-white/55">
+                    <p className="text-sm font-bold text-[#e7e9ea]">{selectedBot ? selectedBot.name : t("autoPost.bot.defaultTitle")}</p>
+                    <p className="mt-1 text-sm leading-6 text-[#71767b]">
                       {selectedBot ? t("autoPost.bot.boundHint", { tone: selectedBot.voice_tone || t("autoPost.bot.noTone") }) : t("autoPost.bot.unboundHint")}
                     </p>
                   </div>
@@ -464,16 +464,16 @@ export default function AutoPostPage() {
               <CardHeader title={t("autoPost.ai.title")} description={t("autoPost.ai.description")} />
               <div className="flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-2xl font-semibold text-white">{aiRemaining.toLocaleString()}</p>
-                  <p className="mt-1 text-xs text-white/50">{t("autoPost.ai.remaining")}</p>
+                  <p className="text-2xl font-bold text-[#e7e9ea]">{aiRemaining.toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{t("autoPost.ai.remaining")}</p>
                 </div>
-                <div className="text-right text-xs text-white/55">
+                <div className="text-right text-xs text-[#71767b]">
                   <p>{t("autoPost.ai.used", { used: aiUsed.toLocaleString(), limit: aiLimit.toLocaleString() })}</p>
                   <p>{t("autoPost.ai.percent", { percent: aiPercent })}</p>
                 </div>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-violet-400" style={{ width: `${aiPercent}%` }} />
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#2f3336]">
+                <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${aiPercent}%` }} />
               </div>
             </Card>
 
@@ -520,10 +520,10 @@ export default function AutoPostPage() {
                     {t("autoPost.scheduler.aiQuotaHint")}
                   </div>
                 ) : null}
-                <label className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                <label className="flex items-center justify-between gap-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                   <span>
-                    <span className="block text-sm font-medium text-white">{t("autoPost.fields.enabled")}</span>
-                    <span className="mt-1 block text-xs leading-5 text-white/50">{t("autoPost.fields.enabledHelper")}</span>
+                    <span className="block text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.enabled")}</span>
+                    <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoPost.fields.enabledHelper")}</span>
                   </span>
                   <input
                     type="checkbox"
@@ -534,7 +534,7 @@ export default function AutoPostPage() {
                 </label>
 
                 <div className="grid gap-3">
-                  <p className="text-xs font-medium text-white/60">{t("autoPost.fields.executionMode")}</p>
+                  <p className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.executionMode")}</p>
                   <div className="grid gap-2 md:grid-cols-3">
                     {executionModes.map((mode) => (
                       <button
@@ -543,12 +543,12 @@ export default function AutoPostPage() {
                         onClick={() => setForm((current) => ({ ...current, executionMode: mode }))}
                         className={`rounded-xl border p-3 text-left transition ${
                           form.executionMode === mode
-                            ? "border-blue-300/35 bg-blue-500/15 text-white"
-                            : "border-white/10 bg-white/[0.035] text-white/65 hover:border-blue-300/20"
+                            ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]"
+                            : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
                         }`}
                       >
-                        <span className="block text-sm font-medium">{t(`autoPost.executionMode.${mode}`)}</span>
-                        <span className="mt-1 block text-xs leading-5 text-white/50">{t(`autoPost.executionMode.${mode}Helper`)}</span>
+                        <span className="block text-sm font-semibold">{t(`autoPost.executionMode.${mode}`)}</span>
+                        <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoPost.executionMode.${mode}Helper`)}</span>
                       </button>
                     ))}
                   </div>
@@ -572,22 +572,22 @@ export default function AutoPostPage() {
                 </div>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-white/60">{t("autoPost.fields.postingWindows")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.postingWindows")}</span>
                   <input
                     value={form.postingWindows}
                     onChange={(event) => setForm((current) => ({ ...current, postingWindows: event.target.value }))}
                     placeholder={t("autoPost.fields.postingWindowsPlaceholder")}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                   />
-                  <span className="text-xs leading-5 text-white/45">{t("autoPost.fields.postingWindowsHelper")}</span>
+                  <span className="text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</span>
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-white/60">{t("autoPost.fields.timezone")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.timezone")}</span>
                   <select
                     value={form.timezone}
                     onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                   >
                     {timezones.map((timezone) => (
                       <option key={timezone} value={timezone}>
@@ -617,23 +617,23 @@ export default function AutoPostPage() {
                 />
 
                 {libraryOpen ? (
-                  <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <div className="mb-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.title")}</span>
+                        <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.title")}</span>
                         <input
                           value={libraryForm.title}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, title: event.target.value }))}
                           placeholder={t("autoPost.contentLibrary.fields.titlePlaceholder")}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.itemType")}</span>
+                        <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.itemType")}</span>
                         <select
                           value={libraryForm.itemType}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, itemType: event.target.value as ContentLibraryItemType }))}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                         >
                           {contentItemTypes.map((type) => (
                             <option key={type} value={type}>
@@ -644,13 +644,13 @@ export default function AutoPostPage() {
                       </label>
                     </div>
                     <label className="mt-3 block space-y-2">
-                      <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.body")}</span>
+                      <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.body")}</span>
                       <textarea
                         value={libraryForm.body}
                         onChange={(event) => setLibraryForm((current) => ({ ...current, body: event.target.value }))}
                         rows={4}
                         placeholder={t("autoPost.contentLibrary.fields.bodyPlaceholder")}
-                        className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/30"
+                        className="w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                       />
                     </label>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -660,7 +660,7 @@ export default function AutoPostPage() {
                           value={libraryForm.topics}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, topics: event.target.value }))}
                           placeholder={t("autoPost.contentLibrary.fields.topicsPlaceholder")}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
@@ -669,7 +669,7 @@ export default function AutoPostPage() {
                           value={libraryForm.sourceURL}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, sourceURL: event.target.value }))}
                           placeholder={t("autoPost.contentLibrary.fields.sourceUrlPlaceholder")}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
@@ -678,7 +678,7 @@ export default function AutoPostPage() {
                           value={libraryForm.growthGoal}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, growthGoal: event.target.value }))}
                           placeholder={t("autoPost.contentLibrary.fields.growthGoalPlaceholder")}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
@@ -687,17 +687,17 @@ export default function AutoPostPage() {
                           value={libraryForm.ctaPreference}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, ctaPreference: event.target.value }))}
                           placeholder={t("autoPost.contentLibrary.fields.ctaPreferencePlaceholder")}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30"
+                          className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                      <label className="flex items-center gap-2 text-xs text-white/60">
+                      <label className="flex items-center gap-2 text-xs text-[#71767b]">
                         {t("autoPost.contentLibrary.fields.status")}
                         <select
                           value={libraryForm.status}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, status: event.target.value as ContentLibraryStatus }))}
-                          className="h-9 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                          className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                         >
                           <option value="active">{t("autoPost.contentLibrary.status.active")}</option>
                           <option value="paused">{t("autoPost.contentLibrary.status.paused")}</option>
@@ -717,7 +717,7 @@ export default function AutoPostPage() {
                 ) : null}
 
                 {availableContentItems.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm leading-6 text-white/55">
+                  <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
                     {t("autoPost.contentLibrary.empty")}
                   </div>
                 ) : (
@@ -726,7 +726,7 @@ export default function AutoPostPage() {
                       type="button"
                       onClick={() => setSelectedContentItemID(0)}
                       className={`w-full rounded-xl border p-3 text-left text-sm transition ${
-                        selectedContentItemID === 0 ? "border-blue-300/35 bg-blue-500/15 text-white" : "border-white/10 bg-white/[0.025] text-white/65 hover:border-blue-300/20"
+                        selectedContentItemID === 0 ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]" : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
                       }`}
                     >
                       {t("autoPost.contentLibrary.noSelection")}
@@ -735,23 +735,23 @@ export default function AutoPostPage() {
                       <div
                         key={item.id}
                         className={`rounded-xl border p-4 transition ${
-                          selectedContentItemID === item.id ? "border-blue-300/35 bg-blue-500/15" : "border-white/10 bg-white/[0.035]"
+                          selectedContentItemID === item.id ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12" : "border-[#2f3336] bg-black hover:bg-[#16181c]"
                         }`}
                       >
                         <button type="button" className="w-full text-left" onClick={() => setSelectedContentItemID(item.id)}>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-white">{item.title}</span>
-                            <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs text-white/60">
+                            <span className="text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-xs text-[#71767b]">
                               {t(`autoPost.contentLibrary.itemType.${item.item_type}`)}
                             </span>
                             <span className={`rounded-full border px-2 py-0.5 text-xs ${item.status === "active" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : "border-amber-300/20 bg-amber-500/10 text-amber-100"}`}>
                               {t(`autoPost.contentLibrary.status.${item.status}`)}
                             </span>
                           </div>
-                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/55">{item.body}</p>
-                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/45">
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#e7e9ea]/70">{item.body}</p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
                             {item.topics.slice(0, 4).map((topic) => (
-                              <span key={topic} className="rounded-full bg-white/[0.05] px-2 py-0.5">{topic}</span>
+                              <span key={topic} className="rounded-full bg-[#0f1419] px-2 py-0.5">{topic}</span>
                             ))}
                             <span>{t("autoPost.contentLibrary.usageCount", { count: item.usage_count })}</span>
                             {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDate(item.last_used_at) })}</span> : null}
@@ -780,11 +780,11 @@ export default function AutoPostPage() {
               <Card>
                 <CardHeader title={t("autoPost.generate.title")} description={t("autoPost.generate.description")} />
                 <label className="mb-4 block space-y-2">
-                  <span className="text-xs font-medium text-white/60">{t("autoPost.generate.contentItemLabel")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.contentItemLabel")}</span>
                   <select
                     value={selectedContentItemID}
                     onChange={(event) => setSelectedContentItemID(Number(event.target.value))}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                   >
                     <option value={0}>{t("autoPost.generate.noContentItem")}</option>
                     {availableContentItems
@@ -797,20 +797,20 @@ export default function AutoPostPage() {
                   </select>
                 </label>
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-white/60">{t("autoPost.generate.directionLabel")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.directionLabel")}</span>
                   <textarea
                     value={contentDirection}
                     onChange={(event) => setContentDirection(event.target.value)}
                     rows={4}
                     placeholder={t("autoPost.generate.directionPlaceholder")}
-                    className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/30"
+                    className="w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                   />
                 </label>
-                <div className="mt-4 rounded-xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm leading-6 text-blue-50/80">
+                <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3 text-sm leading-6 text-[#e7e9ea]/78">
                   {selectedBot ? t("autoPost.generate.botHint", { bot: selectedBot.name }) : t("autoPost.generate.defaultHint")}
                 </div>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-white/50">{t("autoPost.generate.quotaHint")}</p>
+                  <p className="text-xs text-[#71767b]">{t("autoPost.generate.quotaHint")}</p>
                   <Button type="button" onClick={() => void generateDraft()} disabled={generating || !selectedAccountID || aiRemaining <= 0}>
                     {generating ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
                     {t("autoPost.actions.generateNow")}
@@ -825,26 +825,26 @@ export default function AutoPostPage() {
                   right={<Sparkles className="size-4 text-blue-100/70" />}
                 />
                 {accountDrafts.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/55">
+                  <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
                     {t("autoPost.drafts.empty")}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
                     {accountDrafts.map((draft) => (
-                      <div key={draft.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                      <div key={draft.id} className="px-5 py-4 transition-colors hover:bg-[#080808] md:px-6">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(draft.status)}`}>{t(`executionQueue.status.${draft.status}`)}</span>
                           {draft.content_title ? (
-                            <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-100">
+                            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                               {draft.content_title}
                             </span>
                           ) : null}
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-white/60">
+                          <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                             {t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
                           </span>
-                          <span className="text-xs text-white/40">{formatDate(draft.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDate(draft.created_at)}</span>
                         </div>
-                        <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-white/85">{draft.generated_content}</p>
+                        <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
                       </div>
                     ))}
@@ -855,38 +855,38 @@ export default function AutoPostPage() {
               <Card>
                 <CardHeader title={t("autoPost.runs.title")} description={t("autoPost.runs.description")} />
                 {accountRuns.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/55">
+                  <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
                     {t("autoPost.runs.empty")}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {accountRuns.map((run) => (
-                      <div key={run.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                      <div key={run.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${runTone(run.status)}`}>
                             {t(`autoPost.runs.status.${run.status}`)}
                           </span>
                           {run.content_title ? (
-                            <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-100">
+                            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                               {run.content_title}
                             </span>
                           ) : null}
-                          <span className="text-xs text-white/40">{formatDate(run.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDate(run.created_at)}</span>
                         </div>
                         {run.skip_reason ? (
-                          <p className="mt-2 text-sm leading-6 text-white/60">
+                          <p className="mt-2 text-sm leading-6 text-[#71767b]">
                             {skipReasonLabel(run.skip_reason)}
                           </p>
                         ) : null}
                         {run.error_message ? <p className="mt-2 break-words text-xs text-rose-100">{run.error_message}</p> : null}
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/45">
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#71767b]">
                           <span>
                             {run.content_library_item_title || run.content_title
                               ? t("autoPost.runs.contentItem", { title: run.content_library_item_title || run.content_title || "" })
                               : t("autoPost.runs.noContentItem")}
                           </span>
                           {run.generated_draft_id ? (
-                            <Link href="/execution-queue?type=post" className="text-blue-100 hover:text-white">
+                            <Link href="/execution-queue?type=post" className="font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
                               {t("autoPost.runs.openQueue")}
                             </Link>
                           ) : null}
@@ -938,23 +938,23 @@ function TextInput({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-xs font-medium text-white/60">{label}</span>
+      <span className="text-xs font-medium text-[#71767b]">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none"
+        className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
       />
-      <span className="text-xs leading-5 text-white/45">{helper}</span>
+      <span className="text-xs leading-5 text-[#71767b]">{helper}</span>
     </label>
   );
 }
 
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
-      <span className="text-white/50">{label}</span>
-      <span className="max-w-[60%] truncate text-right text-white/85">{value}</span>
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
+      <span className="text-[#71767b]">{label}</span>
+      <span className="max-w-[60%] truncate text-right font-medium text-[#e7e9ea]">{value}</span>
     </div>
   );
 }

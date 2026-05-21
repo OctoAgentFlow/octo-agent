@@ -57,12 +57,12 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setLoadState("ready");
     } catch (error) {
       const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || "Failed to load post."
-        : "Failed to load post.";
+        ? error.response?.data?.message || t("posts.detail.loadFailed")
+        : t("posts.detail.loadFailed");
       setErrorMessage(msg);
       setLoadState("error");
     }
-  }, [postId]);
+  }, [postId, t]);
 
   useEffect(() => {
     void fetchPost();
@@ -103,8 +103,8 @@ export function PostDetailClient({ postId }: { postId: number }) {
       pushToast(t("posts.detail.saveSuccess"));
     } catch (error) {
       const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || "Failed to save."
-        : "Failed to save.";
+        ? error.response?.data?.message || t("posts.detail.saveFailed")
+        : t("posts.detail.saveFailed");
       pushToast(msg);
     } finally {
       setSaving(false);
@@ -124,8 +124,8 @@ export function PostDetailClient({ postId }: { postId: number }) {
       pushToast(t("posts.detail.executeSuccess"));
     } catch (error) {
       const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || "Failed to publish."
-        : "Failed to publish.";
+        ? error.response?.data?.message || t("posts.detail.executeFailed")
+        : t("posts.detail.executeFailed");
       pushToast(msg);
     } finally {
       setExecuting(false);
@@ -141,8 +141,8 @@ export function PostDetailClient({ postId }: { postId: number }) {
       router.replace("/posts");
     } catch (error) {
       const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || "Failed to delete."
-        : "Failed to delete.";
+        ? error.response?.data?.message || t("posts.detail.deleteFailed")
+        : t("posts.detail.deleteFailed");
       pushToast(msg);
     }
   };
@@ -177,22 +177,22 @@ export function PostDetailClient({ postId }: { postId: number }) {
       ) : null}
 
       {loadState === "ready" && post ? (
-        <Card>
+        <Card className="bg-[#0f1419]">
           <p className="mb-4 text-xs text-white/50">
             #{post.id} · {t("posts.list.col.account")} {post.x_account_id}
           </p>
           {post.status === "processing" ? (
-            <p className="mb-4 text-sm text-amber-200/90">{t("posts.detail.processingHint")}</p>
+            <p className="mb-4 text-sm text-[#f6d96b]">{t("posts.detail.processingHint")}</p>
           ) : null}
           {post.last_error_message ? (
-            <div className="mb-4 rounded-md border border-rose-300/25 bg-rose-500/10 p-3">
+            <div className="mb-4 rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 p-3">
               <div className="flex items-start gap-2">
-                <AlertCircle className="mt-0.5 size-4 shrink-0 text-rose-100" />
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-[#ff8a91]" />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-rose-50">{t("posts.detail.lastError")}</p>
-                  <p className="mt-1 break-words text-xs leading-5 text-rose-50/80">{post.last_error_message}</p>
+                  <p className="text-sm font-semibold text-[#ffdadd]">{t("posts.detail.lastError")}</p>
+                  <p className="mt-1 break-words text-xs leading-5 text-[#ffb6bb]">{post.last_error_message}</p>
                   {post.last_attempt_at ? (
-                    <p className="mt-1 text-xs text-rose-50/55">
+                    <p className="mt-1 text-xs text-[#ff8a91]">
                       {t("posts.detail.lastAttemptAt")}: {new Date(post.last_attempt_at).toLocaleString()}
                     </p>
                   ) : null}
@@ -201,21 +201,21 @@ export function PostDetailClient({ postId }: { postId: number }) {
             </div>
           ) : null}
           <form className="space-y-4" onSubmit={(e) => void save(e)}>
-            <label className="block text-xs text-white/70">
+            <label className="block text-xs text-[#71767b]">
               {t("posts.create.content")}
               <textarea
-                className="form-input mt-1 min-h-[160px] w-full"
+                className="form-input mt-1 min-h-[220px] w-full resize-y text-[15px] leading-7"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 required
                 maxLength={5000}
                 disabled={post.status === "processing"}
               />
-              <span className="mt-1 block text-right text-xs text-white/40">
+              <span className="mt-1 block text-right text-xs text-[#71767b]">
                 {t("posts.create.characterCount", { count: content.trim().length, max: 5000 })}
               </span>
             </label>
-            <label className="block text-xs text-white/70">
+            <label className="block text-xs text-[#71767b]">
               {t("posts.create.status")}
               <select
                 className="form-input mt-1 w-full max-w-md"
@@ -238,7 +238,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
               </select>
             </label>
             {status === "scheduled" ? (
-              <label className="block text-xs text-white/70">
+              <label className="block text-xs text-[#71767b]">
                 {t("posts.create.scheduledAt")}
                 <Input
                   type="datetime-local"
@@ -251,12 +251,12 @@ export function PostDetailClient({ postId }: { postId: number }) {
               </label>
             ) : null}
             {post.published_at ? (
-              <p className="text-xs text-white/50">
+              <p className="text-xs text-[#71767b]">
                 {t("posts.detail.publishedAt")}: {new Date(post.published_at).toLocaleString()}
               </p>
             ) : null}
             {(post.status === "draft" || post.status === "scheduled" || post.status === "failed") ? (
-              <p className="text-xs text-white/50">{t("posts.detail.executeHint")}</p>
+              <p className="text-xs text-[#71767b]">{t("posts.detail.executeHint")}</p>
             ) : null}
             <div className="flex flex-wrap justify-between gap-3">
               <Button

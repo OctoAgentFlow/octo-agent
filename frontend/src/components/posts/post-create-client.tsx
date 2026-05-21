@@ -68,9 +68,9 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       setLoadAccounts("ready");
     } catch (error) {
       setLoadAccounts("error");
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to load accounts." : "Failed to load accounts.");
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("accounts.toast.loadFailed") : t("accounts.toast.loadFailed"));
     }
-  }, [pushToast]);
+  }, [pushToast, t]);
 
   useEffect(() => {
     void load();
@@ -111,8 +111,8 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       router.replace(`/posts/${created.id}`);
     } catch (error) {
       const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || "Failed to create post."
-        : "Failed to create post.";
+        ? error.response?.data?.message || t("posts.create.failed")
+        : t("posts.create.failed");
       pushToast(msg);
     } finally {
       setSubmitting(false);
@@ -161,12 +161,12 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       </div>
 
       {isAutoPostSource ? (
-        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
+        <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
           <div className="flex items-start gap-3">
-            <CalendarClock className="mt-0.5 size-5 shrink-0 text-cyan-100" />
+            <CalendarClock className="mt-0.5 size-5 shrink-0 text-[#1d9bf0]" />
             <div>
               <p className="text-sm font-semibold text-white">{t("posts.create.autoPostContextTitle")}</p>
-              <p className="mt-1 text-sm leading-relaxed text-cyan-50/72">{t("posts.create.autoPostContextDescription")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[#b6bec5]">{t("posts.create.autoPostContextDescription")}</p>
             </div>
           </div>
         </div>
@@ -179,7 +179,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       ) : null}
 
       {loadAccounts === "ready" && accounts.length === 0 ? (
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader title={t("posts.create.needAccount")} description={t("posts.create.needAccountDescription")} />
           <div className="flex justify-end">
             <Link href="/accounts" className={cn(buttonVariants())}>
@@ -190,13 +190,13 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       ) : null}
 
       {loadAccounts === "ready" && accounts.length > 0 ? (
-        <Card>
+        <Card className="bg-[#0f1419]">
           <form className="space-y-4" onSubmit={(e) => void submit(e)}>
-            <div className="rounded-md border border-white/8 bg-white/[0.03] p-3">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
               <div className="flex items-start gap-2">
-                <CalendarClock className="mt-0.5 size-4 shrink-0 text-cyan-200" />
-                <div className="space-y-1 text-xs text-white/58">
-                  <p className="font-medium text-white/80">{t("posts.create.preflightTitle")}</p>
+                <CalendarClock className="mt-0.5 size-4 shrink-0 text-[#1d9bf0]" />
+                <div className="space-y-1 text-xs text-[#71767b]">
+                  <p className="font-medium text-white">{t("posts.create.preflightTitle")}</p>
                   <p>{t("posts.create.preflightAccount", { count: accounts.length })}</p>
                   <p>
                     {autoPostEnabled
@@ -206,7 +206,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
                 </div>
               </div>
             </div>
-            <label className="block text-xs text-white/70">
+            <label className="block text-xs text-[#71767b]">
               {t("posts.create.account")}
               <select
                 className="form-input mt-1 w-full max-w-md"
@@ -215,12 +215,12 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    @{a.username} (id {a.id})
+                    @{a.username} #{a.id}
                   </option>
                 ))}
               </select>
             </label>
-            <label className="block text-xs text-white/70">
+            <label className="block text-xs text-[#71767b]">
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span>{t("posts.create.content")}</span>
                 <Button
@@ -235,38 +235,38 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
                 </Button>
               </span>
               <div
-                className={`mt-2 rounded-xl border p-3 ${
-                  selectedBot ? "border-violet-300/25 bg-violet-500/10" : "border-white/10 bg-white/[0.04]"
+                className={`mt-2 rounded-2xl border p-3 ${
+                  selectedBot ? "border-[#1d9bf0]/25 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"
                 }`}
               >
                 {selectedBot ? (
-                  <div className="space-y-1 text-xs text-white/65">
+                  <div className="space-y-1 text-xs text-[#b6bec5]">
                     <p className="font-medium text-white">{t("posts.create.botBound", { name: selectedBot.name })}</p>
                     <p>{t("posts.create.botVoice", { value: selectedBot.voice_tone || "—" })}</p>
                     <p>{t("posts.create.botGoal", { value: selectedBot.growth_goal || "—" })}</p>
-                    <p className="text-violet-100/85">{t("posts.create.botWillUsePersona")}</p>
+                    <p className="text-[#1d9bf0]">{t("posts.create.botWillUsePersona")}</p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/65">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#71767b]">
                     <p>{t("posts.create.botUnbound")}</p>
-                    <Link href="/oaf-bots" className="text-blue-200 hover:text-blue-100">
+                    <Link href="/oaf-bots" className="text-[#1d9bf0] hover:underline">
                       {t("posts.create.goOAFBots")}
                     </Link>
                   </div>
                 )}
               </div>
               <textarea
-                className="form-input mt-1 min-h-[140px] w-full"
+                className="form-input mt-1 min-h-[180px] w-full resize-y text-[15px] leading-7"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 required
                 maxLength={5000}
               />
-              <span className="mt-1 block text-right text-xs text-white/40">
+              <span className="mt-1 block text-right text-xs text-[#71767b]">
                 {t("posts.create.characterCount", { count: content.trim().length, max: 5000 })}
               </span>
             </label>
-            <label className="block text-xs text-white/70">
+            <label className="block text-xs text-[#71767b]">
               {t("posts.create.status")}
               <select
                 className="form-input mt-1 w-full max-w-md"
@@ -281,7 +281,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
               </select>
             </label>
             {status === "scheduled" ? (
-              <label className="block text-xs text-white/70">
+              <label className="block text-xs text-[#71767b]">
                 {t("posts.create.scheduledAt")}
                 <Input
                   type="datetime-local"
@@ -291,7 +291,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
                   required
                 />
                 {!autoPostEnabled ? (
-                  <span className="mt-2 flex items-center gap-1 text-xs text-amber-200/85">
+                  <span className="mt-2 flex items-center gap-1 text-xs text-[#f6d96b]">
                     <AlertCircle className="size-3.5" />
                     {t("posts.create.autoPostDisabledHint")}
                   </span>

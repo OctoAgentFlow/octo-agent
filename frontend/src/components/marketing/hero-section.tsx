@@ -6,7 +6,7 @@ import { ArrowRight, Bot, CheckCircle2, ShieldCheck, Sparkles } from "lucide-rea
 import { buttonVariants } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
-import { heroStats } from "@/mocks/landing.mock";
+import { heroStats, trustBadges } from "@/mocks/landing.mock";
 
 const personaFields = [
   ["marketing.hero.persona.occupationLabel", "marketing.hero.persona.occupationValue"],
@@ -64,6 +64,15 @@ export function HeroSection() {
           </a>
         </div>
         <p className="text-xs text-white/55">{t("marketing.hero.note")}</p>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-2.5">
+          <span className="px-2 text-xs text-white/46">{t("marketing.hero.trust.title")}</span>
+          {trustBadges.map((badge) => (
+            <span key={badge.labelKey} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/16 px-2.5 py-1 text-xs text-white/68">
+              <badge.icon className="size-3.5 text-blue-200" />
+              {t(badge.labelKey)}
+            </span>
+          ))}
+        </div>
         <div className="grid grid-cols-3 gap-3 pt-1">
           {heroStats.map((item) => (
             <div

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import axios from "axios";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, CheckCircle2, Clock3, ListChecks } from "lucide-react";
 
 import type { ActivityRange, ActivityRecord, ActivityStatus, ActivityType } from "@/types/activity";
 import { activityService } from "@/services/activity.service";
@@ -180,10 +182,43 @@ export default function ActivityPage() {
   }, [recordsRaw]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageSuccessCount = records.filter((record) => record.status === "success").length;
+  const pageReviewCount = records.filter((record) => record.status === "review").length;
+  const pageFailedCount = records.filter((record) => record.status === "failed").length;
+  const latestRecord = records[0];
 
   return (
     <div className="space-y-4 md:space-y-5">
       <ActivityPageHeader count={total} />
+      <div className="grid gap-3 md:grid-cols-4">
+        <ActivitySummaryCard
+          icon={<ListChecks className="size-4" />}
+          label={t("activity.summary.matched")}
+          value={String(total)}
+          description={t("activity.summary.matchedDesc")}
+        />
+        <ActivitySummaryCard
+          icon={<CheckCircle2 className="size-4" />}
+          label={t("activity.summary.success")}
+          value={String(pageSuccessCount)}
+          description={t("activity.summary.currentPage")}
+          tone="success"
+        />
+        <ActivitySummaryCard
+          icon={<Clock3 className="size-4" />}
+          label={t("activity.summary.review")}
+          value={String(pageReviewCount)}
+          description={t("activity.summary.currentPage")}
+          tone={pageReviewCount > 0 ? "warning" : "default"}
+        />
+        <ActivitySummaryCard
+          icon={<AlertTriangle className="size-4" />}
+          label={t("activity.summary.failed")}
+          value={String(pageFailedCount)}
+          description={latestRecord ? t("activity.summary.latest", { time: new Date(latestRecord.executedAt).toLocaleString() }) : t("activity.summary.noLatest")}
+          tone={pageFailedCount > 0 ? "danger" : "default"}
+        />
+      </div>
       <ActivityFilters value={filters} onChange={setFilters} accounts={accounts} />
       {loading ? (
         <ActivityLoading />
@@ -217,5 +252,39 @@ export default function ActivityPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ActivitySummaryCard({
+  icon,
+  label,
+  value,
+  description,
+  tone = "default",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  description: string;
+  tone?: "default" | "success" | "warning" | "danger";
+}) {
+  const toneClass = {
+    default: "border-[#2f3336] bg-[#16181c] text-[#e7e9ea]",
+    success: "border-emerald-300/20 bg-emerald-400/5 text-emerald-200",
+    warning: "border-amber-300/20 bg-amber-400/5 text-amber-200",
+    danger: "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]",
+  }[tone];
+
+  return (
+    <Card className="bg-[#0f1419] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-[#71767b]">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-[#e7e9ea]">{value}</p>
+        </div>
+        <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-full border ${toneClass}`}>{icon}</span>
+      </div>
+      <p className="mt-3 truncate text-xs text-[#71767b]">{description}</p>
+    </Card>
   );
 }

@@ -236,11 +236,11 @@ export default function ExecutionQueuePage() {
         <h1 className="mt-2 text-3xl font-semibold text-white">{t("executionQueue.title")}</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("executionQueue.subtitle")}</p>
         {publisherStatus ? (
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b]">
+          <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 text-xs">
+            <span className="max-w-full rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b]">
               {t("executionQueue.publisherMode.label")}
             </span>
-            <span className={`rounded-full border px-3 py-1 ${
+            <span className={`max-w-full rounded-full border px-3 py-1 ${
               publisherStatus.real_publish_enabled && !publisherStatus.dry_run
                 ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"
                 : publisherStatus.dry_run
@@ -253,14 +253,14 @@ export default function ExecutionQueuePage() {
                   ? t("executionQueue.publisherMode.dryRun")
                   : t("executionQueue.publisherMode.simulated")}
             </span>
-            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b]">
+            <span className="max-w-full break-words rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b] [overflow-wrap:anywhere]">
               {t("executionQueue.publisherMode.limits", {
                 daily: publisherStatus.per_account_daily_limit,
                 cooldown: publisherStatus.per_account_min_interval_seconds,
               })}
             </span>
             {publisherStatus.accounts_missing_tweet_write_count > 0 ? (
-              <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-[#f6d96b]">
+              <span className="max-w-full break-words rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-[#f6d96b] [overflow-wrap:anywhere]">
                 {t("executionQueue.publisherMode.missingScope", { count: publisherStatus.accounts_missing_tweet_write_count })}
               </span>
             ) : null}
@@ -317,7 +317,7 @@ export default function ExecutionQueuePage() {
               const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               return (
-                <div key={`${item.type}-${item.id}`} className="bg-black p-5 transition-colors hover:bg-[#080808]">
+                <div key={`${item.type}-${item.id}`} className="bg-black p-4 transition-colors hover:bg-[#080808] md:p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -371,7 +371,7 @@ export default function ExecutionQueuePage() {
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:justify-start xl:max-w-[300px] xl:justify-end">
                       {item.status === "ready_to_publish" ? (
                         <span className="inline-flex h-8 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs text-[#7ee0b5]">
                           {t("executionQueue.actions.simulatedMode")}
@@ -384,14 +384,15 @@ export default function ExecutionQueuePage() {
                       ) : null}
                       {editing ? (
                         <>
-                          <Button size="sm" disabled={busyID === item.id} onClick={() => void saveEdit(item)}>{t("executionQueue.actions.save")}</Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingKey(null)}>{t("common.cancel")}</Button>
+                          <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void saveEdit(item)}>{t("executionQueue.actions.save")}</Button>
+                          <Button size="sm" className="w-full sm:w-auto" variant="outline" onClick={() => setEditingKey(null)}>{t("common.cancel")}</Button>
                         </>
                       ) : (
                         <>
                           {manageable ? (
                             <Button
                               size="sm"
+                              className="w-full sm:w-auto"
                               variant="outline"
                               onClick={() => {
                                 setEditingKey(itemKey);
@@ -403,25 +404,25 @@ export default function ExecutionQueuePage() {
                             </Button>
                           ) : null}
                           {canReview ? (
-                            <Button size="sm" disabled={busyID === item.id} onClick={() => void approve(item)}>
+                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void approve(item)}>
                               <CheckCircle2 className="size-4" />
                               {t("executionQueue.actions.approve")}
                             </Button>
                           ) : null}
                           {manageable && item.status !== "rejected" && item.status !== "published" ? (
-                            <Button size="sm" variant="outline" disabled={busyID === item.id} onClick={() => void reject(item)}>
+                            <Button size="sm" className="w-full sm:w-auto" variant="outline" disabled={busyID === item.id} onClick={() => void reject(item)}>
                               <XCircle className="size-4" />
                               {t("executionQueue.actions.reject")}
                             </Button>
                           ) : null}
                           {item.status === "failed" && item.publish_job_id ? (
-                            <Button size="sm" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
+                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
                               <Send className="size-4" />
                               {t("executionQueue.actions.retryPublish")}
                             </Button>
                           ) : null}
                           {item.type === "post" && !item.publish_job_id && (item.status === "ready_to_publish" || item.status === "approved") ? (
-                            <Button size="sm" disabled={busyID === item.id} onClick={() => void preparePostPublish(item)}>
+                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void preparePostPublish(item)}>
                               <Send className="size-4" />
                               {t("executionQueue.actions.preparePublish")}
                             </Button>
@@ -430,6 +431,7 @@ export default function ExecutionQueuePage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="w-full sm:w-auto"
                               disabled={busyID === item.id || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
                               title={!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
                               onClick={() => void realPublish(item)}

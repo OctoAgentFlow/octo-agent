@@ -32,8 +32,8 @@ export function PlanComparison({
 
   return (
     <SectionCard className="bg-[#0f1419]" title={t("billing.planComparison.title")} description={t("billing.planComparison.subtitle")}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-full border border-[#2f3336] bg-black p-1">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 rounded-full border border-[#2f3336] bg-black p-1 sm:inline-flex">
           {(["monthly", "yearly"] as const).map((cycle) => (
             <button
               key={cycle}
@@ -47,11 +47,11 @@ export function PlanComparison({
             </button>
           ))}
         </div>
-        <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs text-[#7ee0b5]">
+        <span className="w-fit rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs text-[#7ee0b5]">
           {t("billing.billingCycle.yearlySave")}
         </span>
       </div>
-      <div className="grid gap-3 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
           const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });
@@ -72,12 +72,12 @@ export function PlanComparison({
                   </span>
                 ) : null}
               </div>
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <h4 className="text-base font-semibold text-white">{plan.name}</h4>
                   <p className="mt-1 min-h-10 text-xs leading-relaxed text-[#71767b]">{t(planAudienceKey(plan.code))}</p>
                 </div>
-                <p className="shrink-0 text-right text-sm text-[#71767b]">
+                <p className="shrink-0 text-left text-sm text-[#71767b] sm:text-right">
                   <span className="text-xl font-semibold text-white">
                     {billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
@@ -102,7 +102,7 @@ export function PlanComparison({
                     className={`flex items-center gap-2 text-xs ${feature.available ? "text-[#b6bec5]" : "text-[#71767b]/65"}`}
                   >
                     {feature.available ? <span className="size-1.5 rounded-full bg-[#00ba7c]" /> : <Lock className="size-3" />}
-                    <span className="leading-relaxed">{t(planFeatureKey(feature.key))}</span>
+                    <span className="min-w-0 leading-relaxed">{t(planFeatureKey(feature.key))}</span>
                     {!feature.available && feature.minPlan ? (
                       <span className="ml-auto shrink-0 text-[#1d9bf0]">{t("actions.upgrade")}</span>
                     ) : null}

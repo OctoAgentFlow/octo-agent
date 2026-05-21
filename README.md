@@ -67,11 +67,17 @@ Frontend services:
 
 - Frontend（`frontend/src/app`）:
   - `(auth)`：登录注册
-  - `(dashboard)`：dashboard、accounts、agents、activity、billing、posts、analytics、settings、profile 等
+  - `(dashboard)`：dashboard、accounts、oaf-bots、automations、auto-post、auto-replies、auto-comments、auto-dms、execution-queue、activity、billing、posts、analytics、settings、profile 等
 - Backend 分层：
   - `controller`, `service`, `model`, `repository`, `router`, `middleware`, `dto`, `email`, `jobs` 等
 - AutoMigrate（见 `backend/internal/database/migrate.go`）:
-  - `User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `TwitterAccount`, `AutomationConfig`, `ActivityLog`, `ReplyReservation`, `Post`, `Agent`, `Task`, `BillingOrder`, `BillingChainTx`
+  - 用户/认证/钱包：`User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `UserNotificationSetting`
+  - X 与自动化：`TwitterAccount`, `AutomationConfig`, `ActivityLog`, `ReplyReservation`
+  - OAF Bot / AI 用量：`OAFBot`, `AIGenerationUsage`
+  - Auto Post / 内容池：`AutoPostPlan`, `AutoPostDraft`, `AutoPostGenerationRun`, `ContentLibraryItem`
+  - Auto Reply / Auto Comment / Auto DM：`AutoReplyDraft`, `AutoCommentTarget`, `AutoCommentTask`, `AutoDMTask`, `AutoDMRecipientRule`, `AutoDMRecipientImport`
+  - Publishing / Posts / Billing：`PublishJob`, `Post`, `BillingOrder`, `BillingOrderAudit`, `BillingChainTx`
+  - 兼容 scaffold：`Agent`, `Task`
   - 启动时会执行表注释（`ApplyTableComments`）及部分活动字段回填（`BackfillActivityReplyFields`）
 - 文档：`docs/`（[API 索引](docs/api/README.md)、库表、部署环境等）
 

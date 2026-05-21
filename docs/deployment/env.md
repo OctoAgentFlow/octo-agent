@@ -48,11 +48,48 @@ x_oauth:
   client_id: "<OAuth 2.0 Client ID>"
   client_secret: "<Client Secret>"
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
+  scopes: "tweet.read tweet.write users.read offline.access"
   state_secret: ""  # 可选；生产环境建议填写随机长字符串
 ```
 
 - **未填写** `client_id` / `redirect_uri` 时，`POST /accounts/oauth/x/start` 会返回 400，提示在 yaml 中配置。
-- `redirect_uri` 必须与 [X Developer Portal](https://developer.twitter.com/en/portal/dashboard) 里 **Callback URL** 完全一致；scope 与后端一致：`tweet.read users.read offline.access`。
+- `redirect_uri` 必须与 [X Developer Portal](https://developer.twitter.com/en/portal/dashboard) 里 **Callback URL** 完全一致。
+- 当前 Auto Post / Auto Reply / Auto Comment 的 Publishing Pipeline 灰度发布要求 scope 至少包含：`tweet.read tweet.write users.read offline.access`。
+- 如果历史账号授权时缺少 `tweet.write`，需要用户重新绑定 X 账号，后端才能在 `/publishing/status` 中识别为可发布账号。
+
+## X Publisher（YAML）
+
+真实 X 发布灰度由 `x_publisher` 配置控制，位于 API 服务 YAML（例如 `backend/configs/config.test.api.yaml`）：
+
+```yaml
+x_publisher:
+  real_publish_enabled: false
+  manual_publish_enabled: true
+  per_account_daily_limit: 1
+  per_account_min_interval_seconds: 300
+  dry_run: true
+```
+
+字段含义：
+
+- `real_publish_enabled=false`：禁止真实调用 X API。
+- `manual_publish_enabled=true`：允许前端展示人工发布入口。
+- `dry_run=true`：手动发布只做发布演练，不真实发送到 X。
+- `per_account_daily_limit`：单个 X 账号每日手动发布/演练次数上限。
+- `per_account_min_interval_seconds`：同一 X 账号两次手动发布之间的冷却时间。
+
+测试环境默认必须保持 `real_publish_enabled=false` 或 `dry_run=true`。只有做单账号灰度验收时，才临时改为：
+
+```yaml
+x_publisher:
+  real_publish_enabled: true
+  manual_publish_enabled: true
+  per_account_daily_limit: 1
+  per_account_min_interval_seconds: 300
+  dry_run: false
+```
+
+灰度步骤见 [x-publisher-gray-release.md](./x-publisher-gray-release.md)。scheduler 不会自动真实发布；真实发布只能由用户在 Execution Queue 中手动触发。
 
 ## Email Provider
 

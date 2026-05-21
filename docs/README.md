@@ -19,6 +19,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 
 - `deployment/env.md`：环境变量说明。
 - `deployment/DEPLOYMENT_SCRIPTS.md`：脚本化测试/生产部署说明。
+- `deployment/x-publisher-gray-release.md`：X Publisher 单账号真实发布灰度 Runbook。
 
 ## Audits
 
@@ -32,3 +33,11 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 - `product/prd.md`：产品需求文档。
 - `product/page-list.md`：页面清单。
 - `product/roadmap.md`：产品路线图。
+- `product/oaf-bot-billing.md`：OAF Bot + Billing 会员体系。
+- `product/oaf-bot-execution-mode.md`：OAF Bot 执行模式产品设计。
+- `product/auto-post-oaf-bot-redesign.md`：Auto Post 在 OAF Bot 体系下的产品重设计。
+- `product/publishing-pipeline.md`：统一发布器产品说明。
+- `technical/oaf-bot-billing-tech-design.md`：OAF Bot + Billing 技术设计。
+- `technical/oaf-bot-execution-mode-tech-design.md`：执行模式技术设计。
+- `technical/auto-post-oaf-bot-redesign-tech-design.md`：Auto Post Planner / Content Library / Scheduler 技术设计。
+- `technical/publishing-pipeline-tech-design.md`：Publishing Pipeline 技术设计。

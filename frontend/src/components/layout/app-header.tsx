@@ -79,12 +79,13 @@ export function AppHeader() {
   }, [clock, headerBusy, lastSyncedAt, t]);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#2f3336] bg-black/78 px-4 backdrop-blur-xl md:px-6">
-      <div>
-        <h1 className="text-base font-bold text-[#e7e9ea] md:text-lg">{t("dashboard.header.title")}</h1>
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-[#2f3336] bg-black/78 px-4 backdrop-blur-xl md:px-6">
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-bold text-[#e7e9ea] md:text-lg">{t("dashboard.header.title")}</h1>
         <p className="hidden text-xs text-[#71767b] md:block">{t("dashboard.header.subtitle")}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
+        <LanguageSwitcher className="sm:hidden" buttonClassName="h-8 w-10 justify-center px-0" menuClassName="right-0" />
         <LanguageSwitcher className="hidden sm:block" />
         {isAdminFrontend() ? null : (
           <ConnectWalletButton

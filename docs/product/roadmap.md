@@ -1,41 +1,57 @@
 # Roadmap
 
-## Current Integration Status (Frontend -> Backend)
+本文档描述当前前后端集成状态和下一步优先级。历史 MVP 已完成项不再作为开发入口，继续开发时以 OAF Bot、自动化执行闭环和发布灰度为主线。
+
+## Current Integration Status
 
 | Area | Main Pages | Status | Notes |
 | --- | --- | --- | --- |
-| Auth | `/login` | real | 邮箱验证码、注册、登录、刷新、`/users/me`、已登录用户修改密码。 |
-| Wallet Binding | `/login`, `/dashboard` | real | `challenge` → 签名 → `bind` / `unbind`。 |
-| Dashboard Data | `/dashboard` | real | `GET /dashboard/overview`；`runtime-status` 指标为 **DB 真实统计**；用户端上线检查读取账号、自动化、帖子和活动进度。 |
-| Accounts | `/accounts` | real | 列表、OAuth、解绑；空状态引导连接第一个 X 账号。 |
-| Activity | `/activity` | real | `GET /activities` 支持类型、状态、时间范围、账号与失败原因筛选；可从 Analytics 跳转排查。 |
-| Billing | `/billing` | real（MVP+） | `GET /billing/subscription|plans|payment-methods`；**BEP20** 下单、轮询、用户补交 tx hash、自动过期、失败原因记录；链上确认 `POST /billing/webhooks/onchain`（Header 密钥）；支付记录支持 owner/admin 对账筛选、人工审核和操作审计。 |
-| Posts | `/posts` | real（MVP+） | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`；服务端 **每分钟** 调度 `scheduled` 帖子（需 Auto Post 开启）；支持状态筛选、发布前检查、失败原因和失败重试。 |
-| Agents UI（自动化） | `/agents` | real（automations） | 页面使用 **`/automations`**；`GET /agents` 已作为兼容列表读取自动化配置；结合账号/帖子状态提示下一步。 |
-| Analytics | `/analytics` | real（MVP+） | `GET /analytics/overview?range=7d|30d&account_id=...` 聚合账号对比、账号级活动趋势、自动化拆分、失败原因、待处理项与内容状态，并跳转 Activity 排查。 |
-| Admin | `/admin` | real（MVP） | `GET /admin/overview`、`GET/PATCH /admin/users`；owner/admin 后台入口，支持用户角色/状态管理、订单/活动/配置健康概览。 |
-| Settings / Profile | `/settings`, `/profile` | real（MVP+） | `GET/PATCH /users/me`；`PATCH /users/me/password`；`GET/PATCH /users/me/notification-settings`；语言偏好保存在浏览器本地。 |
+| Auth | `/login` | real | 邮箱验证码、注册、登录、刷新、`/users/me`；管理员端使用邮箱验证码登录。 |
+| Wallet Binding | `/dashboard`, `/settings` | real | `challenge` → 签名 → `bind` / `unbind`；已避免刷新页面反复签名。 |
+| Accounts | `/accounts` | real | X OAuth 绑定、列表、解绑；真实发布灰度要求 token scopes 包含 `tweet.write`。 |
+| OAF Bot | `/oaf-bots` | real | one bot per account；支持人设、语言配置、示例生成、月度 AI 用量分布。 |
+| Billing | `/billing` | real | Basic / Plus / Pro / Pro+；月付/年付；AI 生成总额度和 OAF Bot / X 账号限制。 |
+| Dashboard | `/dashboard` | real | 当前套餐与额度、上线检查、近期活动、账号和自动化摘要。 |
+| Automations Overview | `/automations` | real | 作为自动化总览和入口；具体能力拆到 Auto Post / Reply / Comment / DM 页面。 |
+| Auto Post Planner | `/auto-post` | real（MVP+） | Planner、Content Library、手动生成、run-now、scheduler 到点生成、Execution Queue、Publishing Pipeline `source_type=post`。 |
+| Auto Reply | `/auto-replies` | real（MVP） | 基于待回复评论生成草稿，支持 execution mode，进入 Execution Queue；当前不自动真实回复。 |
+| Auto Comment | `/auto-comments` | real（MVP） | 目标推文录入、评论草稿生成、execution mode、风险降级、Execution Queue；当前不自动真实评论。 |
+| Auto DM | `/auto-dms` | real（MVP+） | 候选、审核、发送、重试、名单管理、导入、黑名单/退订、公开退订页。 |
+| Execution Queue | `/execution-queue` | real | 聚合 post/comment/reply；编辑、批准、拒绝、发布任务状态、失败原因、发布演练/真实发布按钮。 |
+| Publishing Pipeline | `/execution-queue`, `/publishing/*` | real（灰度） | scheduler 只 simulated publish；真实 X 发布只能由手动 `publish-now` 触发，受 `x_publisher` 开关、daily limit、cooldown 控制。 |
+| Posts | `/posts` | real | 传统帖子 CRUD、AI 生成、手动执行、定时发布；Auto Post 新闭环优先走 `/auto-post`。 |
+| Activity | `/activity` | real | 自动化、AI 生成、发布、失败、名单变更等活动日志。 |
+| Analytics | `/analytics` | real（MVP+） | 活动趋势、失败原因、自动化拆分、内容状态、Auto DM 摘要；外部 X impressions/engagement 待接入。 |
+| Admin | `/admin` | real（MVP） | 管理员概览、用户管理；更完整订单运营和系统配置编辑待扩展。 |
+| Settings / Profile | `/settings`, `/profile` | real | 资料、密码、通知偏好、语言偏好。 |
 
-## Automation execution (backend)
+## Automation Execution Status
 
-| 模块 | 状态 |
+| 模块 | 当前状态 |
 | --- | --- |
-| Auto Post（定时发推） | 已实现（scheduler + X API） |
-| Auto Reply（模板回复评论） | 已实现（scheduler + X API；`reply_reservations` 防并发重复） |
-| Auto DM | 真实发送 + 安全重试 + 名单/偏好中心 + 名单审计/管理/运营可视化已实现（近期互动候选、审批、X DM API 发送、失败分类、retry queue、白/黑名单、CSV allowlist、导入历史、名单搜索/筛选/批量操作、名单变更 Activity、Analytics 运营摘要、公开退订页、成功/失败 Activity） |
+| OAF Bot | 已作为生成人设入口，Auto Post / Auto Reply / Auto Comment 均按 `twitter_account_id` 查询绑定 Bot。 |
+| Auto Post | Planner + Content Library + scheduler 自动生成 + run-now + Execution Queue + Publishing Pipeline `source_type=post` 已接入；真实发推只允许手动灰度。 |
+| Auto Reply | 草稿生成 + execution mode + Execution Queue 已接入；真实回复发布通过 Publishing Pipeline 灰度能力预留。 |
+| Auto Comment | 草稿生成 + execution mode + risk fallback + Execution Queue 已接入；真实评论发布通过 Publishing Pipeline 灰度能力预留。 |
+| Auto DM | 真实发送、重试队列、名单管理、退订、运营摘要已实现；后续可接入 OAF Bot 人设生成。 |
+| Publishing Pipeline | post/comment/reply 均接入统一发布任务；scheduler 只 simulated publish；manual `publish-now` 才可能真实调用 X。 |
 
-## Next API Integration Priorities
+## Next Development Priorities
 
-1. **Settings 安全继续增强**：后续再补多会话管理、安全提醒和更完整的工作区级配置。
-2. **Analytics 深度指标**：后续再接真实 X impressions / engagement 等外部表现指标。
-3. **Auto DM 转化与风控增强**：继续细化内容转化分析和投放安全策略。
-4. **Admin 扩展**：继续补订单明细运营、对账导出、系统配置编辑、审计日志搜索。
-5. **Agents（可选）**：若后续需要独立 Agent 实体，再将 `agents` 表与自动化配置建立关联。
+1. **真实发布灰度验收**：使用单个测试 X 账号验证 Auto Post `PublishPost`，严格保持 `real_publish_enabled` / `dry_run` 可回滚。
+2. **Auto Post 内容质量增强**：内容池分类、最近草稿摘要、重复度策略、素材轮换策略和生成质量反馈。
+3. **Execution Queue 体验增强**：更强的批量处理、失败分类筛选、publish job 详情和 Activity 联动。
+4. **Auto Reply / Auto Comment 真实发布灰度**：在 post 灰度稳定后，再开放 comment/reply 的真实发布。
+5. **Auto DM 接入 OAF Bot**：让私信生成读取 Bot 人设、语言策略和增长目标。
+6. **Analytics 外部指标**：接入 X impressions、engagement、profile click 等真实表现数据。
+7. **Admin 扩展**：订单运营、对账导出、系统配置、发布器开关可视化和操作审计检索。
 
 ## Milestones
 
-1. M1: Scaffold and UI baseline（done）
-2. M2: Auth + wallet（done）
-3. M3: Accounts + dashboard overview + automations + activity + billing 读接口（done / 持续迭代）
-4. M4: Post scheduling、Auto Reply、计费下单与链上确认（done / 持续迭代）
-5. M5: Analytics 扩展 + Auto DM + 计费扩展
+1. M1: Scaffold + Auth + Wallet + Accounts（done）
+2. M2: Posts / Automations / Billing / Activity MVP（done）
+3. M3: OAF Bot + Billing 会员体系（done / 持续迭代）
+4. M4: Auto Comment / Auto Reply + Execution Mode + Execution Queue（done / 持续迭代）
+5. M5: Auto Post Planner + Content Library + Scheduler + Publishing Pipeline `post`（done / 灰度中）
+6. M6: 单账号真实 X 发布灰度（current）
+7. M7: 多场景真实发布与风控运营（next）

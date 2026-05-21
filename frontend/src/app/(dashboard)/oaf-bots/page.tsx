@@ -523,7 +523,7 @@ export default function OAFBotsPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm text-[#1d9bf0]"><Bot className="size-4" /> OAF Bot</p>
           <h1 className="mt-2 text-2xl font-bold text-[#e7e9ea]">{t("oafBots.page.title")}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#71767b]">{t("oafBots.page.subtitle")}</p>
@@ -532,6 +532,7 @@ export default function OAFBotsPage() {
           type="button"
           disabled={!canCreate}
           onClick={startCreate}
+          className="w-full sm:w-auto"
         >
           {t("oafBots.actions.new")}
         </Button>
@@ -545,8 +546,8 @@ export default function OAFBotsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
-        <p>{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
-        <Link href="/billing" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+        <p className="min-w-0 break-words">{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
+        <Link href="/billing" className="inline-flex shrink-0 items-center gap-1 font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
           {t("oafBots.planHintCta")}
           <ArrowRight className="size-4" />
         </Link>
@@ -878,23 +879,24 @@ export default function OAFBotsPage() {
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => goStep("previous")} disabled={activeStepIndex === 0}>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => goStep("previous")} disabled={activeStepIndex === 0}>
                   <ArrowLeft className="size-4" />
                   {t("oafBots.actions.previous")}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => goStep("next")} disabled={activeStepIndex === wizardStepOrder.length - 1}>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => goStep("next")} disabled={activeStepIndex === wizardStepOrder.length - 1}>
                   {t("oafBots.actions.next")}
                   <ArrowRight className="size-4" />
                 </Button>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
               <Button
                 type="button"
                 variant={activeStep === "test" ? "default" : "outline"}
                 onClick={activeStep === "test" ? testGenerate : goTestStep}
                 disabled={generating || !canTestBot}
+                className="w-full sm:w-auto"
               >
                 <Sparkles className="size-4" />
                 {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
@@ -903,6 +905,7 @@ export default function OAFBotsPage() {
                 type="button"
                 onClick={save}
                 disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
+                className="w-full sm:w-auto"
               >
                 <Save className="size-4" />
                 {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
@@ -1080,7 +1083,7 @@ function QuotaCard({ label, used, limit }: { label: string; used: number; limit:
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#2f3336] bg-black p-5">
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
       <div className="mb-4">
         <h2 className="text-lg font-bold text-[#e7e9ea]">{title}</h2>
         <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{description}</p>
@@ -1418,7 +1421,7 @@ function TagPicker({
               </button>
             ))}
           </div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input
               className="min-w-0 flex-1 bg-transparent text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b]"
               value={input}
@@ -1434,7 +1437,7 @@ function TagPicker({
             <button
               type="button"
               disabled={maxReached}
-              className="rounded-full border border-[#2f3336] px-3 text-xs text-[#e7e9ea]/75 hover:bg-[#16181c] disabled:cursor-not-allowed disabled:opacity-45"
+              className="h-9 shrink-0 rounded-full border border-[#2f3336] px-3 text-xs text-[#e7e9ea]/75 hover:bg-[#16181c] disabled:cursor-not-allowed disabled:opacity-45"
               onClick={() => addValue(input)}
             >
               {t("oafBots.chips.addCustom")}
@@ -1469,7 +1472,7 @@ function ChipOptions({
   const visibleOptions = expanded ? orderedOptions : orderedOptions.slice(0, maxInitial);
   const hasMore = orderedOptions.length > maxInitial;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex min-w-0 flex-wrap gap-2">
       {visibleOptions.map((option) => {
         const active = selected.includes(option.value);
         const disabled = Boolean(disableUnselected && !active);
@@ -1479,7 +1482,7 @@ function ChipOptions({
             type="button"
             disabled={disabled}
             onClick={() => onPick(option.value)}
-            className={`rounded-full border px-3 py-1.5 text-xs transition ${
+            className={`max-w-full rounded-full border px-3 py-1.5 text-left text-xs leading-5 transition [overflow-wrap:anywhere] ${
               active
                 ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/14 text-[#e7e9ea]"
                 : disabled
@@ -1829,15 +1832,15 @@ function SampleCard({
         ) : null}
       </div>
       <div className="mt-4 flex min-w-0 flex-wrap gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={copy}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={copy}>
           <Copy className="size-4" />
           {copied ? t("oafBots.samples.copied") : t("oafBots.samples.copy")}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onRegenerate}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={onRegenerate}>
           <RefreshCw className="size-4" />
           {t("oafBots.samples.regenerate")}
         </Button>
-        <Button type="button" size="sm" variant="outline" disabled title={t("oafBots.samples.saveDraftDisabled")}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" disabled title={t("oafBots.samples.saveDraftDisabled")}>
           <FilePlus2 className="size-4" />
           {t("oafBots.samples.saveDraft")}
         </Button>

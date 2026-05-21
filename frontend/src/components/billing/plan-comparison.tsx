@@ -31,15 +31,15 @@ export function PlanComparison({
   const { t, lang } = useT();
 
   return (
-    <SectionCard title={t("billing.planComparison.title")} description={t("billing.planComparison.subtitle")}>
+    <SectionCard className="bg-[#0f1419]" title={t("billing.planComparison.title")} description={t("billing.planComparison.subtitle")}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-full border border-white/10 bg-black/20 p-1">
+        <div className="inline-flex rounded-full border border-[#2f3336] bg-black p-1">
           {(["monthly", "yearly"] as const).map((cycle) => (
             <button
               key={cycle}
               type="button"
               className={`rounded-full px-4 py-1.5 text-sm transition ${
-                billingCycle === cycle ? "bg-white/14 text-white" : "text-white/60 hover:text-white"
+                billingCycle === cycle ? "bg-[#1d9bf0] text-white" : "text-[#71767b] hover:text-white"
               }`}
               onClick={() => onBillingCycleChange(cycle)}
             >
@@ -47,7 +47,7 @@ export function PlanComparison({
             </button>
           ))}
         </div>
-        <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
+        <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs text-[#7ee0b5]">
           {t("billing.billingCycle.yearlySave")}
         </span>
       </div>
@@ -58,15 +58,15 @@ export function PlanComparison({
           return (
             <article
               key={plan.code}
-              className={`relative flex h-full flex-col rounded-xl border p-4 ${
+              className={`relative flex h-full flex-col rounded-2xl border p-4 transition-colors ${
                 plan.highlight
-                  ? "border-violet-300/55 bg-violet-500/12 shadow-[0_0_28px_rgba(124,58,237,0.18)]"
-                  : "border-white/10 bg-white/5"
+                  ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10 shadow-[0_0_24px_rgba(29,155,240,0.12)]"
+                  : "border-[#2f3336] bg-black hover:bg-[#080808]"
               }`}
             >
               <div className="mb-3 h-7">
                 {badgeKey ? (
-                  <span className="inline-flex h-7 items-center gap-1 rounded-full border border-violet-300/25 bg-violet-400/12 px-2.5 text-xs text-violet-100">
+                  <span className="inline-flex h-7 items-center gap-1 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 text-xs text-[#8ecdf8]">
                     <Star className="size-3" />
                     {t(badgeKey)}
                   </span>
@@ -75,36 +75,36 @@ export function PlanComparison({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h4 className="text-base font-semibold text-white">{plan.name}</h4>
-                  <p className="mt-1 min-h-10 text-xs leading-relaxed text-white/55">{t(planAudienceKey(plan.code))}</p>
+                  <p className="mt-1 min-h-10 text-xs leading-relaxed text-[#71767b]">{t(planAudienceKey(plan.code))}</p>
                 </div>
-                <p className="shrink-0 text-right text-sm text-white/75">
+                <p className="shrink-0 text-right text-sm text-[#71767b]">
                   <span className="text-xl font-semibold text-white">
                     {billingCycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
-                  <span className="block whitespace-nowrap text-xs text-white/50">
+                  <span className="block whitespace-nowrap text-xs text-[#71767b]">
                     {t(planUnitKey(billingCycle))}
                   </span>
                 </p>
               </div>
-              <p className="mt-2 min-h-12 text-sm leading-relaxed text-white/60">{t(planDescriptionKey(plan.code))}</p>
+              <p className="mt-2 min-h-12 text-sm leading-relaxed text-[#71767b]">{t(planDescriptionKey(plan.code))}</p>
               <ul className="mt-4 space-y-2">
                 {benefits.map((benefit) => (
-                  <li key={benefit} className="flex items-start gap-2 text-sm text-white/75">
-                    <span className="mt-[0.55em] inline-block size-1.5 shrink-0 rounded-full bg-blue-300/80" />
+                  <li key={benefit} className="flex items-start gap-2 text-sm text-[#d5d9dc]">
+                    <span className="mt-[0.55em] inline-block size-1.5 shrink-0 rounded-full bg-[#1d9bf0]" />
                     <span className="leading-relaxed">{benefit}</span>
                   </li>
                 ))}
               </ul>
-              <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
+              <div className="mt-4 space-y-2 border-t border-[#2f3336] pt-4">
                 {plan.featureFlags.slice(0, 5).map((feature) => (
                   <div
                     key={feature.key}
-                    className={`flex items-center gap-2 text-xs ${feature.available ? "text-white/65" : "text-white/35"}`}
+                    className={`flex items-center gap-2 text-xs ${feature.available ? "text-[#b6bec5]" : "text-[#71767b]/65"}`}
                   >
-                    {feature.available ? <span className="size-1.5 rounded-full bg-emerald-300" /> : <Lock className="size-3" />}
+                    {feature.available ? <span className="size-1.5 rounded-full bg-[#00ba7c]" /> : <Lock className="size-3" />}
                     <span className="leading-relaxed">{t(planFeatureKey(feature.key))}</span>
                     {!feature.available && feature.minPlan ? (
-                      <span className="ml-auto shrink-0 text-violet-200/70">{t("actions.upgrade")}</span>
+                      <span className="ml-auto shrink-0 text-[#1d9bf0]">{t("actions.upgrade")}</span>
                     ) : null}
                   </div>
                 ))}
@@ -114,8 +114,8 @@ export function PlanComparison({
                   type="button"
                   className={`w-full ${
                     plan.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white hover:opacity-90"
-                      : "bg-white/10 text-white hover:bg-white/15"
+                      ? ""
+                      : "border border-[#2f3336] bg-transparent text-white hover:bg-[#16181c]"
                   }`}
                   disabled={currentPlan === plan.code}
                   onClick={() => onUpgrade(plan.code)}

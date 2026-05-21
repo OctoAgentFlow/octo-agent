@@ -109,56 +109,60 @@ export function PostsClient() {
 
       {loadState === "ready" && items.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-2">
             {(["all", "draft", "scheduled", "processing", "published", "failed"] as const).map((filter) => (
               <button
                 key={filter}
                 type="button"
                 onClick={() => setStatusFilter(filter)}
                 className={cn(
-                  "rounded-md border px-3 py-1.5 text-xs transition-colors",
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   statusFilter === filter
-                    ? "border-cyan-200/40 bg-cyan-300/10 text-white"
-                    : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06]"
+                    ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10 text-[#8ecdf8]"
+                    : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-white"
                 )}
               >
                 {filter === "all" ? t("posts.list.filter.all") : t(`posts.status.${filter}`)}
               </button>
             ))}
           </div>
-          {items.filter((post) => statusFilter === "all" || post.status === statusFilter).map((post) => (
-            <Link
-              key={post.id}
-              href={`/posts/${post.id}`}
-              className="surface-card block p-4 transition-colors hover:bg-white/[0.04] md:p-5"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="line-clamp-2 text-sm text-white/90">{post.content}</p>
-                  <div className="flex flex-wrap gap-3 text-xs text-white/55">
-                    <span>
-                      {t("posts.list.col.status")}:{" "}
-                      <span className="text-white/75">{statusLabel(t, post.status)}</span>
-                    </span>
-                    <span>
-                      {t("posts.list.col.account")}: #{post.x_account_id}
-                    </span>
-                    {post.scheduled_at ? (
-                      <span>
-                        {t("posts.list.col.scheduled")}: {new Date(post.scheduled_at).toLocaleString()}
+          <div className="overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419]">
+            {items.filter((post) => statusFilter === "all" || post.status === statusFilter).map((post) => (
+              <Link
+                key={post.id}
+                href={`/posts/${post.id}`}
+                className="block border-b border-[#2f3336] bg-black p-4 transition-colors last:border-b-0 hover:bg-[#080808] md:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <p className="line-clamp-4 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{post.content}</p>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#71767b]">
+                        {t("posts.list.col.status")}:{" "}
+                        <span className="text-[#e7e9ea]">{statusLabel(t, post.status)}</span>
                       </span>
-                    ) : null}
+                      <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#71767b]">
+                        {t("posts.list.col.account")}: #{post.x_account_id}
+                      </span>
+                      {post.scheduled_at ? (
+                        <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#71767b]">
+                          {t("posts.list.col.scheduled")}: {new Date(post.scheduled_at).toLocaleString()}
+                        </span>
+                      ) : null}
+                    </div>
                     {post.last_error_message ? (
-                      <span className="break-words text-rose-100/80">
-                        {t("posts.detail.lastError")}: {post.last_error_message}
+                      <span>
+                        <span className="break-words text-xs text-[#ff8a91]">
+                          {t("posts.detail.lastError")}: {post.last_error_message}
+                        </span>
                       </span>
                     ) : null}
                   </div>
+                  <span className="text-xs text-[#71767b]">{new Date(post.updated_at).toLocaleString()}</span>
                 </div>
-                <span className="text-xs text-white/45">{new Date(post.updated_at).toLocaleString()}</span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
           {items.filter((post) => statusFilter === "all" || post.status === statusFilter).length === 0 ? (
             <Card>
               <CardHeader title={t("posts.list.filteredEmpty")} description="" />

@@ -114,25 +114,25 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
     ["billing.usage.items.autoDMs", subscription.usage.autoDMsToday, subscription.limits.dailyAutoDMs],
   ];
   return (
-    <section className="surface-card p-5 md:p-6">
+    <section className="surface-card bg-[#0f1419] p-5 md:p-6">
       <div className="mb-4">
         <h3 className="text-base font-semibold text-white md:text-lg">{t("billing.usage.title")}</h3>
-        <p className="text-sm text-white/60">{t("billing.usage.description")}</p>
+        <p className="text-sm text-[#71767b]">{t("billing.usage.description")}</p>
       </div>
 
       <div
-        className={`mb-4 rounded-xl border p-4 ${
+        className={`mb-4 rounded-2xl border p-4 ${
           aiBlocked
-            ? "border-red-300/25 bg-red-500/10"
+            ? "border-[#f4212e]/25 bg-[#f4212e]/10"
             : aiWarning
-              ? "border-amber-300/25 bg-amber-400/10"
-              : "border-white/10 bg-white/[0.04]"
+              ? "border-[#ffd400]/25 bg-[#ffd400]/10"
+              : "border-[#2f3336] bg-black"
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-white">{t("billing.usage.ai.title")}</p>
-            <p className="mt-1 text-xs text-white/58">
+            <p className="mt-1 text-xs text-[#71767b]">
               {t("billing.usage.ai.summary", {
                 used: usedAI,
                 limit: limitAI,
@@ -145,16 +145,16 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
             {t("actions.upgrade")}
           </Button>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#2f3336]">
           <span
             className={`block h-full rounded-full ${
-              aiBlocked ? "bg-red-300" : aiWarning ? "bg-amber-300" : "bg-gradient-to-r from-blue-400 to-violet-400"
+              aiBlocked ? "bg-[#f4212e]" : aiWarning ? "bg-[#ffd400]" : "bg-[#1d9bf0]"
             }`}
             style={{ width: `${aiPct}%` }}
           />
         </div>
         {aiWarning ? (
-          <p className={`mt-3 text-sm ${aiBlocked ? "text-red-100" : "text-amber-100"}`}>
+          <p className={`mt-3 text-sm ${aiBlocked ? "text-[#ff8a91]" : "text-[#f6d96b]"}`}>
             {t(aiBlocked ? "billing.usage.ai.blocked" : "billing.usage.ai.warning")}
           </p>
         ) : null}
@@ -164,13 +164,13 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
         {items.map(([labelKey, used, limit]) => {
           const pct = typeof used === "number" && typeof limit === "number" && limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
           return (
-            <div key={labelKey} className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs text-white/55">{t(String(labelKey))}</p>
+            <div key={labelKey} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition-colors hover:bg-[#080808]">
+              <p className="text-xs text-[#71767b]">{t(String(labelKey))}</p>
               <p className="mt-2 text-lg font-semibold text-white">
-                {used} <span className="text-sm font-normal text-white/45">/ {limit}</span>
+                {used} <span className="text-sm font-normal text-[#71767b]">/ {limit}</span>
               </p>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-violet-400" style={{ width: `${pct}%` }} />
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
+                <span className="block h-full rounded-full bg-[#1d9bf0]" style={{ width: `${pct}%` }} />
               </div>
             </div>
           );

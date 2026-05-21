@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Lock, Pencil, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -74,6 +74,15 @@ export default function AutoRepliesPage() {
     [bots, selectedAccount]
   );
   const autopilotAvailable = canUseAutopilot(plan);
+  const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccount?.id), [drafts, selectedAccount?.id]);
+  const queuedDraftCount = useMemo(
+    () => accountDrafts.filter((draft) => ["draft", "review", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
+    [accountDrafts]
+  );
+  const publishReadyCount = useMemo(
+    () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
+    [accountDrafts]
+  );
 
   const loadAll = useCallback(async () => {
     setLoadState("loading");
@@ -224,10 +233,44 @@ export default function AutoRepliesPage() {
         </Card>
       ) : null}
 
+      {loadState === "ready" ? (
+        <AutomationPipelineSummary
+          baseKey="autoReply"
+          inputValue={commentText.trim() ? formatHandle(authorHandle) : t("autoReply.pipeline.inputValue", { count: accountDrafts.length })}
+          queueCount={queuedDraftCount}
+          publishReadyCount={publishReadyCount}
+          executionMode={executionMode}
+          queueHref="/execution-queue?type=reply"
+        />
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="bg-[#0f1419]">
           <CardHeader title={t("autoReply.target.title")} description={t("autoReply.target.description")} />
           <div className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-3">
+              <WorkbenchSignal
+                icon={Database}
+                label={t("autoReply.signal.input")}
+                title={commentText.trim() ? t("autoReply.signal.inputReady") : t("autoReply.signal.inputWaiting")}
+                description={t("autoReply.signal.inputDesc")}
+                tone="blue"
+              />
+              <WorkbenchSignal
+                icon={Bot}
+                label={t("autoReply.signal.persona")}
+                title={selectedBot ? selectedBot.name : t("autoReply.botStatus.title")}
+                description={selectedBot ? t("autoReply.signal.personaReady") : t("autoReply.botStatus.unbound")}
+                tone="green"
+              />
+              <WorkbenchSignal
+                icon={ListChecks}
+                label={t("autoReply.signal.destination")}
+                title={t("autoReply.signal.queue")}
+                description={t("autoReply.signal.destinationDesc", { mode: t(`autoReply.execution.${executionMode}.title`) })}
+                tone="violet"
+              />
+            </div>
             <label className="block space-y-2">
               <span className={labelClass}>{t("autoReply.target.account")}</span>
               <select
@@ -403,6 +446,11 @@ export default function AutoRepliesPage() {
                             <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{draft.generated_reply || "—"}</p>
                           )}
                         </div>
+                        <div className="grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
+                          <DraftRouteStep label={t("autoReply.pipeline.input")} value={formatHandle(draft.comment_author_handle)} />
+                          <DraftRouteStep label={t("autoReply.pipeline.queue")} value={t(statusKey(draft.status))} />
+                          <DraftRouteStep label={t("autoReply.pipeline.publish")} value={draft.status === "published" || draft.status === "sent" ? t("autoReply.pipeline.published") : t("autoReply.pipeline.waiting")} />
+                        </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap justify-end gap-2">
                         {editing ? (
@@ -439,6 +487,133 @@ export default function AutoRepliesPage() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AutomationPipelineSummary({
+  baseKey,
+  inputValue,
+  queueCount,
+  publishReadyCount,
+  executionMode,
+  queueHref,
+}: {
+  baseKey: "autoReply";
+  inputValue: string;
+  queueCount: number;
+  publishReadyCount: number;
+  executionMode: ExecutionMode;
+  queueHref: string;
+}) {
+  const { t } = useT();
+  const steps = [
+    {
+      id: "input",
+      icon: Database,
+      title: t(`${baseKey}.pipeline.input`),
+      value: inputValue,
+      description: t(`${baseKey}.pipeline.inputDesc`),
+      tone: "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]",
+    },
+    {
+      id: "generate",
+      icon: Wand2,
+      title: t(`${baseKey}.pipeline.generate`),
+      value: t(`${baseKey}.execution.${executionMode}.title`),
+      description: t(`${baseKey}.pipeline.generateDesc`),
+      tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
+    },
+    {
+      id: "queue",
+      icon: ListChecks,
+      title: t(`${baseKey}.pipeline.queue`),
+      value: t(`${baseKey}.pipeline.queueValue`, { count: queueCount }),
+      description: t(`${baseKey}.pipeline.queueDesc`),
+      tone: "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]",
+    },
+    {
+      id: "publish",
+      icon: Send,
+      title: t(`${baseKey}.pipeline.publish`),
+      value: t(`${baseKey}.pipeline.publishValue`, { count: publishReadyCount }),
+      description: t(`${baseKey}.pipeline.publishDesc`),
+      tone: "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]",
+    },
+  ];
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t(`${baseKey}.pipeline.title`)}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t(`${baseKey}.pipeline.description`)}</p>
+        </div>
+        <Link href={queueHref} className="text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {t(`${baseKey}.pipeline.openQueue`)}
+        </Link>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={step.id} className="relative min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border ${step.tone}`}>
+                <step.icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#e7e9ea]">{step.title}</span>
+                <span className="mt-1 block truncate text-sm text-[#8ecdf8]">{step.value}</span>
+                <span className="mt-2 block line-clamp-2 text-xs leading-5 text-[#71767b]">{step.description}</span>
+              </span>
+            </div>
+            {index < steps.length - 1 ? <ArrowRight className="absolute -right-2 top-1/2 hidden size-4 -translate-y-1/2 text-[#2f3336] lg:block" /> : null}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function WorkbenchSignal({
+  icon: Icon,
+  label,
+  title,
+  description,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  description: string;
+  tone: "blue" | "green" | "violet";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+      : tone === "violet"
+        ? "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]"
+        : "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
+          <Icon className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#71767b]">{label}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{title}</span>
+          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DraftRouteStep({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]">{value}</p>
     </div>
   );
 }

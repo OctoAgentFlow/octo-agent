@@ -517,7 +517,7 @@ export default function AnalyticsPage() {
           right={
             <Link
               className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-              href="/agents"
+              href="/auto-dms"
             >
               {t("analytics.autoDMOps.manage")}
             </Link>

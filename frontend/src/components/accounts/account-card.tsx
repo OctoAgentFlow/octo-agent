@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AlertTriangle, Bot, CheckCircle2, Clock3, Link2, PlugZap, Rocket, ShieldCheck, Unplug } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Clock3, Link2, ListChecks, PlugZap, Rocket, Send, ShieldCheck, Unplug, Workflow } from "lucide-react";
 
 import type { ConnectedXAccount } from "@/types/accounts";
 import type { OAFBot } from "@/types/oaf-bot";
@@ -14,9 +14,26 @@ import { cn } from "@/lib/utils";
 type AccountCardProps = {
   account: ConnectedXAccount;
   boundBot?: OAFBot;
+  automationStates: AccountAutomationState[];
+  queueSummary: AccountQueueSummary;
   onReconnect: (id: string) => void;
   onDisconnect: (id: string) => Promise<void>;
   isDisconnecting?: boolean;
+};
+
+export type AccountAutomationState = {
+  type: "post" | "reply" | "comment" | "dm";
+  enabled: boolean;
+  configured: boolean;
+  mode: "manual" | "review" | "autopilot";
+};
+
+export type AccountQueueSummary = {
+  total: number;
+  pendingReview: number;
+  readyToPublish: number;
+  failed: number;
+  published: number;
 };
 
 function statusVariant(status: ConnectedXAccount["status"]) {
@@ -43,9 +60,18 @@ function readinessLabel(status: ConnectedXAccount["status"], boundBot?: OAFBot) 
   return "accounts.readiness.ready";
 }
 
-export function AccountCard({ account, boundBot, onReconnect, onDisconnect, isDisconnecting = false }: AccountCardProps) {
+export function AccountCard({
+  account,
+  boundBot,
+  automationStates,
+  queueSummary,
+  onReconnect,
+  onDisconnect,
+  isDisconnecting = false,
+}: AccountCardProps) {
   const { t } = useT();
   const isConnected = account.status === "connected";
+  const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
 
   return (
     <Card className="overflow-hidden border-[#2f3336] bg-[#0f1419] p-0 transition-colors hover:bg-[#11161c]">
@@ -131,26 +157,154 @@ export function AccountCard({ account, boundBot, onReconnect, onDisconnect, isDi
         <HealthRow
           icon={<Clock3 className="size-4" />}
           label={t("accounts.health.automation")}
-          value={isConnected ? t("accounts.health.executionQueueReady") : t("accounts.health.reconnectFirst")}
-          tone={isConnected ? "info" : "warning"}
+          value={isConnected ? t("accounts.health.automationCount", { count: enabledAutomationCount }) : t("accounts.health.reconnectFirst")}
+          tone={isConnected && enabledAutomationCount > 0 ? "success" : isConnected ? "info" : "warning"}
         />
       </div>
 
-      <div className="border-t border-[#2f3336] px-4 py-3 text-sm text-[#71767b] md:px-5">
-        {boundBot ? (
-          <p className="break-words">
-            {t("accounts.botSummary.bound", {
-              bot: boundBot.name,
-              tone: boundBot.voice_tone || t("accounts.botSummary.noTone"),
-              goal: boundBot.growth_goal || t("accounts.botSummary.noGoal"),
-            })}
-          </p>
-        ) : (
-          <p>{t("accounts.botSummary.missing")}</p>
-        )}
+      <div className="grid gap-3 border-t border-[#2f3336] p-4 md:grid-cols-[1.05fr_1fr] md:p-5">
+        <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black/25 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">{t("accounts.relationship.title")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("accounts.relationship.description")}</p>
+            </div>
+            <Workflow className="size-5 shrink-0 text-[#1d9bf0]" />
+          </div>
+
+          <div className="space-y-3">
+            <AccountBindingLine
+              icon={<Bot className="size-4" />}
+              label={t("accounts.relationship.bot")}
+              title={boundBot?.name || t("accounts.relationship.noBotTitle")}
+              description={
+                boundBot
+                  ? t("accounts.botSummary.bound", {
+                      bot: boundBot.name,
+                      tone: boundBot.voice_tone || t("accounts.botSummary.noTone"),
+                      goal: boundBot.growth_goal || t("accounts.botSummary.noGoal"),
+                    })
+                  : t("accounts.botSummary.missing")
+              }
+              href="/oaf-bots"
+              cta={boundBot ? t("accounts.actions.manageBot") : t("accounts.actions.bindBot")}
+              tone={boundBot ? "success" : "warning"}
+            />
+            <AccountBindingLine
+              icon={<Send className="size-4" />}
+              label={t("accounts.relationship.queue")}
+              title={queueSummary.total > 0 ? t("accounts.queue.total", { count: queueSummary.total }) : t("accounts.queue.emptyTitle")}
+              description={queueSummary.total > 0 ? t("accounts.queue.description") : t("accounts.queue.emptyDescription")}
+              href="/execution-queue"
+              cta={t("accounts.actions.openQueue")}
+              tone={queueSummary.failed > 0 ? "warning" : queueSummary.total > 0 ? "info" : "muted"}
+            />
+          </div>
+        </div>
+
+        <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black/25 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">{t("accounts.automation.title")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("accounts.automation.description")}</p>
+            </div>
+            <ListChecks className="size-5 shrink-0 text-[#1d9bf0]" />
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {automationStates.map((item) => (
+              <AutomationPill key={item.type} item={item} />
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-4 gap-2">
+            <QueueMetric label={t("accounts.queue.pendingReview")} value={queueSummary.pendingReview} />
+            <QueueMetric label={t("accounts.queue.readyToPublish")} value={queueSummary.readyToPublish} />
+            <QueueMetric label={t("accounts.queue.failed")} value={queueSummary.failed} tone={queueSummary.failed > 0 ? "warning" : "default"} />
+            <QueueMetric label={t("accounts.queue.published")} value={queueSummary.published} />
+          </div>
+        </div>
       </div>
     </Card>
   );
+}
+
+function AccountBindingLine({
+  icon,
+  label,
+  title,
+  description,
+  href,
+  cta,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+  tone: "success" | "warning" | "info" | "muted";
+}) {
+  const tones = {
+    success: "border-emerald-300/20 bg-emerald-400/5 text-emerald-200",
+    warning: "border-amber-300/20 bg-amber-400/5 text-amber-200",
+    info: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-blue-200",
+    muted: "border-[#2f3336] bg-[#16181c] text-[#71767b]",
+  };
+
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full border", tones[tone])}>{icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-[#71767b]">{label}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
+        </div>
+        <Link href={href} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {cta}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function AutomationPill({ item }: { item: AccountAutomationState }) {
+  const { t } = useT();
+  const tone = item.enabled
+    ? "border-emerald-300/20 bg-emerald-400/5 text-emerald-200"
+    : item.configured
+      ? "border-[#2f3336] bg-[#16181c] text-[#71767b]"
+      : "border-amber-300/20 bg-amber-400/5 text-amber-200";
+
+  return (
+    <Link href={automationHref(item.type)} className={cn("min-w-0 rounded-2xl border p-3 transition-colors hover:border-[#1d9bf0]/40", tone)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-semibold text-white">{t(`accounts.automation.type.${item.type}`)}</span>
+        <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
+          {item.enabled ? t("accounts.automation.enabled") : item.configured ? t("accounts.automation.paused") : t("accounts.automation.notConfigured")}
+        </span>
+      </div>
+      <p className="mt-2 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`executionQueue.executionMode.${item.mode}`) })}</p>
+    </Link>
+  );
+}
+
+function QueueMetric({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "warning" }) {
+  return (
+    <div className={cn("min-w-0 rounded-xl border border-[#2f3336] bg-[#0f1419] px-2 py-2 text-center", tone === "warning" ? "text-amber-200" : "text-white")}>
+      <p className="text-sm font-semibold">{value}</p>
+      <p className="mt-1 truncate text-[11px] text-[#71767b]">{label}</p>
+    </div>
+  );
+}
+
+function automationHref(type: AccountAutomationState["type"]) {
+  if (type === "post") return "/auto-post";
+  if (type === "reply") return "/auto-replies";
+  if (type === "comment") return "/auto-comments";
+  return "/auto-dms";
 }
 
 function HealthRow({

@@ -47,14 +47,14 @@ export function UserOnboardingCard({
       titleKey: "onboarding.step.automation.title",
       descriptionKey: "onboarding.step.automation.description",
       ctaKey: "onboarding.step.automation.cta",
-      href: "/agents",
+      href: "/automations",
     },
     {
       done: postCreated,
       titleKey: "onboarding.step.post.title",
       descriptionKey: "onboarding.step.post.description",
       ctaKey: "onboarding.step.post.cta",
-      href: "/posts/create",
+      href: "/posts/create?source=auto_post",
     },
     {
       done: activityObserved,

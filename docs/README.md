@@ -12,6 +12,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 
 ## Acceptance
 
+- `acceptance/CURRENT_ACCEPTANCE_CHECKLIST.md`：当前 OAF Bot / Auto Post / Execution Queue / Publishing Pipeline 阶段验收清单。
 - `acceptance/MVP_ACCEPTANCE_CHECKLIST.md`：MVP 手动验收清单。
 - `acceptance/ACCEPTANCE_RESULT.md`：本地 MVP 验收结果。
 

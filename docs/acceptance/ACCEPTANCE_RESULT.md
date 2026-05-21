@@ -1,5 +1,7 @@
 # ACCEPTANCE_RESULT
 
+> 历史快照：本文档记录 2026-05-13 左右本地 MVP 验收结果，保留用于追溯，不代表当前 OAF Bot / Auto Post Planner / Publishing Pipeline 阶段的最新验收清单。继续开发请优先参考 `CURRENT_ACCEPTANCE_CHECKLIST.md`、`PROJECT_CONTEXT.md` 和 `LOCAL_RUNBOOK.md`。
+
 ## 验收时间
 
 - 日期：2026-05-13

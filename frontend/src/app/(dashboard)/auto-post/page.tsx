@@ -520,8 +520,8 @@ export default function AutoPostPage() {
                     {t("autoPost.scheduler.aiQuotaHint")}
                   </div>
                 ) : null}
-                <label className="flex items-center justify-between gap-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-                  <span>
+                <label className="flex flex-col gap-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0">
                     <span className="block text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.enabled")}</span>
                     <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoPost.fields.enabledHelper")}</span>
                   </span>
@@ -691,7 +691,7 @@ export default function AutoPostPage() {
                         />
                       </label>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <label className="flex items-center gap-2 text-xs text-[#71767b]">
                         {t("autoPost.contentLibrary.fields.status")}
                         <select
@@ -703,11 +703,11 @@ export default function AutoPostPage() {
                           <option value="paused">{t("autoPost.contentLibrary.status.paused")}</option>
                         </select>
                       </label>
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" onClick={resetLibraryForm}>
+                      <div className="grid gap-2 sm:flex">
+                        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={resetLibraryForm}>
                           {t("common.cancel")}
                         </Button>
-                        <Button type="button" onClick={() => void saveLibraryItem()} disabled={savingLibrary}>
+                        <Button type="button" className="w-full sm:w-auto" onClick={() => void saveLibraryItem()} disabled={savingLibrary}>
                           {savingLibrary ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                           {editingLibraryID ? t("autoPost.contentLibrary.saveEdit") : t("autoPost.contentLibrary.saveNew")}
                         </Button>
@@ -739,8 +739,8 @@ export default function AutoPostPage() {
                         }`}
                       >
                         <button type="button" className="w-full text-left" onClick={() => setSelectedContentItemID(item.id)}>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="min-w-0 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{item.title}</span>
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-xs text-[#71767b]">
                               {t(`autoPost.contentLibrary.itemType.${item.item_type}`)}
                             </span>
@@ -757,16 +757,16 @@ export default function AutoPostPage() {
                             {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDate(item.last_used_at) })}</span> : null}
                           </div>
                         </button>
-                        <div className="mt-3 flex flex-wrap justify-end gap-2">
-                          <Button size="sm" variant="outline" type="button" onClick={() => editLibraryItem(item)}>
+                        <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                          <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => editLibraryItem(item)}>
                             <Pencil className="size-4" />
                             {t("autoPost.contentLibrary.edit")}
                           </Button>
-                          <Button size="sm" variant="outline" type="button" onClick={() => void updateLibraryStatus(item, item.status === "active" ? "paused" : "active")}>
+                          <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => void updateLibraryStatus(item, item.status === "active" ? "paused" : "active")}>
                             <Power className="size-4" />
                             {item.status === "active" ? t("autoPost.contentLibrary.pause") : t("autoPost.contentLibrary.activate")}
                           </Button>
-                          <Button size="sm" variant="outline" type="button" onClick={() => void deleteLibraryItem(item)}>
+                          <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => void deleteLibraryItem(item)}>
                             <Trash2 className="size-4" />
                             {t("autoPost.contentLibrary.delete")}
                           </Button>
@@ -809,9 +809,9 @@ export default function AutoPostPage() {
                 <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3 text-sm leading-6 text-[#e7e9ea]/78">
                   {selectedBot ? t("autoPost.generate.botHint", { bot: selectedBot.name }) : t("autoPost.generate.defaultHint")}
                 </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   <p className="text-xs text-[#71767b]">{t("autoPost.generate.quotaHint")}</p>
-                  <Button type="button" onClick={() => void generateDraft()} disabled={generating || !selectedAccountID || aiRemaining <= 0}>
+                  <Button type="button" className="w-full sm:w-auto" onClick={() => void generateDraft()} disabled={generating || !selectedAccountID || aiRemaining <= 0}>
                     {generating ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
                     {t("autoPost.actions.generateNow")}
                   </Button>
@@ -953,8 +953,8 @@ function TextInput({
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
-      <span className="text-[#71767b]">{label}</span>
-      <span className="max-w-[60%] truncate text-right font-medium text-[#e7e9ea]">{value}</span>
+      <span className="min-w-0 text-[#71767b]">{label}</span>
+      <span className="min-w-0 max-w-[62%] break-words text-right font-medium text-[#e7e9ea] [overflow-wrap:anywhere]">{value}</span>
     </div>
   );
 }

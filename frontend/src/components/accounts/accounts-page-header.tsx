@@ -18,7 +18,7 @@ export function AccountsPageHeader({ onAddAccount, addDisabled = false, addDisab
       <div>
         <h2 className="text-title">{t("accounts.page.title")}</h2>
         <p className="text-subtitle mt-2">{t("accounts.page.subtitle")}</p>
-        {addDisabled && addDisabledReason ? <p className="mt-2 text-xs text-amber-100/80">{addDisabledReason}</p> : null}
+        {addDisabled && addDisabledReason ? <p className="mt-2 text-xs text-[#f6d96b]">{addDisabledReason}</p> : null}
       </div>
       <Button onClick={onAddAccount} disabled={addDisabled}>
         <Plus className="size-4" />

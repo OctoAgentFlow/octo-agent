@@ -3,7 +3,22 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Loader2, Pencil, PlayCircle, Power, Sparkles, Trash2, Wand2 } from "lucide-react";
+import {
+  ArrowRight,
+  Bot,
+  CheckCircle2,
+  Database,
+  ListChecks,
+  Loader2,
+  Pencil,
+  PlayCircle,
+  Power,
+  Send,
+  Sparkles,
+  Trash2,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -185,9 +200,18 @@ export default function AutoPostPage() {
     () => availableContentItems.find((item) => item.id === selectedContentItemID) || null,
     [availableContentItems, selectedContentItemID]
   );
-  const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID).slice(0, 5), [drafts, selectedAccountID]);
+  const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
+  const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
   const accountRuns = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID).slice(0, 5), [runs, selectedAccountID]);
   const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
+  const queuedDraftCount = useMemo(
+    () => accountDraftsAll.filter((draft) => ["draft", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
+    [accountDraftsAll]
+  );
+  const publishReadyCount = useMemo(
+    () => accountDraftsAll.filter((draft) => ["approved", "ready_to_publish", "published"].includes(draft.status)).length,
+    [accountDraftsAll]
+  );
   const aiLimit = subscription?.limits.ai_generations_monthly || 0;
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
@@ -526,6 +550,16 @@ export default function AutoPostPage() {
             </Card>
           </div>
 
+          <AutoPostPipelineSummary
+            activeContentCount={activeContentCount}
+            selectedContentItem={selectedContentItem}
+            selectedPlan={selectedPlan}
+            queuedDraftCount={queuedDraftCount}
+            publishReadyCount={publishReadyCount}
+            latestRun={latestRun}
+            onOpenPanel={setActivePanel}
+          />
+
           <WorkbenchTabs activePanel={activePanel} onChange={setActivePanel} />
 
           <div className="space-y-5">
@@ -644,6 +678,14 @@ export default function AutoPostPage() {
                     </Button>
                   }
                 />
+                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.active")} value={activeContentCount} />
+                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.total")} value={availableContentItems.length} />
+                  <LibraryMetric
+                    label={t("autoPost.contentLibrary.metrics.selected")}
+                    value={selectedContentItem ? t("autoPost.contentLibrary.metrics.selectedYes") : t("autoPost.contentLibrary.metrics.selectedNo")}
+                  />
+                </div>
 
                 {libraryOpen ? (
                   <div className="mb-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
@@ -758,7 +800,14 @@ export default function AutoPostPage() {
                         selectedContentItemID === 0 ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]" : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
                       }`}
                     >
-                      {t("autoPost.contentLibrary.noSelection")}
+                      <span className="flex items-center justify-between gap-3">
+                        <span>{t("autoPost.contentLibrary.noSelection")}</span>
+                        {selectedContentItemID === 0 ? (
+                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">
+                            {t("autoPost.contentLibrary.selectedForGenerate")}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                     {availableContentItems.map((item) => (
                       <div
@@ -770,6 +819,11 @@ export default function AutoPostPage() {
                         <button type="button" className="w-full text-left" onClick={() => setSelectedContentItemID(item.id)}>
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="min-w-0 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{item.title}</span>
+                            {selectedContentItemID === item.id ? (
+                              <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">
+                                {t("autoPost.contentLibrary.selectedForGenerate")}
+                              </span>
+                            ) : null}
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-xs text-[#71767b]">
                               {t(`autoPost.contentLibrary.itemType.${item.item_type}`)}
                             </span>
@@ -810,6 +864,29 @@ export default function AutoPostPage() {
             {activePanel === "generate" ? (
               <Card>
                 <CardHeader title={t("autoPost.generate.title")} description={t("autoPost.generate.description")} />
+                <div className="mb-4 grid gap-3 lg:grid-cols-3">
+                  <WorkbenchSignal
+                    icon={Database}
+                    label={t("autoPost.generate.signal.source")}
+                    title={selectedContentItem ? selectedContentItem.title : t("autoPost.generate.signal.manualDirection")}
+                    description={selectedContentItem ? t("autoPost.generate.signal.sourceSelected") : t("autoPost.generate.signal.sourceFallback")}
+                    tone="blue"
+                  />
+                  <WorkbenchSignal
+                    icon={Bot}
+                    label={t("autoPost.generate.signal.persona")}
+                    title={selectedBot ? selectedBot.name : t("autoPost.bot.defaultTitle")}
+                    description={selectedBot ? t("autoPost.generate.signal.oafBotSource") : t("autoPost.bot.unboundHint")}
+                    tone="green"
+                  />
+                  <WorkbenchSignal
+                    icon={ListChecks}
+                    label={t("autoPost.generate.signal.destination")}
+                    title={t("autoPost.generate.signal.executionQueue")}
+                    description={t("autoPost.generate.signal.destinationDesc", { mode: t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`) })}
+                    tone="violet"
+                  />
+                </div>
                 <label className="mb-4 block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.contentItemLabel")}</span>
                   <select
@@ -824,9 +901,25 @@ export default function AutoPostPage() {
                         <option key={item.id} value={item.id}>
                           {item.title}
                         </option>
-                      ))}
+                    ))}
                   </select>
                 </label>
+                {selectedContentItem ? (
+                  <div className="mb-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
+                        {t("autoPost.generate.selectedMaterial")}
+                      </span>
+                      <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+                        {t(`autoPost.contentLibrary.itemType.${selectedContentItem.item_type}`)}
+                      </span>
+                      <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-100">
+                        {t("autoPost.contentLibrary.usageCount", { count: selectedContentItem.usage_count })}
+                      </span>
+                    </div>
+                    <p className="mt-3 line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]/78 [overflow-wrap:anywhere]">{selectedContentItem.body}</p>
+                  </div>
+                ) : null}
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.directionLabel")}</span>
                   <textarea
@@ -880,6 +973,11 @@ export default function AutoPostPage() {
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
+                        <div className="mt-3 grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
+                          <DraftRouteStep label={t("autoPost.pipeline.material")} value={draft.content_title || t("autoPost.runs.noContentItem")} />
+                          <DraftRouteStep label={t("autoPost.pipeline.queue")} value={t(`executionQueue.status.${draft.status}`)} />
+                          <DraftRouteStep label={t("autoPost.pipeline.publish")} value={draft.status === "published" ? t("autoPost.pipeline.published") : t("autoPost.pipeline.waiting")} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -935,6 +1033,155 @@ export default function AutoPostPage() {
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function AutoPostPipelineSummary({
+  activeContentCount,
+  selectedContentItem,
+  selectedPlan,
+  queuedDraftCount,
+  publishReadyCount,
+  latestRun,
+  onOpenPanel,
+}: {
+  activeContentCount: number;
+  selectedContentItem: ContentLibraryItemApi | null;
+  selectedPlan: AutoPostPlanApi | null;
+  queuedDraftCount: number;
+  publishReadyCount: number;
+  latestRun?: AutoPostGenerationRunApi;
+  onOpenPanel: (panel: WorkbenchPanel) => void;
+}) {
+  const { t } = useT();
+  const steps = [
+    {
+      id: "material" as const,
+      icon: Database,
+      title: t("autoPost.pipeline.material"),
+      value: selectedContentItem ? selectedContentItem.title : t("autoPost.pipeline.materialValue", { count: activeContentCount }),
+      description: t("autoPost.pipeline.materialDesc"),
+      panel: "content" as WorkbenchPanel,
+      tone: "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]",
+    },
+    {
+      id: "generate" as const,
+      icon: Wand2,
+      title: t("autoPost.pipeline.generate"),
+      value: latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.pipeline.generateValue"),
+      description: t("autoPost.pipeline.generateDesc"),
+      panel: "generate" as WorkbenchPanel,
+      tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
+    },
+    {
+      id: "queue" as const,
+      icon: ListChecks,
+      title: t("autoPost.pipeline.queue"),
+      value: t("autoPost.pipeline.queueValue", { count: queuedDraftCount }),
+      description: t("autoPost.pipeline.queueDesc"),
+      panel: "history" as WorkbenchPanel,
+      tone: "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]",
+    },
+    {
+      id: "publish" as const,
+      icon: Send,
+      title: t("autoPost.pipeline.publish"),
+      value: selectedPlan ? t("autoPost.pipeline.publishValue", { count: publishReadyCount }) : t("autoPost.status.notConfigured"),
+      description: t("autoPost.pipeline.publishDesc"),
+      panel: "planner" as WorkbenchPanel,
+      tone: "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]",
+    },
+  ];
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.pipeline.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoPost.pipeline.description")}</p>
+        </div>
+        <Link href="/execution-queue?type=post" className="text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {t("autoPost.actions.openQueue")}
+        </Link>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-4">
+        {steps.map((step, index) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => onOpenPanel(step.panel)}
+            className="group relative min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4 text-left transition hover:border-[#1d9bf0]/45 hover:bg-[#080808]"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border ${step.tone}`}>
+                <step.icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#e7e9ea]">{step.title}</span>
+                <span className="mt-1 block truncate text-sm text-[#8ecdf8]">{step.value}</span>
+                <span className="mt-2 block line-clamp-2 text-xs leading-5 text-[#71767b]">{step.description}</span>
+              </span>
+            </div>
+            {index < steps.length - 1 ? (
+              <ArrowRight className="absolute -right-2 top-1/2 hidden size-4 -translate-y-1/2 text-[#2f3336] lg:block" />
+            ) : null}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function WorkbenchSignal({
+  icon: Icon,
+  label,
+  title,
+  description,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  description: string;
+  tone: "blue" | "green" | "violet";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+      : tone === "violet"
+        ? "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]"
+        : "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
+          <Icon className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#71767b]">{label}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{title}</span>
+          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LibraryMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-lg font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function DraftRouteStep({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]">{value}</p>
     </div>
   );
 }

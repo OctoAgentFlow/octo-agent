@@ -680,6 +680,8 @@ export const dict: I18nDict = {
   "dashboard.accounts.section.description": "Your social account is active and syncing.",
   "dashboard.accounts.platform.x": "X / Twitter",
   "dashboard.accounts.status.connected": "Connected",
+  "dashboard.accounts.connectedCount": "{count} X account(s) connected",
+  "dashboard.accounts.empty": "No X account connected yet.",
   "dashboard.accounts.labels.followers": "Followers: {count}",
   "dashboard.accounts.labels.following": "Following: {count}",
   "dashboard.accounts.labels.lastSync": "Last sync: {minutes} min ago",

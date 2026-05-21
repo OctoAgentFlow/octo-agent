@@ -12,8 +12,8 @@ export function SectionCard({ title, description, className, children }: Section
     <section className={cn("surface-card p-5 md:p-6", className)}>
       {(title || description) && (
         <header className="mb-4 space-y-1">
-          {title ? <h3 className="text-base font-semibold text-white md:text-lg">{title}</h3> : null}
-          {description ? <p className="text-sm text-white/60">{description}</p> : null}
+          {title ? <h3 className="text-base font-bold text-[#e7e9ea] md:text-lg">{title}</h3> : null}
+          {description ? <p className="text-sm text-[#71767b]">{description}</p> : null}
         </header>
       )}
       {children}

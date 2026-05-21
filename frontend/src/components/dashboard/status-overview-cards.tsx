@@ -64,14 +64,16 @@ export function StatusOverviewCards({ overview }: StatusOverviewCardsProps) {
       {stats.map((stat) => (
         <article
           key={stat.titleKey}
-          className="surface-card rounded-2xl p-4 transition-transform duration-200 hover:-translate-y-0.5"
+          className="surface-card rounded-2xl p-4 transition-colors duration-200 hover:bg-[#080808]"
         >
           <div className="flex items-start justify-between">
-            <p className="text-xs tracking-wide text-white/65 uppercase">{t(stat.titleKey)}</p>
-            <stat.icon className="size-4 text-blue-200" />
+            <p className="text-xs tracking-wide text-[#71767b] uppercase">{t(stat.titleKey)}</p>
+            <span className="grid size-8 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+              <stat.icon className="size-4" />
+            </span>
           </div>
-          <p className="mt-3 text-2xl font-semibold text-white">{stat.value}</p>
-          <p className="mt-1 text-xs text-white/60">{stat.subValue}</p>
+          <p className="mt-3 text-2xl font-bold text-[#e7e9ea]">{stat.value}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{stat.subValue}</p>
         </article>
       ))}
     </section>

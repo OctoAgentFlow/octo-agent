@@ -73,9 +73,9 @@ function usagePct(used: number, limit: number) {
 
 function UsageRow({ label, used, limit, locale }: { label: string; used: number; limit: number; locale: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2">
-      <span className="text-sm text-white/64">{label}</span>
-      <span className="shrink-0 text-sm font-medium text-white">
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2.5">
+      <span className="text-sm text-[#71767b]">{label}</span>
+      <span className="shrink-0 text-sm font-semibold text-[#e7e9ea]">
         {formatNumber(used, locale)} / {formatNumber(limit, locale)}
       </span>
     </div>
@@ -171,18 +171,17 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
 
   return (
     <SectionCard title={t("dashboard.subscription.title")} description={t("dashboard.subscription.subtitle")}>
-      <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-4">
+      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="inline-flex items-center gap-2 text-sm text-blue-100">
+            <p className="inline-flex items-center gap-2 text-sm text-[#1d9bf0]">
               <CheckCircle2 className="size-4" />
               {loading ? t("dashboard.subscription.loading") : planLine}
             </p>
-            <h4 className="text-lg font-semibold text-white">{t("dashboard.subscription.quotaTitle")}</h4>
+            <h4 className="text-lg font-bold text-[#e7e9ea]">{t("dashboard.subscription.quotaTitle")}</h4>
           </div>
           <Button
             type="button"
-            className="bg-gradient-to-r from-blue-500 to-violet-500 text-white hover:opacity-90"
             disabled={loading || loadingMethods}
             onClick={() => void openCheckout()}
           >
@@ -201,15 +200,15 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
         </div>
 
         <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between text-xs text-white/55">
+          <div className="mb-2 flex items-center justify-between text-xs text-[#71767b]">
             <span>{t("dashboard.subscription.aiGenerations")}</span>
             <span>{t("dashboard.subscription.remaining", { count: formatNumber(remainingAI, lang) })}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="h-2 overflow-hidden rounded-full bg-[#2f3336]">
             <span
               className={cn(
                 "block h-full rounded-full",
-                aiBlocked ? "bg-red-300" : aiWarning ? "bg-amber-300" : "bg-gradient-to-r from-blue-400 to-violet-400"
+                aiBlocked ? "bg-red-300" : aiWarning ? "bg-amber-300" : "bg-[#1d9bf0]"
               )}
               style={{ width: `${aiPct}%` }}
             />
@@ -230,11 +229,11 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
           </div>
         ) : null}
 
-        <div className="mt-4 rounded-xl border border-violet-300/20 bg-gradient-to-br from-blue-500/12 to-violet-500/12 p-3">
-          <p className="text-sm font-medium text-white">
+        <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
+          <p className="text-sm font-semibold text-[#e7e9ea]">
             {isHighestPlan ? t("dashboard.subscription.highestPlan") : t("dashboard.subscription.recommendTitle", { plan: t(planLabel(targetPlan ?? "basic")) })}
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-white/66">{t(recommendationKey(plan))}</p>
+          <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/70">{t(recommendationKey(plan))}</p>
         </div>
       </div>
 

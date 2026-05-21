@@ -51,12 +51,12 @@ export function AppSidebar() {
   const activeAdminSection = searchParams.get("section") || "overview";
 
   return (
-    <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
+    <aside className="hidden border-r border-[#2f3336] bg-black/88 px-5 py-4 backdrop-blur md:flex md:flex-col">
       <Link
         href="/"
-        className="mb-8 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 outline-none transition hover:border-blue-300/25 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-blue-300/70"
+        className="mb-6 flex w-full items-center gap-3 rounded-full px-2 py-2 outline-none transition hover:bg-[#16181c] focus-visible:ring-2 focus-visible:ring-[#1d9bf0]/70"
       >
-        <span className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/20 to-violet-500/20 shadow-[0_0_24px_rgba(96,165,250,0.18)]">
+        <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#2f3336] bg-[#0f1419]">
           <Image
             src="/brand/oaf-octopus-icon.png"
             alt={t("common.brand")}
@@ -68,11 +68,11 @@ export function AppSidebar() {
           />
         </span>
         <span className="flex min-w-0 flex-col">
-          <span className="whitespace-nowrap text-sm font-semibold leading-5 text-white">Octo-Agent</span>
-          <span className="whitespace-nowrap text-xs leading-4 text-indigo-200/70">Flow</span>
+          <span className="whitespace-nowrap text-base font-bold leading-5 text-[#e7e9ea]">Octo-Agent</span>
+          <span className="whitespace-nowrap text-xs leading-4 text-[#71767b]">Flow</span>
         </span>
       </Link>
-      <nav className="space-y-1">
+      <nav className="space-y-1.5">
         {visibleNavItems.map((item) => {
           const active = "section" in item
             ? pathname === "/admin" && item.section === activeAdminSection
@@ -81,11 +81,11 @@ export function AppSidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                active ? "bg-white/12 text-white" : "text-white/65 hover:bg-white/8 hover:text-white"
+              className={`flex items-center gap-3 rounded-full px-3 py-2.5 text-[15px] font-medium transition-colors ${
+                active ? "bg-[#1d9bf0]/12 text-[#e7e9ea]" : "text-[#e7e9ea]/75 hover:bg-[#16181c] hover:text-[#e7e9ea]"
               }`}
             >
-              <item.icon className="size-4" />
+              <item.icon className={`size-5 ${active ? "text-[#1d9bf0]" : ""}`} />
               {t(item.labelKey)}
             </Link>
           );

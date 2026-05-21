@@ -70,7 +70,7 @@ export function UserOnboardingCard({
   if (!nextStep) return null;
 
   return (
-    <Card className="border-cyan-300/18 bg-cyan-400/[0.04]">
+    <Card className="border-[#2f3336] bg-black">
       <CardHeader
         title={t("onboarding.title")}
         description={t("onboarding.description", { completed, total: steps.length })}
@@ -87,16 +87,16 @@ export function UserOnboardingCard({
                 step.done
                   ? "border-emerald-300/25 bg-emerald-400/10"
                   : active
-                    ? "border-cyan-200/30 bg-cyan-300/10"
-                    : "border-white/8 bg-white/[0.03]"
+                    ? "border-[#1d9bf0]/35 bg-[#1d9bf0]/10"
+                    : "border-[#2f3336] bg-[#0f1419]"
               )}
             >
               <div className="flex items-start gap-2">
-                <StepIcon className={cn("mt-0.5 size-4 shrink-0", step.done ? "text-emerald-200" : "text-white/45")} />
+                <StepIcon className={cn("mt-0.5 size-4 shrink-0", step.done ? "text-emerald-200" : active ? "text-[#1d9bf0]" : "text-[#71767b]")} />
                 <div className="min-w-0">
-                  <p className="text-xs text-white/40">{t("onboarding.stepNumber", { number: index + 1 })}</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{t(step.titleKey)}</p>
-                  <p className="mt-1 text-xs leading-5 text-white/55">{t(step.descriptionKey)}</p>
+                  <p className="text-xs text-[#71767b]">{t("onboarding.stepNumber", { number: index + 1 })}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#e7e9ea]">{t(step.titleKey)}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(step.descriptionKey)}</p>
                 </div>
               </div>
             </article>

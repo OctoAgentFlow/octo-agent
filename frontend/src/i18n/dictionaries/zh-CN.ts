@@ -656,6 +656,8 @@ export const dict: I18nDict = {
   "dashboard.accounts.section.description": "你的社交账号处于活跃并正在同步。",
   "dashboard.accounts.platform.x": "X / Twitter",
   "dashboard.accounts.status.connected": "已连接",
+  "dashboard.accounts.connectedCount": "{count} 个 X 账号已连接",
+  "dashboard.accounts.empty": "还没有连接 X 账号。",
   "dashboard.accounts.labels.followers": "粉丝数: {count}",
   "dashboard.accounts.labels.following": "关注数: {count}",
   "dashboard.accounts.labels.lastSync": "最近同步: {minutes} 分钟前",

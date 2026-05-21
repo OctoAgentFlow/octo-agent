@@ -79,10 +79,10 @@ export function AppHeader() {
   }, [clock, headerBusy, lastSyncedAt, t]);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-white/10 bg-[#070b17]/80 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#2f3336] bg-black/78 px-4 backdrop-blur-xl md:px-6">
       <div>
-        <h1 className="text-sm font-semibold text-white md:text-base">{t("dashboard.header.title")}</h1>
-        <p className="hidden text-xs text-white/55 md:block">{t("dashboard.header.subtitle")}</p>
+        <h1 className="text-base font-bold text-[#e7e9ea] md:text-lg">{t("dashboard.header.title")}</h1>
+        <p className="hidden text-xs text-[#71767b] md:block">{t("dashboard.header.subtitle")}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <LanguageSwitcher className="hidden sm:block" />
@@ -94,7 +94,7 @@ export function AppHeader() {
             onDisconnected={handleDisconnected}
           />
         )}
-        <span className="stable-meta-chip hidden rounded-full border border-white/15 bg-white/6 px-2 py-1 text-xs text-white/60 sm:inline-flex">
+        <span className="stable-meta-chip hidden rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-1 text-xs text-[#71767b] sm:inline-flex">
           {syncedLabel}
         </span>
         <Button
@@ -110,7 +110,7 @@ export function AppHeader() {
         </Button>
         <Button
           variant="outline"
-          className="h-8 px-2.5 text-white/85 sm:px-3"
+          className="h-8 px-2.5 text-[#e7e9ea] sm:px-3"
           type="button"
           onClick={() => setLogoutConfirmOpen(true)}
           aria-label={t("common.logout")}
@@ -127,10 +127,10 @@ export function AppHeader() {
         showCloseButton={false}
       >
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" className="text-white/75" onClick={() => setLogoutConfirmOpen(false)}>
+          <Button type="button" variant="ghost" className="text-[#e7e9ea]/75" onClick={() => setLogoutConfirmOpen(false)}>
             {t("common.cancel")}
           </Button>
-          <Button type="button" variant="default" className="bg-gradient-to-r from-blue-500 to-violet-500 text-white" onClick={handleConfirmLogout}>
+          <Button type="button" variant="default" onClick={handleConfirmLogout}>
             {t("logout.confirm.confirm")}
           </Button>
         </div>

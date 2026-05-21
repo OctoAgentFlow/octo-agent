@@ -54,29 +54,29 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
           ) : null}
         </div>
       ) : records.length === 0 ? (
-        <p className="text-sm text-white/60">{t("dashboard.activity.empty")}</p>
+        <p className="text-sm text-[#71767b]">{t("dashboard.activity.empty")}</p>
       ) : (
-        <div className="space-y-2">
+        <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
           {records.map((activity) => {
             const Icon = typeIcon(activity.type);
             return (
               <article
                 key={activity.id}
-                className="grid gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm transition-colors hover:bg-white/10 md:grid-cols-[70px_1fr_90px]"
+                className="grid gap-2 px-5 py-4 text-sm transition-colors hover:bg-[#080808] md:grid-cols-[76px_1fr_96px] md:px-6"
               >
-                <span className="flex items-center gap-2 text-white/55">
-                  <Icon className="size-3.5 shrink-0 text-blue-200/90" />
+                <span className="flex items-center gap-2 text-[#71767b]">
+                  <Icon className="size-3.5 shrink-0 text-[#1d9bf0]" />
                   {formatClock(activity.executedAt)}
                 </span>
                 <div>
-                  <p className="font-medium text-white">{t(typeLabelKey(activity.type))}</p>
-                  <p className="line-clamp-3 text-xs text-white/75">{activityNarrativeLine(activity, t)}</p>
+                  <p className="font-semibold text-[#e7e9ea]">{t(typeLabelKey(activity.type))}</p>
+                  <p className="line-clamp-3 text-xs leading-5 text-[#e7e9ea]/78">{activityNarrativeLine(activity, t)}</p>
                   {activity.errorMessage ? (
                     <p className="mt-1 line-clamp-2 text-xs text-rose-200/85">{activity.errorMessage}</p>
                   ) : null}
-                  <p className="mt-1 text-xs text-white/45">{activity.accountHandle}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{activity.accountHandle}</p>
                 </div>
-                <span className="text-right text-white/65">{t(`activity.status.${activity.status}`)}</span>
+                <span className="text-right text-[#71767b]">{t(`activity.status.${activity.status}`)}</span>
               </article>
             );
           })}

@@ -41,11 +41,11 @@ export function DashboardShell({ children }: DashboardShellProps) {
   return (
     <div className="surface-page relative min-h-screen text-white">
       <SubscriptionExpiredBridge />
-      <div className="relative mx-auto grid min-h-screen w-full max-w-[1440px] md:grid-cols-[260px_1fr]">
+      <div className="relative mx-auto grid min-h-screen w-full max-w-[1440px] md:grid-cols-[280px_1fr]">
         <AppSidebar />
         <div className="flex min-h-screen flex-col">
           <AppHeader />
-          <main className="flex-1 p-4 md:p-6">{children}</main>
+          <main className="flex-1 border-r border-[#2f3336] p-4 md:p-6">{children}</main>
         </div>
       </div>
     </div>

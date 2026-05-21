@@ -28,7 +28,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
       title={t("dashboard.automation.section.title")}
       description={t("dashboard.automation.section.description")}
     >
-      {loading ? <p className="text-sm text-white/70">{t("dashboard.automation.loading")}</p> : null}
+      {loading ? <p className="text-sm text-[#71767b]">{t("dashboard.automation.loading")}</p> : null}
       {errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
@@ -41,17 +41,19 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
         {modules.map((module) => {
           const ModuleIcon = iconByType[module.type];
           return (
-            <article key={module.type} className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <article key={module.type} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 transition-colors hover:bg-[#16181c]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ModuleIcon className="size-4 text-violet-200" />
-                <p className="text-sm font-medium text-white">{t(module.nameKey)}</p>
+                <span className="grid size-8 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                  <ModuleIcon className="size-4" />
+                </span>
+                <p className="text-sm font-semibold text-[#e7e9ea]">{t(module.nameKey)}</p>
               </div>
-              <span className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70">
+              <span className="rounded-full border border-[#2f3336] px-2 py-1 text-[11px] text-[#71767b]">
                 {t(`automation.state.${module.state}`)}
               </span>
             </div>
-            <div className="mt-4 space-y-1 text-sm text-white/70">
+            <div className="mt-4 space-y-1 text-sm text-[#71767b]">
               <p>{t("dashboard.automation.labels.executedToday", { count: module.executedToday })}</p>
               <p>{t("dashboard.automation.labels.nextRun", { time: t(module.nextRunKey, module.nextRunParams) })}</p>
             </div>

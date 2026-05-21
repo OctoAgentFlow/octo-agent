@@ -21,11 +21,10 @@ export function CardHeader({ title, description, className, right }: CardHeaderP
   return (
     <header className={cn("mb-4 flex items-start justify-between gap-4", className)}>
       <div className="space-y-1">
-        {title ? <h3 className="text-base font-semibold text-white md:text-lg">{title}</h3> : null}
-        {description ? <p className="text-sm text-white/60">{description}</p> : null}
+        {title ? <h3 className="text-base font-bold text-[#e7e9ea] md:text-lg">{title}</h3> : null}
+        {description ? <p className="text-sm text-[#71767b]">{description}</p> : null}
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
     </header>
   );
 }
-

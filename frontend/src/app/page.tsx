@@ -10,6 +10,7 @@ import { PricingSection } from "@/components/marketing/pricing-section";
 import { DashboardPreviewSection } from "@/components/marketing/dashboard-preview-section";
 import { WorkflowSection } from "@/components/marketing/workflow-section";
 import { OAFBotSection } from "@/components/marketing/oaf-bot-section";
+import { OperatingLoopSection } from "@/components/marketing/operating-loop-section";
 
 export default function Home() {
   if (process.env.NEXT_PUBLIC_FRONTEND_ROLE === "admin") {
@@ -24,6 +25,7 @@ export default function Home() {
         <OAFBotSection />
         <FeatureCardsSection />
         <WorkflowSection />
+        <OperatingLoopSection />
         <DashboardPreviewSection />
         <PricingSection />
         <FAQSection />

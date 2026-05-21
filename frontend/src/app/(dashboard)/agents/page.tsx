@@ -730,7 +730,7 @@ function AutoDMReviewPanel({
             value={importCSV}
             onChange={(event) => onImportCSVChange(event.target.value)}
             rows={3}
-            placeholder="123456789,@username"
+            placeholder={t("automation.dmReview.importExample")}
             className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35"
           />
         </div>

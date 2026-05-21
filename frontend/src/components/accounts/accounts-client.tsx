@@ -16,8 +16,11 @@ import {
 import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import { automationService, type AutomationModuleApi } from "@/services/automation.service";
+import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import { oafBotService } from "@/services/oaf-bot.service";
+import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { ConnectedXAccount } from "@/types/accounts";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -66,6 +69,9 @@ export function AccountsClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedXAccount[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
+  const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
+  const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
   const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
 
@@ -113,6 +119,27 @@ export function AccountsClient() {
     void fetchBots();
   }, [fetchBots]);
 
+  const fetchAccountContext = useCallback(async () => {
+    try {
+      const [automationData, planData, queueData] = await Promise.all([
+        automationService.list(),
+        autoPostService.plans(),
+        reviewQueueService.list({ pageSize: 100 }),
+      ]);
+      setAutomationModules(automationData.modules);
+      setAutoPostPlans(planData.items);
+      setQueueItems(queueData.items);
+    } catch {
+      setAutomationModules([]);
+      setAutoPostPlans([]);
+      setQueueItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchAccountContext();
+  }, [fetchAccountContext]);
+
   useEffect(() => {
     let cancelled = false;
     billingService
@@ -134,12 +161,13 @@ export function AccountsClient() {
         try {
           await fetchAccounts({ quiet: true });
           await fetchBots();
+          await fetchAccountContext();
         } finally {
           broadcastPageRefreshComplete();
         }
       })();
     });
-  }, [fetchAccounts, fetchBots]);
+  }, [fetchAccountContext, fetchAccounts, fetchBots]);
 
   /** When OAuth finishes in a popup, it notifies this tab so we refresh without navigating away. */
   useEffect(() => {
@@ -151,6 +179,7 @@ export function AccountsClient() {
         pushToast(t("accounts.toast.connected"));
         void fetchAccounts({ quiet: true });
         void fetchBots();
+        void fetchAccountContext();
         broadcastDashboardRefresh();
         setDialogOpen(false);
       } else if (data.status === "failed") {
@@ -159,7 +188,7 @@ export function AccountsClient() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [fetchAccounts, fetchBots, pushToast, t]);
+  }, [fetchAccountContext, fetchAccounts, fetchBots, pushToast, t]);
 
   useEffect(() => {
     const oauth = searchParams.get("oauth");
@@ -183,12 +212,13 @@ export function AccountsClient() {
       pushToast(t("accounts.toast.connected"));
       void fetchAccounts();
       void fetchBots();
+      void fetchAccountContext();
       broadcastDashboardRefresh();
     } else if (oauth === "failed") {
       pushToast(t("accounts.toast.authorizationFailed"));
     }
     router.replace(pathname);
-  }, [fetchAccounts, fetchBots, pathname, pushToast, router, searchParams, t]);
+  }, [fetchAccountContext, fetchAccounts, fetchBots, pathname, pushToast, router, searchParams, t]);
 
   const onDisconnect = useCallback(
     async (id: string) => {
@@ -200,6 +230,7 @@ export function AccountsClient() {
         pushToast(t("accounts.toast.disconnected"));
         await fetchAccounts();
         void fetchBots();
+        void fetchAccountContext();
         broadcastDashboardRefresh();
       } catch (error) {
         if (axios.isAxiosError(error)) {
@@ -211,7 +242,7 @@ export function AccountsClient() {
         setDisconnectingAccountId(null);
       }
     },
-    [fetchAccounts, fetchBots, pushToast, t]
+    [fetchAccountContext, fetchAccounts, fetchBots, pushToast, t]
   );
 
   const isFreeAccountLimitReached = subscription?.plan === "free_trial" && accounts.length >= 1;
@@ -293,6 +324,9 @@ export function AccountsClient() {
           <AccountList
             accounts={accounts}
             bots={bots}
+            automationModules={automationModules}
+            autoPostPlans={autoPostPlans}
+            queueItems={queueItems}
             onReconnect={onReconnect}
             onDisconnect={onDisconnect}
             disconnectingAccountId={disconnectingAccountId}

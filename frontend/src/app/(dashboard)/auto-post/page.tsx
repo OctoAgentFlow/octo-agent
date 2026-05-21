@@ -29,6 +29,7 @@ import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
+type WorkbenchPanel = "generate" | "planner" | "content" | "history";
 
 type PlannerForm = {
   enabled: boolean;
@@ -42,6 +43,12 @@ type PlannerForm = {
 const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
 const contentItemTypes: ContentLibraryItemType[] = ["idea", "product_update", "faq", "case_study", "announcement", "link", "thread_seed"];
+const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; descriptionKey: string }> = [
+  { id: "generate", labelKey: "autoPost.tabs.generate", descriptionKey: "autoPost.tabs.generateDesc" },
+  { id: "planner", labelKey: "autoPost.tabs.planner", descriptionKey: "autoPost.tabs.plannerDesc" },
+  { id: "content", labelKey: "autoPost.tabs.content", descriptionKey: "autoPost.tabs.contentDesc" },
+  { id: "history", labelKey: "autoPost.tabs.history", descriptionKey: "autoPost.tabs.historyDesc" },
+];
 
 type LibraryForm = {
   title: string;
@@ -124,6 +131,7 @@ export default function AutoPostPage() {
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [runningPlanner, setRunningPlanner] = useState(false);
+  const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -184,6 +192,7 @@ export default function AutoPostPage() {
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
+  const latestRun = accountRuns[0];
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
@@ -355,6 +364,7 @@ export default function AutoPostPage() {
       setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
       setContentDirection("");
       pushToast(t("autoPost.toast.generated"));
+      setActivePanel("history");
       void load();
     } catch (error) {
       const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
@@ -389,6 +399,7 @@ export default function AutoPostPage() {
       } else {
         pushToast(t("autoPost.runNow.toast.failed"));
       }
+      setActivePanel("history");
       void load();
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runNow.errors.failed") : t("autoPost.runNow.errors.failed"));
@@ -417,6 +428,15 @@ export default function AutoPostPage() {
         <Card className="flex items-center gap-3 text-sm text-[#71767b]">
           <Loader2 className="size-4 animate-spin" />
           {t("common.loading")}
+        </Card>
+      ) : null}
+
+      {loadState === "error" ? (
+        <Card className="space-y-3 bg-[#0f1419]">
+          <CardHeader title={t("automation.error.title")} description={t("autoPost.errors.load")} />
+          <Button type="button" variant="outline" onClick={() => void load()}>
+            {t("common.retry")}
+          </Button>
         </Card>
       ) : null}
 
@@ -494,6 +514,11 @@ export default function AutoPostPage() {
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
                 <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDate(selectedPlan.last_run_at) : t("autoPost.common.emptyValue")} />
                 <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDate(selectedPlan.next_run_at) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.activeContent")} value={t("autoPost.status.activeContentValue", { count: activeContentCount })} />
+                <StatusRow
+                  label={t("autoPost.status.lastRunResult")}
+                  value={latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.common.emptyValue")}
+                />
                 <StatusRow label={t("autoPost.status.dailyLimit")} value={String(selectedPlan?.daily_limit || form.dailyLimit)} />
                 <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
                 <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
@@ -501,7 +526,10 @@ export default function AutoPostPage() {
             </Card>
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+          <WorkbenchTabs activePanel={activePanel} onChange={setActivePanel} />
+
+          <div className="space-y-5">
+            {activePanel === "planner" ? (
               <Card>
                 <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
                 <div className="space-y-4">
@@ -602,9 +630,10 @@ export default function AutoPostPage() {
                   {t("autoPost.actions.savePlanner")}
                 </Button>
               </div>
-            </Card>
+              </Card>
+            ) : null}
 
-            <div className="space-y-5">
+            {activePanel === "content" ? (
               <Card>
                 <CardHeader
                   title={t("autoPost.contentLibrary.title")}
@@ -776,7 +805,9 @@ export default function AutoPostPage() {
                   </div>
                 )}
               </Card>
+            ) : null}
 
+            {activePanel === "generate" ? (
               <Card>
                 <CardHeader title={t("autoPost.generate.title")} description={t("autoPost.generate.description")} />
                 <label className="mb-4 block space-y-2">
@@ -817,8 +848,11 @@ export default function AutoPostPage() {
                   </Button>
                 </div>
               </Card>
+            ) : null}
 
-              <Card>
+            {activePanel === "history" ? (
+              <div className="grid gap-5 xl:grid-cols-2">
+                <Card>
                 <CardHeader
                   title={t("autoPost.drafts.title")}
                   description={t("autoPost.drafts.description")}
@@ -850,9 +884,9 @@ export default function AutoPostPage() {
                     ))}
                   </div>
                 )}
-              </Card>
+                </Card>
 
-              <Card>
+                <Card>
                 <CardHeader title={t("autoPost.runs.title")} description={t("autoPost.runs.description")} />
                 {accountRuns.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
@@ -895,8 +929,9 @@ export default function AutoPostPage() {
                     ))}
                   </div>
                 )}
-              </Card>
-            </div>
+                </Card>
+              </div>
+            ) : null}
           </div>
         </>
       ) : null}
@@ -947,6 +982,32 @@ function TextInput({
       />
       <span className="text-xs leading-5 text-[#71767b]">{helper}</span>
     </label>
+  );
+}
+
+function WorkbenchTabs({ activePanel, onChange }: { activePanel: WorkbenchPanel; onChange: (panel: WorkbenchPanel) => void }) {
+  const { t } = useT();
+  return (
+    <div className="grid gap-2 md:grid-cols-4">
+      {workbenchPanels.map((panel) => {
+        const active = activePanel === panel.id;
+        return (
+          <button
+            key={panel.id}
+            type="button"
+            onClick={() => onChange(panel.id)}
+            className={`min-w-0 rounded-2xl border p-4 text-left transition ${
+              active
+                ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]"
+                : "border-[#2f3336] bg-[#0f1419] text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+            }`}
+          >
+            <span className="block truncate text-sm font-semibold">{t(panel.labelKey)}</span>
+            <span className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{t(panel.descriptionKey)}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -1468,6 +1468,7 @@ export const dict: I18nDict = {
   "oafBots.chips.more": "更多",
   "oafBots.chips.less": "收起",
   "oafBots.chips.addCustom": "自定义",
+  "oafBots.quota.oafBots": "OAF Bots",
   "oafBots.quota.xAccounts": "X 账号",
   "oafBots.quota.aiMonthly": "AI 生成/月",
   "oafBots.quota.autoComments": "自动评论/日",

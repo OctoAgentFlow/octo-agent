@@ -1495,6 +1495,7 @@ export const dict: I18nDict = {
   "oafBots.chips.more": "More",
   "oafBots.chips.less": "Less",
   "oafBots.chips.addCustom": "Custom",
+  "oafBots.quota.oafBots": "OAF Bots",
   "oafBots.quota.xAccounts": "X accounts",
   "oafBots.quota.aiMonthly": "AI generations / month",
   "oafBots.quota.autoComments": "Auto comments / day",

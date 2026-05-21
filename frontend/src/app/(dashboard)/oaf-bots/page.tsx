@@ -524,30 +524,29 @@ export default function OAFBotsPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="flex items-center gap-2 text-sm text-violet-100/80"><Bot className="size-4" /> OAF Bot</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">{t("oafBots.page.title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">{t("oafBots.page.subtitle")}</p>
+          <p className="flex items-center gap-2 text-sm text-[#1d9bf0]"><Bot className="size-4" /> OAF Bot</p>
+          <h1 className="mt-2 text-2xl font-bold text-[#e7e9ea]">{t("oafBots.page.title")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#71767b]">{t("oafBots.page.subtitle")}</p>
         </div>
         <Button
           type="button"
           disabled={!canCreate}
           onClick={startCreate}
-          className="bg-gradient-to-r from-blue-500 to-violet-500 text-white"
         >
           {t("oafBots.actions.new")}
         </Button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <QuotaCard label="OAF Bots" used={usage.oafBots} limit={limits.maxBots} />
+        <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
         <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
         <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
         <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-300/15 bg-blue-400/10 px-4 py-3 text-sm text-blue-50">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
         <p>{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
-        <Link href="/billing" className="inline-flex items-center gap-1 font-medium text-white hover:text-blue-100">
+        <Link href="/billing" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
           {t("oafBots.planHintCta")}
           <ArrowRight className="size-4" />
         </Link>
@@ -561,15 +560,15 @@ export default function OAFBotsPage() {
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
-        <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")} className="border-white/[0.08] bg-white/[0.025] p-4 md:p-5">
+        <SectionCard title={t("oafBots.list.title")} description={t("oafBots.list.description")} className="bg-black p-4 md:p-5">
           <div className="space-y-2">
             {bots.length === 0 ? (
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-                <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+              <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                <div className="flex size-10 items-center justify-center rounded-full border border-[#2f3336] bg-[#1d9bf0]/10 text-[#1d9bf0]">
                   <Bot className="size-5" />
                 </div>
-                <p className="mt-3 text-sm font-medium text-white">{t("oafBots.list.emptyTitle")}</p>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">{t("oafBots.list.emptyDescription")}</p>
+                <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t("oafBots.list.emptyTitle")}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[#71767b]">{t("oafBots.list.emptyDescription")}</p>
                 <div className="mt-4">
                   {accounts.length === 0 ? (
                     <Link href="/accounts" className="inline-flex">
@@ -579,7 +578,7 @@ export default function OAFBotsPage() {
                       </Button>
                     </Link>
                   ) : (
-                    <Button type="button" size="sm" onClick={startCreate} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+                    <Button type="button" size="sm" onClick={startCreate}>
                       <Sparkles className="size-4" />
                       {t("oafBots.list.createFirstCta")}
                     </Button>
@@ -595,19 +594,19 @@ export default function OAFBotsPage() {
                     type="button"
                     onClick={() => selectBot(bot)}
                     className={`w-full rounded-xl border p-3.5 text-left transition ${
-                      selectedID === bot.id ? "border-violet-300/45 bg-violet-500/12" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
+                      selectedID === bot.id ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419] hover:bg-[#16181c]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-white">{bot.name}</p>
-                        <p className="mt-1 text-xs text-white/55">
+                        <p className="truncate font-semibold text-[#e7e9ea]">{bot.name}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">
                           {account ? `@${account.username}` : t("oafBots.list.unbound")}
                         </p>
                       </div>
-                      <ChevronRight className="mt-1 size-4 shrink-0 text-white/35" />
+                      <ChevronRight className="mt-1 size-4 shrink-0 text-[#71767b]" />
                     </div>
-                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-white/65">
+                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-[#e7e9ea]/72">
                       {bot.identity_summary || t("oafBots.list.noSummary")}
                     </p>
                   </button>
@@ -622,20 +621,20 @@ export default function OAFBotsPage() {
             title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
             description={t("oafBots.form.description")}
           >
-            <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="mb-5 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs text-white/45">{t("oafBots.wizard.progress", { current: activeStepIndex + 1, total: wizardStepOrder.length })}</p>
-                  <h2 className="mt-1 text-base font-semibold text-white md:text-lg">{activeStepMeta?.label}</h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-white/62">{t(`oafBots.wizard.goal.${activeStep}`)}</p>
+                  <p className="text-xs text-[#71767b]">{t("oafBots.wizard.progress", { current: activeStepIndex + 1, total: wizardStepOrder.length })}</p>
+                  <h2 className="mt-1 text-base font-bold text-[#e7e9ea] md:text-lg">{activeStepMeta?.label}</h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[#71767b]">{t(`oafBots.wizard.goal.${activeStep}`)}</p>
                 </div>
-                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/55">
+                <span className="rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs text-[#71767b]">
                   {Math.round(((activeStepIndex + 1) / wizardStepOrder.length) * 100)}%
                 </span>
               </div>
-              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-all"
+                  className="h-full rounded-full bg-[#1d9bf0] transition-all"
                   style={{ width: `${((activeStepIndex + 1) / wizardStepOrder.length) * 100}%` }}
                 />
               </div>
@@ -651,10 +650,10 @@ export default function OAFBotsPage() {
                         onClick={() => setActiveStep(step.id)}
                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${
                           active
-                            ? "border-violet-300/45 bg-violet-500/18 text-white shadow-[0_0_22px_rgba(139,92,246,0.16)]"
+                            ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]"
                             : completed
-                              ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/14"
-                              : "border-white/10 bg-white/[0.025] text-white/55 hover:bg-white/[0.06]"
+                              ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/14"
+                              : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c]"
                         }`}
                       >
                         {completed ? <CheckCircle2 className="size-3.5 shrink-0" /> : <span className="size-1.5 shrink-0 rounded-full bg-current opacity-60" />}
@@ -896,7 +895,6 @@ export default function OAFBotsPage() {
                 variant={activeStep === "test" ? "default" : "outline"}
                 onClick={activeStep === "test" ? testGenerate : goTestStep}
                 disabled={generating || !canTestBot}
-                className={activeStep === "test" ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white" : ""}
               >
                 <Sparkles className="size-4" />
                 {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
@@ -905,7 +903,6 @@ export default function OAFBotsPage() {
                 type="button"
                 onClick={save}
                 disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
-                className="bg-gradient-to-r from-blue-500 to-violet-500 text-white"
               >
                 <Save className="size-4" />
                 {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
@@ -1074,19 +1071,19 @@ function errorMessage(error: unknown, fallback: string) {
 
 function QuotaCard({ label, used, limit }: { label: string; used: number; limit: number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-      <p className="text-xs text-white/55">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{used}<span className="text-sm font-normal text-white/45"> / {limit}</span></p>
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-2 text-lg font-bold text-[#e7e9ea]">{used}<span className="text-sm font-normal text-[#71767b]"> / {limit}</span></p>
     </div>
   );
 }
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-5">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-white/55">{description}</p>
+        <h2 className="text-lg font-bold text-[#e7e9ea]">{title}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{description}</p>
       </div>
       {children}
     </div>
@@ -1105,17 +1102,17 @@ function FieldShell({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5 text-sm text-white/70">
+    <label className="block space-y-1.5 text-sm text-[#e7e9ea]/78">
       <span className="flex items-center gap-2">
         {label}
         {recommended ? (
-          <span className="inline-flex size-5 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+          <span className="inline-flex size-5 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#1d9bf0]">
             <CheckCircle2 className="size-3" />
           </span>
         ) : null}
       </span>
       {children}
-      {helper ? <span className="block text-xs leading-relaxed text-white/42">{helper}</span> : null}
+      {helper ? <span className="block text-xs leading-relaxed text-[#71767b]">{helper}</span> : null}
     </label>
   );
 }
@@ -1144,22 +1141,22 @@ function LanguageConfigPanel({
   const currentPrimaryLanguage = primaryLanguage || defaultPrimaryLanguage;
   const currentLanguageStrategy = languageStrategy || "follow_context";
   return (
-    <div className="mb-5 rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-400/10 via-white/[0.035] to-violet-500/10 p-4 shadow-[0_18px_60px_rgba(56,189,248,0.08)]">
+    <div className="mb-5 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#1d9bf0]/10 text-[#1d9bf0]">
             <Globe2 className="size-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-white">{t("oafBots.languageConfig.title")}</h3>
+              <h3 className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.languageConfig.title")}</h3>
               {isDefault ? (
-                <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] text-white/55">
+                <span className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#71767b]">
                   {t("oafBots.languageConfig.defaultBadge")}
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-white/52">{t("oafBots.languageConfig.description")}</p>
+            <p className="mt-1 text-xs leading-relaxed text-[#71767b]">{t("oafBots.languageConfig.description")}</p>
           </div>
         </div>
       </div>
@@ -1180,14 +1177,14 @@ function LanguageConfigPanel({
         />
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-black/15 p-3">
-          <p className="text-xs text-white/40">{t("oafBots.languageConfig.primaryHint")}</p>
-          <p className="mt-1 text-sm font-medium text-white">{getSelectLabel(currentPrimaryLanguage, languageOptions)}</p>
+        <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+          <p className="text-xs text-[#71767b]">{t("oafBots.languageConfig.primaryHint")}</p>
+          <p className="mt-1 text-sm font-semibold text-[#e7e9ea]">{getSelectLabel(currentPrimaryLanguage, languageOptions)}</p>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/15 p-3">
-          <p className="text-xs text-white/40">{t("oafBots.languageConfig.strategyHint")}</p>
-          <p className="mt-1 text-sm font-medium text-white">{getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/50">{t(`oafBots.languageStrategy.helper.${currentLanguageStrategy}`)}</p>
+        <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+          <p className="text-xs text-[#71767b]">{t("oafBots.languageConfig.strategyHint")}</p>
+          <p className="mt-1 text-sm font-semibold text-[#e7e9ea]">{getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}</p>
+          <p className="mt-1 text-xs leading-relaxed text-[#71767b]">{t(`oafBots.languageStrategy.helper.${currentLanguageStrategy}`)}</p>
         </div>
       </div>
     </div>
@@ -1322,18 +1319,18 @@ function SingleChipField({
   return (
     <div className="space-y-2">
       <FieldShell label={label} helper={helper}>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
           {hasRecommendedValue ? (
             <button
               type="button"
               onClick={() => onChange("")}
-              className="mb-3 rounded-full border border-violet-300/25 bg-violet-400/10 px-3 py-1 text-xs text-violet-50 hover:bg-violet-400/18"
+              className="mb-3 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18"
             >
               {selectedLabel} ×
             </button>
           ) : null}
           <input
-            className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+            className="w-full bg-transparent text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b]"
             value={hasRecommendedValue ? "" : value}
             placeholder={placeholder}
             onChange={(event) => onChange(event.target.value)}
@@ -1407,15 +1404,15 @@ function TagPicker({
   return (
     <div className="space-y-2">
       <FieldShell label={label} helper={helper} recommended={recommended}>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
           <div className="flex flex-wrap gap-2">
-            {values.length === 0 ? <span className="text-sm text-white/35">{placeholder}</span> : null}
+            {values.length === 0 ? <span className="text-sm text-[#71767b]">{placeholder}</span> : null}
             {values.map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => removeValue(value)}
-                className="rounded-full border border-violet-300/25 bg-violet-400/10 px-3 py-1 text-xs text-violet-50 hover:bg-violet-400/18"
+                className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18"
               >
                 {getChipLabel(value, options)} ×
               </button>
@@ -1423,7 +1420,7 @@ function TagPicker({
           </div>
           <div className="mt-3 flex gap-2">
             <input
-              className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b]"
               value={input}
               placeholder={placeholder}
               onChange={(event) => setInput(event.target.value)}
@@ -1437,7 +1434,7 @@ function TagPicker({
             <button
               type="button"
               disabled={maxReached}
-              className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded-full border border-[#2f3336] px-3 text-xs text-[#e7e9ea]/75 hover:bg-[#16181c] disabled:cursor-not-allowed disabled:opacity-45"
               onClick={() => addValue(input)}
             >
               {t("oafBots.chips.addCustom")}
@@ -1446,7 +1443,7 @@ function TagPicker({
         </div>
       </FieldShell>
       <ChipOptions options={options} onPick={addValue} selected={values} disableUnselected={maxReached} />
-      {limitText ? <p className={`text-xs leading-relaxed ${maxReached ? "text-amber-100/80" : "text-white/42"}`}>{limitText}</p> : null}
+      {limitText ? <p className={`text-xs leading-relaxed ${maxReached ? "text-amber-100/80" : "text-[#71767b]"}`}>{limitText}</p> : null}
     </div>
   );
 }
@@ -1484,10 +1481,10 @@ function ChipOptions({
             onClick={() => onPick(option.value)}
             className={`rounded-full border px-3 py-1.5 text-xs transition ${
               active
-                ? "border-cyan-200/55 bg-cyan-400/18 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.14)]"
+                ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/14 text-[#e7e9ea]"
                 : disabled
-                  ? "cursor-not-allowed border-white/10 bg-white/[0.02] text-white/28"
-                  : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.07]"
+                  ? "cursor-not-allowed border-[#2f3336] bg-black text-[#71767b]/45"
+                  : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
             }`}
           >
             {option.label}
@@ -1498,7 +1495,7 @@ function ChipOptions({
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/65 hover:bg-white/[0.07]"
+          className="rounded-full border border-[#2f3336] bg-black px-3 py-1.5 text-xs text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
         >
           {expanded ? t("oafBots.chips.less") : t("oafBots.chips.more")}
         </button>
@@ -1567,26 +1564,26 @@ function BotPreview({
     { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
   ].filter((row) => row.value.trim());
   return (
-    <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")} className="border-white/[0.08] bg-white/[0.025] p-4 md:p-5">
-      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.035] to-violet-500/10 p-4">
+    <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")} className="bg-black p-4 md:p-5">
+      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100 shadow-[0_0_24px_rgba(56,189,248,0.18)]">
+          <div className="flex size-12 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[#1d9bf0]">
             <Bot className="size-5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-base font-semibold text-white">{form.name || t("oafBots.preview.unnamed")}</p>
-            <p className="text-xs text-white/50">{account ? `@${account.username}` : t("oafBots.preview.noAccount")}</p>
+            <p className="truncate text-base font-bold text-[#e7e9ea]">{form.name || t("oafBots.preview.unnamed")}</p>
+            <p className="text-xs text-[#71767b]">{account ? `@${account.username}` : t("oafBots.preview.noAccount")}</p>
           </div>
         </div>
 
         <div className="mt-5">
-          <div className="flex items-center justify-between text-xs text-white/55">
+          <div className="flex items-center justify-between text-xs text-[#71767b]">
             <span>{t("oafBots.preview.completeness")}</span>
-            <span className="text-white">{completion}%</span>
+            <span className="text-[#e7e9ea]">{completion}%</span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#2f3336]">
             <div
-              className={`h-full rounded-full ${lowCompletion ? "bg-amber-300" : "bg-gradient-to-r from-cyan-400 to-violet-400"}`}
+              className={`h-full rounded-full ${lowCompletion ? "bg-amber-300" : "bg-[#1d9bf0]"}`}
               style={{ width: `${completion}%` }}
             />
           </div>
@@ -1607,14 +1604,14 @@ function BotPreview({
           ) : null}
           <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={4} />
           <div className="rounded-xl border border-blue-300/15 bg-blue-400/10 p-3">
-            <p className="text-xs text-blue-100/70">{t("oafBots.preview.nextSuggestion")}</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/78">{checklist.nextSuggestion}</p>
+            <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
-          <Button type="button" onClick={onTest} disabled={!canTest} className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white disabled:opacity-50">
+          <Button type="button" onClick={onTest} disabled={!canTest} className="w-full disabled:opacity-50">
             <Sparkles className="size-4" />
             {t("oafBots.actions.testBot")}
           </Button>
-          {!canTest ? <p className="text-xs leading-relaxed text-white/45">{t("oafBots.test.disabledHint")}</p> : null}
+          {!canTest ? <p className="text-xs leading-relaxed text-[#71767b]">{t("oafBots.test.disabledHint")}</p> : null}
         </div>
 
         {showDetails && previewRows.length > 0 ? (
@@ -1651,9 +1648,9 @@ function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: st
 
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/15 p-3">
-      <p className="text-xs text-white/40">{label}</p>
-      <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-white/75">{value}</p>
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-[#e7e9ea]/78">{value}</p>
     </div>
   );
 }
@@ -1705,12 +1702,12 @@ function SamplePanel({
   const providerLabel = samples?.provider ? providerSourceLabel(samples.provider, t) : "";
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/10 p-4 text-sm leading-relaxed text-cyan-50">
+      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 text-sm leading-relaxed text-[#e7e9ea]">
         <div className="flex items-start gap-2">
-          <Sparkles className="mt-0.5 size-4 shrink-0" />
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-[#1d9bf0]" />
           <div>
             <p>{generating ? t("oafBots.test.loading") : t("oafBots.test.costHint")}</p>
-            <p className="mt-1 text-xs text-cyan-50/65">{t("oafBots.test.sceneHint")}</p>
+            <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.test.sceneHint")}</p>
           </div>
         </div>
       </div>
@@ -1722,16 +1719,16 @@ function SamplePanel({
             type="button"
             onClick={() => onSceneChange(item.id)}
             className={`min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition ${
-              scene === item.id ? "border-cyan-300/35 bg-cyan-400/12 text-white" : "border-white/10 bg-white/[0.035] text-white/60 hover:bg-white/[0.07]"
+              scene === item.id ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]" : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
             }`}
           >
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-cyan-100">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#0f1419] text-[#1d9bf0]">
                 {item.icon}
               </span>
               <div className="min-w-0">
                 <p className="truncate whitespace-nowrap text-sm font-medium">{item.title}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/45 [overflow-wrap:anywhere]">{item.description}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#71767b] [overflow-wrap:anywhere]">{item.description}</p>
               </div>
             </div>
           </button>
@@ -1746,12 +1743,12 @@ function SamplePanel({
         <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.disabledHint")}</p>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <div>
-          <p className="text-sm font-medium text-white">{t("oafBots.test.panelTitle")}</p>
-          <p className="mt-1 text-xs text-white/45">{t("oafBots.test.panelDescription")}</p>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.test.panelTitle")}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.test.panelDescription")}</p>
         </div>
-        <Button type="button" onClick={onGenerate} disabled={generating || previewDisabled} className="bg-gradient-to-r from-blue-500 to-violet-500 text-white">
+        <Button type="button" onClick={onGenerate} disabled={generating || previewDisabled}>
           {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {generating ? t("oafBots.test.loadingShort") : t("oafBots.actions.generate")}
         </Button>
@@ -1772,10 +1769,10 @@ function SamplePanel({
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.025] p-6 text-center">
-          <Sparkles className="mx-auto size-6 text-violet-200/75" />
-          <p className="mt-3 text-sm font-medium text-white">{t("oafBots.samples.emptyTitle")}</p>
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-white/50">{t("oafBots.samples.emptyDescription")}</p>
+        <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black p-6 text-center">
+          <Sparkles className="mx-auto size-6 text-[#1d9bf0]" />
+          <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t("oafBots.samples.emptyTitle")}</p>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#71767b]">{t("oafBots.samples.emptyDescription")}</p>
         </div>
       )}
     </div>
@@ -1810,23 +1807,23 @@ function SampleCard({
   };
 
   return (
-    <div className={`flex min-h-[260px] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border p-4 ${highlight ? "border-violet-300/30 bg-violet-500/12" : "border-white/10 bg-black/20"}`}>
+    <div className={`flex min-h-[260px] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border p-4 ${highlight ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate whitespace-nowrap text-sm font-semibold text-white">{title}</p>
-          <p className="mt-1 text-xs text-white/40">
+          <p className="truncate whitespace-nowrap text-sm font-bold text-[#e7e9ea]">{title}</p>
+          <p className="mt-1 text-xs text-[#71767b]">
             {t("oafBots.samples.characters", { count: content.length })}
             {providerLabel ? ` · ${t("oafBots.samples.providerMeta", { provider: providerLabel })}` : ""}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/45">
+        <span className="shrink-0 rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
           {highlight ? t("oafBots.samples.selected") : t("oafBots.samples.generated")}
         </span>
       </div>
-      <div className="mt-4 max-w-full flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/20 p-4">
-        <p className="max-h-[280px] whitespace-pre-wrap break-words text-sm leading-7 text-white/82 [overflow-wrap:anywhere] overflow-y-auto">{visibleText || t("oafBots.samples.empty")}</p>
+      <div className="mt-4 max-w-full flex-1 overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <p className="max-h-[280px] whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere] overflow-y-auto">{visibleText || t("oafBots.samples.empty")}</p>
         {isLong ? (
-          <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-3 text-xs font-medium text-cyan-100 hover:text-white">
+          <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-3 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
             {expanded ? t("oafBots.samples.collapse") : t("oafBots.samples.expand")}
           </button>
         ) : null}
@@ -1851,16 +1848,16 @@ function SampleCard({
 
 function PersonaBasisCard({ title, rows, empty }: { title: string; rows: Array<{ label: string; value: string }>; empty: string }) {
   return (
-    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-      <p className="text-sm font-semibold text-white">{title}</p>
+    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <p className="text-sm font-bold text-[#e7e9ea]">{title}</p>
       {rows.length === 0 ? (
-        <p className="mt-3 text-sm leading-relaxed text-white/50">{empty}</p>
+        <p className="mt-3 text-sm leading-relaxed text-[#71767b]">{empty}</p>
       ) : (
         <div className="mt-4 space-y-3">
           {rows.map((row) => (
-            <div key={row.label} className="min-w-0 rounded-xl border border-white/10 bg-black/15 p-3">
-              <p className="text-xs text-white/40">{row.label}</p>
-              <p className="mt-1 break-words text-sm leading-relaxed text-white/75 [overflow-wrap:anywhere]">{row.value}</p>
+            <div key={row.label} className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+              <p className="text-xs text-[#71767b]">{row.label}</p>
+              <p className="mt-1 break-words text-sm leading-relaxed text-[#e7e9ea]/78 [overflow-wrap:anywhere]">{row.value}</p>
             </div>
           ))}
         </div>
@@ -1986,25 +1983,25 @@ function GenerationUsageCard({
   return (
     <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
       {!selectedID ? (
-        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
           {t("oafBots.usages.selectBot")}
         </p>
       ) : loading ? (
-        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
           {t("oafBots.usages.loading")}
         </p>
       ) : total === 0 ? (
-        <p className="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-white/55">
+        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
           {t("oafBots.usages.empty")}
         </p>
       ) : (
         <div className="space-y-3">
-          <div className="space-y-2 rounded-xl border border-cyan-300/15 bg-cyan-400/10 p-3">
+          <div className="space-y-2 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-cyan-50/75">{t("oafBots.usages.botMonthlyTotal")}</span>
-              <span className="font-semibold text-white">{t("oafBots.usages.countWithUnit", { count: total })}</span>
+              <span className="text-[#8ecdf8]">{t("oafBots.usages.botMonthlyTotal")}</span>
+              <span className="font-semibold text-[#e7e9ea]">{t("oafBots.usages.countWithUnit", { count: total })}</span>
             </div>
-            <p className="text-xs leading-relaxed text-cyan-50/65">
+            <p className="text-xs leading-relaxed text-[#e7e9ea]/68">
               {t("oafBots.usages.sharedQuotaHint", {
                 limit: planLimit,
                 used: planUsed,
@@ -2017,20 +2014,20 @@ function GenerationUsageCard({
             const count = item?.count ?? 0;
             const ratio = total > 0 ? Math.round((count / total) * 100) : 0;
             return (
-              <div key={scene} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/72">
+              <div key={scene} className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#e7e9ea]/72">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-white">{usageSceneLabel(scene, t)}</p>
-                    <p className="mt-1 text-xs text-white/45">{t("oafBots.usages.latestMonth", { month: item?.month ?? currentMonth })}</p>
+                    <p className="truncate font-semibold text-[#e7e9ea]">{usageSceneLabel(scene, t)}</p>
+                    <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.usages.latestMonth", { month: item?.month ?? currentMonth })}</p>
                   </div>
-                  <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-white/70">
+                  <span className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1 text-xs text-[#71767b]">
                     {t("oafBots.usages.countWithUnit", { count })}
                   </span>
                 </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${ratio}%` }} />
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
+                  <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${ratio}%` }} />
                 </div>
-                <p className="mt-2 text-xs text-white/40">{t("oafBots.usages.sceneShare", { percent: ratio })}</p>
+                <p className="mt-2 text-xs text-[#71767b]">{t("oafBots.usages.sceneShare", { percent: ratio })}</p>
               </div>
             );
           })}

@@ -31,7 +31,7 @@ type Filters = {
 };
 
 function readType(value: string | null): Filters["type"] {
-  return value === "post" || value === "reply" || value === "dm" ? value : "all";
+  return value === "post" || value === "reply" || value === "comment" || value === "dm" ? value : "all";
 }
 
 function readStatus(value: string | null): Filters["status"] {
@@ -199,17 +199,17 @@ export default function ActivityPage() {
       ) : (
         <div className="space-y-3">
           <ActivityList records={records as ActivityRecord[]} />
-          <Card className="p-3">
+          <Card className="bg-[#0f1419] p-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-white/65">
-                Page {page} / {totalPages}
+              <p className="text-xs text-[#71767b]">
+                {t("activity.pagination.page", { page, total: totalPages })}
               </p>
               <div className="flex gap-2">
                 <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                  Previous
+                  {t("activity.pagination.previous")}
                 </Button>
                 <Button variant="outline" disabled={page >= totalPages || loading} onClick={() => setPage((p) => p + 1)}>
-                  Next
+                  {t("activity.pagination.next")}
                 </Button>
               </div>
             </div>

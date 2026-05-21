@@ -100,38 +100,38 @@ export function ProfileClient() {
         <p className="text-subtitle mt-2">{t("profile.page.subtitle")}</p>
       </div>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader title={t("profile.section.account")} description={t("profile.section.accountDesc")} />
         <dl className="grid gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-white/50">{t("profile.field.id")}</dt>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <dt className="text-[#71767b]">{t("profile.field.id")}</dt>
             <dd className="mt-0.5 font-medium text-white">{me.id}</dd>
           </div>
-          <div>
-            <dt className="text-white/50">{t("profile.field.email")}</dt>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <dt className="text-[#71767b]">{t("profile.field.email")}</dt>
             <dd className="mt-0.5 font-medium text-white">{me.email || "—"}</dd>
           </div>
-          <div>
-            <dt className="text-white/50">{t("profile.field.name")}</dt>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <dt className="text-[#71767b]">{t("profile.field.name")}</dt>
             <dd className="mt-0.5 font-medium text-white">{me.name || "—"}</dd>
           </div>
-          <div>
-            <dt className="text-white/50">{t("profile.field.status")}</dt>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <dt className="text-[#71767b]">{t("profile.field.status")}</dt>
             <dd className="mt-0.5 font-medium text-white">{me.status || "—"}</dd>
           </div>
-          <div className="md:col-span-2">
-            <dt className="text-white/50">{t("profile.field.wallet")}</dt>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4 md:col-span-2">
+            <dt className="text-[#71767b]">{t("profile.field.wallet")}</dt>
             <dd className="mt-0.5 font-mono text-sm text-white">
               {me.wallet_address ? maskWallet(me.wallet_address) : t("profile.wallet.unbound")}
             </dd>
             {!me.wallet_address ? (
-              <p className="mt-2 text-xs text-white/55">{t("profile.wallet.hint")}</p>
+              <p className="mt-2 text-xs text-[#71767b]">{t("profile.wallet.hint")}</p>
             ) : null}
           </div>
         </dl>
       </Card>
 
-      <Card>
+      <Card className="bg-[#0f1419]">
         <CardHeader title={t("profile.section.shortcuts")} description={t("profile.section.shortcutsDesc")} />
         <div className="flex flex-wrap gap-2">
           <Link href="/accounts" className={cn(buttonVariants({ variant: "outline" }))}>

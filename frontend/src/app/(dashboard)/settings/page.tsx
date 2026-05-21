@@ -233,24 +233,24 @@ export default function SettingsPage() {
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.profile.title")}
             description={t("settings.profile.description")}
-            right={<UserCog className="h-5 w-5 text-cyan-200" />}
+            right={<UserCog className="h-5 w-5 text-[#1d9bf0]" />}
           />
           <div className="space-y-4">
             <label className="block space-y-2">
-              <span className="text-sm text-white/60">{t("settings.profile.displayName")}</span>
+              <span className="text-sm text-[#71767b]">{t("settings.profile.displayName")}</span>
               <Input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
             </label>
             <div className="grid gap-3 text-sm md:grid-cols-2">
               <div>
-                <p className="text-white/50">{t("settings.profile.email")}</p>
+                <p className="text-[#71767b]">{t("settings.profile.email")}</p>
                 <p className="mt-0.5 font-medium text-white">{me.email || "—"}</p>
               </div>
               <div>
-                <p className="text-white/50">{t("settings.profile.status")}</p>
+                <p className="text-[#71767b]">{t("settings.profile.status")}</p>
                 <p className="mt-0.5 font-medium text-white">{me.status || "—"}</p>
               </div>
             </div>
@@ -262,35 +262,35 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.security.title")}
             description={t("settings.security.description")}
-            right={<ShieldCheck className="h-5 w-5 text-emerald-200" />}
+            right={<ShieldCheck className="h-5 w-5 text-[#00ba7c]" />}
           />
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
-              <span className="flex items-center gap-2 text-sm text-white/68">
-                <Wallet className="h-4 w-4 text-white/50" />
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+              <span className="flex items-center gap-2 text-sm text-[#b6bec5]">
+                <Wallet className="h-4 w-4 text-[#71767b]" />
                 {t("settings.security.wallet")}
               </span>
               <span className="font-mono text-xs text-white">{maskWallet(me.wallet_address)}</span>
             </div>
-            <div className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
-              <span className="flex items-center gap-2 text-sm text-white/68">
-                <BadgeCheck className="h-4 w-4 text-white/50" />
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+              <span className="flex items-center gap-2 text-sm text-[#b6bec5]">
+                <BadgeCheck className="h-4 w-4 text-[#71767b]" />
                 {t("settings.security.session")}
               </span>
               <Button variant="outline" size="sm" onClick={logout}>
                 {t("common.logout")}
               </Button>
             </div>
-            <div className="space-y-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+            <div className="space-y-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
               <div className="flex items-start gap-2">
-                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-white/50" />
+                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#71767b]" />
                 <div>
-                  <p className="text-sm font-medium text-white/78">{t("settings.security.password")}</p>
-                  <p className="mt-1 text-xs leading-5 text-white/45">
+                  <p className="text-sm font-medium text-white">{t("settings.security.password")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">
                     {t("settings.security.passwordDescription")}
                   </p>
                 </div>
@@ -335,11 +335,11 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.language.title")}
             description={t("settings.language.description")}
-            right={<Languages className="h-5 w-5 text-blue-200" />}
+            right={<Languages className="h-5 w-5 text-[#1d9bf0]" />}
           />
           <div className="grid gap-2 sm:grid-cols-2">
             {languages.map((item) => {
@@ -353,25 +353,25 @@ export default function SettingsPage() {
                     pushToast(t("settings.language.saved"));
                   }}
                   className={cn(
-                    "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                    "rounded-2xl border px-3 py-2 text-left text-sm transition-colors",
                     active
-                      ? "border-cyan-200/40 bg-cyan-300/10 text-white"
-                      : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06]"
+                      ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10 text-white"
+                      : "border-[#2f3336] bg-black text-[#b6bec5] hover:bg-[#16181c]"
                   )}
                 >
                   <span className="block font-medium">{item.label}</span>
-                  <span className="text-xs text-white/45">{item.code}</span>
+                  <span className="text-xs text-[#71767b]">{item.code}</span>
                 </button>
               );
             })}
           </div>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.notifications.title")}
             description={t("settings.notifications.description")}
-            right={<Bell className="h-5 w-5 text-amber-200" />}
+            right={<Bell className="h-5 w-5 text-[#f6d96b]" />}
           />
           <div className="space-y-3">
             <NotificationToggle
@@ -421,11 +421,11 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-4">
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.shortcuts.title")}
             description={t("settings.shortcuts.description")}
-            right={<CreditCard className="h-5 w-5 text-violet-200" />}
+            right={<CreditCard className="h-5 w-5 text-[#1d9bf0]" />}
           />
           <div className="flex flex-wrap gap-2">
             <Link href="/billing" className={cn(buttonVariants({ variant: "outline" }))}>
@@ -454,11 +454,11 @@ function NotificationToggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-2">
-      <span className="text-sm font-medium text-white/75">{label}</span>
+    <label className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2 transition-colors hover:bg-[#080808]">
+      <span className="text-sm font-medium text-[#d5d9dc]">{label}</span>
       <input
         type="checkbox"
-        className="h-5 w-5 accent-cyan-300"
+        className="h-5 w-5 accent-[#1d9bf0]"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />

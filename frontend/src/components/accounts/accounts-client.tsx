@@ -46,7 +46,7 @@ function mapAccount(item: AccountListItem): ConnectedXAccount {
     id: String(item.id),
     avatarUrl: item.avatar_url || `https://api.dicebear.com/9.x/identicon/svg?seed=${item.username || item.id}`,
     username: item.username || "x_user",
-    displayName: item.display_name || item.username || "X Account",
+    displayName: item.display_name || item.username || `#${item.id}`,
     status: item.status,
     followers: item.followers,
     ...toLastSyncData(item.last_synced_at),
@@ -80,8 +80,8 @@ export function AccountsClient() {
         broadcastDataSynced(Date.now());
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to load accounts."
-          : "Failed to load accounts.";
+          ? error.response?.data?.message || t("accounts.toast.loadFailed")
+          : t("accounts.toast.loadFailed");
         setErrorMessage(msg);
         if (!quiet) {
           setLoadState("error");
@@ -90,7 +90,7 @@ export function AccountsClient() {
         }
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   useEffect(() => {
@@ -131,17 +131,17 @@ export function AccountsClient() {
       const data = event.data as { type?: string; status?: string } | null;
       if (!data || data.type !== X_OAUTH_RESULT_MESSAGE) return;
       if (data.status === "success") {
-        pushToast("X account connected.");
+        pushToast(t("accounts.toast.connected"));
         void fetchAccounts({ quiet: true });
         broadcastDashboardRefresh();
         setDialogOpen(false);
       } else if (data.status === "failed") {
-        pushToast("X account authorization failed.");
+        pushToast(t("accounts.toast.authorizationFailed"));
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [fetchAccounts, pushToast]);
+  }, [fetchAccounts, pushToast, t]);
 
   useEffect(() => {
     const oauth = searchParams.get("oauth");
@@ -162,14 +162,14 @@ export function AccountsClient() {
     }
 
     if (oauth === "success") {
-      pushToast("X account connected.");
+      pushToast(t("accounts.toast.connected"));
       void fetchAccounts();
       broadcastDashboardRefresh();
     } else if (oauth === "failed") {
-      pushToast("X account authorization failed.");
+      pushToast(t("accounts.toast.authorizationFailed"));
     }
     router.replace(pathname);
-  }, [fetchAccounts, pathname, pushToast, router, searchParams]);
+  }, [fetchAccounts, pathname, pushToast, router, searchParams, t]);
 
   const onDisconnect = useCallback(
     async (id: string) => {
@@ -178,20 +178,20 @@ export function AccountsClient() {
       setDisconnectingAccountId(id);
       try {
         await accountService.disconnect(accountID);
-        pushToast("Account disconnected.");
+        pushToast(t("accounts.toast.disconnected"));
         await fetchAccounts();
         broadcastDashboardRefresh();
       } catch (error) {
         if (axios.isAxiosError(error)) {
-          pushToast(error.response?.data?.message || "Failed to disconnect account.");
+          pushToast(error.response?.data?.message || t("accounts.toast.disconnectFailed"));
         } else {
-          pushToast("Failed to disconnect account.");
+          pushToast(t("accounts.toast.disconnectFailed"));
         }
       } finally {
         setDisconnectingAccountId(null);
       }
     },
-    [fetchAccounts, pushToast]
+    [fetchAccounts, pushToast, t]
   );
 
   const isFreeAccountLimitReached = subscription?.plan === "free_trial" && accounts.length >= 1;
@@ -203,15 +203,15 @@ export function AccountsClient() {
       throw new Error(freeAccountLimitReason);
     }
     const data = await accountService.startXOAuth();
-    if (!data.auth_url) throw new Error("OAuth url missing.");
+    if (!data.auth_url) throw new Error(t("accounts.toast.oauthUrlMissing"));
     const features = ["popup=yes", "width=560", "height=720", "left=80", "top=80"].join(",");
     const popup = window.open(data.auth_url, "octo_x_oauth", features);
     if (!popup) {
-      throw new Error("Browser blocked the OAuth window. Allow popups for this site and try again.");
+      throw new Error(t("accounts.toast.popupBlocked"));
     }
     popup.focus();
     setDialogOpen(false);
-  }, [freeAccountLimitReason, isFreeAccountLimitReached, pushToast, setDialogOpen]);
+  }, [freeAccountLimitReason, isFreeAccountLimitReached, pushToast, setDialogOpen, t]);
 
   const onReconnect = useCallback(
     () => {

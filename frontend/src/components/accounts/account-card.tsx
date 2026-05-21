@@ -29,10 +29,10 @@ function statusLabel(status: ConnectedXAccount["status"]) {
 export function AccountCard({ account, onReconnect, onDisconnect, isDisconnecting = false }: AccountCardProps) {
   const { t } = useT();
   return (
-    <Card className="p-4 md:p-5">
+    <Card className="bg-[#0f1419] p-4 transition-colors hover:bg-[#16181c] md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="relative size-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+          <div className="relative size-12 overflow-hidden rounded-full border border-[#2f3336] bg-[#16181c]">
             <Image
               src={account.avatarUrl}
               alt={account.displayName}
@@ -48,8 +48,8 @@ export function AccountCard({ account, onReconnect, onDisconnect, isDisconnectin
               <p className="text-base font-semibold text-white">{account.displayName}</p>
               <Badge variant={statusVariant(account.status)}>{t(statusLabel(account.status))}</Badge>
             </div>
-            <p className="text-sm text-white/65">@{account.username}</p>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-white/55">
+            <p className="text-sm text-[#71767b]">@{account.username}</p>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-[#71767b]">
               <span className="inline-flex items-center gap-1">
                 <Link2 className="size-3.5" />
                 {t("accounts.labels.xAccount")}
@@ -71,12 +71,12 @@ export function AccountCard({ account, onReconnect, onDisconnect, isDisconnectin
           ) : null}
           <Button
             variant="ghost"
-            className="text-rose-200 hover:text-rose-100"
+            className="text-[#ff8a91] hover:text-[#ffb6bb]"
             onClick={() => void onDisconnect(account.id)}
             disabled={isDisconnecting}
           >
             <Unplug className="size-4" />
-            {isDisconnecting ? "Disconnecting..." : t("accounts.actions.disconnect")}
+            {isDisconnecting ? t("accounts.actions.disconnecting") : t("accounts.actions.disconnect")}
           </Button>
         </div>
       </div>

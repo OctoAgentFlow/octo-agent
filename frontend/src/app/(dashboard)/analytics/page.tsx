@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, FileText, ListChecks, MessageSquareText, RefreshCw, Send, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, FileText, ListChecks, MessageSquareText, RefreshCw, Send, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,12 @@ function compactText(value: string, max = 130) {
 function percent(value: number, total: number) {
   if (total <= 0) return 0;
   return Math.round((value / total) * 100);
+}
+
+function healthKey(successRate: number, attentionCount: number) {
+  if (successRate >= 90 && attentionCount === 0) return "analytics.insights.health.healthy";
+  if (successRate >= 70) return "analytics.insights.health.watch";
+  return "analytics.insights.health.risk";
 }
 
 function attentionRecord(item: AnalyticsOverview["attention_items"][number]): ActivityRecord {
@@ -273,6 +279,8 @@ export default function AnalyticsPage() {
         </div>
       </section>
 
+      <AnalyticsInsightPanel overview={overview} range={range} selectedAccountID={selectedAccountID} />
+
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label={t("analytics.metric.activity")}
@@ -322,11 +330,11 @@ export default function AnalyticsPage() {
                 return (
                   <div key={item.date} className="min-w-0">
                     <div className="flex h-36 items-end rounded-xl border border-[#2f3336] bg-black px-1.5 py-2">
-                      <div
-                        className="w-full rounded-sm bg-[#1d9bf0]"
-                        style={{ height }}
-                        title={`${formatDate(item.date)}: ${item.total}`}
-                      />
+                      <div className="flex w-full flex-col justify-end overflow-hidden rounded-sm" style={{ height }} title={`${formatDate(item.date)}: ${item.total}`}>
+                        <div className="bg-[#00ba7c]" style={{ height: `${percent(item.success, item.total)}%` }} />
+                        <div className="bg-[#ffd400]" style={{ height: `${percent(item.review, item.total)}%` }} />
+                        <div className="bg-[#f4212e]" style={{ height: `${percent(item.failed, item.total)}%` }} />
+                      </div>
                     </div>
                     <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date)}</p>
                     <p className="text-center text-xs font-semibold text-white">{item.total}</p>
@@ -334,6 +342,11 @@ export default function AnalyticsPage() {
                 );
               })}
             </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-[#71767b]">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#00ba7c]" />{t("analytics.status.success")}</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#ffd400]" />{t("analytics.status.review")}</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-[#f4212e]" />{t("analytics.status.failed")}</span>
           </div>
         </Card>
 
@@ -798,6 +811,94 @@ export default function AnalyticsPage() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AnalyticsInsightPanel({
+  overview,
+  range,
+  selectedAccountID,
+}: {
+  overview: AnalyticsOverview;
+  range: AnalyticsRange;
+  selectedAccountID?: number;
+}) {
+  const { t } = useT();
+  const attentionCount = overview.activity_summary.failed + overview.activity_summary.review;
+  const topFailure = overview.failure_reasons[0];
+  const healthLabel = t(healthKey(overview.activity_summary.success_rate_pct, attentionCount));
+
+  return (
+    <Card className="overflow-hidden border-[#2f3336] bg-[radial-gradient(circle_at_top_right,rgba(29,155,240,0.16),transparent_36%),#0f1419] p-0">
+      <div className="grid gap-0 lg:grid-cols-[1.25fr_1fr]">
+        <div className="border-b border-[#2f3336] p-5 md:p-6 lg:border-b-0 lg:border-r">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex size-9 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#1d9bf0]">
+              <TrendingUp className="size-4" />
+            </span>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("analytics.insights.title")}</p>
+          </div>
+          <h3 className="mt-4 max-w-3xl text-2xl font-bold leading-tight text-white md:text-3xl">
+            {t("analytics.insights.headline", {
+              health: healthLabel,
+              rate: overview.activity_summary.success_rate_pct,
+              attention: attentionCount,
+            })}
+          </h3>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5]">
+            {topFailure
+              ? t("analytics.insights.failureHint", {
+                  reason: compactText(topFailure.reason || t("analytics.failureReasons.unknown"), 80),
+                  count: topFailure.count,
+                })
+              : t("analytics.insights.noFailureHint")}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link href={activityHref({ range, status: "failed", accountID: selectedAccountID })} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+              {t("analytics.insights.ctaFailures")}
+              <ArrowUpRight className="size-3.5" />
+            </Link>
+            <Link href="/execution-queue" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-white hover:bg-[#16181c]">
+              {t("analytics.insights.ctaQueue")}
+              <ArrowUpRight className="size-3.5" />
+            </Link>
+          </div>
+        </div>
+        <div className="grid gap-3 p-5 sm:grid-cols-2 md:p-6">
+          <InsightPill label={t("analytics.insights.successRate")} value={`${overview.activity_summary.success_rate_pct}%`} detail={t("analytics.metric.successRateDetail", { success: overview.activity_summary.success, failed: overview.activity_summary.failed })} tone="success" />
+          <InsightPill label={t("analytics.insights.needsAttention")} value={attentionCount} detail={t("analytics.insights.needsAttentionDetail", { failed: overview.activity_summary.failed, review: overview.activity_summary.review })} tone={attentionCount > 0 ? "warning" : "default"} />
+          <InsightPill label={t("analytics.insights.publishRate")} value={`${overview.content_effect.conversion.publish_rate_pct}%`} detail={t("analytics.contentEffect.conversionDetail")} tone="info" />
+          <InsightPill label={t("analytics.insights.autoPostActivity")} value={overview.content_effect.post_activity.total} detail={t("analytics.insights.autoPostActivityDetail", { success: overview.content_effect.post_activity.success, failed: overview.content_effect.post_activity.failed })} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function InsightPill({
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "default" | "success" | "warning" | "info";
+}) {
+  const toneClass = {
+    default: "border-[#2f3336] bg-black text-white",
+    success: "border-emerald-300/20 bg-emerald-400/5 text-emerald-200",
+    warning: "border-amber-300/20 bg-amber-400/5 text-amber-200",
+    info: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-blue-200",
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <p className="text-xs opacity-75">{label}</p>
+      <p className="mt-2 text-2xl font-bold">{value}</p>
+      <p className="mt-2 line-clamp-2 text-xs leading-5 opacity-75">{detail}</p>
     </div>
   );
 }

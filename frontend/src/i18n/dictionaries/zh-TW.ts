@@ -248,7 +248,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.login": "使用 Email 登入以進入自動化儀表板。",
   "auth.card.subtitle.register": "建立帳號並開始免費試用。",
   "auth.card.connectWallet": "連結錢包",
-  "auth.card.freeTrialNote": "新用戶可先免費試用，再訂閱 Basic（10 USDT/月）。",
+  "auth.card.freeTrialNote": "新用戶可先免費試用，再訂閱 Basic（8 USDT/月）。",
 
   "auth.mode.login": "登入",
   "auth.mode.register": "註冊",
@@ -862,7 +862,7 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "推薦",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "付款將在鏈上確認後，訂閱會自動啟用。",
-  "billing.payment.upgradeCta": "升級到 Basic - 10 USDT / 月",
+  "billing.payment.upgradeCta": "升級到 Basic - 8 USDT / 月",
   "billing.payment.successToast": "支付已確認，訂閱已生效。",
   "billing.checkout.title": "USDT 付款",
   "billing.checkout.pickNetwork": "選擇網路並建立訂單。",

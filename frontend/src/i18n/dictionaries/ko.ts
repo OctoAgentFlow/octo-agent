@@ -248,7 +248,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.login": "이메일로 로그인하여 대시보드로 이동하세요.",
   "auth.card.subtitle.register": "계정을 만들고 무료 체험을 시작하세요.",
   "auth.card.connectWallet": "월렛 연결",
-  "auth.card.freeTrialNote": "신규 사용자는 무료 체험 후 Basic(10 USDT/월)로 전환합니다.",
+  "auth.card.freeTrialNote": "신규 사용자는 무료 체험 후 Basic(8 USDT/월)로 전환합니다.",
 
   "auth.mode.login": "로그인",
   "auth.mode.register": "회원가입",
@@ -862,7 +862,7 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "추천",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "결제는 온체인에서 확인되며 구독은 자동으로 활성화됩니다.",
-  "billing.payment.upgradeCta": "Basic으로 업그레이드 - 10 USDT / 월",
+  "billing.payment.upgradeCta": "Basic으로 업그레이드 - 8 USDT / 월",
   "billing.payment.successToast": "결제가 확인되었습니다. 구독이 활성화되었습니다.",
   "billing.checkout.title": "USDT 결제",
   "billing.checkout.pickNetwork": "네트워크를 선택하고 주문을 만듭니다.",

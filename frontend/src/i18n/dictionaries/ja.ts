@@ -248,7 +248,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.login": "メールでログインしてダッシュボードへ。",
   "auth.card.subtitle.register": "アカウントを作成して無料トライアルを開始。",
   "auth.card.connectWallet": "ウォレット接続",
-  "auth.card.freeTrialNote": "新規ユーザーは無料トライアル後に Basic（10 USDT/月）へ。",
+  "auth.card.freeTrialNote": "新規ユーザーは無料トライアル後に Basic（8 USDT/月）へ。",
 
   "auth.mode.login": "ログイン",
   "auth.mode.register": "新規登録",
@@ -862,7 +862,7 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "おすすめ",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "支払いはオンチェーンで確認され、購読は自動的に有効化されます。",
-  "billing.payment.upgradeCta": "Basic にアップグレード - 10 USDT / 月",
+  "billing.payment.upgradeCta": "Basic にアップグレード - 8 USDT / 月",
   "billing.payment.successToast": "支払いを確認しました。サブスクリプションが有効です。",
   "billing.checkout.title": "USDT で支払う",
   "billing.checkout.pickNetwork": "ネットワークを選び、注文を作成します。",

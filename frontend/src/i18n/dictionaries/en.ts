@@ -317,7 +317,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.register": "Create your account and start with a free trial.",
   "auth.card.subtitle.adminLogin": "Enter an administrator email and sign in with a verification code.",
   "auth.card.connectWallet": "Connect Wallet",
-  "auth.card.freeTrialNote": "New users get a free trial before subscribing to Basic (10 USDT/month).",
+  "auth.card.freeTrialNote": "New users get a free trial before subscribing to Basic (8 USDT/month).",
   "auth.card.or": "OR",
 
   // auth mode switch

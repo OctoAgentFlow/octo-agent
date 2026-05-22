@@ -68,7 +68,7 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	if st == "expired" {
 		hint = "Renew your subscription to restore automation and posting."
 	} else if strings.EqualFold(normPlan, subscription.PlanFreeTrial) {
-		hint = "Basic plan starts at 10 USDT / month"
+		hint = "Basic plan starts at 8 USDT / month"
 	}
 	limits := subscription.LimitsForUser(user)
 	usage := s.subscriptionUsage(userID)

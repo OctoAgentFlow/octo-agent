@@ -179,9 +179,6 @@ export function BillingCheckoutDialog({
                 <AddressPreview label={t("billing.payment.fields.address")} value={selectedMethod.receiverAddress} />
                 <AddressPreview label={t("billing.payment.fields.token")} value={selectedMethod.tokenAddress} />
               </div>
-              {selectedMethod.networkCode === "TRC20" ? (
-                <p className="mt-3 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 px-3 py-2 text-[#7ee0b5]">{t("billing.checkout.tronReviewHint")}</p>
-              ) : null}
             </div>
           ) : null}
           <Button

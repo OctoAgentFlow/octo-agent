@@ -145,8 +145,8 @@ export function PaymentHistoryTable({
         ))}
       </div>
 
-      <div className={`mt-4 grid gap-3 ${canOperateBilling ? "md:grid-cols-3" : "md:grid-cols-1"}`}>
-        {canOperateBilling ? (
+      {canOperateBilling ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <label className="space-y-1 text-xs text-[#71767b]">
             <span>{t("billing.history.filters.scope")}</span>
             <select
@@ -158,22 +158,20 @@ export function PaymentHistoryTable({
               <option value="all">{t("billing.history.scope.all")}</option>
             </select>
           </label>
-        ) : null}
-        <label className="space-y-1 text-xs text-[#71767b]">
-          <span>{t("billing.history.filters.status")}</span>
-          <select
-            className="form-input h-9 py-0"
-            value={filters.status}
-            onChange={(event) => updateFilter({ status: event.target.value as BillingOrderFilterState["status"] })}
-          >
-            <option value="all">{t("billing.history.filters.all")}</option>
-            <option value="pending">{t("billing.history.status.pending")}</option>
-            <option value="paid">{t("billing.history.status.paid")}</option>
-            <option value="failed">{t("billing.history.status.failed")}</option>
-            <option value="expired">{t("billing.history.status.expired")}</option>
-          </select>
-        </label>
-        {canOperateBilling ? (
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("billing.history.filters.status")}</span>
+            <select
+              className="form-input h-9 py-0"
+              value={filters.status}
+              onChange={(event) => updateFilter({ status: event.target.value as BillingOrderFilterState["status"] })}
+            >
+              <option value="all">{t("billing.history.filters.all")}</option>
+              <option value="pending">{t("billing.history.status.pending")}</option>
+              <option value="paid">{t("billing.history.status.paid")}</option>
+              <option value="failed">{t("billing.history.status.failed")}</option>
+              <option value="expired">{t("billing.history.status.expired")}</option>
+            </select>
+          </label>
           <label className="space-y-1 text-xs text-[#71767b]">
             <span>{t("billing.history.filters.review")}</span>
             <select
@@ -189,8 +187,8 @@ export function PaymentHistoryTable({
               <option value="reviewed">{t("billing.history.review.reviewed")}</option>
             </select>
           </label>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 overflow-x-auto">
         <table className={`w-full text-left text-sm ${canOperateBilling ? "min-w-[980px]" : "min-w-[820px]"}`}>
@@ -256,7 +254,7 @@ export function PaymentHistoryTable({
                       <td className="px-3 py-3" colSpan={colSpan}>
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
                           <div className="space-y-2">
-                            {record.failureReason ? (
+                            {canOperateBilling && record.failureReason ? (
                               <p className="text-xs text-[#f6d96b]">
                                 {t("billing.history.failureReason")}: {record.failureReason}
                               </p>

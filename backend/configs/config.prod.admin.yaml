@@ -88,7 +88,7 @@ billing:
       receiver_address: "TR4vMB8o5rA3KXTN1QLxewgPeuh9RhmAuX"
       decimals: 6
       is_default: false
-      note: "TRC20 主网 USDT，手续费低；提交 Tx Hash 后自动链上确认"
+      note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
   plans:
     basic_monthly:
       name: "Basic"

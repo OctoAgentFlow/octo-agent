@@ -1367,6 +1367,8 @@ export const dict: I18nDict = {
 
   "billing.history.title": "Payment History",
   "billing.history.description": "Recent billing records for your workspace.",
+  "billing.history.userDescription": "Review your recent payment orders, transaction hashes, and confirmation status.",
+  "billing.history.adminDescription": "Review payment orders, reconciliation status, and operations handling records.",
   "billing.history.columns.date": "Date",
   "billing.history.columns.plan": "Plan",
   "billing.history.columns.amount": "Amount",
@@ -1378,7 +1380,9 @@ export const dict: I18nDict = {
   "billing.history.empty": "No payment history yet.",
   "billing.history.summary.total": "Total",
   "billing.history.summary.pending": "Pending",
+  "billing.history.summary.paid": "Paid",
   "billing.history.summary.failed": "Failed",
+  "billing.history.summary.expired": "Expired",
   "billing.history.summary.reviewNeeded": "Review needed",
   "billing.history.summary.mismatch": "Mismatch",
   "billing.history.filters.status": "Payment status",

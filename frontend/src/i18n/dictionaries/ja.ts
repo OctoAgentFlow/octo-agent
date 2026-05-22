@@ -898,6 +898,8 @@ export const dict: I18nDict = {
 
   "billing.history.title": "支払い履歴",
   "billing.history.description": "ワークスペースの最近の請求記録。",
+  "billing.history.userDescription": "Review your recent payment orders, transaction hashes, and confirmation status.",
+  "billing.history.adminDescription": "Review payment orders, reconciliation status, and operations handling records.",
   "billing.history.columns.date": "日付",
   "billing.history.columns.plan": "プラン",
   "billing.history.columns.amount": "金額",
@@ -909,7 +911,9 @@ export const dict: I18nDict = {
   "billing.history.empty": "支払い履歴はまだありません。",
   "billing.history.summary.total": "合計",
   "billing.history.summary.pending": "保留",
+  "billing.history.summary.paid": "Paid",
   "billing.history.summary.failed": "失敗",
+  "billing.history.summary.expired": "Expired",
   "billing.history.summary.reviewNeeded": "要レビュー",
   "billing.history.summary.mismatch": "不一致",
   "billing.history.filters.status": "支払い状態",

@@ -864,9 +864,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "추천",
   "billing.payment.autoConfirm": "온체인 자동 확인",
   "billing.payment.manualReview": "수동 확인",
+  "billing.payment.hashAutoConfirm": "Tx Hash 제출 후 자동 확인",
   "billing.payment.networkSummary.bep20": "BSC 결제에 권장되며 수수료가 낮고 자동 확인됩니다.",
   "billing.payment.networkSummary.erc20": "Ethereum 메인넷 USDT 결제에 적합하며 자동 확인됩니다.",
-  "billing.payment.networkSummary.trc20": "TRON USDT 전송에 적합하며 입금 후 운영자가 수동 확인합니다.",
+  "billing.payment.networkSummary.trc20": "TRON USDT 전송에 적합하며 Tx Hash 제출 후 자동 온체인 확인됩니다.",
   "billing.payment.safetyHint": "금액 또는 네트워크 불일치를 피하려면 주문을 만든 뒤 전송하세요.",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "결제는 온체인에서 확인되며 구독은 자동으로 활성화됩니다.",
@@ -889,9 +890,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "복사",
   "billing.checkout.copied": "복사되었습니다.",
   "billing.checkout.copyFailed": "복사에 실패했습니다. 직접 복사해 주세요.",
-  "billing.checkout.tronReviewHint": "TRC20 주문은 거래 해시 제출 후 수동 확인으로 이동합니다. TRON 자동 확인은 아직 활성화되지 않았습니다.",
+  "billing.checkout.tronReviewHint": "TRC20 전송 후 Tx Hash를 제출하면 시스템이 TRON 체인에서 자동 확인합니다.",
   "billing.checkout.pollingHint": "온체인 확인 대기 중…",
-  "billing.checkout.tronPollingHint": "TRC20 전송 후 결제 내역에서 거래 해시를 제출하세요. 운영자 확인 후 구독이 활성화됩니다.",
+  "billing.checkout.tronPollingHint": "TRC20 전송 후 결제 내역에서 Tx Hash를 제출하세요. 온체인 자동 확인 후 구독이 활성화됩니다.",
 
   "errors.subscriptionExpired": "구독이 만료되었습니다. 결제 페이지로 이동합니다.",
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/billingevm"
+	"octo-agent/backend/internal/billingtron"
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
@@ -576,15 +577,6 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		return ErrBillingTxAlreadyUsed
 	}
 
-	if isManualReviewPaymentNetwork(order.Network) {
-		return s.orderRepo.MarkNeedsReview(
-			order.ID,
-			normHash,
-			"TRC20 payment tx submitted. Manual verification is required because TRON transfer verification is not automated yet.",
-			now,
-		)
-	}
-
 	rpcKey := fmt.Sprintf("%d", order.ChainID)
 	rpcURL := s.cfg.Billing.RpcURLs[rpcKey]
 	if rpcURL == "" {
@@ -596,17 +588,28 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		return err
 	}
 
-	txHash := common.HexToHash(normHash)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	verifyErr := billingevm.VerifyERC20Transfer(ctx, rpcURL, billingevm.VerifyParams{
-		TxHash:          txHash,
-		TokenAddress:    order.TokenAddress,
-		ReceiverAddress: order.ReceiverAddress,
-		ExpectedMinUnit: expected,
-		ExpectedChainID: big.NewInt(order.ChainID),
-	})
+	var verifyErr error
+	if isTRONPaymentNetwork(order.Network) {
+		verifyErr = billingtron.VerifyTRC20Transfer(ctx, rpcURL, billingtron.VerifyParams{
+			TxHash:          normHash,
+			TokenAddress:    order.TokenAddress,
+			ReceiverAddress: order.ReceiverAddress,
+			ExpectedMinUnit: expected,
+			ExpectedChainID: big.NewInt(order.ChainID),
+		})
+	} else {
+		txHash := common.HexToHash(normHash)
+		verifyErr = billingevm.VerifyERC20Transfer(ctx, rpcURL, billingevm.VerifyParams{
+			TxHash:          txHash,
+			TokenAddress:    order.TokenAddress,
+			ReceiverAddress: order.ReceiverAddress,
+			ExpectedMinUnit: expected,
+			ExpectedChainID: big.NewInt(order.ChainID),
+		})
+	}
 	if verifyErr != nil {
 		if markFailure {
 			_ = s.orderRepo.MarkFailed(order.ID, normHash, sanitizeBillingFailureReason(fmt.Sprintf("transfer verification failed: %v", verifyErr)), time.Now().UTC())
@@ -697,7 +700,7 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 	})
 }
 
-func isManualReviewPaymentNetwork(network string) bool {
+func isTRONPaymentNetwork(network string) bool {
 	switch strings.ToUpper(strings.TrimSpace(network)) {
 	case "TRC20":
 		return true

@@ -22,13 +22,13 @@ Base path: `/api/v1`
 
 ## GET /api/v1/billing/payment-methods
 
-- **用途**：返回 **YAML 配置的链上收款方式**（当前 MVP **仅支持 BEP20 USDT**，多链扩展通过配置增加条目）。
+- **用途**：返回 **YAML 配置的链上收款方式**。当前支持 BEP20、ERC20、TRC20 USDT；BEP20/ERC20 走 EVM RPC 校验，TRC20 走 TRON Solidity JSON-RPC 校验。
 - **响应**：`data.items` 为数组，元素含 `method`、`network`、`token_address`、`receiver_address`、`decimals`、`chain_id`、`is_default`、`note` 等（见 `dto.BillingPaymentMethodItem`）。
 
 ## POST /api/v1/billing/orders
 
 - **用途**：创建一笔待支付的链上 USDT 订单（`status=pending`，带过期时间）。
-- **Body**：`{ "plan_code": "basic_monthly", "method": "USDT", "network": "BEP20" }`（`method`/`network` 须与配置中的支付方式匹配）
+- **Body**：`{ "plan_code": "basic_monthly", "method": "USDT", "network": "BEP20" }`（`method`/`network` 须与配置中的支付方式匹配；`network` 可为 `BEP20` / `ERC20` / `TRC20`）
 - **响应**：`order_id`（数值订单主键的十进制字符串）、`amount`、`currency`、`network`、`token_address`、`receiver_address`、`expired_at`、`status`
 
 ## GET /api/v1/billing/orders
@@ -71,7 +71,7 @@ Base path: `/api/v1`
 
 ## POST /api/v1/billing/orders/{id}/confirm
 
-- **用途**：用户侧异常订单恢复入口。当用户已经转账但 webhook 未到达或订单显示 `failed` 时，可提交链上交易哈希重新触发 BEP20 校验。
+- **用途**：用户侧异常订单恢复入口。当用户已经转账但订单未自动变为 `paid` 或订单显示 `failed` 时，可提交链上交易哈希重新触发链上校验。
 - **Body**：`{ "tx_hash": "0x..." }`
 - **成功响应**：返回更新后的订单详情；若链上校验通过，订单变为 `paid`，并开通/延长订阅。
 - **失败行为**：链上校验失败时订单会记录 `failure_reason`、`last_checked_at`，状态变为 `failed`；在订单未过期前仍可继续提交正确哈希。已过期订单返回 `410`。
@@ -80,6 +80,7 @@ Base path: `/api/v1`
 
 - **鉴权**：**不使用** Bearer；请求头 **`X-Billing-Webhook-Secret`** 须与配置 `billing.webhook_secret` 一致。
 - **Body**：`{ "order_id": "<与订单 id 一致的字符串>", "network": "BEP20", "tx_hash": "0x..." }`
-- **用途**：对 **BEP20** 转账做链上校验（金额、收款地址、代币合约等），成功后更新订单并延长订阅；同一链上 `tx_hash` 通过 `billing_chain_txs` 去重，不可重复确认多笔订单。Webhook 可确认 `pending` 或用户侧校验失败后的 `failed` 订单。
-
-> 当前 MVP **不支持** TRC20/ERC20 收款；配置中仅保留 BEP20 时，其它 `network` 会校验失败。
+- **用途**：对对应网络的 USDT 转账做链上校验（金额、收款地址、代币合约等），成功后更新订单并延长订阅；同一链上 `tx_hash` 通过 `billing_chain_txs` 去重，不可重复确认多笔订单。Webhook 可确认 `pending` 或用户侧校验失败后的 `failed` 订单。
+- **网络差异**：
+  - `BEP20` / `ERC20`：使用 `billing.rpc_urls["56"]` / `billing.rpc_urls["1"]` 的 EVM JSON-RPC 查询 ERC20 `Transfer` 日志。
+  - `TRC20`：使用 `billing.rpc_urls["728126428"]` 的 TRON Solidity JSON-RPC 查询 TRC20 `Transfer` 日志，支持 TRON Base58 地址与 `41...` / `0x...` 地址格式转换。

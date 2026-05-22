@@ -32,9 +32,9 @@ function networkTone(networkCode: string) {
     border: "border-amber-300/25",
     bg: "from-amber-300/10 to-[#0f1419]",
     icon: "text-amber-200",
-    labelKey: "billing.payment.manualReview",
+    labelKey: "billing.payment.hashAutoConfirm",
     descriptionKey: "billing.payment.networkSummary.trc20",
-    settlementKey: "billing.payment.manualReview",
+    settlementKey: "billing.payment.hashAutoConfirm",
   };
 }
 

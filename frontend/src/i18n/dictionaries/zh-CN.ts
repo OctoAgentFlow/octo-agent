@@ -1288,7 +1288,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "升级",
 
   "billing.payment.title": "支付方式",
-  "billing.payment.description": "支持 BEP20、ERC20 和 TRC20 USDT 支付。BSC/ETH 可自动链上确认，TRC20 到账后进入人工核验。",
+  "billing.payment.description": "支持 BEP20、ERC20 和 TRC20 USDT 支付。BSC/ETH 可自动链上确认，TRC20 提交 Tx Hash 后自动链上确认。",
   "billing.payment.empty": "还没有可用的支付方式。",
   "billing.checkout.createOrderFailed": "创建订单失败。",
   "billing.payment.fields.method": "方式",
@@ -1305,9 +1305,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "推荐",
   "billing.payment.autoConfirm": "自动链上确认",
   "billing.payment.manualReview": "人工核验",
+  "billing.payment.hashAutoConfirm": "提交哈希后自动确认",
   "billing.payment.networkSummary.bep20": "推荐使用 BSC 网络，手续费更低，支付后可自动确认。",
   "billing.payment.networkSummary.erc20": "适合从以太坊主网付款，支付后可自动确认。",
-  "billing.payment.networkSummary.trc20": "适合使用 TRON USDT 转账，到账后由运营人工核验。",
+  "billing.payment.networkSummary.trc20": "适合使用 TRON USDT 转账，提交 Tx Hash 后自动链上确认。",
   "billing.payment.safetyHint": "创建订单后再转账，避免金额或网络不匹配。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "支付将通过链上确认，订阅会自动生效。",
@@ -1330,9 +1331,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "复制",
   "billing.checkout.copied": "已复制。",
   "billing.checkout.copyFailed": "复制失败，请手动复制。",
-  "billing.checkout.tronReviewHint": "TRC20 订单提交交易哈希后会进入人工核验，暂不自动链上确认。",
+  "billing.checkout.tronReviewHint": "TRC20 订单转账后请提交 Tx Hash，系统会自动查询 TRON 链并确认到账。",
   "billing.checkout.pollingHint": "BSC/ETH 订单正在等待链上确认… 可保持此窗口打开。",
-  "billing.checkout.tronPollingHint": "TRC20 转账完成后，请在支付记录中提交交易哈希，运营核验后订阅生效。",
+  "billing.checkout.tronPollingHint": "TRC20 转账完成后，请在支付记录中提交 Tx Hash。系统自动链上确认后订阅会生效。",
 
   "errors.subscriptionExpired": "订阅已过期，正在打开账单页以便续费。",
 

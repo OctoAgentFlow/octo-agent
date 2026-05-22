@@ -1316,7 +1316,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "Upgrade",
 
   "billing.payment.title": "Payment Method",
-  "billing.payment.description": "Pay with BEP20, ERC20, or TRC20 USDT. BSC/ETH can be verified on-chain automatically; TRC20 is routed to manual review after transfer.",
+  "billing.payment.description": "Pay with BEP20, ERC20, or TRC20 USDT. BSC/ETH are verified on-chain automatically; TRC20 is verified automatically after you submit the Tx Hash.",
   "billing.payment.empty": "No payment method connected yet.",
   "billing.checkout.createOrderFailed": "Failed to create order.",
   "billing.payment.fields.method": "Method",
@@ -1333,9 +1333,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "Recommended",
   "billing.payment.autoConfirm": "Auto on-chain confirmation",
   "billing.payment.manualReview": "Manual review",
+  "billing.payment.hashAutoConfirm": "Auto after Tx Hash",
   "billing.payment.networkSummary.bep20": "Recommended for BSC payments with lower fees and automatic confirmation.",
   "billing.payment.networkSummary.erc20": "Use Ethereum mainnet USDT when funds are already on ETH. Confirmation is automatic.",
-  "billing.payment.networkSummary.trc20": "Use TRON USDT transfers when preferred. The order is reviewed manually after arrival.",
+  "billing.payment.networkSummary.trc20": "Use TRON USDT transfers when preferred. Submit the Tx Hash for automatic on-chain confirmation.",
   "billing.payment.safetyHint": "Create an order before transfer to avoid amount or network mismatch.",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "Payments are confirmed on-chain and subscription activates automatically.",
@@ -1358,9 +1359,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "Copy",
   "billing.checkout.copied": "Copied.",
   "billing.checkout.copyFailed": "Copy failed. Please copy manually.",
-  "billing.checkout.tronReviewHint": "TRC20 orders enter manual review after you submit the transaction hash. Automatic TRON verification is not enabled yet.",
+  "billing.checkout.tronReviewHint": "After a TRC20 transfer, submit the Tx Hash and the system will verify the TRON payment automatically.",
   "billing.checkout.pollingHint": "Waiting for BSC/ETH on-chain confirmation… You can leave this dialog open.",
-  "billing.checkout.tronPollingHint": "After the TRC20 transfer, submit the transaction hash in payment history. The subscription activates after operator review.",
+  "billing.checkout.tronPollingHint": "After the TRC20 transfer, submit the Tx Hash in payment history. The subscription activates after automatic on-chain confirmation.",
 
   "errors.subscriptionExpired": "Your subscription has expired. Opening Billing to renew.",
 

@@ -864,9 +864,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "Рекомендуется",
   "billing.payment.autoConfirm": "Автоподтверждение в сети",
   "billing.payment.manualReview": "Ручная проверка",
+  "billing.payment.hashAutoConfirm": "Авто после Tx Hash",
   "billing.payment.networkSummary.bep20": "Рекомендуется для BSC: ниже комиссия и автоматическое подтверждение.",
   "billing.payment.networkSummary.erc20": "Подходит для USDT в Ethereum mainnet. Подтверждение автоматическое.",
-  "billing.payment.networkSummary.trc20": "Подходит для TRON USDT. После поступления заказ проверяется вручную.",
+  "billing.payment.networkSummary.trc20": "Подходит для TRON USDT. После отправки Tx Hash платёж проверяется автоматически.",
   "billing.payment.safetyHint": "Создайте заказ перед переводом, чтобы избежать ошибки сети или суммы.",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "Платеж подтверждается в сети, подписка активируется автоматически.",
@@ -889,9 +890,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "Копировать",
   "billing.checkout.copied": "Скопировано.",
   "billing.checkout.copyFailed": "Не удалось скопировать. Скопируйте вручную.",
-  "billing.checkout.tronReviewHint": "Заказы TRC20 после отправки хэша транзакции идут на ручную проверку. Автопроверка TRON пока не включена.",
+  "billing.checkout.tronReviewHint": "После перевода TRC20 отправьте Tx Hash, и система автоматически проверит платёж в сети TRON.",
   "billing.checkout.pollingHint": "Ожидание подтверждения в сети…",
-  "billing.checkout.tronPollingHint": "После перевода TRC20 отправьте хэш транзакции в истории платежей. Подписка активируется после проверки оператором.",
+  "billing.checkout.tronPollingHint": "После перевода TRC20 отправьте Tx Hash в истории платежей. Подписка активируется после автоматической проверки в сети.",
 
   "errors.subscriptionExpired": "Подписка истекла. Открываем страницу оплаты.",
 

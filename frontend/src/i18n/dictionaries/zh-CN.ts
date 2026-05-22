@@ -294,7 +294,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.login": "使用邮箱登录，进入你的自动化控制台。",
   "auth.card.subtitle.register": "创建账号并开启免费试用。",
   "auth.card.connectWallet": "连接钱包",
-  "auth.card.freeTrialNote": "新用户可先免费试用，再订阅 Basic（10 USDT/月）。",
+  "auth.card.freeTrialNote": "新用户可先免费试用，再订阅 Basic（8 USDT/月）。",
   "auth.card.subtitle.adminLogin": "请输入管理员邮箱，并使用验证码登录后台。",
   "auth.card.or": "或",
 

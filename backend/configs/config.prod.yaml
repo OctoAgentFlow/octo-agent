@@ -103,7 +103,7 @@ billing:
   plans:
     basic_monthly:
       name: "Basic"
-      amount: "10"
+      amount: "8"
       currency: "USDT"
       period_days: 30
       description: "Full automation for one month."

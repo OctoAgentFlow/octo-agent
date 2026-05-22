@@ -248,7 +248,7 @@ export const dict: I18nDict = {
   "auth.card.subtitle.login": "Войдите по email, чтобы открыть дашборд.",
   "auth.card.subtitle.register": "Создайте аккаунт и начните пробный период.",
   "auth.card.connectWallet": "Подключить кошелек",
-  "auth.card.freeTrialNote": "Новые пользователи получают пробный период перед подпиской Basic (10 USDT/мес).",
+  "auth.card.freeTrialNote": "Новые пользователи получают пробный период перед подпиской Basic (8 USDT/мес).",
 
   "auth.mode.login": "Войти",
   "auth.mode.register": "Регистрация",
@@ -862,7 +862,7 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "Рекомендуется",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "Платеж подтверждается в сети, подписка активируется автоматически.",
-  "billing.payment.upgradeCta": "Апгрейд до Basic - 10 USDT / месяц",
+  "billing.payment.upgradeCta": "Апгрейд до Basic - 8 USDT / месяц",
   "billing.payment.successToast": "Платёж подтверждён — подписка активна.",
   "billing.checkout.title": "Оплата USDT",
   "billing.checkout.pickNetwork": "Выберите сеть и создайте заказ.",

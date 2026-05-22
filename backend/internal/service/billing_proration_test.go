@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,30 @@ func TestCalculateBillingQuoteAppliesUnusedSubscriptionCredit(t *testing.T) {
 	}
 	if quote.dto.PayableAmount != "23.58" {
 		t.Fatalf("expected prorated payable 23.58, got %s", quote.dto.PayableAmount)
+	}
+}
+
+func TestAmountStringFromMinUnitsTrimsAndKeepsUniquePrecision(t *testing.T) {
+	cases := []struct {
+		name     string
+		units    string
+		decimals int
+		want     string
+	}{
+		{name: "bsc six decimal display", units: "8000001000000000000", decimals: 18, want: "8.000001"},
+		{name: "erc20 six decimals", units: "8000001", decimals: 6, want: "8.000001"},
+		{name: "whole amount", units: "8000000000000000000", decimals: 18, want: "8"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			units, ok := new(big.Int).SetString(tc.units, 10)
+			if !ok {
+				t.Fatalf("invalid test units")
+			}
+			if got := amountStringFromMinUnits(units, tc.decimals); got != tc.want {
+				t.Fatalf("expected %s, got %s", tc.want, got)
+			}
+		})
 	}
 }
 

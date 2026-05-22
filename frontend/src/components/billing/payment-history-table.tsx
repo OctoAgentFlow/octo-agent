@@ -288,14 +288,17 @@ export function PaymentHistoryTable({
                             ) : null}
                             <div className="grid gap-2 md:grid-cols-3">
                               {record.canRetry ? (
-                                <input
-                                  className="form-input w-full font-mono text-xs"
-                                  placeholder={t("billing.history.confirm.placeholder")}
-                                  value={txInputs[record.id] ?? record.txHash}
-                                  onChange={(event) =>
-                                    setTxInputs((prev) => ({ ...prev, [record.id]: event.target.value }))
-                                  }
-                                />
+                                <div className="space-y-1 md:col-span-2">
+                                  <input
+                                    className="form-input w-full font-mono text-xs"
+                                    placeholder={t("billing.history.confirm.placeholder")}
+                                    value={txInputs[record.id] ?? record.txHash}
+                                    onChange={(event) =>
+                                      setTxInputs((prev) => ({ ...prev, [record.id]: event.target.value }))
+                                    }
+                                  />
+                                  <p className="text-xs text-[#71767b]">{t("billing.history.confirm.hint")}</p>
+                                </div>
                               ) : null}
                               {canOperateBilling ? (
                                 <>

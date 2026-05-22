@@ -1316,7 +1316,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "Upgrade",
 
   "billing.payment.title": "Payment Method",
-  "billing.payment.description": "Pay with BEP20, ERC20, or TRC20 USDT. All three networks are verified on-chain automatically; TRC20 uses the submitted Tx Hash for automatic verification.",
+  "billing.payment.description": "Pay with BEP20, ERC20, or TRC20 USDT. All three networks support automatic on-chain confirmation.",
   "billing.payment.empty": "No payment method connected yet.",
   "billing.checkout.createOrderFailed": "Failed to create order.",
   "billing.payment.fields.method": "Method",
@@ -1336,7 +1336,7 @@ export const dict: I18nDict = {
   "billing.payment.hashAutoConfirm": "Tx Hash auto verification",
   "billing.payment.networkSummary.bep20": "Recommended for BSC payments with lower fees and automatic confirmation.",
   "billing.payment.networkSummary.erc20": "Use Ethereum mainnet USDT when funds are already on ETH. Confirmation is automatic.",
-  "billing.payment.networkSummary.trc20": "Use TRON USDT transfers when preferred. Submit the Tx Hash after transfer for automatic on-chain confirmation.",
+  "billing.payment.networkSummary.trc20": "Use TRON USDT transfers when preferred. Payment can be confirmed automatically after transfer.",
   "billing.payment.safetyHint": "Create an order before transfer to avoid amount or network mismatch.",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "Payments are confirmed on-chain and subscription activates automatically.",

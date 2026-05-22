@@ -850,7 +850,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "Upgrade",
 
   "billing.payment.title": "支払い方法",
-  "billing.payment.description": "BEP20、ERC20、TRC20 の USDT 支払いに対応しています。3 つのネットワークはいずれもオンチェーン自動確認に対応し、TRC20 は送信された Tx Hash で自動検証します。",
+  "billing.payment.description": "BEP20、ERC20、TRC20 の USDT 支払いに対応しています。3 つのネットワークはいずれもオンチェーン自動確認に対応しています。",
   "billing.payment.fields.method": "方法",
   "billing.payment.fields.network": "ネットワーク",
   "billing.payment.fields.address": "アドレス",
@@ -867,7 +867,7 @@ export const dict: I18nDict = {
   "billing.payment.hashAutoConfirm": "Tx Hash による自動検証",
   "billing.payment.networkSummary.bep20": "BSC 支払いにおすすめです。手数料が低く、自動確認に対応します。",
   "billing.payment.networkSummary.erc20": "Ethereum メインネットの USDT を使う場合に適しています。自動確認に対応します。",
-  "billing.payment.networkSummary.trc20": "TRON USDT 送金に適しています。送金後に Tx Hash を送信すると自動でオンチェーン確認されます。",
+  "billing.payment.networkSummary.trc20": "TRON USDT 送金に適しています。支払い後に自動確認できます。",
   "billing.payment.safetyHint": "金額やネットワークの不一致を避けるため、注文作成後に送金してください。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "支払いはオンチェーンで確認され、購読は自動的に有効化されます。",

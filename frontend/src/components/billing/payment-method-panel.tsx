@@ -1,11 +1,42 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Clock3, ShieldCheck, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { PaymentMethodOption } from "@/types/billing";
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useT } from "@/i18n/use-t";
+
+function networkTone(networkCode: string) {
+  if (networkCode === "BEP20") {
+    return {
+      border: "border-[#1d9bf0]/45",
+      bg: "from-[#1d9bf0]/16 to-[#0f1419]",
+      icon: "text-[#8ecdf8]",
+      labelKey: "billing.payment.defaultBadge",
+      descriptionKey: "billing.payment.networkSummary.bep20",
+      settlementKey: "billing.payment.autoConfirm",
+    };
+  }
+  if (networkCode === "ERC20") {
+    return {
+      border: "border-white/12",
+      bg: "from-white/[0.04] to-[#0f1419]",
+      icon: "text-white/70",
+      labelKey: "billing.checkout.availableNetwork",
+      descriptionKey: "billing.payment.networkSummary.erc20",
+      settlementKey: "billing.payment.autoConfirm",
+    };
+  }
+  return {
+    border: "border-amber-300/25",
+    bg: "from-amber-300/10 to-[#0f1419]",
+    icon: "text-amber-200",
+    labelKey: "billing.payment.manualReview",
+    descriptionKey: "billing.payment.networkSummary.trc20",
+    settlementKey: "billing.payment.manualReview",
+  };
+}
 
 export function PaymentMethodPanel({
   paymentMethods,
@@ -17,40 +48,62 @@ export function PaymentMethodPanel({
   const { t } = useT();
   return (
     <SectionCard className="bg-[#0f1419]" title={t("billing.payment.title")} description={t("billing.payment.description")}>
-      <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="rounded-2xl border border-[#2f3336] bg-black p-4 sm:p-5">
         {paymentMethods.length > 0 ? (
-          <ul className="space-y-4">
+          <ul className="grid gap-3 lg:grid-cols-3">
             {paymentMethods.map((pm) => (
+              (() => {
+                const tone = networkTone(pm.networkCode);
+                return (
               <li
                 key={`${pm.networkKey}-${pm.receiverMasked}`}
-                className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3"
+                className={`flex min-h-[230px] flex-col rounded-2xl border bg-gradient-to-br p-4 ${tone.border} ${tone.bg}`}
               >
-                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[#8ecdf8]">
-                  {pm.isDefault ? (
-                    <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5">{t("billing.payment.defaultBadge")}</span>
-                  ) : null}
-                  {pm.chainId > 0 ? (
-                    <span className="text-[#71767b]">
-                      {t("billing.payment.fields.chainId", { chainId: pm.chainId })}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                      <WalletCards className={`size-5 ${tone.icon}`} />
                     </span>
-                  ) : null}
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-white">{t(pm.networkKey)}</p>
+                      <p className="mt-0.5 text-xs text-[#71767b]">{t("billing.payment.method.usdt")}</p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.05] px-2 py-1 text-xs text-white/75">
+                    {t(tone.labelKey)}
+                  </span>
                 </div>
-                <div className="grid gap-2 text-sm text-[#71767b] sm:grid-cols-2 lg:grid-cols-4">
-                  <p>
-                    {t("billing.payment.fields.method")}: <span className="text-white">{t(pm.methodKey)}</span>
-                  </p>
-                  <p>
-                    {t("billing.payment.fields.network")}: <span className="text-white">{t(pm.networkKey)}</span>
-                  </p>
-                  <p className="sm:col-span-2">
-                    {t("billing.payment.fields.token")}: <span className="break-all text-white">{pm.tokenMasked}</span>
-                  </p>
-                  <p className="sm:col-span-2 lg:col-span-4">
-                    {t("billing.payment.fields.address")}: <span className="break-all text-white">{pm.receiverMasked}</span>
-                  </p>
+                <p className="mt-4 min-h-[40px] text-sm leading-relaxed text-[#71767b]">
+                  {t(tone.descriptionKey)}
+                </p>
+                <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-black/25 p-3">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-[#71767b]">{t("billing.payment.fields.chain")}</span>
+                    <span className="font-medium text-white">{t(pm.networkKey)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-[#71767b]">{t("billing.payment.fields.settlement")}</span>
+                    <span className="inline-flex items-center gap-1.5 font-medium text-white">
+                      {pm.networkCode === "TRC20" ? <Clock3 className="size-3.5 text-amber-200" /> : <CheckCircle2 className="size-3.5 text-emerald-300" />}
+                      {t(tone.settlementKey)}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-[#71767b]">{t("billing.payment.fields.address")}</p>
+                    <p className="break-all font-mono text-white">{pm.receiverMasked}</p>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-[#71767b]">{t("billing.payment.fields.token")}</p>
+                    <p className="break-all font-mono text-white">{pm.tokenMasked}</p>
+                  </div>
                 </div>
-                {pm.note ? <p className="mt-2 text-xs text-[#71767b]">{pm.note}</p> : null}
+                <div className="mt-auto flex items-center gap-2 pt-4 text-xs text-[#71767b]">
+                  <ShieldCheck className="size-4 shrink-0 text-[#1d9bf0]" />
+                  <span>{t("billing.payment.safetyHint")}</span>
+                </div>
               </li>
+                );
+              })()
             ))}
           </ul>
         ) : (

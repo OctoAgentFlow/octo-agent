@@ -27,8 +27,9 @@ type Config struct {
 
 // BillingConfig holds USDT payment settings (loaded from YAML; do not hardcode in code).
 type BillingConfig struct {
-	OrderTTLMinutes int    `yaml:"order_ttl_minutes"`
-	WebhookSecret   string `yaml:"webhook_secret"`
+	OrderTTLMinutes int                  `yaml:"order_ttl_minutes"`
+	WebhookSecret   string               `yaml:"webhook_secret"`
+	Scanner         BillingScannerConfig `yaml:"scanner"`
 	// RpcURLs maps chain id as string (e.g. "56", "1", "728126428") to JSON-RPC HTTP endpoint for payment verification.
 	RpcURLs map[string]string `yaml:"rpc_urls"`
 	// WssURLs maps chain id as string to WebSocket endpoints for future chain listeners.
@@ -37,6 +38,13 @@ type BillingConfig struct {
 	ExplorerAPIKeys map[string]string           `yaml:"explorer_api_keys"`
 	PaymentMethods  []PaymentMethodConfig       `yaml:"payment_methods"`
 	Plans           map[string]BillingPlanEntry `yaml:"plans"`
+}
+
+type BillingScannerConfig struct {
+	Enabled          bool  `yaml:"enabled"`
+	IntervalSeconds  int   `yaml:"interval_seconds"`
+	MaxOrdersPerTick int   `yaml:"max_orders_per_tick"`
+	BlockLookback    int64 `yaml:"block_lookback"`
 }
 
 // PaymentMethodConfig is one USDT payment route.
@@ -346,6 +354,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.Billing.OrderTTLMinutes <= 0 {
 		cfg.Billing.OrderTTLMinutes = 30
+	}
+	if cfg.Billing.Scanner.IntervalSeconds <= 0 {
+		cfg.Billing.Scanner.IntervalSeconds = 60
+	}
+	if cfg.Billing.Scanner.MaxOrdersPerTick <= 0 {
+		cfg.Billing.Scanner.MaxOrdersPerTick = 100
+	}
+	if cfg.Billing.Scanner.BlockLookback <= 0 {
+		cfg.Billing.Scanner.BlockLookback = 7200
 	}
 	if cfg.Billing.RpcURLs == nil {
 		cfg.Billing.RpcURLs = map[string]string{}

@@ -102,6 +102,114 @@ type VerifyParams struct {
 	ExpectedChainID *big.Int
 }
 
+type TransferEvent struct {
+	TxHash      string
+	Amount      *big.Int
+	BlockNumber uint64
+	BlockTime   time.Time
+}
+
+type ScanParams struct {
+	TokenAddress    string
+	ReceiverAddress string
+	ExpectedChainID *big.Int
+	FromBlock       uint64
+	ToBlock         uint64
+	BlockLookback   uint64
+}
+
+func ScanTRC20Transfers(ctx context.Context, rpcURL string, params ScanParams) ([]TransferEvent, error) {
+	if strings.TrimSpace(rpcURL) == "" {
+		return nil, fmt.Errorf("tron rpc url is required")
+	}
+	token, err := tronAddressToEVMHex(params.TokenAddress)
+	if err != nil {
+		return nil, fmt.Errorf("token address: %w", err)
+	}
+	receiver, err := tronAddressToEVMHex(params.ReceiverAddress)
+	if err != nil {
+		return nil, fmt.Errorf("receiver address: %w", err)
+	}
+	client := &rpcClient{url: rpcURL, http: &http.Client{Timeout: 30 * time.Second}}
+	if params.ExpectedChainID != nil {
+		chainID, err := client.chainID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("tron chain id: %w", err)
+		}
+		if chainID.Cmp(params.ExpectedChainID) != 0 {
+			return nil, fmt.Errorf("chain_id mismatch: rpc has %s, expected %s", chainID.String(), params.ExpectedChainID.String())
+		}
+	}
+	latest, err := client.blockNumber(ctx)
+	if err != nil {
+		return nil, err
+	}
+	from := params.FromBlock
+	to := params.ToBlock
+	if to == 0 || to > latest {
+		to = latest
+	}
+	if from == 0 && params.BlockLookback > 0 && to > params.BlockLookback {
+		from = to - params.BlockLookback
+	}
+	if from > to {
+		from = to
+	}
+	transferSig := crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)")).Hex()
+	var out []txLog
+	filter := map[string]any{
+		"fromBlock": fmt.Sprintf("0x%x", from),
+		"toBlock":   fmt.Sprintf("0x%x", to),
+		"address":   token,
+		"topics": []any{
+			transferSig,
+			nil,
+			"0x" + strings.Repeat("0", 24) + strings.TrimPrefix(strings.ToLower(receiver), "0x"),
+		},
+	}
+	if err := client.call(ctx, "eth_getLogs", []any{filter}, &out); err != nil {
+		return nil, fmt.Errorf("filter logs: %w", err)
+	}
+	blockTimes := make(map[uint64]time.Time)
+	events := make([]TransferEvent, 0, len(out))
+	for _, lg := range out {
+		if len(lg.Topics) != 3 || !strings.EqualFold(lg.Topics[0], transferSig) {
+			continue
+		}
+		toAddr, err := topicToEVMAddress(lg.Topics[2])
+		if err != nil || !sameHexAddress(toAddr, receiver) {
+			continue
+		}
+		amount, err := hexBig(lg.Data)
+		if err != nil {
+			continue
+		}
+		blockNumber, err := hexUint64(lg.BlockNumber)
+		if err != nil {
+			continue
+		}
+		bt, ok := blockTimes[blockNumber]
+		if !ok {
+			bt, err = client.blockTime(ctx, blockNumber)
+			if err != nil {
+				return nil, err
+			}
+			blockTimes[blockNumber] = bt
+		}
+		txHash, err := normalizeTxHash(lg.TransactionHash)
+		if err != nil {
+			continue
+		}
+		events = append(events, TransferEvent{
+			TxHash:      txHash,
+			Amount:      amount,
+			BlockNumber: blockNumber,
+			BlockTime:   bt,
+		})
+	}
+	return events, nil
+}
+
 type rpcClient struct {
 	url  string
 	http *http.Client
@@ -113,6 +221,29 @@ func (c *rpcClient) chainID(ctx context.Context) (*big.Int, error) {
 		return nil, err
 	}
 	return hexBig(out)
+}
+
+func (c *rpcClient) blockNumber(ctx context.Context) (uint64, error) {
+	var out string
+	if err := c.call(ctx, "eth_blockNumber", []any{}, &out); err != nil {
+		return 0, fmt.Errorf("block number: %w", err)
+	}
+	return hexUint64(out)
+}
+
+func (c *rpcClient) blockTime(ctx context.Context, blockNumber uint64) (time.Time, error) {
+	var out *txBlock
+	if err := c.call(ctx, "eth_getBlockByNumber", []any{fmt.Sprintf("0x%x", blockNumber), false}, &out); err != nil {
+		return time.Time{}, fmt.Errorf("block %d: %w", blockNumber, err)
+	}
+	if out == nil {
+		return time.Time{}, fmt.Errorf("block %d not found", blockNumber)
+	}
+	ts, err := hexUint64(out.Timestamp)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("block %d timestamp: %w", blockNumber, err)
+	}
+	return time.Unix(int64(ts), 0).UTC(), nil
 }
 
 func (c *rpcClient) receipt(ctx context.Context, txHash string) (*txReceipt, error) {
@@ -176,9 +307,15 @@ type txReceipt struct {
 }
 
 type txLog struct {
-	Address string   `json:"address"`
-	Topics  []string `json:"topics"`
-	Data    string   `json:"data"`
+	Address         string   `json:"address"`
+	Topics          []string `json:"topics"`
+	Data            string   `json:"data"`
+	BlockNumber     string   `json:"blockNumber"`
+	TransactionHash string   `json:"transactionHash"`
+}
+
+type txBlock struct {
+	Timestamp string `json:"timestamp"`
 }
 
 func (r *txReceipt) success() bool {
@@ -280,6 +417,17 @@ func hexBig(v string) (*big.Int, error) {
 		return nil, err
 	}
 	return new(big.Int).SetBytes(raw), nil
+}
+
+func hexUint64(v string) (uint64, error) {
+	n, err := hexBig(v)
+	if err != nil {
+		return 0, err
+	}
+	if !n.IsUint64() {
+		return 0, fmt.Errorf("hex integer overflows uint64")
+	}
+	return n.Uint64(), nil
 }
 
 func hexBytes(v string) ([]byte, error) {

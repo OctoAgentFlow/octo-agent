@@ -67,6 +67,11 @@ llm:
 
 billing:
   order_ttl_minutes: 30
+  scanner:
+    enabled: true
+    interval_seconds: 60
+    max_orders_per_tick: 100
+    block_lookback: 7200
   webhook_secret: "local-billing-webhook-secret"
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"

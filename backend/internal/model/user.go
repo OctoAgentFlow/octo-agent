@@ -10,7 +10,9 @@ type User struct {
 	Status   string `gorm:"size:32;default:active;index;comment:用户状态" json:"status"`
 	Role     string `gorm:"size:32;default:user;index;comment:用户角色（user/owner/admin）" json:"role"`
 
-	SubscriptionPlanCode  string     `gorm:"size:64;comment:订阅方案编码" json:"subscription_plan_code,omitempty"`
-	SubscriptionStatus    string     `gorm:"size:32;index;comment:订阅状态（none/active/expired）" json:"subscription_status,omitempty"`
-	SubscriptionExpiresAt *time.Time `gorm:"comment:订阅到期时间" json:"subscription_expires_at,omitempty"`
+	SubscriptionPlanCode     string     `gorm:"size:64;comment:订阅方案编码" json:"subscription_plan_code,omitempty"`
+	SubscriptionStatus       string     `gorm:"size:32;index;comment:订阅状态（none/active/expired）" json:"subscription_status,omitempty"`
+	SubscriptionBillingCycle string     `gorm:"size:16;comment:订阅计费周期（monthly/yearly）" json:"subscription_billing_cycle,omitempty"`
+	SubscriptionStartedAt    *time.Time `gorm:"comment:当前订阅周期开始时间" json:"subscription_started_at,omitempty"`
+	SubscriptionExpiresAt    *time.Time `gorm:"comment:订阅到期时间" json:"subscription_expires_at,omitempty"`
 }

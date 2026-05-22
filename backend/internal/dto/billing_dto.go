@@ -95,15 +95,36 @@ type BillingCreateOrderRequest struct {
 	Network      string `json:"network" binding:"required"`
 }
 
+type BillingQuoteRequest struct {
+	PlanCode     string `json:"plan_code" binding:"required"`
+	BillingCycle string `json:"billing_cycle"`
+}
+
+type BillingUpgradeQuote struct {
+	CurrentPlan         string `json:"current_plan"`
+	CurrentBillingCycle string `json:"current_billing_cycle"`
+	TargetPlan          string `json:"target_plan"`
+	TargetBillingCycle  string `json:"target_billing_cycle"`
+	OriginalAmount      string `json:"original_amount"`
+	CreditAmount        string `json:"credit_amount"`
+	PayableAmount       string `json:"payable_amount"`
+	Currency            string `json:"currency"`
+	OrderType           string `json:"order_type"`
+	IsUpgrade           bool   `json:"is_upgrade"`
+	CurrentExpiresAt    string `json:"current_expires_at,omitempty"`
+	QuoteExpiresAt      string `json:"quote_expires_at,omitempty"`
+}
+
 type BillingCreateOrderResponse struct {
-	OrderID         string `json:"order_id"`
-	Amount          string `json:"amount"`
-	Currency        string `json:"currency"`
-	Network         string `json:"network"`
-	TokenAddress    string `json:"token_address"`
-	ReceiverAddress string `json:"receiver_address"`
-	ExpiredAt       string `json:"expired_at"`
-	Status          string `json:"status"`
+	OrderID         string               `json:"order_id"`
+	Amount          string               `json:"amount"`
+	Currency        string               `json:"currency"`
+	Network         string               `json:"network"`
+	TokenAddress    string               `json:"token_address"`
+	ReceiverAddress string               `json:"receiver_address"`
+	ExpiredAt       string               `json:"expired_at"`
+	Status          string               `json:"status"`
+	Quote           *BillingUpgradeQuote `json:"quote,omitempty"`
 }
 
 // BillingOrderDetailResponse is returned by GET /billing/orders/:id (polling).
@@ -111,6 +132,10 @@ type BillingOrderDetailResponse struct {
 	OrderID              string                  `json:"order_id"`
 	UserID               uint                    `json:"user_id"`
 	Amount               string                  `json:"amount"`
+	OriginalAmount       string                  `json:"original_amount,omitempty"`
+	CreditAmount         string                  `json:"credit_amount,omitempty"`
+	PayableAmount        string                  `json:"payable_amount,omitempty"`
+	OrderType            string                  `json:"order_type,omitempty"`
 	Currency             string                  `json:"currency"`
 	Network              string                  `json:"network"`
 	TokenAddress         string                  `json:"token_address"`
@@ -137,6 +162,10 @@ type BillingOrderListItem struct {
 	PlanCode             string `json:"plan_code"`
 	BillingCycle         string `json:"billing_cycle"`
 	Amount               string `json:"amount"`
+	OriginalAmount       string `json:"original_amount,omitempty"`
+	CreditAmount         string `json:"credit_amount,omitempty"`
+	PayableAmount        string `json:"payable_amount,omitempty"`
+	OrderType            string `json:"order_type,omitempty"`
 	Currency             string `json:"currency"`
 	Method               string `json:"method"`
 	Network              string `json:"network"`

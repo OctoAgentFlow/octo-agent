@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -43,6 +44,20 @@ const (
 	billingReviewReviewed   = "reviewed"
 )
 
+type billingQuoteCalc struct {
+	dto                dto.BillingUpgradeQuote
+	targetPlan         subscription.PlanDefinition
+	currentPlan        subscription.PlanDefinition
+	hasCurrentPlan     bool
+	originalCents      int64
+	creditCents        int64
+	payableCents       int64
+	targetCycle        string
+	currentCycle       string
+	currentPeriodStart time.Time
+	currentPeriodEnd   time.Time
+}
+
 func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
 	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
@@ -59,7 +74,10 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 		pc = subscription.PlanFreeTrial
 	}
 	normPlan := subscription.NormalizePlanCode(pc)
-	cycle := deriveBillingCycleFromPlanCode(pc)
+	cycle := subscription.NormalizeBillingCycle(user.SubscriptionBillingCycle)
+	if strings.TrimSpace(user.SubscriptionBillingCycle) == "" {
+		cycle = deriveBillingCycleFromPlanCode(pc)
+	}
 	var expStr string
 	if user.SubscriptionExpiresAt != nil {
 		expStr = user.SubscriptionExpiresAt.In(time.UTC).Format("2006-01-02")
@@ -129,6 +147,18 @@ func (s *BillingService) PaymentMethods(_ uint) *dto.BillingPaymentMethodsRespon
 	return &dto.BillingPaymentMethodsResponse{Items: out}
 }
 
+func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.BillingUpgradeQuote, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	return &quote.dto, nil
+}
+
 func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 	var usage dto.PlanUsageData
 	if s.oafBotRepo != nil {
@@ -145,13 +175,192 @@ func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 	return usage
 }
 
+func calculateBillingQuote(user *model.User, targetPlanCode, targetBillingCycle string, now time.Time) (billingQuoteCalc, error) {
+	targetPlan, ok := subscription.FindPlan(targetPlanCode)
+	if !ok {
+		return billingQuoteCalc{}, fmt.Errorf("unknown plan_code")
+	}
+	targetCycle := subscription.NormalizeBillingCycle(targetBillingCycle)
+	originalCents := int64(subscription.PriceForCycle(targetPlan, targetCycle)) * 100
+	out := billingQuoteCalc{
+		targetPlan:    targetPlan,
+		originalCents: originalCents,
+		payableCents:  originalCents,
+		targetCycle:   targetCycle,
+		currentCycle:  subscription.BillingCycleMonthly,
+	}
+	quote := dto.BillingUpgradeQuote{
+		CurrentPlan:         subscription.PlanFreeTrial,
+		CurrentBillingCycle: subscription.BillingCycleMonthly,
+		TargetPlan:          targetPlan.Code,
+		TargetBillingCycle:  targetCycle,
+		OriginalAmount:      centsToAmountString(originalCents),
+		CreditAmount:        "0",
+		PayableAmount:       centsToAmountString(originalCents),
+		Currency:            targetPlan.Currency,
+		OrderType:           "new",
+		IsUpgrade:           false,
+		QuoteExpiresAt:      now.Add(5 * time.Minute).UTC().Format(time.RFC3339),
+	}
+	if user == nil {
+		out.dto = quote
+		return out, nil
+	}
+	currentStatus := subscription.EffectiveStatus(user, now)
+	currentPlanCode := subscription.NormalizePlanCode(user.SubscriptionPlanCode)
+	if strings.TrimSpace(currentPlanCode) == "" {
+		currentPlanCode = subscription.PlanFreeTrial
+	}
+	currentCycle := subscription.NormalizeBillingCycle(user.SubscriptionBillingCycle)
+	if strings.TrimSpace(user.SubscriptionBillingCycle) == "" {
+		currentCycle = deriveBillingCycleFromPlanCode(user.SubscriptionPlanCode)
+	}
+	out.currentCycle = currentCycle
+	quote.CurrentPlan = currentPlanCode
+	quote.CurrentBillingCycle = currentCycle
+	if user.SubscriptionExpiresAt != nil {
+		quote.CurrentExpiresAt = user.SubscriptionExpiresAt.UTC().Format(time.RFC3339)
+	}
+
+	if currentStatus != "active" || user.SubscriptionExpiresAt == nil || !now.Before(*user.SubscriptionExpiresAt) || currentPlanCode == subscription.PlanFreeTrial {
+		out.dto = quote
+		return out, nil
+	}
+
+	currentPlan, ok := subscription.FindPlan(currentPlanCode)
+	if !ok {
+		out.dto = quote
+		return out, nil
+	}
+	out.currentPlan = currentPlan
+	out.hasCurrentPlan = true
+
+	currentRank := billingPlanRank(currentPlan.Code)
+	targetRank := billingPlanRank(targetPlan.Code)
+	if targetRank < currentRank {
+		return billingQuoteCalc{}, fmt.Errorf("downgrade_not_supported")
+	}
+	if currentCycle == subscription.BillingCycleYearly && targetCycle == subscription.BillingCycleMonthly && targetRank > currentRank {
+		return billingQuoteCalc{}, fmt.Errorf("yearly_subscription_can_only_upgrade_to_yearly")
+	}
+	if targetRank == currentRank {
+		quote.OrderType = "renew"
+		out.dto = quote
+		return out, nil
+	}
+
+	start, end := subscriptionPeriodBounds(user, currentCycle)
+	if !now.Before(end) || !start.Before(end) {
+		out.dto = quote
+		return out, nil
+	}
+	totalSeconds := int64(end.Sub(start).Seconds())
+	remainingSeconds := int64(end.Sub(now).Seconds())
+	if totalSeconds <= 0 || remainingSeconds <= 0 {
+		out.dto = quote
+		return out, nil
+	}
+	currentCents := int64(subscription.PriceForCycle(currentPlan, currentCycle)) * 100
+	creditCents := (currentCents*remainingSeconds + totalSeconds/2) / totalSeconds
+	if creditCents < 0 {
+		creditCents = 0
+	}
+	if creditCents >= originalCents {
+		creditCents = originalCents - 1
+	}
+	payableCents := originalCents - creditCents
+	quote.OrderType = "upgrade"
+	quote.IsUpgrade = true
+	quote.CreditAmount = centsToAmountString(creditCents)
+	quote.PayableAmount = centsToAmountString(payableCents)
+	out.creditCents = creditCents
+	out.payableCents = payableCents
+	out.currentPeriodStart = start
+	out.currentPeriodEnd = end
+	out.dto = quote
+	return out, nil
+}
+
+func billingPlanRank(plan string) int {
+	switch subscription.NormalizePlanCode(plan) {
+	case subscription.PlanBasic:
+		return 1
+	case subscription.PlanPlus:
+		return 2
+	case subscription.PlanPro:
+		return 3
+	case subscription.PlanProPlus:
+		return 4
+	default:
+		return 0
+	}
+}
+
+func subscriptionPeriodBounds(user *model.User, cycle string) (time.Time, time.Time) {
+	if user == nil || user.SubscriptionExpiresAt == nil {
+		now := time.Now().UTC()
+		return now, now
+	}
+	end := user.SubscriptionExpiresAt.UTC()
+	if user.SubscriptionStartedAt != nil && user.SubscriptionStartedAt.Before(end) {
+		return user.SubscriptionStartedAt.UTC(), end
+	}
+	if subscription.NormalizeBillingCycle(cycle) == subscription.BillingCycleYearly {
+		return end.AddDate(-1, 0, 0), end
+	}
+	return end.AddDate(0, -1, 0), end
+}
+
+func centsToAmountString(cents int64) string {
+	if cents <= 0 {
+		return "0"
+	}
+	whole := cents / 100
+	frac := cents % 100
+	if frac == 0 {
+		return strconv.FormatInt(whole, 10)
+	}
+	return fmt.Sprintf("%d.%02d", whole, frac)
+}
+
+func billingProrationSnapshot(q billingQuoteCalc) string {
+	payload := map[string]any{
+		"current_plan":          q.dto.CurrentPlan,
+		"current_billing_cycle": q.dto.CurrentBillingCycle,
+		"target_plan":           q.dto.TargetPlan,
+		"target_billing_cycle":  q.dto.TargetBillingCycle,
+		"original_amount":       q.dto.OriginalAmount,
+		"credit_amount":         q.dto.CreditAmount,
+		"payable_amount":        q.dto.PayableAmount,
+		"order_type":            q.dto.OrderType,
+		"is_upgrade":            q.dto.IsUpgrade,
+		"current_expires_at":    q.dto.CurrentExpiresAt,
+	}
+	if !q.currentPeriodStart.IsZero() {
+		payload["current_period_start"] = q.currentPeriodStart.UTC().Format(time.RFC3339)
+	}
+	if !q.currentPeriodEnd.IsZero() {
+		payload["current_period_end"] = q.currentPeriodEnd.UTC().Format(time.RFC3339)
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
-	plan, ok := subscription.FindPlan(req.PlanCode)
-	if !ok {
-		return nil, fmt.Errorf("unknown plan_code")
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
 	}
-	cycle := subscription.NormalizeBillingCycle(req.BillingCycle)
+	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	plan := quote.targetPlan
+	cycle := quote.targetCycle
 	if !strings.EqualFold(strings.TrimSpace(req.Method), "USDT") {
 		return nil, fmt.Errorf("unsupported method")
 	}
@@ -173,7 +382,14 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		UserID:               userID,
 		PlanCode:             plan.Code,
 		BillingCycle:         cycle,
-		Amount:               strconv.Itoa(subscription.PriceForCycle(plan, cycle)),
+		Amount:               centsToAmountString(quote.payableCents),
+		OriginalAmount:       centsToAmountString(quote.originalCents),
+		CreditAmount:         centsToAmountString(quote.creditCents),
+		PayableAmount:        centsToAmountString(quote.payableCents),
+		OrderType:            quote.dto.OrderType,
+		FromPlanCode:         quote.dto.CurrentPlan,
+		FromBillingCycle:     quote.dto.CurrentBillingCycle,
+		ProrationSnapshot:    billingProrationSnapshot(quote),
 		Currency:             plan.Currency,
 		Method:               strings.ToUpper(strings.TrimSpace(req.Method)),
 		Network:              strings.ToUpper(strings.TrimSpace(pm.Network)),
@@ -201,6 +417,7 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		ReceiverAddress: o.ReceiverAddress,
 		ExpiredAt:       o.ExpiredAt.UTC().Format(time.RFC3339),
 		Status:          o.Status,
+		Quote:           &quote.dto,
 	}, nil
 }
 
@@ -282,6 +499,10 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
 		UserID:               o.UserID,
 		Amount:               o.Amount,
+		OriginalAmount:       o.OriginalAmount,
+		CreditAmount:         o.CreditAmount,
+		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
+		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		Currency:             o.Currency,
 		Network:              o.Network,
 		TokenAddress:         o.TokenAddress,
@@ -317,6 +538,10 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		PlanCode:             subscription.NormalizePlanCode(o.PlanCode),
 		BillingCycle:         normalizeOrderBillingCycle(o),
 		Amount:               o.Amount,
+		OriginalAmount:       o.OriginalAmount,
+		CreditAmount:         o.CreditAmount,
+		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
+		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		Currency:             o.Currency,
 		Method:               o.Method,
 		Network:              o.Network,
@@ -688,16 +913,30 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 			return fmt.Errorf("plan config missing for %s", ord.PlanCode)
 		}
 		cycle := normalizeOrderBillingCycle(&ord)
-		expires := paidAt.AddDate(0, 1, 0)
-		if cycle == subscription.BillingCycleYearly {
-			expires = paidAt.AddDate(1, 0, 0)
-		}
+		expires := billingNextSubscriptionExpiry(tx, ord, paidAt, cycle)
 		return tx.Model(&model.User{}).Where("id = ?", ord.UserID).Updates(map[string]any{
-			"subscription_plan_code":  plan.Code,
-			"subscription_status":     "active",
-			"subscription_expires_at": expires,
+			"subscription_plan_code":     plan.Code,
+			"subscription_status":        "active",
+			"subscription_billing_cycle": cycle,
+			"subscription_started_at":    paidAt,
+			"subscription_expires_at":    expires,
 		}).Error
 	})
+}
+
+func billingNextSubscriptionExpiry(tx *gorm.DB, ord model.BillingOrder, paidAt time.Time, cycle string) time.Time {
+	base := paidAt
+	orderType := strings.ToLower(strings.TrimSpace(ord.OrderType))
+	if orderType == "renew" {
+		var u model.User
+		if err := tx.Select("subscription_expires_at").First(&u, ord.UserID).Error; err == nil && u.SubscriptionExpiresAt != nil && u.SubscriptionExpiresAt.After(base) {
+			base = u.SubscriptionExpiresAt.UTC()
+		}
+	}
+	if subscription.NormalizeBillingCycle(cycle) == subscription.BillingCycleYearly {
+		return base.AddDate(1, 0, 0)
+	}
+	return base.AddDate(0, 1, 0)
 }
 
 func isTRONPaymentNetwork(network string) bool {

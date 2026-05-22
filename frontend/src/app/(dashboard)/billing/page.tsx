@@ -17,7 +17,6 @@ import { billingService, type BillingOrderListItemApi } from "@/services/billing
 import { useT } from "@/i18n/use-t";
 import type { BillingPlanApi, BillingSubscriptionApi, PlanLimitsApi, PlanUsageApi } from "@/services/billing.service";
 import type {
-  BillingOpsAction,
   BillingOpsSummary,
   BillingOrderFilterState,
   BillingReconciliationStatus,
@@ -212,7 +211,6 @@ export default function BillingPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   const [opsSummary, setOpsSummary] = useState<BillingOpsSummary>(emptyOpsSummary);
-  const [canOperateBilling, setCanOperateBilling] = useState(false);
   const [paymentFilters, setPaymentFilters] = useState<BillingOrderFilterState>({
     status: "all",
     reviewStatus: "all",
@@ -239,7 +237,6 @@ export default function BillingPage() {
         setPaymentMethods(mapPaymentMethods(methodsData.items));
         setPaymentRecords(ordersData.items.map(mapPaymentRecord));
         setOpsSummary(ordersData.ops_summary || emptyOpsSummary);
-        setCanOperateBilling(Boolean(ordersData.can_operate_billing));
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -295,26 +292,6 @@ export default function BillingPage() {
     [fetchBilling, pushToast, t]
   );
 
-  const updateBillingOps = useCallback(
-    async (orderId: string, action: BillingOpsAction, payload?: { opsNote?: string }) => {
-      try {
-        await billingService.orderOpsAction(orderId, {
-          action,
-          ops_note: payload?.opsNote,
-        });
-        pushToast(t("billing.toast.orderUpdated"));
-        await fetchBilling({ quiet: true });
-      } catch (error) {
-        const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || t("billing.errors.updateOrder")
-          : t("billing.errors.updateOrder");
-        pushToast(msg);
-        throw new Error(msg);
-      }
-    },
-    [fetchBilling, pushToast, t]
-  );
-
   if (loadState === "loading") {
     return (
       <Card>
@@ -341,11 +318,9 @@ export default function BillingPage() {
       paymentMethods={paymentMethods}
       paymentRecords={paymentRecords}
       opsSummary={opsSummary}
-      canOperateBilling={canOperateBilling}
       filters={paymentFilters}
       onFiltersChange={setPaymentFilters}
       onConfirmTx={confirmOrderTx}
-      onOpsAction={updateBillingOps}
       onPaymentConfirmed={() => void fetchBilling({ quiet: true })}
     />
   );

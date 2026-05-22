@@ -1,5 +1,4 @@
 import type {
-  BillingOpsAction,
   BillingCycle,
   BillingOpsSummary,
   BillingOrderFilterState,
@@ -35,15 +34,9 @@ type BillingPageContentProps = {
   paymentMethods: PaymentMethodOption[];
   paymentRecords: PaymentRecord[];
   opsSummary: BillingOpsSummary;
-  canOperateBilling: boolean;
   filters: BillingOrderFilterState;
   onFiltersChange: (filters: BillingOrderFilterState) => void;
   onConfirmTx?: (orderId: string, txHash: string) => Promise<void>;
-  onOpsAction?: (
-    orderId: string,
-    action: BillingOpsAction,
-    payload?: { opsNote?: string }
-  ) => Promise<void>;
   onPaymentConfirmed?: () => void;
 };
 
@@ -53,11 +46,9 @@ export function BillingPageContent({
   paymentMethods,
   paymentRecords,
   opsSummary,
-  canOperateBilling,
   filters,
   onFiltersChange,
   onConfirmTx,
-  onOpsAction,
   onPaymentConfirmed,
 }: BillingPageContentProps) {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
@@ -94,11 +85,10 @@ export function BillingPageContent({
       <PaymentHistoryTable
         paymentRecords={paymentRecords}
         opsSummary={opsSummary}
-        canOperateBilling={canOperateBilling}
+        canOperateBilling={false}
         filters={filters}
         onFiltersChange={onFiltersChange}
         onConfirmTx={onConfirmTx}
-        onOpsAction={onOpsAction}
       />
     </div>
   );

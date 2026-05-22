@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, Clock3, ShieldCheck, WalletCards } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ShieldCheck, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { PaymentMethodOption } from "@/types/billing";
@@ -29,10 +29,10 @@ function networkTone(networkCode: string) {
     };
   }
   return {
-    border: "border-amber-300/25",
-    bg: "from-amber-300/10 to-[#0f1419]",
-    icon: "text-amber-200",
-    labelKey: "billing.payment.hashAutoConfirm",
+    border: "border-[#00ba7c]/35",
+    bg: "from-[#00ba7c]/12 to-[#0f1419]",
+    icon: "text-[#7ee0b5]",
+    labelKey: "billing.payment.autoConfirm",
     descriptionKey: "billing.payment.networkSummary.trc20",
     settlementKey: "billing.payment.hashAutoConfirm",
   };
@@ -84,7 +84,7 @@ export function PaymentMethodPanel({
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-[#71767b]">{t("billing.payment.fields.settlement")}</span>
                     <span className="inline-flex items-center gap-1.5 font-medium text-white">
-                      {pm.networkCode === "TRC20" ? <Clock3 className="size-3.5 text-amber-200" /> : <CheckCircle2 className="size-3.5 text-emerald-300" />}
+                      <CheckCircle2 className="size-3.5 text-emerald-300" />
                       {t(tone.settlementKey)}
                     </span>
                   </div>

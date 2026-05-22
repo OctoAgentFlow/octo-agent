@@ -89,7 +89,7 @@ billing:
     - method: "USDT"
       network: "BEP20"
       chain_id: 56
-      token_address: "0x55d398326f99059fF775485246999027B3197955"
+      token_address: "0x2b4ebe719fef365a5ce75a8032238199eb5ad533"
       receiver_address: "0x0b5ab6edb89677e6fb627715f615d18428a067c0"
       decimals: 18
       is_default: true

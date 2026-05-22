@@ -92,6 +92,26 @@ export type BillingCreateOrderRequest = {
   network: string;
 };
 
+export type BillingQuoteRequest = {
+  plan_code: string;
+  billing_cycle?: "monthly" | "yearly";
+};
+
+export type BillingUpgradeQuoteApi = {
+  current_plan: string;
+  current_billing_cycle: "monthly" | "yearly";
+  target_plan: string;
+  target_billing_cycle: "monthly" | "yearly";
+  original_amount: string;
+  credit_amount: string;
+  payable_amount: string;
+  currency: string;
+  order_type: "new" | "renew" | "upgrade";
+  is_upgrade: boolean;
+  current_expires_at?: string;
+  quote_expires_at?: string;
+};
+
 export type BillingCreateOrderResponse = {
   order_id: string;
   amount: string;
@@ -101,12 +121,17 @@ export type BillingCreateOrderResponse = {
   receiver_address: string;
   expired_at: string;
   status: string;
+  quote?: BillingUpgradeQuoteApi;
 };
 
 export type BillingOrderDetailApi = {
   order_id: string;
   user_id: number;
   amount: string;
+  original_amount?: string;
+  credit_amount?: string;
+  payable_amount?: string;
+  order_type?: string;
   currency: string;
   network: string;
   token_address: string;
@@ -133,6 +158,10 @@ export type BillingOrderListItemApi = {
   plan_code: string;
   billing_cycle: "monthly" | "yearly";
   amount: string;
+  original_amount?: string;
+  credit_amount?: string;
+  payable_amount?: string;
+  order_type?: string;
   currency: string;
   method: string;
   network: string;
@@ -229,6 +258,10 @@ export const billingService = {
   },
   async paymentMethods() {
     const res = await request.get<ApiResponse<BillingPaymentMethodsData>>("/billing/payment-methods");
+    return res.data.data;
+  },
+  async quote(body: BillingQuoteRequest) {
+    const res = await request.post<ApiResponse<BillingUpgradeQuoteApi>>("/billing/quote", body);
     return res.data.data;
   },
   async createOrder(body: BillingCreateOrderRequest) {

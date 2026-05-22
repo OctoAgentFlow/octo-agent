@@ -9,6 +9,13 @@ type BillingOrder struct {
 	PlanCode             string     `gorm:"size:64;index;not null;comment:订阅方案编码" json:"plan_code"`
 	BillingCycle         string     `gorm:"size:16;not null;default:monthly;comment:计费周期（monthly/yearly）" json:"billing_cycle"`
 	Amount               string     `gorm:"size:32;not null;comment:支付金额" json:"amount"`
+	OriginalAmount       string     `gorm:"size:32;comment:目标套餐原价" json:"original_amount,omitempty"`
+	CreditAmount         string     `gorm:"size:32;comment:当前套餐剩余抵扣金额" json:"credit_amount,omitempty"`
+	PayableAmount        string     `gorm:"size:32;comment:本次实际应付金额" json:"payable_amount,omitempty"`
+	OrderType            string     `gorm:"size:32;index;not null;default:new;comment:订单类型（new/renew/upgrade）" json:"order_type,omitempty"`
+	FromPlanCode         string     `gorm:"size:64;comment:升级前订阅方案编码" json:"from_plan_code,omitempty"`
+	FromBillingCycle     string     `gorm:"size:16;comment:升级前计费周期" json:"from_billing_cycle,omitempty"`
+	ProrationSnapshot    string     `gorm:"type:text;comment:升级抵扣计算快照JSON" json:"proration_snapshot,omitempty"`
 	Currency             string     `gorm:"size:16;not null;comment:币种" json:"currency"`
 	Method               string     `gorm:"size:16;not null;comment:支付方式" json:"method"`
 	Network              string     `gorm:"size:16;index;not null;comment:支付网络" json:"network"`

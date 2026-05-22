@@ -9,7 +9,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, broadcastPageRefreshRequest } from "@/lib/app-page-refresh";
 import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
-import { billingService, type BillingCreateOrderResponse } from "@/services/billing.service";
+import { billingService, type BillingCreateOrderResponse, type BillingUpgradeQuoteApi } from "@/services/billing.service";
 import type { BillingCycle, PaymentMethodOption } from "@/types/billing";
 
 const POLL_MS = 3000;
@@ -47,6 +47,9 @@ export function BillingCheckoutDialog({
   const [phase, setPhase] = useState<"pick" | "pay">("pick");
   const [created, setCreated] = useState<BillingCreateOrderResponse | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [quote, setQuote] = useState<BillingUpgradeQuoteApi | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
 
   const options = paymentMethods;
   const selectedNetworkValue = selectedNetwork || defaultNetwork;
@@ -64,6 +67,8 @@ export function BillingCheckoutDialog({
     setPhase("pick");
     setCreated(null);
     setOrderId(null);
+    setQuote(null);
+    setQuoteError("");
   }, []);
 
   const handleOpenChange = useCallback(
@@ -75,6 +80,37 @@ export function BillingCheckoutDialog({
     },
     [onOpenChange, reset]
   );
+
+  useEffect(() => {
+    if (!open || phase !== "pick") return;
+    let cancelled = false;
+    const loadQuote = async () => {
+      setQuoteLoading(true);
+      setQuoteError("");
+      try {
+        const nextQuote = await billingService.quote({
+          plan_code: planCode,
+          billing_cycle: billingCycle,
+        });
+        if (!cancelled) {
+          setQuote(nextQuote);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQuote(null);
+          setQuoteError(error instanceof Error ? error.message : t("billing.checkout.quoteFailed"));
+        }
+      } finally {
+        if (!cancelled) {
+          setQuoteLoading(false);
+        }
+      }
+    };
+    void loadQuote();
+    return () => {
+      cancelled = true;
+    };
+  }, [billingCycle, open, phase, planCode, t]);
 
   useEffect(() => {
     if (!open || !orderId || phase !== "pay") return;
@@ -181,9 +217,11 @@ export function BillingCheckoutDialog({
               </div>
             </div>
           ) : null}
+          <PriceSummary quote={quote} loading={quoteLoading} error={quoteError} />
           <Button
             type="button"
             className="h-11 w-full bg-gradient-to-r from-[#1d9bf0] to-violet-500 text-white hover:opacity-90"
+            disabled={quoteLoading || Boolean(quoteError)}
             onClick={() => void startPay()}
           >
             <QrCode className="size-4" />
@@ -216,6 +254,7 @@ export function BillingCheckoutDialog({
                 <InfoPill label={t("billing.checkout.amount")} value={`${created.amount} ${created.currency}`} />
                 <InfoPill label={t("billing.payment.fields.network")} value={createdMethod ? t(createdMethod.networkKey) : created.network} />
               </div>
+              <PriceSummary quote={created.quote || quote} compact />
               <CopyField
                 label={t("billing.payment.fields.address")}
                 value={created.receiver_address}
@@ -266,6 +305,78 @@ function CheckoutSteps({ phase }: { phase: "pick" | "pay" }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PriceSummary({
+  quote,
+  loading,
+  error,
+  compact = false,
+}: {
+  quote: BillingUpgradeQuoteApi | null;
+  loading?: boolean;
+  error?: string;
+  compact?: boolean;
+}) {
+  const { t } = useT();
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/55">
+        {t("billing.checkout.priceSummary.loading")}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-xs text-rose-100">
+        {error}
+      </div>
+    );
+  }
+  if (!quote) return null;
+
+  const hasCredit = quote.is_upgrade && Number.parseFloat(quote.credit_amount || "0") > 0;
+  return (
+    <div className={`rounded-2xl border border-white/10 bg-white/[0.03] ${compact ? "p-3" : "p-4"}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-white">{t("billing.checkout.priceSummary.title")}</p>
+        {hasCredit ? (
+          <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-xs text-[#7ee0b5]">
+            {t("billing.checkout.priceSummary.upgradeApplied")}
+          </span>
+        ) : null}
+      </div>
+      <div className="space-y-2 text-xs">
+        <PriceRow
+          label={t("billing.checkout.priceSummary.original")}
+          value={`${quote.original_amount} ${quote.currency}`}
+        />
+        {hasCredit ? (
+          <PriceRow
+            label={t("billing.checkout.priceSummary.credit")}
+            value={`-${quote.credit_amount} ${quote.currency}`}
+            valueClassName="text-[#7ee0b5]"
+          />
+        ) : null}
+        <div className="border-t border-white/10 pt-2">
+          <PriceRow
+            label={t("billing.checkout.priceSummary.payable")}
+            value={`${quote.payable_amount} ${quote.currency}`}
+            valueClassName="text-base font-semibold text-white"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriceRow({ label, value, valueClassName = "text-white" }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-white/50">{label}</span>
+      <span className={`shrink-0 whitespace-nowrap font-medium ${valueClassName}`}>{value}</span>
     </div>
   );
 }

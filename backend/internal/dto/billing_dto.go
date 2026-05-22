@@ -147,6 +147,9 @@ type BillingOrderDetailResponse struct {
 	PaidAt               string                  `json:"paid_at,omitempty"`
 	FailureReason        string                  `json:"failure_reason,omitempty"`
 	LastCheckedAt        string                  `json:"last_checked_at,omitempty"`
+	AutoScanStatus       string                  `json:"auto_scan_status,omitempty"`
+	AutoScanSkipReason   string                  `json:"auto_scan_skip_reason,omitempty"`
+	AutoScannedAt        string                  `json:"auto_scanned_at,omitempty"`
 	CanRetry             bool                    `json:"can_retry"`
 	NextAction           string                  `json:"next_action"`
 	ReconciliationStatus string                  `json:"reconciliation_status"`
@@ -176,6 +179,9 @@ type BillingOrderListItem struct {
 	PaidAt               string `json:"paid_at,omitempty"`
 	FailureReason        string `json:"failure_reason,omitempty"`
 	LastCheckedAt        string `json:"last_checked_at,omitempty"`
+	AutoScanStatus       string `json:"auto_scan_status,omitempty"`
+	AutoScanSkipReason   string `json:"auto_scan_skip_reason,omitempty"`
+	AutoScannedAt        string `json:"auto_scanned_at,omitempty"`
 	CanRetry             bool   `json:"can_retry"`
 	NextAction           string `json:"next_action"`
 	ReconciliationStatus string `json:"reconciliation_status"`

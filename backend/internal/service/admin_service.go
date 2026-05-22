@@ -378,6 +378,8 @@ func adminBillingOrdersDTO(orders []model.BillingOrder) []dto.BillingOrderListIt
 			FailureReason:        order.FailureReason,
 			ReconciliationStatus: withDefault(order.ReconciliationStatus, "unchecked"),
 			ReviewStatus:         withDefault(order.ReviewStatus, "unreviewed"),
+			AutoScanStatus:       firstNonEmpty(order.AutoScanStatus, "pending"),
+			AutoScanSkipReason:   order.AutoScanSkipReason,
 			OpsNote:              order.OpsNote,
 			CanRetry:             order.Status == "failed" && time.Now().UTC().Before(order.ExpiredAt),
 			NextAction:           adminBillingNextAction(order),
@@ -387,6 +389,9 @@ func adminBillingOrdersDTO(orders []model.BillingOrder) []dto.BillingOrderListIt
 		}
 		if order.LastCheckedAt != nil {
 			item.LastCheckedAt = order.LastCheckedAt.UTC().Format(time.RFC3339)
+		}
+		if order.AutoScannedAt != nil {
+			item.AutoScannedAt = order.AutoScannedAt.UTC().Format(time.RFC3339)
 		}
 		if order.ReviewedAt != nil {
 			item.ReviewedAt = order.ReviewedAt.UTC().Format(time.RFC3339)

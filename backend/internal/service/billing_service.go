@@ -50,6 +50,12 @@ const (
 	billingReviewUnreviewed = "unreviewed"
 	billingReviewNeeded     = "review_needed"
 	billingReviewReviewed   = "reviewed"
+
+	billingAutoScanPending   = "pending"
+	billingAutoScanScanned   = "scanned"
+	billingAutoScanConfirmed = "confirmed"
+	billingAutoScanSkipped   = "skipped"
+	billingAutoScanFailed    = "failed"
 )
 
 type billingScanGroupKey struct {
@@ -647,6 +653,11 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
 	}
+	out.AutoScanStatus = firstNonEmpty(o.AutoScanStatus, billingAutoScanPending)
+	out.AutoScanSkipReason = o.AutoScanSkipReason
+	if o.AutoScannedAt != nil {
+		out.AutoScannedAt = o.AutoScannedAt.UTC().Format(time.RFC3339)
+	}
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
 	}
@@ -676,6 +687,8 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
 		ReconciliationStatus: billingOrderReconStatus(o),
 		ReviewStatus:         billingOrderReviewStatus(o),
+		AutoScanStatus:       firstNonEmpty(o.AutoScanStatus, billingAutoScanPending),
+		AutoScanSkipReason:   o.AutoScanSkipReason,
 		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
@@ -683,6 +696,9 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	}
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
+	}
+	if o.AutoScannedAt != nil {
+		out.AutoScannedAt = o.AutoScannedAt.UTC().Format(time.RFC3339)
 	}
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
@@ -920,6 +936,7 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 	for _, order := range orders {
 		if strings.TrimSpace(order.Amount) == "" || strings.TrimSpace(order.TokenAddress) == "" || strings.TrimSpace(order.ReceiverAddress) == "" || order.ChainID == 0 {
 			stats.Skipped++
+			s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "missing_payment_metadata", now)
 			continue
 		}
 		groupKey := billingScanGroupKey{
@@ -938,6 +955,17 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 		byGroup[groupKey] = append(byGroup[groupKey], order)
 		byAmount[amountKey] = append(byAmount[amountKey], order)
 	}
+	ambiguousAmountKeys := make(map[billingAmountMatchKey]bool)
+	for amountKey, amountOrders := range byAmount {
+		if len(amountOrders) <= 1 {
+			continue
+		}
+		ambiguousAmountKeys[amountKey] = true
+		for _, order := range amountOrders {
+			stats.Skipped++
+			s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "ambiguous_payment_amount", now)
+		}
+	}
 
 	for groupKey, groupOrders := range byGroup {
 		if len(groupOrders) == 0 {
@@ -946,9 +974,14 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 		events, err := s.scanBillingTransfersForGroup(ctx, groupKey, groupOrders[0])
 		if err != nil {
 			stats.Failed++
+			for _, order := range groupOrders {
+				s.markBillingAutoScan(order.ID, billingAutoScanFailed, sanitizeBillingFailureReason(err.Error()), now)
+			}
 			continue
 		}
 		stats.ScannedEvents += len(events)
+		matchedOrderIDs := make(map[uint]bool)
+		windowMissOrderIDs := make(map[uint]bool)
 		for _, event := range events {
 			amount := amountStringFromMinUnits(event.Amount, groupOrders[0].TokenDecimals)
 			amountKey := billingAmountMatchKey{
@@ -959,32 +992,66 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 				Amount:   amount,
 			}
 			matches := byAmount[amountKey]
+			if ambiguousAmountKeys[amountKey] {
+				continue
+			}
 			if len(matches) != 1 {
-				if len(matches) > 1 {
-					stats.Skipped++
-				}
 				continue
 			}
 			order := matches[0]
 			if !billingTransferWithinOrderWindow(event.BlockTime, order) {
+				windowMissOrderIDs[order.ID] = true
 				continue
 			}
 			normHash, err := normalizeEVMTxHash(event.TxHash)
 			if err != nil {
 				stats.Failed++
+				s.markBillingAutoScan(order.ID, billingAutoScanFailed, "invalid_tx_hash_from_chain", now)
 				continue
 			}
 			if err := s.confirmOnchainOrder(&order, strings.ToUpper(strings.TrimSpace(order.Network)), normHash, false); err != nil {
-				if !errors.Is(err, ErrBillingTxAlreadyUsed) && !errors.Is(err, ErrBillingOrderExpired) {
+				switch {
+				case errors.Is(err, ErrBillingTxAlreadyUsed):
+					stats.Skipped++
+					s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "tx_already_used", now)
+				case errors.Is(err, ErrBillingOrderExpired):
+					stats.Skipped++
+					s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "order_expired", now)
+				default:
 					stats.Failed++
+					s.markBillingAutoScan(order.ID, billingAutoScanFailed, sanitizeBillingFailureReason(err.Error()), now)
 				}
 				continue
 			}
 			stats.Confirmed++
+			matchedOrderIDs[order.ID] = true
 			delete(byAmount, amountKey)
+		}
+		for _, order := range groupOrders {
+			if matchedOrderIDs[order.ID] || ambiguousAmountKeys[billingAmountMatchKey{
+				Network:  groupKey.Network,
+				ChainID:  groupKey.ChainID,
+				Token:    groupKey.Token,
+				Receiver: groupKey.Receiver,
+				Amount:   strings.TrimSpace(order.Amount),
+			}] {
+				continue
+			}
+			if windowMissOrderIDs[order.ID] {
+				s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "transfer_outside_order_window", now)
+			} else {
+				s.markBillingAutoScan(order.ID, billingAutoScanScanned, "no_matching_transfer", now)
+			}
 		}
 	}
 	return stats, nil
+}
+
+func (s *BillingService) markBillingAutoScan(orderID uint, status, reason string, scannedAt time.Time) {
+	if s == nil || s.orderRepo == nil || orderID == 0 {
+		return
+	}
+	_ = s.orderRepo.UpdateAutoScanState(orderID, status, sanitizeBillingFailureReason(reason), scannedAt)
 }
 
 func (s *BillingService) scanBillingTransfersForGroup(ctx context.Context, key billingScanGroupKey, sample model.BillingOrder) ([]billingTransferCandidate, error) {
@@ -1158,6 +1225,9 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 			"paid_at":               paidAt,
 			"failure_reason":        "",
 			"last_checked_at":       paidAt,
+			"auto_scan_status":      billingAutoScanConfirmed,
+			"auto_scan_skip_reason": "",
+			"auto_scanned_at":       paidAt,
 			"reconciliation_status": billingReconMatched,
 			"review_status":         billingReviewReviewed,
 			"reviewed_at":           paidAt,

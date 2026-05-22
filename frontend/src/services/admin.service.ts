@@ -1,5 +1,12 @@
 import { request } from "@/lib/request";
-import type { BillingOrderListItemApi, BillingOpsSummaryApi } from "@/services/billing.service";
+import type {
+  BillingOrderDetailApi,
+  BillingOrderListItemApi,
+  BillingOrderOpsActionRequest,
+  BillingOrderQueryApi,
+  BillingOrdersData,
+  BillingOpsSummaryApi,
+} from "@/services/billing.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -114,6 +121,14 @@ export const adminService = {
   },
   async updateUser(userId: number, body: { role?: string; status?: string }) {
     const res = await request.patch<ApiResponse<AdminUserListItemApi>>(`/admin/users/${userId}`, body);
+    return res.data.data;
+  },
+  async billingOrders(params?: BillingOrderQueryApi) {
+    const res = await request.get<ApiResponse<BillingOrdersData>>("/admin/billing/orders", { params });
+    return res.data.data;
+  },
+  async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {
+    const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/admin/billing/orders/${orderId}/ops-action`, body);
     return res.data.data;
   },
 };

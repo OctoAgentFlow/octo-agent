@@ -197,6 +197,8 @@ type BillingOrderListQuery struct {
 	Status               string `form:"status"`
 	ReconciliationStatus string `form:"reconciliation_status"`
 	ReviewStatus         string `form:"review_status"`
+	AutoScanStatus       string `form:"auto_scan_status"`
+	AutoScanSkipReason   string `form:"auto_scan_skip_reason"`
 	Limit                int    `form:"limit"`
 	Scope                string `form:"scope"`
 }

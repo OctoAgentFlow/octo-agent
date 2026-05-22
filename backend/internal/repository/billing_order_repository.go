@@ -16,6 +16,8 @@ type BillingOrderListQuery struct {
 	Status               string
 	ReconciliationStatus string
 	ReviewStatus         string
+	AutoScanStatus       string
+	AutoScanSkipReason   string
 	Limit                int
 	AllUsers             bool
 }
@@ -75,6 +77,12 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 	}
 	if v := cleanBillingFilter(q.ReviewStatus); v != "" {
 		db = db.Where("review_status = ?", v)
+	}
+	if v := cleanBillingFilter(q.AutoScanStatus); v != "" {
+		db = db.Where("auto_scan_status = ?", v)
+	}
+	if v := cleanBillingFilter(q.AutoScanSkipReason); v != "" {
+		db = db.Where("auto_scan_skip_reason = ?", v)
 	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {

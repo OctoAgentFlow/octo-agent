@@ -920,9 +920,6 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 		return stats, nil
 	}
 	now := time.Now().UTC()
-	if err := s.orderRepo.ExpireStale(now); err != nil {
-		return stats, err
-	}
 	limit := s.cfg.Billing.Scanner.MaxOrdersPerTick
 	orders, err := s.orderRepo.ListPendingForAutoConfirm(now, limit)
 	if err != nil {
@@ -930,7 +927,7 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 	}
 	stats.ScannedOrders = len(orders)
 	if len(orders) == 0 {
-		return stats, nil
+		return stats, s.orderRepo.ExpireStale(now)
 	}
 
 	byGroup := make(map[billingScanGroupKey][]model.BillingOrder)
@@ -1011,7 +1008,7 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 				s.markBillingAutoScan(order.ID, billingAutoScanFailed, "invalid_tx_hash_from_chain", now)
 				continue
 			}
-			if err := s.confirmOnchainOrder(&order, strings.ToUpper(strings.TrimSpace(order.Network)), normHash, false); err != nil {
+			if err := s.confirmScannedOnchainOrder(&order, strings.ToUpper(strings.TrimSpace(order.Network)), normHash, event.BlockTime); err != nil {
 				switch {
 				case errors.Is(err, ErrBillingTxAlreadyUsed):
 					stats.Skipped++
@@ -1045,6 +1042,9 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 				s.markBillingAutoScan(order.ID, billingAutoScanScanned, "no_matching_transfer", now)
 			}
 		}
+	}
+	if err := s.orderRepo.ExpireStale(now); err != nil {
+		return stats, err
 	}
 	return stats, nil
 }
@@ -1112,6 +1112,23 @@ func billingTransferWithinOrderWindow(blockTime time.Time, order model.BillingOr
 }
 
 func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, normHash string, markFailure bool) error {
+	return s.confirmOnchainOrderWithOptions(order, net, normHash, billingConfirmOptions{MarkFailure: markFailure})
+}
+
+type billingConfirmOptions struct {
+	MarkFailure  bool
+	AllowExpired bool
+	PaidAt       time.Time
+}
+
+func (s *BillingService) confirmScannedOnchainOrder(order *model.BillingOrder, net, normHash string, paidAt time.Time) error {
+	return s.confirmOnchainOrderWithOptions(order, net, normHash, billingConfirmOptions{
+		AllowExpired: true,
+		PaidAt:       paidAt,
+	})
+}
+
+func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrder, net, normHash string, opts billingConfirmOptions) error {
 	if strings.ToUpper(strings.TrimSpace(order.Network)) != net {
 		return fmt.Errorf("network does not match order")
 	}
@@ -1120,14 +1137,17 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 	if order.Status == "paid" {
 		return nil
 	}
-	if order.Status == "expired" {
+	if order.Status == "expired" && !opts.AllowExpired {
 		return ErrBillingOrderExpired
 	}
-	if order.Status != "pending" && order.Status != "failed" {
+	if order.Status != "pending" && order.Status != "failed" && !(opts.AllowExpired && order.Status == "expired") {
 		return fmt.Errorf("order not pending")
 	}
-	if now.After(order.ExpiredAt) {
+	if now.After(order.ExpiredAt) && !opts.AllowExpired {
 		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
+		return ErrBillingOrderExpired
+	}
+	if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, *order) {
 		return ErrBillingOrderExpired
 	}
 
@@ -1173,7 +1193,7 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		})
 	}
 	if verifyErr != nil {
-		if markFailure {
+		if opts.MarkFailure {
 			_ = s.orderRepo.MarkFailed(order.ID, normHash, sanitizeBillingFailureReason(fmt.Sprintf("transfer verification failed: %v", verifyErr)), time.Now().UTC())
 		}
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
@@ -1187,11 +1207,11 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		if ord.Status == "paid" {
 			return nil
 		}
-		if ord.Status != "pending" && ord.Status != "failed" {
+		if ord.Status != "pending" && ord.Status != "failed" && !(opts.AllowExpired && ord.Status == "expired") {
 			return fmt.Errorf("order not pending")
 		}
 		tnow := time.Now().UTC()
-		if tnow.After(ord.ExpiredAt) {
+		if tnow.After(ord.ExpiredAt) && !opts.AllowExpired {
 			_ = tx.Model(&model.BillingOrder{}).Where("id = ?", ord.ID).Updates(map[string]any{
 				"status":                "expired",
 				"failure_reason":        "order expired before payment confirmation",
@@ -1200,6 +1220,9 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 				"review_status":         billingReviewNeeded,
 				"ops_note":              "Order expired before payment confirmation.",
 			})
+			return ErrBillingOrderExpired
+		}
+		if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, ord) {
 			return ErrBillingOrderExpired
 		}
 
@@ -1221,7 +1244,14 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		}
 
 		paidAt := time.Now().UTC()
-		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, []string{"pending", "failed"}).Updates(map[string]any{
+		if !opts.PaidAt.IsZero() {
+			paidAt = opts.PaidAt.UTC()
+		}
+		allowedStatuses := []string{"pending", "failed"}
+		if opts.AllowExpired {
+			allowedStatuses = append(allowedStatuses, "expired")
+		}
+		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, allowedStatuses).Updates(map[string]any{
 			"status":                "paid",
 			"tx_hash":               normHash,
 			"paid_at":               paidAt,

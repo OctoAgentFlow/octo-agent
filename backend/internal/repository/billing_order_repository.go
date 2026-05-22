@@ -36,6 +36,8 @@ type BillingOrderOpsSummary struct {
 	Reviewed     int64
 }
 
+const billingAutoConfirmExpiredScanGrace = 24 * time.Hour
+
 func NewBillingOrderRepository(db *gorm.DB) *BillingOrderRepository {
 	return &BillingOrderRepository{DB: db}
 }
@@ -102,7 +104,7 @@ func (r *BillingOrderRepository) ListPendingForAutoConfirm(now time.Time, limit 
 	}
 	var orders []model.BillingOrder
 	err := r.DB.
-		Where("status IN ? AND expired_at > ?", []string{"pending", "failed"}, now).
+		Where("status IN ? AND expired_at > ?", []string{"pending", "failed", "expired"}, now.Add(-billingAutoConfirmExpiredScanGrace)).
 		Order("id ASC").
 		Limit(limit).
 		Find(&orders).Error

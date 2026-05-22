@@ -870,7 +870,15 @@ export const dict: I18nDict = {
   "billing.checkout.networkLabel": "ネットワーク",
   "billing.checkout.continue": "注文を作成してアドレスを表示",
   "billing.checkout.amount": "金額",
+  "billing.checkout.availableNetwork": "利用可能なネットワーク",
+  "billing.checkout.qrAlt": "受取アドレス QR コード",
+  "billing.checkout.qrHint": "QR コードは選択したネットワークの受取ウォレットアドレスです。ウォレットで一致する USDT ネットワークを選んで送金してください。",
+  "billing.checkout.copy": "コピー",
+  "billing.checkout.copied": "コピーしました。",
+  "billing.checkout.copyFailed": "コピーに失敗しました。手動でコピーしてください。",
+  "billing.checkout.tronReviewHint": "TRC20 注文は Tx ハッシュ提出後に手動確認へ進みます。TRON の自動確認はまだ有効ではありません。",
   "billing.checkout.pollingHint": "オンチェーン確認を待っています…",
+  "billing.checkout.tronPollingHint": "TRC20 送金後、支払い履歴で Tx ハッシュを提出してください。運営確認後に有効化されます。",
 
   "errors.subscriptionExpired": "サブスクリプションの期限が切れました。課金ページを開きます。",
 
@@ -928,6 +936,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "新しい注文を作成",
   "billing.history.nextAction.submit_correct_tx_hash": "正しいハッシュを送信",
   "billing.history.nextAction.submit_tx_hash_or_wait": "確認待ち",
+  "billing.history.nextAction.manual_review_pending": "手動確認待ち",
   "billing.history.nextAction.contact_support": "サポートに連絡",
 
   // accounts

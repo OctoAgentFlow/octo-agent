@@ -377,6 +377,9 @@ func canRetryBillingOrder(o *model.BillingOrder, now time.Time) bool {
 		return false
 	}
 	st := strings.ToLower(strings.TrimSpace(o.Status))
+	if st == "pending" && billingOrderReviewStatus(o) == billingReviewNeeded && strings.TrimSpace(o.TxHash) != "" {
+		return false
+	}
 	return (st == "pending" || st == "failed") && now.Before(o.ExpiredAt)
 }
 
@@ -392,6 +395,8 @@ func billingOrderNextAction(o *model.BillingOrder, now time.Time) string {
 		return "create_new_order"
 	case st == "failed":
 		return "submit_correct_tx_hash"
+	case st == "pending" && billingOrderReviewStatus(o) == billingReviewNeeded && strings.TrimSpace(o.TxHash) != "":
+		return "manual_review_pending"
 	case st == "pending":
 		return "submit_tx_hash_or_wait"
 	default:
@@ -571,6 +576,15 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		return ErrBillingTxAlreadyUsed
 	}
 
+	if isManualReviewPaymentNetwork(order.Network) {
+		return s.orderRepo.MarkNeedsReview(
+			order.ID,
+			normHash,
+			"TRC20 payment tx submitted. Manual verification is required because TRON transfer verification is not automated yet.",
+			now,
+		)
+	}
+
 	rpcKey := fmt.Sprintf("%d", order.ChainID)
 	rpcURL := s.cfg.Billing.RpcURLs[rpcKey]
 	if rpcURL == "" {
@@ -681,6 +695,15 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 			"subscription_expires_at": expires,
 		}).Error
 	})
+}
+
+func isManualReviewPaymentNetwork(network string) bool {
+	switch strings.ToUpper(strings.TrimSpace(network)) {
+	case "TRC20":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeBillingFailureReason(reason string) string {

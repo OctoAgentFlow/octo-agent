@@ -1288,7 +1288,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "升级",
 
   "billing.payment.title": "支付方式",
-  "billing.payment.description": "使用 USDT 支付，创建订单并完成链上确认后，订阅会自动生效。",
+  "billing.payment.description": "支持 BEP20、ERC20 和 TRC20 USDT 支付。BSC/ETH 可自动链上确认，TRC20 到账后进入人工核验。",
   "billing.payment.empty": "还没有可用的支付方式。",
   "billing.checkout.createOrderFailed": "创建订单失败。",
   "billing.payment.fields.method": "方式",
@@ -1307,11 +1307,19 @@ export const dict: I18nDict = {
   "billing.payment.successToast": "支付已确认，订阅已生效。",
   "billing.checkout.title": "USDT 支付",
   "billing.checkout.pickNetwork": "选择网络并创建订单。",
-  "billing.checkout.sendUsdt": "请向下方地址转入准确金额，系统将自动轮询链上确认。",
+  "billing.checkout.sendUsdt": "请向下方地址转入准确金额，并确认网络与代币合约一致。",
   "billing.checkout.networkLabel": "网络",
   "billing.checkout.continue": "创建订单并显示地址",
   "billing.checkout.amount": "金额",
-  "billing.checkout.pollingHint": "正在等待链上确认… 可保持此窗口打开。",
+  "billing.checkout.availableNetwork": "可用网络",
+  "billing.checkout.qrAlt": "收款地址二维码",
+  "billing.checkout.qrHint": "二维码内容为当前网络的收款钱包地址，请在钱包中选择对应 USDT 网络后转账。",
+  "billing.checkout.copy": "复制",
+  "billing.checkout.copied": "已复制。",
+  "billing.checkout.copyFailed": "复制失败，请手动复制。",
+  "billing.checkout.tronReviewHint": "TRC20 订单提交交易哈希后会进入人工核验，暂不自动链上确认。",
+  "billing.checkout.pollingHint": "BSC/ETH 订单正在等待链上确认… 可保持此窗口打开。",
+  "billing.checkout.tronPollingHint": "TRC20 转账完成后，请在支付记录中提交交易哈希，运营核验后订阅生效。",
 
   "errors.subscriptionExpired": "订阅已过期，正在打开账单页以便续费。",
 
@@ -1369,6 +1377,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "重新下单",
   "billing.history.nextAction.submit_correct_tx_hash": "补交正确哈希",
   "billing.history.nextAction.submit_tx_hash_or_wait": "等待确认",
+  "billing.history.nextAction.manual_review_pending": "人工核验中",
   "billing.history.nextAction.contact_support": "联系支持",
 
   // accounts

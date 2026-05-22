@@ -194,6 +194,18 @@ func (r *BillingOrderRepository) MarkFailed(id uint, txHash, reason string, chec
 	}).Error
 }
 
+func (r *BillingOrderRepository) MarkNeedsReview(id uint, txHash, note string, checkedAt time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
+		"status":                "pending",
+		"tx_hash":               txHash,
+		"failure_reason":        "",
+		"last_checked_at":       checkedAt,
+		"reconciliation_status": "needs_review",
+		"review_status":         "review_needed",
+		"ops_note":              note,
+	}).Error
+}
+
 func (r *BillingOrderRepository) MarkPaid(id uint, txHash string, paidAt time.Time) error {
 	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
 		"status":                "paid",

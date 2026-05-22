@@ -71,6 +71,8 @@ export type PaymentMethodOption = {
   networkKey: string;
   /** API value e.g. BEP20 — used when creating orders */
   networkCode: string;
+  receiverAddress: string;
+  tokenAddress: string;
   receiverMasked: string;
   tokenMasked: string;
   chainId: number;

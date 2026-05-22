@@ -79,7 +79,7 @@ billing:
       network: "BEP20"
       chain_id: 56
       token_address: "0x55d398326f99059fF775485246999027B3197955"
-      receiver_address: "TODO_TEST_RECEIVER_ADDRESS"
+      receiver_address: "0x0b5ab6edb89677e6fb627715f615d18428a067c0"
       decimals: 18
       is_default: true
       note: "推荐使用 BEP20，手续费更低"
@@ -87,10 +87,18 @@ billing:
       network: "ERC20"
       chain_id: 1
       token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-      receiver_address: "TODO_TEST_RECEIVER_ADDRESS"
+      receiver_address: "0x0b5ab6edb89677e6fb627715f615d18428a067c0"
       decimals: 6
       is_default: false
       note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
+      receiver_address: "TR4vMB8o5rA3KXTN1QLxewgPeuh9RhmAuX"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；到账需要人工核验"
   plans:
     basic_monthly:
       name: "Basic"

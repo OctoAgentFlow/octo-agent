@@ -648,8 +648,9 @@ function BillingSection({
                   {t("admin.billing.orderLine", { orderId: order.order_id, userId: order.user_id })}
                 </p>
                 <p className="mt-1 break-words text-[#71767b]">
-                  {planLabel(order.plan_code, t)} · {order.amount} {order.currency} · {order.network} · {formatDate(order.created_at)}
+                  {planLabel(order.plan_code, t)} · {order.payable_amount || order.amount} {order.currency} · {order.network} · {formatDate(order.created_at)}
                 </p>
+                {hasOrderUpgradeCredit(order) ? <AdminProrationBreakdown order={order} /> : null}
                 {order.tx_hash ? <p className="mt-1 break-all font-mono text-xs text-[#71767b]">{order.tx_hash}</p> : null}
               </div>
               <div className="flex flex-wrap items-center gap-2 xl:justify-end">
@@ -682,6 +683,38 @@ function BillingSection({
           {overview.recent_orders.length === 0 ? <p className="py-8 text-center text-sm text-[#71767b]">{t("admin.billing.empty")}</p> : null}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function hasOrderUpgradeCredit(order: AdminOverviewApi["recent_orders"][number]) {
+  return order.order_type === "upgrade" && Number.parseFloat(order.credit_amount || "0") > 0;
+}
+
+function AdminProrationBreakdown({ order }: { order: AdminOverviewApi["recent_orders"][number] }) {
+  const { t } = useT();
+  return (
+    <div className="mt-3 grid gap-2 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/5 p-3 text-xs sm:grid-cols-3">
+      <AdminAmountLine label={t("billing.history.proration.original")} value={`${order.original_amount} ${order.currency}`} />
+      <AdminAmountLine
+        label={t("billing.history.proration.credit")}
+        value={`-${order.credit_amount} ${order.currency}`}
+        valueClassName="text-[#7ee0b5]"
+      />
+      <AdminAmountLine
+        label={t("billing.history.proration.payable")}
+        value={`${order.payable_amount || order.amount} ${order.currency}`}
+        valueClassName="text-white"
+      />
+    </div>
+  );
+}
+
+function AdminAmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[#71767b]">{label}</div>
+      <div className={`mt-1 whitespace-nowrap font-semibold ${valueClassName}`}>{value}</div>
     </div>
   );
 }

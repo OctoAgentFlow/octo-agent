@@ -42,6 +42,10 @@ function formatCheckedAt(value: string) {
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function hasUpgradeCredit(record: PaymentRecord) {
+  return record.orderType === "upgrade" && Number.parseFloat(record.creditAmount || "0") > 0;
+}
+
 type OpsInputState = {
   opsNote: string;
 };
@@ -226,7 +230,12 @@ export function PaymentHistoryTable({
                           </div>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3">{record.amount}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-white">{record.amount}</div>
+                        {hasUpgradeCredit(record) ? (
+                          <div className="mt-1 text-xs text-[#00ba7c]">{t("billing.history.proration.applied")}</div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-3">
                         {t(record.methodKey)} / {record.network}
                       </td>
@@ -254,6 +263,7 @@ export function PaymentHistoryTable({
                       <td className="px-3 py-3" colSpan={colSpan}>
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
                           <div className="space-y-2">
+                            {hasUpgradeCredit(record) ? <ProrationBreakdown record={record} /> : null}
                             {canOperateBilling && record.failureReason ? (
                               <p className="text-xs text-[#f6d96b]">
                                 {t("billing.history.failureReason")}: {record.failureReason}
@@ -348,5 +358,33 @@ export function PaymentHistoryTable({
         </table>
       </div>
     </SectionCard>
+  );
+}
+
+function ProrationBreakdown({ record }: { record: PaymentRecord }) {
+  const { t } = useT();
+  return (
+    <div className="grid gap-2 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/5 p-3 text-xs sm:grid-cols-3">
+      <AmountLine label={t("billing.history.proration.original")} value={`${record.originalAmount} ${record.currency}`} />
+      <AmountLine
+        label={t("billing.history.proration.credit")}
+        value={`-${record.creditAmount} ${record.currency}`}
+        valueClassName="text-[#7ee0b5]"
+      />
+      <AmountLine
+        label={t("billing.history.proration.payable")}
+        value={`${record.payableAmount} ${record.currency}`}
+        valueClassName="text-white"
+      />
+    </div>
+  );
+}
+
+function AmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[#71767b]">{label}</div>
+      <div className={`mt-1 whitespace-nowrap font-semibold ${valueClassName}`}>{value}</div>
+    </div>
   );
 }

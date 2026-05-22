@@ -113,6 +113,11 @@ export type PaymentRecord = {
   date: string;
   planKey: string;
   amount: string;
+  originalAmount: string;
+  creditAmount: string;
+  payableAmount: string;
+  orderType: string;
+  currency: string;
   methodKey: string;
   network: string;
   status: PaymentStatus;

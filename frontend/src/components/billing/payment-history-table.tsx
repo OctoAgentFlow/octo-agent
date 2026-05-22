@@ -116,13 +116,26 @@ export function PaymentHistoryTable({
   const summaryItems = [
     { key: "billing.history.summary.total", value: opsSummary.total },
     { key: "billing.history.summary.pending", value: opsSummary.pending },
-    { key: "billing.history.summary.failed", value: opsSummary.failed },
-    { key: "billing.history.summary.reviewNeeded", value: opsSummary.review_needed },
-    { key: "billing.history.summary.mismatch", value: opsSummary.mismatch },
+    ...(canOperateBilling
+      ? [
+          { key: "billing.history.summary.failed", value: opsSummary.failed },
+          { key: "billing.history.summary.reviewNeeded", value: opsSummary.review_needed },
+          { key: "billing.history.summary.mismatch", value: opsSummary.mismatch },
+        ]
+      : [
+          { key: "billing.history.summary.paid", value: opsSummary.paid },
+          { key: "billing.history.summary.failed", value: opsSummary.failed },
+          { key: "billing.history.summary.expired", value: opsSummary.expired },
+        ]),
   ];
+  const colSpan = canOperateBilling ? 8 : 7;
 
   return (
-    <SectionCard className="bg-[#0f1419]" title={t("billing.history.title")} description={t("billing.history.description")}>
+    <SectionCard
+      className="bg-[#0f1419]"
+      title={t("billing.history.title")}
+      description={t(canOperateBilling ? "billing.history.adminDescription" : "billing.history.userDescription")}
+    >
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {summaryItems.map((item) => (
           <div key={item.key} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
@@ -132,7 +145,7 @@ export function PaymentHistoryTable({
         ))}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className={`mt-4 grid gap-3 ${canOperateBilling ? "md:grid-cols-3" : "md:grid-cols-1"}`}>
         {canOperateBilling ? (
           <label className="space-y-1 text-xs text-[#71767b]">
             <span>{t("billing.history.filters.scope")}</span>
@@ -160,25 +173,27 @@ export function PaymentHistoryTable({
             <option value="expired">{t("billing.history.status.expired")}</option>
           </select>
         </label>
-        <label className="space-y-1 text-xs text-[#71767b]">
-          <span>{t("billing.history.filters.review")}</span>
-          <select
-            className="form-input h-9 py-0"
-            value={filters.reviewStatus}
-            onChange={(event) =>
-              updateFilter({ reviewStatus: event.target.value as BillingOrderFilterState["reviewStatus"] })
-            }
-          >
-            <option value="all">{t("billing.history.filters.all")}</option>
-            <option value="unreviewed">{t("billing.history.review.unreviewed")}</option>
-            <option value="review_needed">{t("billing.history.review.review_needed")}</option>
-            <option value="reviewed">{t("billing.history.review.reviewed")}</option>
-          </select>
-        </label>
+        {canOperateBilling ? (
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("billing.history.filters.review")}</span>
+            <select
+              className="form-input h-9 py-0"
+              value={filters.reviewStatus}
+              onChange={(event) =>
+                updateFilter({ reviewStatus: event.target.value as BillingOrderFilterState["reviewStatus"] })
+              }
+            >
+              <option value="all">{t("billing.history.filters.all")}</option>
+              <option value="unreviewed">{t("billing.history.review.unreviewed")}</option>
+              <option value="review_needed">{t("billing.history.review.review_needed")}</option>
+              <option value="reviewed">{t("billing.history.review.reviewed")}</option>
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-sm">
+        <table className={`w-full text-left text-sm ${canOperateBilling ? "min-w-[980px]" : "min-w-[820px]"}`}>
           <thead className="text-[#71767b]">
             <tr className="border-b border-[#2f3336]">
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.date")}</th>
@@ -186,7 +201,7 @@ export function PaymentHistoryTable({
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.amount")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.method")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.status")}</th>
-              <th className="px-3 py-2 font-medium">{t("billing.history.columns.ops")}</th>
+              {canOperateBilling ? <th className="px-3 py-2 font-medium">{t("billing.history.columns.ops")}</th> : null}
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.txHash")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.action")}</th>
             </tr>
@@ -194,7 +209,7 @@ export function PaymentHistoryTable({
           <tbody className="text-[#e7e9ea]">
             {paymentRecords.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center text-sm text-[#71767b]" colSpan={8}>
+                <td className="px-3 py-6 text-center text-sm text-[#71767b]" colSpan={colSpan}>
                   {t("billing.history.empty")}
                 </td>
               </tr>
@@ -220,23 +235,25 @@ export function PaymentHistoryTable({
                       <td className="px-3 py-3">
                         <Badge variant={statusVariant(record.status)}>{t(`billing.history.status.${record.status}`)}</Badge>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <Badge variant={record.reconciliationStatus === "mismatch" ? "danger" : "info"}>
-                            {t(`billing.history.reconciliation.${record.reconciliationStatus}`)}
-                          </Badge>
-                          <Badge variant={reviewVariant(record.reviewStatus)}>
-                            {t(`billing.history.review.${record.reviewStatus}`)}
-                          </Badge>
-                        </div>
-                      </td>
+                      {canOperateBilling ? (
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant={record.reconciliationStatus === "mismatch" ? "danger" : "info"}>
+                              {t(`billing.history.reconciliation.${record.reconciliationStatus}`)}
+                            </Badge>
+                            <Badge variant={reviewVariant(record.reviewStatus)}>
+                              {t(`billing.history.review.${record.reviewStatus}`)}
+                            </Badge>
+                          </div>
+                        </td>
+                      ) : null}
                       <td className="px-3 py-3 font-mono text-xs text-[#71767b]">{maskHash(record.txHash)}</td>
                       <td className="px-3 py-3 text-xs text-[#71767b]">
                         {record.canRetry ? t("billing.history.action.submitTx") : t(`billing.history.nextAction.${record.nextAction}`)}
                       </td>
                     </tr>
                     <tr className="border-b border-[#2f3336] bg-black">
-                      <td className="px-3 py-3" colSpan={8}>
+                      <td className="px-3 py-3" colSpan={colSpan}>
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
                           <div className="space-y-2">
                             {record.failureReason ? (
@@ -244,7 +261,7 @@ export function PaymentHistoryTable({
                                 {t("billing.history.failureReason")}: {record.failureReason}
                               </p>
                             ) : null}
-                            {record.opsNote ? (
+                            {canOperateBilling && record.opsNote ? (
                               <p className="text-xs text-[#71767b]">
                                 {t("billing.history.opsNote")}: {record.opsNote}
                               </p>
@@ -254,7 +271,7 @@ export function PaymentHistoryTable({
                                 {t("billing.history.lastCheckedAt")}: {formatCheckedAt(record.lastCheckedAt)}
                               </p>
                             ) : null}
-                            {record.lastAuditAction ? (
+                            {canOperateBilling && record.lastAuditAction ? (
                               <p className="text-xs text-[#71767b]">
                                 {t("billing.history.audit.last")}: {t(`billing.history.audit.action.${record.lastAuditAction}`)}
                                 {record.lastAuditOperatorId ? ` · ${t("billing.history.audit.operator")} #${record.lastAuditOperatorId}` : ""}

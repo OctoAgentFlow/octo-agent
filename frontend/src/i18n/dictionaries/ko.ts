@@ -898,6 +898,8 @@ export const dict: I18nDict = {
 
   "billing.history.title": "결제 내역",
   "billing.history.description": "워크스페이스의 최근 결제 기록입니다.",
+  "billing.history.userDescription": "Review your recent payment orders, transaction hashes, and confirmation status.",
+  "billing.history.adminDescription": "Review payment orders, reconciliation status, and operations handling records.",
   "billing.history.columns.date": "날짜",
   "billing.history.columns.plan": "플랜",
   "billing.history.columns.amount": "금액",
@@ -909,7 +911,9 @@ export const dict: I18nDict = {
   "billing.history.empty": "아직 결제 내역이 없습니다.",
   "billing.history.summary.total": "전체",
   "billing.history.summary.pending": "대기",
+  "billing.history.summary.paid": "Paid",
   "billing.history.summary.failed": "실패",
+  "billing.history.summary.expired": "Expired",
   "billing.history.summary.reviewNeeded": "검토 필요",
   "billing.history.summary.mismatch": "불일치",
   "billing.history.filters.status": "결제 상태",

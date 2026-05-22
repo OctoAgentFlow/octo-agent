@@ -898,6 +898,8 @@ export const dict: I18nDict = {
 
   "billing.history.title": "История платежей",
   "billing.history.description": "Недавние платежи для вашей рабочей области.",
+  "billing.history.userDescription": "Review your recent payment orders, transaction hashes, and confirmation status.",
+  "billing.history.adminDescription": "Review payment orders, reconciliation status, and operations handling records.",
   "billing.history.columns.date": "Дата",
   "billing.history.columns.plan": "План",
   "billing.history.columns.amount": "Сумма",
@@ -909,7 +911,9 @@ export const dict: I18nDict = {
   "billing.history.empty": "Истории платежей пока нет.",
   "billing.history.summary.total": "Всего",
   "billing.history.summary.pending": "Ожидает",
+  "billing.history.summary.paid": "Paid",
   "billing.history.summary.failed": "Ошибки",
+  "billing.history.summary.expired": "Expired",
   "billing.history.summary.reviewNeeded": "Нужна проверка",
   "billing.history.summary.mismatch": "Несовпадения",
   "billing.history.filters.status": "Статус платежа",

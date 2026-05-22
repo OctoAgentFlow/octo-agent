@@ -1339,6 +1339,8 @@ export const dict: I18nDict = {
 
   "billing.history.title": "支付记录",
   "billing.history.description": "工作空间的近期计费记录。",
+  "billing.history.userDescription": "查看你的近期支付订单、交易哈希和确认状态。",
+  "billing.history.adminDescription": "查看支付订单、对账状态和运营处理记录。",
   "billing.history.columns.date": "日期",
   "billing.history.columns.plan": "方案",
   "billing.history.columns.amount": "金额",
@@ -1350,7 +1352,9 @@ export const dict: I18nDict = {
   "billing.history.empty": "暂无支付记录。",
   "billing.history.summary.total": "总订单",
   "billing.history.summary.pending": "待确认",
+  "billing.history.summary.paid": "已支付",
   "billing.history.summary.failed": "失败",
+  "billing.history.summary.expired": "已过期",
   "billing.history.summary.reviewNeeded": "待审核",
   "billing.history.summary.mismatch": "对账异常",
   "billing.history.filters.status": "支付状态",

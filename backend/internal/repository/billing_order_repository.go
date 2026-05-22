@@ -88,6 +88,19 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 	return orders, total, err
 }
 
+func (r *BillingOrderRepository) ListPendingForAutoConfirm(now time.Time, limit int) ([]model.BillingOrder, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var orders []model.BillingOrder
+	err := r.DB.
+		Where("status IN ? AND expired_at > ?", []string{"pending", "failed"}, now).
+		Order("id ASC").
+		Limit(limit).
+		Find(&orders).Error
+	return orders, err
+}
+
 func (r *BillingOrderRepository) OpsSummary(userID uint, allUsers bool) (BillingOrderOpsSummary, error) {
 	var rows []model.BillingOrder
 	db := r.DB.Select("status, reconciliation_status, review_status")

@@ -33,6 +33,14 @@ type BillingService struct {
 	cfg         *config.Config
 }
 
+type BillingAutoConfirmStats struct {
+	ScannedOrders int
+	ScannedEvents int
+	Confirmed     int
+	Skipped       int
+	Failed        int
+}
+
 const (
 	billingReconUnchecked   = "unchecked"
 	billingReconMatched     = "matched"
@@ -43,6 +51,27 @@ const (
 	billingReviewNeeded     = "review_needed"
 	billingReviewReviewed   = "reviewed"
 )
+
+type billingScanGroupKey struct {
+	Network  string
+	ChainID  int64
+	Token    string
+	Receiver string
+}
+
+type billingAmountMatchKey struct {
+	Network  string
+	ChainID  int64
+	Token    string
+	Receiver string
+	Amount   string
+}
+
+type billingTransferCandidate struct {
+	TxHash    string
+	Amount    *big.Int
+	BlockTime time.Time
+}
 
 type billingQuoteCalc struct {
 	dto                dto.BillingUpgradeQuote
@@ -145,6 +174,17 @@ func (s *BillingService) PaymentMethods(_ uint) *dto.BillingPaymentMethodsRespon
 		})
 	}
 	return &dto.BillingPaymentMethodsResponse{Items: out}
+}
+
+func (s *BillingService) AutoConfirmInterval() time.Duration {
+	if s == nil || s.cfg == nil || !s.cfg.Billing.Scanner.Enabled {
+		return 0
+	}
+	seconds := s.cfg.Billing.Scanner.IntervalSeconds
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.BillingUpgradeQuote, error) {
@@ -854,6 +894,152 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 		return err
 	}
 	return s.confirmOnchainOrder(order, net, normHash, false)
+}
+
+func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingAutoConfirmStats, error) {
+	var stats BillingAutoConfirmStats
+	if s == nil || s.orderRepo == nil || s.cfg == nil || !s.cfg.Billing.Scanner.Enabled {
+		return stats, nil
+	}
+	now := time.Now().UTC()
+	if err := s.orderRepo.ExpireStale(now); err != nil {
+		return stats, err
+	}
+	limit := s.cfg.Billing.Scanner.MaxOrdersPerTick
+	orders, err := s.orderRepo.ListPendingForAutoConfirm(now, limit)
+	if err != nil {
+		return stats, err
+	}
+	stats.ScannedOrders = len(orders)
+	if len(orders) == 0 {
+		return stats, nil
+	}
+
+	byGroup := make(map[billingScanGroupKey][]model.BillingOrder)
+	byAmount := make(map[billingAmountMatchKey][]model.BillingOrder)
+	for _, order := range orders {
+		if strings.TrimSpace(order.Amount) == "" || strings.TrimSpace(order.TokenAddress) == "" || strings.TrimSpace(order.ReceiverAddress) == "" || order.ChainID == 0 {
+			stats.Skipped++
+			continue
+		}
+		groupKey := billingScanGroupKey{
+			Network:  strings.ToUpper(strings.TrimSpace(order.Network)),
+			ChainID:  order.ChainID,
+			Token:    strings.ToLower(strings.TrimSpace(order.TokenAddress)),
+			Receiver: strings.ToLower(strings.TrimSpace(order.ReceiverAddress)),
+		}
+		amountKey := billingAmountMatchKey{
+			Network:  groupKey.Network,
+			ChainID:  groupKey.ChainID,
+			Token:    groupKey.Token,
+			Receiver: groupKey.Receiver,
+			Amount:   strings.TrimSpace(order.Amount),
+		}
+		byGroup[groupKey] = append(byGroup[groupKey], order)
+		byAmount[amountKey] = append(byAmount[amountKey], order)
+	}
+
+	for groupKey, groupOrders := range byGroup {
+		if len(groupOrders) == 0 {
+			continue
+		}
+		events, err := s.scanBillingTransfersForGroup(ctx, groupKey, groupOrders[0])
+		if err != nil {
+			stats.Failed++
+			continue
+		}
+		stats.ScannedEvents += len(events)
+		for _, event := range events {
+			amount := amountStringFromMinUnits(event.Amount, groupOrders[0].TokenDecimals)
+			amountKey := billingAmountMatchKey{
+				Network:  groupKey.Network,
+				ChainID:  groupKey.ChainID,
+				Token:    groupKey.Token,
+				Receiver: groupKey.Receiver,
+				Amount:   amount,
+			}
+			matches := byAmount[amountKey]
+			if len(matches) != 1 {
+				if len(matches) > 1 {
+					stats.Skipped++
+				}
+				continue
+			}
+			order := matches[0]
+			if !billingTransferWithinOrderWindow(event.BlockTime, order) {
+				continue
+			}
+			normHash, err := normalizeEVMTxHash(event.TxHash)
+			if err != nil {
+				stats.Failed++
+				continue
+			}
+			if err := s.confirmOnchainOrder(&order, strings.ToUpper(strings.TrimSpace(order.Network)), normHash, false); err != nil {
+				if !errors.Is(err, ErrBillingTxAlreadyUsed) && !errors.Is(err, ErrBillingOrderExpired) {
+					stats.Failed++
+				}
+				continue
+			}
+			stats.Confirmed++
+			delete(byAmount, amountKey)
+		}
+	}
+	return stats, nil
+}
+
+func (s *BillingService) scanBillingTransfersForGroup(ctx context.Context, key billingScanGroupKey, sample model.BillingOrder) ([]billingTransferCandidate, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rpcKey := fmt.Sprintf("%d", key.ChainID)
+	rpcURL := s.cfg.Billing.RpcURLs[rpcKey]
+	if strings.TrimSpace(rpcURL) == "" {
+		return nil, fmt.Errorf("no rpc_urls configured for chain_id %s", rpcKey)
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	lookback := uint64(s.cfg.Billing.Scanner.BlockLookback)
+	var out []billingTransferCandidate
+	if isTRONPaymentNetwork(sample.Network) {
+		events, err := billingtron.ScanTRC20Transfers(timeoutCtx, rpcURL, billingtron.ScanParams{
+			TokenAddress:    sample.TokenAddress,
+			ReceiverAddress: sample.ReceiverAddress,
+			ExpectedChainID: big.NewInt(sample.ChainID),
+			BlockLookback:   lookback,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = make([]billingTransferCandidate, 0, len(events))
+		for _, event := range events {
+			out = append(out, billingTransferCandidate{TxHash: event.TxHash, Amount: event.Amount, BlockTime: event.BlockTime})
+		}
+		return out, nil
+	}
+	events, err := billingevm.ScanERC20Transfers(timeoutCtx, rpcURL, billingevm.ScanParams{
+		TokenAddress:    sample.TokenAddress,
+		ReceiverAddress: sample.ReceiverAddress,
+		ExpectedChainID: big.NewInt(sample.ChainID),
+		BlockLookback:   lookback,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out = make([]billingTransferCandidate, 0, len(events))
+	for _, event := range events {
+		out = append(out, billingTransferCandidate{TxHash: event.TxHash, Amount: event.Amount, BlockTime: event.BlockTime})
+	}
+	return out, nil
+}
+
+func billingTransferWithinOrderWindow(blockTime time.Time, order model.BillingOrder) bool {
+	if blockTime.IsZero() {
+		return false
+	}
+	createdAt := order.CreatedAt.UTC().Add(-2 * time.Minute)
+	expiredAt := order.ExpiredAt.UTC().Add(2 * time.Minute)
+	bt := blockTime.UTC()
+	return !bt.Before(createdAt) && !bt.After(expiredAt)
 }
 
 func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, normHash string, markFailure bool) error {

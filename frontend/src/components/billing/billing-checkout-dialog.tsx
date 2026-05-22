@@ -50,6 +50,9 @@ export function BillingCheckoutDialog({
   const [quote, setQuote] = useState<BillingUpgradeQuoteApi | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
+  const [confirmTxHash, setConfirmTxHash] = useState("");
+  const [confirmingTx, setConfirmingTx] = useState(false);
+  const [confirmTxError, setConfirmTxError] = useState("");
 
   const options = paymentMethods;
   const selectedNetworkValue = selectedNetwork || defaultNetwork;
@@ -69,6 +72,9 @@ export function BillingCheckoutDialog({
     setOrderId(null);
     setQuote(null);
     setQuoteError("");
+    setConfirmTxHash("");
+    setConfirmTxError("");
+    setConfirmingTx(false);
   }, []);
 
   const handleOpenChange = useCallback(
@@ -112,6 +118,15 @@ export function BillingCheckoutDialog({
     };
   }, [billingCycle, open, phase, planCode, t]);
 
+  const handlePaid = useCallback(() => {
+    pushToast(t("billing.payment.successToast"));
+    broadcastDashboardRefresh();
+    broadcastPageRefreshRequest();
+    broadcastDataSynced(Date.now());
+    onPaid?.();
+    onOpenChange(false);
+  }, [onOpenChange, onPaid, pushToast, t]);
+
   useEffect(() => {
     if (!open || !orderId || phase !== "pay") return;
     let cancelled = false;
@@ -120,12 +135,7 @@ export function BillingCheckoutDialog({
         const o = await billingService.getOrder(orderId);
         if (cancelled) return;
         if (o.status === "paid") {
-          pushToast(t("billing.payment.successToast"));
-          broadcastDashboardRefresh();
-          broadcastPageRefreshRequest();
-          broadcastDataSynced(Date.now());
-          onPaid?.();
-          onOpenChange(false);
+          handlePaid();
         }
       } catch {
         /* transient network errors — next tick retries */
@@ -137,7 +147,7 @@ export function BillingCheckoutDialog({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [open, orderId, phase, onOpenChange, onPaid, pushToast, t]);
+  }, [handlePaid, open, orderId, phase]);
 
   const startPay = async () => {
     try {
@@ -163,6 +173,22 @@ export function BillingCheckoutDialog({
       pushToast(t(toastKey));
     } catch {
       pushToast(t("billing.checkout.copyFailed"));
+    }
+  };
+
+  const submitTxHash = async () => {
+    if (!created?.order_id || !confirmTxHash.trim()) return;
+    setConfirmingTx(true);
+    setConfirmTxError("");
+    try {
+      const order = await billingService.confirmOrder(created.order_id, confirmTxHash.trim());
+      if (order.status === "paid") {
+        handlePaid();
+      }
+    } catch (error) {
+      setConfirmTxError(error instanceof Error ? error.message : t("billing.checkout.submitTxFailed"));
+    } finally {
+      setConfirmingTx(false);
     }
   };
 
@@ -273,6 +299,29 @@ export function BillingCheckoutDialog({
           <p className="text-xs leading-relaxed text-amber-200/90">
             {created.network === "TRC20" ? t("billing.checkout.tronPollingHint") : t("billing.checkout.pollingHint")}
           </p>
+          <div className="rounded-3xl border border-[#1d9bf0]/20 bg-[#1d9bf0]/10 p-4">
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-white">{t("billing.checkout.txHashTitle")}</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/55">{t("billing.checkout.txHashHint")}</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                className="form-input w-full font-mono text-xs"
+                value={confirmTxHash}
+                placeholder={t("billing.checkout.txHashPlaceholder")}
+                onChange={(event) => setConfirmTxHash(event.target.value)}
+              />
+              <Button
+                type="button"
+                className="h-10 bg-gradient-to-r from-[#1d9bf0] to-violet-500 text-white hover:opacity-90"
+                disabled={confirmingTx || !confirmTxHash.trim()}
+                onClick={() => void submitTxHash()}
+              >
+                {confirmingTx ? t("billing.checkout.submittingTx") : t("billing.checkout.submitTx")}
+              </Button>
+            </div>
+            {confirmTxError ? <p className="mt-2 text-xs text-rose-200">{confirmTxError}</p> : null}
+          </div>
         </div>
       ) : null}
     </Dialog>

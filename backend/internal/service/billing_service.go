@@ -323,6 +323,81 @@ func centsToAmountString(cents int64) string {
 	return fmt.Sprintf("%d.%02d", whole, frac)
 }
 
+func amountStringFromMinUnits(units *big.Int, decimals int) string {
+	if units == nil || units.Sign() <= 0 {
+		return "0"
+	}
+	if decimals <= 0 {
+		return units.String()
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	whole := new(big.Int)
+	frac := new(big.Int)
+	whole.QuoRem(units, scale, frac)
+	fracStr := frac.String()
+	if len(fracStr) < decimals {
+		fracStr = strings.Repeat("0", decimals-len(fracStr)) + fracStr
+	}
+	fracStr = strings.TrimRight(fracStr, "0")
+	if fracStr == "" {
+		return whole.String()
+	}
+	return whole.String() + "." + fracStr
+}
+
+func billingUniqueAmountPrecision(decimals int) int {
+	if decimals <= 0 {
+		return 0
+	}
+	if decimals < 6 {
+		return decimals
+	}
+	return 6
+}
+
+func (s *BillingService) uniquePendingOrderAmount(baseAmount string, pm *config.PaymentMethodConfig, now time.Time) (string, error) {
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil || pm == nil {
+		return baseAmount, nil
+	}
+	precision := billingUniqueAmountPrecision(pm.Decimals)
+	if precision <= 0 {
+		return baseAmount, nil
+	}
+	baseUnits, err := billingamount.ToMinUnits(baseAmount, pm.Decimals)
+	if err != nil {
+		return "", err
+	}
+	unitStep := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(pm.Decimals-precision)), nil)
+	maxSuffix := int64(999999)
+	if precision < 6 {
+		maxSuffix = 1
+		for i := 0; i < precision; i++ {
+			maxSuffix *= 10
+		}
+		maxSuffix--
+	}
+	statuses := []string{"pending", "failed"}
+	network := strings.ToUpper(strings.TrimSpace(pm.Network))
+	receiver := strings.TrimSpace(pm.ReceiverAddress)
+	token := strings.TrimSpace(pm.TokenAddress)
+	for suffix := int64(1); suffix <= maxSuffix; suffix++ {
+		offset := new(big.Int).Mul(big.NewInt(suffix), unitStep)
+		candidateUnits := new(big.Int).Add(baseUnits, offset)
+		candidate := amountStringFromMinUnits(candidateUnits, pm.Decimals)
+		var count int64
+		err := s.orderRepo.DB.Model(&model.BillingOrder{}).
+			Where("status IN ? AND expired_at > ? AND network = ? AND receiver_address = ? AND token_address = ? AND amount = ?", statuses, now, network, receiver, token, candidate).
+			Count(&count).Error
+		if err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no unique payment amount available")
+}
+
 func billingProrationSnapshot(q billingQuoteCalc) string {
 	payload := map[string]any{
 		"current_plan":          q.dto.CurrentPlan,
@@ -351,11 +426,12 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
+	now := time.Now().UTC()
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
 		return nil, err
 	}
-	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, time.Now().UTC())
+	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, now)
 	if err != nil {
 		return nil, err
 	}
@@ -371,21 +447,27 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if pm.Decimals <= 0 {
 		return nil, fmt.Errorf("invalid payment method decimals in config")
 	}
+	basePayableAmount := centsToAmountString(quote.payableCents)
+	exactPayableAmount, err := s.uniquePendingOrderAmount(basePayableAmount, pm, now)
+	if err != nil {
+		return nil, err
+	}
+	quote.dto.PayableAmount = exactPayableAmount
 
 	ttl := s.cfg.Billing.OrderTTLMinutes
 	if ttl <= 0 {
 		ttl = 30
 	}
-	exp := time.Now().UTC().Add(time.Duration(ttl) * time.Minute)
+	exp := now.Add(time.Duration(ttl) * time.Minute)
 
 	o := &model.BillingOrder{
 		UserID:               userID,
 		PlanCode:             plan.Code,
 		BillingCycle:         cycle,
-		Amount:               centsToAmountString(quote.payableCents),
+		Amount:               exactPayableAmount,
 		OriginalAmount:       centsToAmountString(quote.originalCents),
 		CreditAmount:         centsToAmountString(quote.creditCents),
-		PayableAmount:        centsToAmountString(quote.payableCents),
+		PayableAmount:        exactPayableAmount,
 		OrderType:            quote.dto.OrderType,
 		FromPlanCode:         quote.dto.CurrentPlan,
 		FromBillingCycle:     quote.dto.CurrentBillingCycle,

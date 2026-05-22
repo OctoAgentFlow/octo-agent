@@ -19,6 +19,8 @@ export function mapPaymentMethods(items: BillingPaymentMethodApi[]): PaymentMeth
     methodKey: "billing.payment.method.usdt",
     networkKey: networkKeyForApi(m.network),
     networkCode: m.network.trim().toUpperCase(),
+    receiverAddress: m.receiver_address.trim(),
+    tokenAddress: m.token_address.trim(),
     receiverMasked: maskAddr(m.receiver_address),
     tokenMasked: maskAddr(m.token_address),
     chainId: m.chain_id,

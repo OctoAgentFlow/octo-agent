@@ -1316,7 +1316,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "Upgrade",
 
   "billing.payment.title": "Payment Method",
-  "billing.payment.description": "Pay with USDT. After you create an order and the on-chain transfer is confirmed, the subscription activates automatically.",
+  "billing.payment.description": "Pay with BEP20, ERC20, or TRC20 USDT. BSC/ETH can be verified on-chain automatically; TRC20 is routed to manual review after transfer.",
   "billing.payment.empty": "No payment method connected yet.",
   "billing.checkout.createOrderFailed": "Failed to create order.",
   "billing.payment.fields.method": "Method",
@@ -1335,11 +1335,19 @@ export const dict: I18nDict = {
   "billing.payment.successToast": "Payment confirmed — your subscription is active.",
   "billing.checkout.title": "Pay with USDT",
   "billing.checkout.pickNetwork": "Choose network and create an order.",
-  "billing.checkout.sendUsdt": "Send the exact amount to the address below. We poll for confirmation every few seconds.",
+  "billing.checkout.sendUsdt": "Send the exact amount to the address below, and make sure the network and token contract match.",
   "billing.checkout.networkLabel": "Network",
   "billing.checkout.continue": "Create order & show address",
   "billing.checkout.amount": "Amount",
-  "billing.checkout.pollingHint": "Waiting for on-chain confirmation… You can leave this dialog open.",
+  "billing.checkout.availableNetwork": "Available network",
+  "billing.checkout.qrAlt": "Receiver address QR code",
+  "billing.checkout.qrHint": "The QR code contains the receiver wallet address for the selected network. Select the matching USDT network in your wallet before transfer.",
+  "billing.checkout.copy": "Copy",
+  "billing.checkout.copied": "Copied.",
+  "billing.checkout.copyFailed": "Copy failed. Please copy manually.",
+  "billing.checkout.tronReviewHint": "TRC20 orders enter manual review after you submit the transaction hash. Automatic TRON verification is not enabled yet.",
+  "billing.checkout.pollingHint": "Waiting for BSC/ETH on-chain confirmation… You can leave this dialog open.",
+  "billing.checkout.tronPollingHint": "After the TRC20 transfer, submit the transaction hash in payment history. The subscription activates after operator review.",
 
   "errors.subscriptionExpired": "Your subscription has expired. Opening Billing to renew.",
 
@@ -1397,6 +1405,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "Create a new order",
   "billing.history.nextAction.submit_correct_tx_hash": "Submit correct hash",
   "billing.history.nextAction.submit_tx_hash_or_wait": "Waiting",
+  "billing.history.nextAction.manual_review_pending": "Manual review pending",
   "billing.history.nextAction.contact_support": "Contact support",
 
   // accounts

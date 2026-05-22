@@ -870,7 +870,15 @@ export const dict: I18nDict = {
   "billing.checkout.networkLabel": "Сеть",
   "billing.checkout.continue": "Создать заказ и показать адрес",
   "billing.checkout.amount": "Сумма",
+  "billing.checkout.availableNetwork": "Доступная сеть",
+  "billing.checkout.qrAlt": "QR-код адреса получателя",
+  "billing.checkout.qrHint": "QR-код содержит адрес кошелька получателя для выбранной сети. Перед переводом выберите такую же сеть USDT в кошельке.",
+  "billing.checkout.copy": "Копировать",
+  "billing.checkout.copied": "Скопировано.",
+  "billing.checkout.copyFailed": "Не удалось скопировать. Скопируйте вручную.",
+  "billing.checkout.tronReviewHint": "Заказы TRC20 после отправки хэша транзакции идут на ручную проверку. Автопроверка TRON пока не включена.",
   "billing.checkout.pollingHint": "Ожидание подтверждения в сети…",
+  "billing.checkout.tronPollingHint": "После перевода TRC20 отправьте хэш транзакции в истории платежей. Подписка активируется после проверки оператором.",
 
   "errors.subscriptionExpired": "Подписка истекла. Открываем страницу оплаты.",
 
@@ -928,6 +936,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "Создать новый заказ",
   "billing.history.nextAction.submit_correct_tx_hash": "Отправить верный hash",
   "billing.history.nextAction.submit_tx_hash_or_wait": "Ожидание",
+  "billing.history.nextAction.manual_review_pending": "Ожидает ручной проверки",
   "billing.history.nextAction.contact_support": "Связаться с поддержкой",
 
   // accounts

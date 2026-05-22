@@ -870,7 +870,15 @@ export const dict: I18nDict = {
   "billing.checkout.networkLabel": "네트워크",
   "billing.checkout.continue": "주문 만들고 주소 표시",
   "billing.checkout.amount": "금액",
+  "billing.checkout.availableNetwork": "사용 가능한 네트워크",
+  "billing.checkout.qrAlt": "수취 주소 QR 코드",
+  "billing.checkout.qrHint": "QR 코드는 선택한 네트워크의 수취 지갑 주소입니다. 지갑에서 일치하는 USDT 네트워크를 선택한 뒤 전송하세요.",
+  "billing.checkout.copy": "복사",
+  "billing.checkout.copied": "복사되었습니다.",
+  "billing.checkout.copyFailed": "복사에 실패했습니다. 직접 복사해 주세요.",
+  "billing.checkout.tronReviewHint": "TRC20 주문은 거래 해시 제출 후 수동 확인으로 이동합니다. TRON 자동 확인은 아직 활성화되지 않았습니다.",
   "billing.checkout.pollingHint": "온체인 확인 대기 중…",
+  "billing.checkout.tronPollingHint": "TRC20 전송 후 결제 내역에서 거래 해시를 제출하세요. 운영자 확인 후 구독이 활성화됩니다.",
 
   "errors.subscriptionExpired": "구독이 만료되었습니다. 결제 페이지로 이동합니다.",
 
@@ -928,6 +936,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "새 주문 만들기",
   "billing.history.nextAction.submit_correct_tx_hash": "올바른 해시 제출",
   "billing.history.nextAction.submit_tx_hash_or_wait": "확인 대기",
+  "billing.history.nextAction.manual_review_pending": "수동 확인 대기",
   "billing.history.nextAction.contact_support": "지원팀 문의",
 
   // accounts

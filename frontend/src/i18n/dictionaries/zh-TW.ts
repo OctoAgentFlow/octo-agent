@@ -870,7 +870,15 @@ export const dict: I18nDict = {
   "billing.checkout.networkLabel": "網路",
   "billing.checkout.continue": "建立訂單並顯示地址",
   "billing.checkout.amount": "金額",
+  "billing.checkout.availableNetwork": "可用網路",
+  "billing.checkout.qrAlt": "收款地址 QR Code",
+  "billing.checkout.qrHint": "QR Code 內容為目前網路的收款錢包地址，請在錢包中選擇對應 USDT 網路後轉帳。",
+  "billing.checkout.copy": "複製",
+  "billing.checkout.copied": "已複製。",
+  "billing.checkout.copyFailed": "複製失敗，請手動複製。",
+  "billing.checkout.tronReviewHint": "TRC20 訂單提交交易雜湊後會進入人工核驗，暫不自動鏈上確認。",
   "billing.checkout.pollingHint": "等待鏈上確認… 可保持此視窗開啟。",
+  "billing.checkout.tronPollingHint": "TRC20 轉帳完成後，請在付款記錄中提交交易雜湊，營運核驗後訂閱生效。",
 
   "errors.subscriptionExpired": "訂閱已過期，正在開啟帳單頁以便續費。",
 
@@ -928,6 +936,7 @@ export const dict: I18nDict = {
   "billing.history.nextAction.create_new_order": "重新下單",
   "billing.history.nextAction.submit_correct_tx_hash": "補交正確雜湊",
   "billing.history.nextAction.submit_tx_hash_or_wait": "等待確認",
+  "billing.history.nextAction.manual_review_pending": "人工核驗中",
   "billing.history.nextAction.contact_support": "聯絡支援",
 
   // accounts

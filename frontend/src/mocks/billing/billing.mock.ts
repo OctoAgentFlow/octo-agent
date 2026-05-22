@@ -61,6 +61,8 @@ export const paymentMethods: PaymentMethodOption[] = [
     methodKey: "billing.payment.method.usdt",
     networkKey: "billing.payment.network.bep20",
     networkCode: "BEP20",
+    receiverAddress: "TODO_RECEIVER_ADDRESS",
+    tokenAddress: "TODO_TOKEN_ADDRESS",
     receiverMasked: "0xabcd…123456",
     tokenMasked: "0x11F5…9ECF2",
     chainId: 56,

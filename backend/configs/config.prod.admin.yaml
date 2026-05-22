@@ -80,6 +80,14 @@ billing:
       decimals: 6
       is_default: false
       note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；到账需要人工核验"
   plans:
     basic_monthly:
       name: "Basic"

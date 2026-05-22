@@ -864,9 +864,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "おすすめ",
   "billing.payment.autoConfirm": "オンチェーン自動確認",
   "billing.payment.manualReview": "手動確認",
+  "billing.payment.hashAutoConfirm": "Tx Hash 送信後に自動確認",
   "billing.payment.networkSummary.bep20": "BSC 支払いにおすすめです。手数料が低く、自動確認に対応します。",
   "billing.payment.networkSummary.erc20": "Ethereum メインネットの USDT を使う場合に適しています。自動確認に対応します。",
-  "billing.payment.networkSummary.trc20": "TRON USDT 送金に適しています。着金後に手動確認されます。",
+  "billing.payment.networkSummary.trc20": "TRON USDT 送金に適しています。Tx Hash 送信後に自動確認されます。",
   "billing.payment.safetyHint": "金額やネットワークの不一致を避けるため、注文作成後に送金してください。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "支払いはオンチェーンで確認され、購読は自動的に有効化されます。",
@@ -889,9 +890,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "コピー",
   "billing.checkout.copied": "コピーしました。",
   "billing.checkout.copyFailed": "コピーに失敗しました。手動でコピーしてください。",
-  "billing.checkout.tronReviewHint": "TRC20 注文は Tx ハッシュ提出後に手動確認へ進みます。TRON の自動確認はまだ有効ではありません。",
+  "billing.checkout.tronReviewHint": "TRC20 送金後に Tx Hash を送信すると、システムが TRON 上で自動確認します。",
   "billing.checkout.pollingHint": "オンチェーン確認を待っています…",
-  "billing.checkout.tronPollingHint": "TRC20 送金後、支払い履歴で Tx ハッシュを提出してください。運営確認後に有効化されます。",
+  "billing.checkout.tronPollingHint": "TRC20 送金後、支払い履歴で Tx Hash を送信してください。オンチェーン自動確認後に有効化されます。",
 
   "errors.subscriptionExpired": "サブスクリプションの期限が切れました。課金ページを開きます。",
 

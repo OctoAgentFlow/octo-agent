@@ -864,9 +864,10 @@ export const dict: I18nDict = {
   "billing.payment.defaultBadge": "推薦",
   "billing.payment.autoConfirm": "自動鏈上確認",
   "billing.payment.manualReview": "人工核驗",
+  "billing.payment.hashAutoConfirm": "提交雜湊後自動確認",
   "billing.payment.networkSummary.bep20": "推薦使用 BSC 網路，手續費較低，付款後可自動確認。",
   "billing.payment.networkSummary.erc20": "適合從以太坊主網付款，付款後可自動確認。",
-  "billing.payment.networkSummary.trc20": "適合使用 TRON USDT 轉帳，入帳後由營運人工核驗。",
+  "billing.payment.networkSummary.trc20": "適合使用 TRON USDT 轉帳，提交 Tx Hash 後自動鏈上確認。",
   "billing.payment.safetyHint": "建立訂單後再轉帳，避免金額或網路不匹配。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "付款將在鏈上確認後，訂閱會自動啟用。",
@@ -889,9 +890,9 @@ export const dict: I18nDict = {
   "billing.checkout.copy": "複製",
   "billing.checkout.copied": "已複製。",
   "billing.checkout.copyFailed": "複製失敗，請手動複製。",
-  "billing.checkout.tronReviewHint": "TRC20 訂單提交交易雜湊後會進入人工核驗，暫不自動鏈上確認。",
+  "billing.checkout.tronReviewHint": "TRC20 轉帳後請提交 Tx Hash，系統會自動查詢 TRON 鏈並確認入帳。",
   "billing.checkout.pollingHint": "等待鏈上確認… 可保持此視窗開啟。",
-  "billing.checkout.tronPollingHint": "TRC20 轉帳完成後，請在付款記錄中提交交易雜湊，營運核驗後訂閱生效。",
+  "billing.checkout.tronPollingHint": "TRC20 轉帳完成後，請在付款記錄中提交 Tx Hash。系統自動鏈上確認後訂閱會生效。",
 
   "errors.subscriptionExpired": "訂閱已過期，正在開啟帳單頁以便續費。",
 

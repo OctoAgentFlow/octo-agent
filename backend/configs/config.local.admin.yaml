@@ -56,6 +56,7 @@ billing:
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"
     "1": "https://ethereum.publicnode.com"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -80,7 +81,7 @@ billing:
       receiver_address: "TR4vMB8o5rA3KXTN1QLxewgPeuh9RhmAuX"
       decimals: 6
       is_default: false
-      note: "TRC20 主网 USDT，手续费低；到账需要人工核验"
+      note: "TRC20 主网 USDT，手续费低；提交 Tx Hash 后自动链上确认"
   plans:
     basic_monthly:
       name: "Basic"

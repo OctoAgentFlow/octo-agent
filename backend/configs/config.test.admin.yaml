@@ -65,6 +65,7 @@ billing:
   rpc_urls:
     "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
     "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
   wss_urls:
     "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
     "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
@@ -94,7 +95,7 @@ billing:
       receiver_address: "TR4vMB8o5rA3KXTN1QLxewgPeuh9RhmAuX"
       decimals: 6
       is_default: false
-      note: "TRC20 主网 USDT，手续费低；到账需要人工核验"
+      note: "TRC20 主网 USDT，手续费低；提交 Tx Hash 后自动链上确认"
   plans:
     basic_monthly:
       name: "Basic"

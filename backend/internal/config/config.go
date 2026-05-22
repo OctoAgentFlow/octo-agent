@@ -29,7 +29,7 @@ type Config struct {
 type BillingConfig struct {
 	OrderTTLMinutes int    `yaml:"order_ttl_minutes"`
 	WebhookSecret   string `yaml:"webhook_secret"`
-	// RpcURLs maps chain id as string (e.g. "56", "1") to JSON-RPC HTTP endpoint for EVM verification.
+	// RpcURLs maps chain id as string (e.g. "56", "1", "728126428") to JSON-RPC HTTP endpoint for payment verification.
 	RpcURLs map[string]string `yaml:"rpc_urls"`
 	// WssURLs maps chain id as string to WebSocket endpoints for future chain listeners.
 	WssURLs map[string]string `yaml:"wss_urls"`

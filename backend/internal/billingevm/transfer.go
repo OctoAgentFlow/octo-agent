@@ -8,9 +8,12 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
+
+const defaultMaxEVMLogScanBlockRange uint64 = 1400
 
 // VerifyERC20Transfer checks that txHash contains exactly one ERC-20 Transfer to receiver
 // from token contract with value == expectedMinUnit (smallest units). Does not use tx ETH value.
@@ -99,6 +102,7 @@ type ScanParams struct {
 	FromBlock       uint64
 	ToBlock         uint64
 	BlockLookback   uint64
+	MaxBlockRange   uint64
 }
 
 func ScanERC20Transfers(ctx context.Context, rpcURL string, params ScanParams) ([]TransferEvent, error) {
@@ -136,14 +140,31 @@ func ScanERC20Transfers(ctx context.Context, rpcURL string, params ScanParams) (
 
 	transferSig := crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)"))
 	receiverTopic := common.BytesToHash(common.HexToAddress(params.ReceiverAddress).Bytes())
-	logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(from),
-		ToBlock:   new(big.Int).SetUint64(to),
-		Addresses: []common.Address{common.HexToAddress(params.TokenAddress)},
-		Topics:    [][]common.Hash{{transferSig}, nil, {receiverTopic}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("filter logs: %w", err)
+	maxBlockRange := params.MaxBlockRange
+	if maxBlockRange == 0 || maxBlockRange > defaultMaxEVMLogScanBlockRange {
+		maxBlockRange = defaultMaxEVMLogScanBlockRange
+	}
+
+	var logs []types.Log
+	for start := from; start <= to; {
+		end := start + maxBlockRange - 1
+		if end < start || end > to {
+			end = to
+		}
+		chunkLogs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			FromBlock: new(big.Int).SetUint64(start),
+			ToBlock:   new(big.Int).SetUint64(end),
+			Addresses: []common.Address{common.HexToAddress(params.TokenAddress)},
+			Topics:    [][]common.Hash{{transferSig}, nil, {receiverTopic}},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("filter logs %d-%d: %w", start, end, err)
+		}
+		logs = append(logs, chunkLogs...)
+		if end == to {
+			break
+		}
+		start = end + 1
 	}
 	blockTimes := make(map[uint64]time.Time)
 	events := make([]TransferEvent, 0, len(logs))

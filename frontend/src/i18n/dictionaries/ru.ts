@@ -850,7 +850,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "Upgrade",
 
   "billing.payment.title": "Способ оплаты",
-  "billing.payment.description": "Поддерживаются платежи USDT в BEP20, ERC20 и TRC20. Все три сети проверяются автоматически в блокчейне; TRC20 использует отправленный Tx Hash для автопроверки.",
+  "billing.payment.description": "Поддерживаются платежи USDT в BEP20, ERC20 и TRC20. Все три сети поддерживают автоматическое подтверждение в блокчейне.",
   "billing.payment.fields.method": "Метод",
   "billing.payment.fields.network": "Сеть",
   "billing.payment.fields.address": "Адрес",
@@ -867,7 +867,7 @@ export const dict: I18nDict = {
   "billing.payment.hashAutoConfirm": "Автопроверка по Tx Hash",
   "billing.payment.networkSummary.bep20": "Рекомендуется для BSC: ниже комиссия и автоматическое подтверждение.",
   "billing.payment.networkSummary.erc20": "Подходит для USDT в Ethereum mainnet. Подтверждение автоматическое.",
-  "billing.payment.networkSummary.trc20": "Подходит для TRON USDT. После перевода отправьте Tx Hash для автоматической проверки в сети.",
+  "billing.payment.networkSummary.trc20": "Подходит для TRON USDT. Платёж может быть подтверждён автоматически после перевода.",
   "billing.payment.safetyHint": "Создайте заказ перед переводом, чтобы избежать ошибки сети или суммы.",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "Платеж подтверждается в сети, подписка активируется автоматически.",

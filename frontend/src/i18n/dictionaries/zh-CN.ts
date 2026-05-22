@@ -1288,7 +1288,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "升级",
 
   "billing.payment.title": "支付方式",
-  "billing.payment.description": "支持 BEP20、ERC20 和 TRC20 USDT 支付。三种网络均支持系统自动链上确认，TRC20 通过交易哈希完成自动验链。",
+  "billing.payment.description": "支持 BEP20、ERC20 和 TRC20 USDT 支付。三种网络均支持系统自动链上确认。",
   "billing.payment.empty": "还没有可用的支付方式。",
   "billing.checkout.createOrderFailed": "创建订单失败。",
   "billing.payment.fields.method": "方式",
@@ -1308,7 +1308,7 @@ export const dict: I18nDict = {
   "billing.payment.hashAutoConfirm": "交易哈希自动验链",
   "billing.payment.networkSummary.bep20": "推荐使用 BSC 网络，手续费更低，支付后可自动确认。",
   "billing.payment.networkSummary.erc20": "适合从以太坊主网付款，支付后可自动确认。",
-  "billing.payment.networkSummary.trc20": "适合使用 TRON USDT 转账，转账后提交交易哈希即可自动链上确认。",
+  "billing.payment.networkSummary.trc20": "适合使用 TRON USDT 转账，支付后可自动确认。",
   "billing.payment.safetyHint": "创建订单后再转账，避免金额或网络不匹配。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "支付将通过链上确认，订阅会自动生效。",

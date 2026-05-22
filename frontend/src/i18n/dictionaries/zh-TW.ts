@@ -850,7 +850,7 @@ export const dict: I18nDict = {
   "billing.actions.upgrade": "升級",
 
   "billing.payment.title": "付款方式",
-  "billing.payment.description": "支援 BEP20、ERC20 和 TRC20 USDT 付款。三種網路均支援系統自動鏈上確認，TRC20 透過交易雜湊完成自動驗鏈。",
+  "billing.payment.description": "支援 BEP20、ERC20 和 TRC20 USDT 付款。三種網路均支援系統自動鏈上確認。",
   "billing.payment.fields.method": "方式",
   "billing.payment.fields.network": "網路",
   "billing.payment.fields.address": "地址",
@@ -867,7 +867,7 @@ export const dict: I18nDict = {
   "billing.payment.hashAutoConfirm": "交易雜湊自動驗鏈",
   "billing.payment.networkSummary.bep20": "推薦使用 BSC 網路，手續費較低，付款後可自動確認。",
   "billing.payment.networkSummary.erc20": "適合從以太坊主網付款，付款後可自動確認。",
-  "billing.payment.networkSummary.trc20": "適合使用 TRON USDT 轉帳，轉帳後提交交易雜湊即可自動鏈上確認。",
+  "billing.payment.networkSummary.trc20": "適合使用 TRON USDT 轉帳，付款後可自動確認。",
   "billing.payment.safetyHint": "建立訂單後再轉帳，避免金額或網路不匹配。",
   "billing.payment.method.usdt_trc20": "USDT (TRC20)",
   "billing.payment.note": "付款將在鏈上確認後，訂閱會自動啟用。",

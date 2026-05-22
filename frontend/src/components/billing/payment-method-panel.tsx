@@ -34,7 +34,7 @@ function networkTone(networkCode: string) {
     icon: "text-[#7ee0b5]",
     labelKey: "billing.payment.autoConfirm",
     descriptionKey: "billing.payment.networkSummary.trc20",
-    settlementKey: "billing.payment.hashAutoConfirm",
+    settlementKey: "billing.payment.autoConfirm",
   };
 }
 

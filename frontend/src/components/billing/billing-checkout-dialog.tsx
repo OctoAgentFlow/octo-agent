@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, QrCode, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -22,6 +22,12 @@ type BillingCheckoutDialogProps = {
   billingCycle?: BillingCycle;
   onPaid?: () => void;
 };
+
+function methodDescriptionKey(networkCode: string) {
+  if (networkCode === "BEP20") return "billing.payment.networkSummary.bep20";
+  if (networkCode === "ERC20") return "billing.payment.networkSummary.erc20";
+  return "billing.payment.networkSummary.trc20";
+}
 
 export function BillingCheckoutDialog({
   open,
@@ -134,75 +140,85 @@ export function BillingCheckoutDialog({
       onOpenChange={handleOpenChange}
       title={t("billing.checkout.title")}
       description={phase === "pick" ? t("billing.checkout.pickNetwork") : t("billing.checkout.sendUsdt")}
-      className="max-w-lg"
+      className="max-w-3xl"
     >
       {phase === "pick" ? (
-        <div className="space-y-3">
-          <label className="block text-xs text-white/60">{t("billing.checkout.networkLabel")}</label>
-          <div className="grid gap-2 sm:grid-cols-3">
+        <div className="space-y-4">
+          <CheckoutSteps phase={phase} />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium uppercase tracking-[0.18em] text-white/45">{t("billing.checkout.networkLabel")}</label>
+            <div className="grid gap-3 sm:grid-cols-3">
             {options.map((m) => (
               <button
                 key={m.networkCode}
                 type="button"
-                className={`rounded-2xl border p-3 text-left transition ${
+                className={`min-h-[118px] rounded-2xl border p-4 text-left transition ${
                   selectedNetworkValue === m.networkCode
-                    ? "border-[#1d9bf0] bg-[#1d9bf0]/12"
+                    ? "border-[#1d9bf0] bg-[#1d9bf0]/12 shadow-[0_0_0_1px_rgba(29,155,240,0.35)]"
                     : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
                 }`}
                 onClick={() => setSelectedNetwork(m.networkCode)}
               >
-                <span className="block text-sm font-semibold text-white">{t(m.networkKey)}</span>
-                <span className="mt-1 block text-xs text-white/50">
-                  {m.isDefault ? t("billing.payment.defaultBadge") : t("billing.checkout.availableNetwork")}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-base font-semibold text-white">{t(m.networkKey)}</span>
+                  {selectedNetworkValue === m.networkCode ? <CheckCircle2 className="size-4 text-[#8ecdf8]" /> : null}
                 </span>
+                <span className="mt-1 block text-xs text-white/50">{m.isDefault ? t("billing.payment.defaultBadge") : t("billing.checkout.availableNetwork")}</span>
+                <span className="mt-3 block text-xs leading-relaxed text-white/55">{t(methodDescriptionKey(m.networkCode))}</span>
               </button>
             ))}
+            </div>
           </div>
           {selectedMethod ? (
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-xs text-white/65">
-              <p className="break-all">
-                <span className="text-white/45">{t("billing.payment.fields.address")}:</span>{" "}
-                <span className="text-white">{selectedMethod.receiverAddress}</span>
-              </p>
-              <p className="mt-1 break-all">
-                <span className="text-white/45">{t("billing.payment.fields.token")}:</span>{" "}
-                <span className="text-white">{selectedMethod.tokenAddress}</span>
-              </p>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4 text-xs text-white/65">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+                <WalletCards className="size-4 text-[#8ecdf8]" />
+                <span>{t("billing.checkout.receiverPreview")}</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <AddressPreview label={t("billing.payment.fields.address")} value={selectedMethod.receiverAddress} />
+                <AddressPreview label={t("billing.payment.fields.token")} value={selectedMethod.tokenAddress} />
+              </div>
               {selectedMethod.networkCode === "TRC20" ? (
-                <p className="mt-2 text-amber-200/90">{t("billing.checkout.tronReviewHint")}</p>
+                <p className="mt-3 rounded-2xl border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-amber-200/90">{t("billing.checkout.tronReviewHint")}</p>
               ) : null}
             </div>
           ) : null}
           <Button
             type="button"
-            className="w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white hover:opacity-90"
+            className="h-11 w-full bg-gradient-to-r from-[#1d9bf0] to-violet-500 text-white hover:opacity-90"
             onClick={() => void startPay()}
           >
+            <QrCode className="size-4" />
             {t("billing.checkout.continue")}
           </Button>
         </div>
       ) : created ? (
         <div className="space-y-4 text-sm text-white/80">
-          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
-            <div className="rounded-2xl border border-white/10 bg-white p-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrURL}
-                alt={t("billing.checkout.qrAlt")}
-                className="aspect-square w-full rounded-xl object-contain"
-              />
+          <CheckoutSteps phase={phase} />
+          <div className="rounded-2xl border border-amber-300/15 bg-amber-300/10 p-3 text-xs leading-relaxed text-amber-100/90">
+            <div className="flex gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-200" />
+              <p>{t("billing.checkout.networkWarning")}</p>
             </div>
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-              <p>
-                <span className="text-white/50">{t("billing.checkout.amount")}:</span>{" "}
-                <span className="font-medium text-white">
-                  {created.amount} {created.currency}
-                </span>
-              </p>
-              <p>
-                <span className="text-white/50">{t("billing.payment.fields.network")}:</span>{" "}
-                <span className="font-medium text-white">{createdMethod ? t(createdMethod.networkKey) : created.network}</span>
-              </p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+            <div className="rounded-3xl border border-white/10 bg-white p-4">
+              <div className="rounded-2xl bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrURL}
+                  alt={t("billing.checkout.qrAlt")}
+                  className="aspect-square w-full rounded-2xl object-contain"
+                />
+              </div>
+              <p className="mt-3 text-center text-xs leading-relaxed text-black/55">{t("billing.checkout.qrShortHint")}</p>
+            </div>
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-black/20 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <InfoPill label={t("billing.checkout.amount")} value={`${created.amount} ${created.currency}`} />
+                <InfoPill label={t("billing.payment.fields.network")} value={createdMethod ? t(createdMethod.networkKey) : created.network} />
+              </div>
               <CopyField
                 label={t("billing.payment.fields.address")}
                 value={created.receiver_address}
@@ -217,13 +233,61 @@ export function BillingCheckoutDialog({
               />
             </div>
           </div>
-          <p className="text-xs text-white/55">{t("billing.checkout.qrHint")}</p>
-          <p className="text-xs text-amber-200/90">
+          <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-white/55">{t("billing.checkout.qrHint")}</p>
+          <p className="text-xs leading-relaxed text-amber-200/90">
             {created.network === "TRC20" ? t("billing.checkout.tronPollingHint") : t("billing.checkout.pollingHint")}
           </p>
         </div>
       ) : null}
     </Dialog>
+  );
+}
+
+function CheckoutSteps({ phase }: { phase: "pick" | "pay" }) {
+  const { t } = useT();
+  const steps = [
+    { id: "pick", label: t("billing.checkout.step.pick") },
+    { id: "pay", label: t("billing.checkout.step.pay") },
+  ] as const;
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {steps.map((step, index) => {
+        const active = step.id === phase;
+        const done = phase === "pay" && step.id === "pick";
+        return (
+          <div
+            key={step.id}
+            className={`flex items-center gap-3 rounded-2xl border px-3 py-2 ${
+              active || done ? "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-white" : "border-white/10 bg-white/[0.03] text-white/45"
+            }`}
+          >
+            <span className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold ${active || done ? "bg-[#1d9bf0] text-white" : "bg-white/10"}`}>
+              {done ? <CheckCircle2 className="size-3.5" /> : index + 1}
+            </span>
+            <span className="text-sm font-medium">{step.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AddressPreview({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-xs text-white/45">{label}</p>
+      <p className="mt-1 break-all font-mono text-xs leading-relaxed text-white">{value}</p>
+    </div>
+  );
+}
+
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+      <p className="text-xs text-white/45">{label}</p>
+      <p className="mt-1 font-semibold text-white">{value}</p>
+    </div>
   );
 }
 

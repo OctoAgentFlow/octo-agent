@@ -591,6 +591,8 @@ func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) 
 		Status:               req.Status,
 		ReconciliationStatus: req.ReconciliationStatus,
 		ReviewStatus:         req.ReviewStatus,
+		AutoScanStatus:       req.AutoScanStatus,
+		AutoScanSkipReason:   req.AutoScanSkipReason,
 		Limit:                req.Limit,
 		AllUsers:             allUsers,
 	})

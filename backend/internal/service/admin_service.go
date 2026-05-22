@@ -94,6 +94,73 @@ func (s *AdminService) ListUsers(operatorID uint, query dto.AdminUserListQuery) 
 	}, nil
 }
 
+func (s *AdminService) ListBillingOrders(operatorID uint, query dto.BillingOrderListQuery) (*dto.BillingOrderListResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	orders, total, err := s.billingOrderRepo.List(operatorID, repository.BillingOrderListQuery{
+		Status:               query.Status,
+		ReconciliationStatus: query.ReconciliationStatus,
+		ReviewStatus:         query.ReviewStatus,
+		AutoScanStatus:       query.AutoScanStatus,
+		AutoScanSkipReason:   query.AutoScanSkipReason,
+		Limit:                query.Limit,
+		AllUsers:             true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	summary, err := s.billingOrderRepo.OpsSummary(0, true)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.BillingOrderListResponse{
+		Items:             adminBillingOrdersDTO(orders),
+		Total:             total,
+		OpsSummary:        billingOpsSummaryDTO(summary),
+		Scope:             "all",
+		CanOperateBilling: true,
+	}, nil
+}
+
+func (s *AdminService) UpdateBillingOrderOpsAction(operatorID, orderID uint, req dto.BillingOrderOpsActionRequest) (*dto.BillingOrderDetailResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	note := sanitizeBillingOpsNote(req.OpsNote)
+	now := time.Now().UTC()
+	updates := map[string]any{}
+	if note != "" {
+		updates["ops_note"] = note
+	}
+
+	switch action {
+	case "mark_reviewed":
+		updates["review_status"] = billingReviewReviewed
+		updates["reviewed_at"] = now
+		updates["reconciliation_status"] = billingReconMatched
+	case "mark_review_needed":
+		updates["review_status"] = billingReviewNeeded
+		updates["reconciliation_status"] = billingReconNeedsReview
+	default:
+		return nil, fmt.Errorf("unsupported billing ops action")
+	}
+
+	updated, err := s.billingOrderRepo.UpdateOpsState(operatorID, orderID, action, updates)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBillingOrderNotFound
+		}
+		return nil, err
+	}
+	out := orderToDetailDTO(updated)
+	if audits, err := s.billingOrderRepo.ListAuditsByOrder(updated.ID, 20); err == nil {
+		out.AuditTrail = billingAuditItemsToDTO(audits)
+	}
+	return out, nil
+}
+
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {
 	operator, err := s.requireOperator(operatorID)
 	if err != nil {

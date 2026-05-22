@@ -193,6 +193,8 @@ export type BillingOrderQueryApi = {
   status?: string;
   reconciliation_status?: string;
   review_status?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
   limit?: number;
   scope?: string;
 };
@@ -241,7 +243,7 @@ type BillingPaymentMethodsData = {
   items: BillingPaymentMethodApi[];
 };
 
-type BillingOrdersData = {
+export type BillingOrdersData = {
   items: BillingOrderListItemApi[];
   total: number;
   ops_summary: BillingOpsSummaryApi;

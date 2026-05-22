@@ -29,7 +29,6 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { adminService, type AdminOverviewApi, type AdminUserListItemApi } from "@/services/admin.service";
-import { billingService } from "@/services/billing.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -158,6 +157,17 @@ const autoScanSkipReasons = new Set([
   "order_expired",
   "invalid_tx_hash_from_chain",
 ]);
+const autoScanStatusOptions = ["all", "pending", "scanned", "confirmed", "skipped", "failed"];
+const autoScanSkipReasonOptions = [
+  "all",
+  "missing_payment_metadata",
+  "ambiguous_payment_amount",
+  "no_matching_transfer",
+  "transfer_outside_order_window",
+  "tx_already_used",
+  "order_expired",
+  "invalid_tx_hash_from_chain",
+];
 
 function normalizedAutoScanStatus(status?: string) {
   const value = status || "pending";
@@ -275,7 +285,7 @@ export default function AdminPage() {
   const updateOrder = async (orderId: string, action: BillingOpsAction) => {
     setSubmittingOrder(`${orderId}:${action}`);
     try {
-      await billingService.orderOpsAction(orderId, {
+      await adminService.updateBillingOrder(orderId, {
         action,
         ops_note: action === "mark_reviewed" ? "Admin console marked reviewed." : "Admin console marked review needed.",
       });
@@ -655,7 +665,40 @@ function BillingSection({
   onUpdateOrder: (orderId: string, action: BillingOpsAction) => Promise<void>;
 }) {
   const { t } = useT();
+  const [scanStatusFilter, setScanStatusFilter] = useState("all");
+  const [skipReasonFilter, setSkipReasonFilter] = useState("all");
+  const [orders, setOrders] = useState(overview.recent_orders);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrders = async () => {
+      setOrdersLoading(true);
+      setOrdersError("");
+      try {
+        const data = await adminService.billingOrders({
+          limit: 100,
+          auto_scan_status: scanStatusFilter === "all" ? undefined : scanStatusFilter,
+          auto_scan_skip_reason: skipReasonFilter === "all" ? undefined : skipReasonFilter,
+        });
+        if (!cancelled) setOrders(data.items);
+      } catch {
+        if (!cancelled) {
+          setOrders(overview.recent_orders);
+          setOrdersError(t("admin.billing.filters.loadFailed"));
+        }
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    };
+    void loadOrders();
+    return () => {
+      cancelled = true;
+    };
+  }, [overview.recent_orders, scanStatusFilter, skipReasonFilter, t]);
+
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -667,8 +710,45 @@ function BillingSection({
       </section>
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.billing.recentTitle")} description={t("admin.billing.recentDesc")} />
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("admin.billing.filters.autoScanStatus")}</span>
+            <select className="form-input h-10 py-0" value={scanStatusFilter} onChange={(event) => setScanStatusFilter(event.target.value)}>
+              {autoScanStatusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status === "all" ? t("admin.billing.filters.allAutoScanStatuses") : t(`billing.history.autoScan.status.${status}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("admin.billing.filters.autoScanSkipReason")}</span>
+            <select className="form-input h-10 py-0" value={skipReasonFilter} onChange={(event) => setSkipReasonFilter(event.target.value)}>
+              {autoScanSkipReasonOptions.map((reason) => (
+                <option key={reason} value={reason}>
+                  {reason === "all" ? t("admin.billing.filters.allSkipReasons") : autoScanSkipReasonLabel(reason, t)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full md:w-auto"
+            onClick={() => {
+              setScanStatusFilter("all");
+              setSkipReasonFilter("all");
+            }}
+          >
+            {t("admin.billing.filters.reset")}
+          </Button>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+          <span>{ordersLoading ? t("admin.billing.filters.loading") : t("admin.billing.filters.loaded", { count: orders.length })}</span>
+          {ordersError ? <span className="text-[#f6d96b]">{ordersError}</span> : null}
+        </div>
         <div className="space-y-2">
-          {overview.recent_orders.map((order) => (
+          {orders.map((order) => (
             <div key={order.order_id} className="grid gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 text-sm xl:grid-cols-[1fr_auto] xl:items-center">
               <div className="min-w-0">
                 <p className="break-words font-medium text-white">
@@ -708,7 +788,7 @@ function BillingSection({
               </div>
             </div>
           ))}
-          {overview.recent_orders.length === 0 ? <p className="py-8 text-center text-sm text-[#71767b]">{t("admin.billing.empty")}</p> : null}
+          {orders.length === 0 ? <p className="py-8 text-center text-sm text-[#71767b]">{t("admin.billing.empty")}</p> : null}
         </div>
       </Card>
     </div>

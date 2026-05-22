@@ -124,6 +124,9 @@ export type PaymentRecord = {
   txHash: string;
   failureReason: string;
   lastCheckedAt: string;
+  autoScanStatus: string;
+  autoScanSkipReason: string;
+  autoScannedAt: string;
   canRetry: boolean;
   nextAction: string;
   reconciliationStatus: BillingReconciliationStatus;

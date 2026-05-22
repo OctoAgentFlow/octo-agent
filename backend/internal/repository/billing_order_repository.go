@@ -207,6 +207,14 @@ func (r *BillingOrderRepository) MarkFailed(id uint, txHash, reason string, chec
 	}).Error
 }
 
+func (r *BillingOrderRepository) UpdateAutoScanState(id uint, status, reason string, scannedAt time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
+		"auto_scan_status":      status,
+		"auto_scan_skip_reason": reason,
+		"auto_scanned_at":       scannedAt,
+	}).Error
+}
+
 func (r *BillingOrderRepository) MarkNeedsReview(id uint, txHash, note string, checkedAt time.Time) error {
 	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
 		"status":                "pending",

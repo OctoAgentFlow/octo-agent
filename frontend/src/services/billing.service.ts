@@ -143,6 +143,9 @@ export type BillingOrderDetailApi = {
   paid_at?: string;
   failure_reason?: string;
   last_checked_at?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
+  auto_scanned_at?: string;
   can_retry: boolean;
   next_action: string;
   reconciliation_status: string;
@@ -172,6 +175,9 @@ export type BillingOrderListItemApi = {
   paid_at?: string;
   failure_reason?: string;
   last_checked_at?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
+  auto_scanned_at?: string;
   can_retry: boolean;
   next_action: string;
   reconciliation_status: string;

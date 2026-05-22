@@ -27,6 +27,9 @@ type BillingOrder struct {
 	TxHash               string     `gorm:"size:128;index;comment:链上交易哈希" json:"tx_hash,omitempty"`
 	FailureReason        string     `gorm:"size:512;comment:最近一次确认失败原因" json:"failure_reason,omitempty"`
 	LastCheckedAt        *time.Time `gorm:"comment:最近一次链上确认检查时间" json:"last_checked_at,omitempty"`
+	AutoScanStatus       string     `gorm:"size:32;index;comment:自动扫链状态" json:"auto_scan_status,omitempty"`
+	AutoScanSkipReason   string     `gorm:"size:512;comment:自动扫链跳过原因" json:"auto_scan_skip_reason,omitempty"`
+	AutoScannedAt        *time.Time `gorm:"comment:最近一次自动扫链时间" json:"auto_scanned_at,omitempty"`
 	ChainID              int64      `gorm:"not null;default:0;comment:链ID" json:"chain_id"`
 	TokenDecimals        int        `gorm:"not null;default:18;comment:代币精度" json:"token_decimals"`
 	ReconciliationStatus string     `gorm:"size:32;index;not null;default:unchecked;comment:对账状态" json:"reconciliation_status,omitempty"`

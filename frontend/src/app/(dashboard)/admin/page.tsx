@@ -137,10 +137,37 @@ function formatDate(value?: string) {
 
 function statusVariant(status: string): BadgeVariant {
   const s = status.toLowerCase();
-  if (s === "active" || s === "paid" || s === "success" || s === "matched" || s === "reviewed") return "success";
-  if (s === "pending" || s === "review" || s === "review_needed" || s === "needs_review") return "warning";
+  if (s === "active" || s === "paid" || s === "success" || s === "matched" || s === "reviewed" || s === "confirmed") {
+    return "success";
+  }
+  if (s === "pending" || s === "review" || s === "review_needed" || s === "needs_review" || s === "skipped") {
+    return "warning";
+  }
   if (s === "failed" || s === "expired" || s === "suspended" || s === "mismatch") return "danger";
+  if (s === "scanned") return "info";
   return "default";
+}
+
+const autoScanStatuses = new Set(["pending", "scanned", "confirmed", "skipped", "failed"]);
+const autoScanSkipReasons = new Set([
+  "missing_payment_metadata",
+  "ambiguous_payment_amount",
+  "no_matching_transfer",
+  "transfer_outside_order_window",
+  "tx_already_used",
+  "order_expired",
+  "invalid_tx_hash_from_chain",
+]);
+
+function normalizedAutoScanStatus(status?: string) {
+  const value = status || "pending";
+  return autoScanStatuses.has(value) ? value : "pending";
+}
+
+function autoScanSkipReasonLabel(reason: string | undefined, t: (key: string) => string) {
+  if (!reason) return t("billing.history.autoScan.noReason");
+  if (autoScanSkipReasons.has(reason)) return t(`billing.history.autoScan.reason.${reason}`);
+  return reason;
 }
 
 function roleVariant(role: string): BadgeVariant {
@@ -652,6 +679,7 @@ function BillingSection({
                 </p>
                 {hasOrderUpgradeCredit(order) ? <AdminProrationBreakdown order={order} /> : null}
                 {order.tx_hash ? <p className="mt-1 break-all font-mono text-xs text-[#71767b]">{order.tx_hash}</p> : null}
+                <AdminAutoScanInfo order={order} />
               </div>
               <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                 <Badge variant={statusVariant(order.status)}>{t(statusLabelKey(order.status))}</Badge>
@@ -705,6 +733,30 @@ function AdminProrationBreakdown({ order }: { order: AdminOverviewApi["recent_or
         label={t("billing.history.proration.payable")}
         value={`${order.payable_amount || order.amount} ${order.currency}`}
         valueClassName="text-white"
+      />
+    </div>
+  );
+}
+
+function AdminAutoScanInfo({ order }: { order: AdminOverviewApi["recent_orders"][number] }) {
+  const { t } = useT();
+  const status = normalizedAutoScanStatus(order.auto_scan_status);
+  return (
+    <div className="mt-3 grid gap-2 rounded-2xl border border-[#1d9bf0]/15 bg-[#1d9bf0]/5 p-3 text-xs sm:grid-cols-3">
+      <AdminAmountLine
+        label={t("billing.history.autoScan.title")}
+        value={t(`billing.history.autoScan.status.${status}`)}
+        valueClassName="text-[#cfd9de]"
+      />
+      <AdminAmountLine
+        label={t("billing.history.autoScan.lastScannedAt")}
+        value={order.auto_scanned_at ? formatDate(order.auto_scanned_at) : t("billing.history.autoScan.notScanned")}
+        valueClassName="text-[#cfd9de]"
+      />
+      <AdminAmountLine
+        label={t("billing.history.autoScan.skipReason")}
+        value={autoScanSkipReasonLabel(order.auto_scan_skip_reason, t)}
+        valueClassName="whitespace-normal break-words text-[#cfd9de]"
       />
     </div>
   );

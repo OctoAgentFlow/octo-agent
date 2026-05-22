@@ -28,6 +28,35 @@ function reviewVariant(status: BillingReviewStatus): BadgeVariant {
   return "default";
 }
 
+function autoScanVariant(status: string): BadgeVariant {
+  if (status === "confirmed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "skipped") return "warning";
+  if (status === "scanned") return "info";
+  return "default";
+}
+
+const autoScanStatuses = new Set(["pending", "scanned", "confirmed", "skipped", "failed"]);
+const autoScanSkipReasons = new Set([
+  "missing_payment_metadata",
+  "ambiguous_payment_amount",
+  "no_matching_transfer",
+  "transfer_outside_order_window",
+  "tx_already_used",
+  "order_expired",
+  "invalid_tx_hash_from_chain",
+]);
+
+function normalizedAutoScanStatus(status: string) {
+  return autoScanStatuses.has(status) ? status : "pending";
+}
+
+function autoScanSkipReasonLabel(reason: string, t: (key: string) => string) {
+  if (!reason) return t("billing.history.autoScan.noReason");
+  if (autoScanSkipReasons.has(reason)) return t(`billing.history.autoScan.reason.${reason}`);
+  return reason;
+}
+
 function maskHash(hash: string) {
   const s = hash.trim();
   if (!s) return "—";
@@ -274,6 +303,7 @@ export function PaymentHistoryTable({
                                 {t("billing.history.opsNote")}: {record.opsNote}
                               </p>
                             ) : null}
+                            {canOperateBilling ? <AutoScanInfo record={record} /> : null}
                             {record.lastCheckedAt ? (
                               <p className="text-xs text-[#71767b]">
                                 {t("billing.history.lastCheckedAt")}: {formatCheckedAt(record.lastCheckedAt)}
@@ -361,6 +391,31 @@ export function PaymentHistoryTable({
         </table>
       </div>
     </SectionCard>
+  );
+}
+
+function AutoScanInfo({ record }: { record: PaymentRecord }) {
+  const { t } = useT();
+  const status = normalizedAutoScanStatus(record.autoScanStatus || "pending");
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#080808] p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[#71767b]">{t("billing.history.autoScan.title")}</span>
+        <Badge variant={autoScanVariant(status)}>{t(`billing.history.autoScan.status.${status}`)}</Badge>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <span className="text-[#71767b]">{t("billing.history.autoScan.lastScannedAt")}</span>
+          <div className="mt-1 text-[#e7e9ea]">
+            {record.autoScannedAt ? formatCheckedAt(record.autoScannedAt) : t("billing.history.autoScan.notScanned")}
+          </div>
+        </div>
+        <div>
+          <span className="text-[#71767b]">{t("billing.history.autoScan.skipReason")}</span>
+          <div className="mt-1 break-words text-[#e7e9ea]">{autoScanSkipReasonLabel(record.autoScanSkipReason, t)}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 

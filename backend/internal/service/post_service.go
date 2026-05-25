@@ -455,6 +455,13 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 		var p2 *twitter.PublishError
 		if errors.As(apiErr, &p2) {
 			failMsg = truncateErrMsg(p2.Error())
+			if p2.StatusCode == 401 {
+				if markErr := s.accountRepo.MarkNeedsReauth(userID, p.XAccountID); markErr != nil {
+					zap.L().Warn("post execute: mark x account needs reauth failed", append(base,
+						zap.String("account_handle", handle),
+						zap.Error(markErr))...)
+				}
+			}
 		}
 		if err := s.persistExecuteFailure(postID, userID, p.XAccountID, handle, at, failMsg); err != nil {
 			zap.L().Error("post execute: persist failure after x api error", append(base,

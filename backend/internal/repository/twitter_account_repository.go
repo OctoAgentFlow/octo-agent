@@ -99,3 +99,12 @@ func (r *TwitterAccountRepository) DeleteByUserAndID(userID, id uint) error {
 			"refresh_token": "",
 		}).Error
 }
+
+func (r *TwitterAccountRepository) MarkNeedsReauth(userID, id uint) error {
+	return r.DB.Model(&model.TwitterAccount{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(map[string]any{
+			"status":     "needs_reauth",
+			"updated_at": time.Now(),
+		}).Error
+}

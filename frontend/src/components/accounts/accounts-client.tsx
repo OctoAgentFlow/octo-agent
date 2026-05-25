@@ -54,6 +54,10 @@ function mapAccount(item: AccountListItem): ConnectedXAccount {
     displayName: item.display_name || item.username || `#${item.id}`,
     status: item.status,
     followers: item.followers,
+    publishReady: item.publish_ready,
+    publishReauthRequired: item.publish_reauth_required,
+    publishIssue: item.publish_issue,
+    missingScopes: item.missing_scopes,
     ...toLastSyncData(item.last_synced_at),
   };
 }
@@ -248,7 +252,7 @@ export function AccountsClient() {
   const isFreeAccountLimitReached = subscription?.plan === "free_trial" && accounts.length >= 1;
   const freeAccountLimitReason = t("accounts.limit.freeTrialOneAccount");
   const connectedCount = accounts.filter((account) => account.status === "connected").length;
-  const needsActionCount = accounts.filter((account) => account.status !== "connected").length;
+  const needsActionCount = accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired).length;
   const boundBotCount = bots.filter((bot) => accounts.some((account) => Number(account.id) === bot.twitter_account_id)).length;
   const accountLimit = subscription?.limits.max_twitter_accounts ?? 1;
 
@@ -319,7 +323,7 @@ export function AccountsClient() {
             <AccountMetricCard label={t("accounts.overview.connected")} value={`${connectedCount}/${accountLimit}`} />
             <AccountMetricCard label={t("accounts.overview.boundBots")} value={`${boundBotCount}/${accounts.length}`} />
             <AccountMetricCard label={t("accounts.overview.needsAction")} value={String(needsActionCount)} tone={needsActionCount > 0 ? "warning" : "success"} />
-            <AccountMetricCard label={t("accounts.overview.automationReady")} value={String(Math.min(connectedCount, boundBotCount))} />
+            <AccountMetricCard label={t("accounts.overview.automationReady")} value={String(accounts.filter((account) => account.status === "connected" && account.publishReady).length)} />
           </div>
           <AccountList
             accounts={accounts}

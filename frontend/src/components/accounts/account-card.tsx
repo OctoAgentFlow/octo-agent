@@ -54,10 +54,17 @@ function readinessVariant(status: ConnectedXAccount["status"], boundBot?: OAFBot
   return "success";
 }
 
-function readinessLabel(status: ConnectedXAccount["status"], boundBot?: OAFBot) {
+function readinessLabel(status: ConnectedXAccount["status"], boundBot?: OAFBot, publishReauthRequired?: boolean) {
   if (status !== "connected") return "accounts.readiness.reauthRequired";
+  if (publishReauthRequired) return "accounts.readiness.publishReauthRequired";
   if (!boundBot) return "accounts.readiness.needsBot";
   return "accounts.readiness.ready";
+}
+
+function publishIssueLabel(issue?: string) {
+  if (issue === "missing_tweet_write") return "accounts.publishIssue.missingTweetWrite";
+  if (issue === "missing_access_token") return "accounts.publishIssue.missingAccessToken";
+  return "accounts.publishIssue.needsReauth";
 }
 
 export function AccountCard({
@@ -72,6 +79,7 @@ export function AccountCard({
   const { t } = useT();
   const isConnected = account.status === "connected";
   const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
+  const publishNeedsReauth = Boolean(account.publishReauthRequired);
 
   return (
     <Card className="overflow-hidden border-[#2f3336] bg-[#0f1419] p-0 transition-colors hover:bg-[#11161c]">
@@ -110,10 +118,10 @@ export function AccountCard({
 
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={readinessVariant(account.status, boundBot)} className="gap-1">
-              {isConnected && boundBot ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
-              {t(readinessLabel(account.status, boundBot))}
+              {isConnected && boundBot && !publishNeedsReauth ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
+              {t(readinessLabel(account.status, boundBot, publishNeedsReauth))}
             </Badge>
-            {account.status === "needs_reauth" ? (
+            {account.status === "needs_reauth" || publishNeedsReauth ? (
               <Button onClick={() => onReconnect(account.id)} size="sm">
                 <PlugZap className="size-4" />
                 {t("accounts.actions.reconnect")}
@@ -141,12 +149,31 @@ export function AccountCard({
         </div>
       </div>
 
+      {publishNeedsReauth ? (
+        <div className="border-b border-amber-300/20 bg-amber-400/10 px-4 py-3 md:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-100">{t("accounts.reauthNotice.title")}</p>
+              <p className="mt-1 text-xs leading-5 text-amber-100/75">
+                {t(publishIssueLabel(account.publishIssue), {
+                  scopes: account.missingScopes?.join(", ") || "tweet.write",
+                })}
+              </p>
+            </div>
+            <Button type="button" size="sm" onClick={() => onReconnect(account.id)}>
+              <PlugZap className="size-4" />
+              {t("accounts.actions.reconnect")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 p-4 md:grid-cols-3 md:p-5">
         <HealthRow
           icon={<ShieldCheck className="size-4" />}
           label={t("accounts.health.oauth")}
-          value={t(statusLabel(account.status))}
-          tone={isConnected ? "success" : "warning"}
+          value={publishNeedsReauth ? t("accounts.health.publishReauthRequired") : t(statusLabel(account.status))}
+          tone={isConnected && !publishNeedsReauth ? "success" : "warning"}
         />
         <HealthRow
           icon={<Bot className="size-4" />}

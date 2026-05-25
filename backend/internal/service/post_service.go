@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
@@ -38,6 +39,7 @@ type PostService struct {
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
+	xPublisher     config.XPublisherConfig
 }
 
 func NewPostService(
@@ -49,6 +51,7 @@ func NewPostService(
 	oafBotRepo *repository.OAFBotRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
+	xPublisher config.XPublisherConfig,
 ) *PostService {
 	return &PostService{
 		postRepo:       postRepo,
@@ -59,6 +62,7 @@ func NewPostService(
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
+		xPublisher:     xPublisher,
 	}
 }
 
@@ -390,6 +394,33 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 	}
 
 	handle := formatXAccountHandle(acc.Username)
+
+	if s.xPublisher.DryRun {
+		tweetID := fmt.Sprintf("dry-run-post-%d", postID)
+		at := time.Now().UTC()
+		if err := s.persistExecuteSuccess(postID, userID, p.XAccountID, handle, at); err != nil {
+			zap.L().Error("post execute: persist dry-run success failed", append(base,
+				zap.String("tweet_id", tweetID),
+				zap.String("account_handle", handle),
+				zap.Error(err))...)
+			return nil, "", err
+		}
+		out, err := s.postRepo.GetByUserAndID(userID, postID)
+		if err != nil {
+			zap.L().Error("post execute: reload post after dry-run failed", append(base,
+				zap.String("tweet_id", tweetID),
+				zap.Error(err))...)
+			return nil, "", err
+		}
+		item := postModelToDTO(*out)
+		zap.L().Info("post execute: dry-run published", append(base,
+			zap.String("tweet_id", tweetID),
+			zap.String("account_handle", handle),
+			zap.String("content_preview", previewForExecuteLog(p.Content, 160)),
+		)...)
+		return &item, tweetID, nil
+	}
+
 	zap.L().Info("post execute: calling x api",
 		append(base,
 			zap.String("account_handle", handle),

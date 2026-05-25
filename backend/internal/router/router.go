@@ -75,7 +75,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	billingOrderRepo := repository.NewBillingOrderRepository(db)
 	billingService := service.NewBillingService(userRepo, billingOrderRepo, twitterAccountRepo, oafBotRepo, aiGenerationUsageRepo, cfg)
 	oafBotService := service.NewOAFBotService(oafBotRepo, twitterAccountRepo, userRepo, aiGenerationUsageRepo, aiService)
-	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService)
+	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService, cfg.XPublisher)
 	publishingService := service.NewPublishingService(publishJobRepo, autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, twitterAccountRepo, userRepo, activityRepo, cfg.XPublisher, nil)
 	autoReplyService := service.NewAutoReplyService(twitterAccountRepo, automationRepo, activityRepo, replyReservationRepo, userRepo, autoReplyDraftRepo, oafBotRepo, aiGenerationUsageRepo, aiService, publishingService)
 	autoDMService := service.NewAutoDMService(twitterAccountRepo, automationRepo, activityRepo, autoDMTaskRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, userRepo, cfg.App.FrontendBaseURL)

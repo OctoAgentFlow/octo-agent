@@ -2728,6 +2728,7 @@ export const dict: I18nDict = {
   "points.event.freeze": "冻结抵扣积分",
   "points.event.consume": "消耗抵扣积分",
   "points.event.release": "释放冻结积分",
+  "points.event.refund": "退款退回积分",
   "points.toast.loadFailed": "加载积分中心失败",
   "points.toast.claimed": "积分已领取",
   "points.toast.claimFailed": "领取积分失败",

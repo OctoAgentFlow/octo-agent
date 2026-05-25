@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,6 +18,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.WalletChallenge{},
 		&model.UserWallet{},
 		&model.UserPointAccount{},
+		&model.PointActivity{},
 		&model.PointLedgerEntry{},
 		&model.PointActivityClaim{},
 		&model.TwitterAccount{},
@@ -57,7 +59,56 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
 		return err
 	}
+	if err := SeedDefaultPointActivities(db); err != nil {
+		return err
+	}
 	return BackfillUserOwnerRole(db)
+}
+
+func SeedDefaultPointActivities(db *gorm.DB) error {
+	defaults := []model.PointActivity{
+		{
+			Code:        "daily_check_in",
+			Title:       "Daily check-in",
+			Description: "Claim once per day after signing in.",
+			Points:      5,
+			ClaimPeriod: "daily",
+			Enabled:     true,
+			SortOrder:   10,
+		},
+		{
+			Code:        "bind_x_account",
+			Title:       "Bind an X account",
+			Description: "Claim after connecting at least one X account.",
+			Points:      30,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   20,
+		},
+		{
+			Code:        "create_oaf_bot",
+			Title:       "Create an OAF Bot",
+			Description: "Claim after creating at least one OAF Bot.",
+			Points:      50,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   30,
+		},
+	}
+	for _, activity := range defaults {
+		var existing model.PointActivity
+		err := db.Where("code = ?", activity.Code).First(&existing).Error
+		if err == nil {
+			continue
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err := db.Create(&activity).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ApplyTableComments keeps table comments readable in MySQL.
@@ -72,6 +123,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.WalletChallenge{}, "钱包签名挑战记录"},
 		{&model.UserWallet{}, "用户钱包绑定记录"},
 		{&model.UserPointAccount{}, "用户积分账户"},
+		{&model.PointActivity{}, "积分活动配置"},
 		{&model.PointLedgerEntry{}, "积分账本事件"},
 		{&model.PointActivityClaim{}, "积分活动领取记录"},
 		{&model.TwitterAccount{}, "用户绑定的X账号信息"},

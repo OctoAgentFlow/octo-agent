@@ -2760,6 +2760,7 @@ export const dict: I18nDict = {
   "points.event.freeze": "Discount points frozen",
   "points.event.consume": "Discount points spent",
   "points.event.release": "Frozen points released",
+  "points.event.refund": "Refunded points returned",
   "points.toast.loadFailed": "Failed to load Points Center",
   "points.toast.claimed": "Points claimed",
   "points.toast.claimFailed": "Failed to claim points",

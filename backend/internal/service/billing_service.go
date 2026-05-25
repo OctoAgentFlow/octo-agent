@@ -58,6 +58,8 @@ const (
 	billingAutoScanConfirmed = "confirmed"
 	billingAutoScanSkipped   = "skipped"
 	billingAutoScanFailed    = "failed"
+
+	pointMonthlyDiscountLimit = int64(1000)
 )
 
 type billingScanGroupKey struct {
@@ -225,7 +227,20 @@ func (s *BillingService) applyPointDiscount(userID uint, quote *billingQuoteCalc
 		balance = account.Balance
 	}
 	maxByAmount := (quote.payableCents / 2) / 10
-	maxPoints := minInt64(balance, maxByAmount)
+	monthlyRemaining := pointMonthlyDiscountLimit
+	if s.pointRepo != nil {
+		now := time.Now().UTC()
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		usedThisMonth, err := s.pointRepo.DiscountPointsInPeriod(userID, monthStart, monthStart.AddDate(0, 1, 0))
+		if err != nil {
+			return err
+		}
+		monthlyRemaining -= usedThisMonth
+		if monthlyRemaining < 0 {
+			monthlyRemaining = 0
+		}
+	}
+	maxPoints := minInt64(balance, minInt64(maxByAmount, monthlyRemaining))
 	if requestedPoints < 0 {
 		requestedPoints = 0
 	}

@@ -22,9 +22,11 @@ type pointActivityDefinition struct {
 	Title       string
 	Description string
 	Points      int64
-	ClaimKey    func(time.Time) string
+	ClaimPeriod string
 	Claimable   func(*PointService, uint) bool
 }
+
+const pointDailyEarnLimit = int64(100)
 
 func NewPointService(pointRepo *repository.PointRepository, oafBotRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *PointService {
 	return &PointService{pointRepo: pointRepo, oafBotRepo: oafBotRepo, accountRepo: accountRepo}
@@ -44,9 +46,13 @@ func (s *PointService) Center(userID uint) (*dto.PointCenterResponse, error) {
 		claimed[claim.ActivityCode+":"+claim.ClaimKey] = true
 	}
 	now := time.Now().UTC()
-	activities := make([]dto.PointActivityData, 0, len(pointActivities()))
-	for _, activity := range pointActivities() {
-		key := activity.ClaimKey(now)
+	defs, err := s.activities(now)
+	if err != nil {
+		return nil, err
+	}
+	activities := make([]dto.PointActivityData, 0, len(defs))
+	for _, activity := range defs {
+		key := pointClaimKey(activity.ClaimPeriod, now)
 		activities = append(activities, dto.PointActivityData{
 			Code:        activity.Code,
 			Title:       activity.Title,
@@ -75,7 +81,12 @@ func (s *PointService) Center(userID uint) (*dto.PointCenterResponse, error) {
 
 func (s *PointService) Claim(userID uint, req dto.PointClaimRequest) (*dto.PointCenterResponse, error) {
 	var selected *pointActivityDefinition
-	for _, activity := range pointActivities() {
+	now := time.Now().UTC()
+	defs, err := s.activities(now)
+	if err != nil {
+		return nil, err
+	}
+	for _, activity := range defs {
 		if activity.Code == req.ActivityCode {
 			a := activity
 			selected = &a
@@ -88,58 +99,115 @@ func (s *PointService) Claim(userID uint, req dto.PointClaimRequest) (*dto.Point
 	if !selected.Claimable(s, userID) {
 		return nil, fmt.Errorf("activity is not claimable")
 	}
-	now := time.Now().UTC()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	earnedToday, err := s.pointRepo.EarnedPointsInPeriod(userID, dayStart, dayStart.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	if earnedToday+selected.Points > pointDailyEarnLimit {
+		return nil, fmt.Errorf("daily point earning limit reached")
+	}
 	details, _ := json.Marshal(map[string]any{"activity": selected.Code, "title": selected.Title})
-	if err := s.pointRepo.EarnActivity(userID, selected.Code, selected.ClaimKey(now), selected.Points, now, string(details)); err != nil {
+	if err := s.pointRepo.EarnActivity(userID, selected.Code, pointClaimKey(selected.ClaimPeriod, now), selected.Points, now, string(details)); err != nil {
 		return nil, err
 	}
 	return s.Center(userID)
 }
 
-func pointActivities() []pointActivityDefinition {
+func (s *PointService) activities(now time.Time) ([]pointActivityDefinition, error) {
+	rows, err := s.pointRepo.Activities(now)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]pointActivityDefinition, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, pointActivityDefinition{
+			Code:        row.Code,
+			Title:       row.Title,
+			Description: row.Description,
+			Points:      row.Points,
+			ClaimPeriod: normalizePointClaimPeriod(row.ClaimPeriod),
+			Claimable:   pointActivityClaimable(row.Code),
+		})
+	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	return defaultPointActivities(), nil
+}
+
+func defaultPointActivities() []pointActivityDefinition {
 	return []pointActivityDefinition{
 		{
 			Code:        "daily_check_in",
 			Title:       "Daily check-in",
 			Description: "Claim once per day after signing in.",
 			Points:      5,
-			ClaimKey: func(now time.Time) string {
-				return now.UTC().Format("2006-01-02")
-			},
-			Claimable: func(_ *PointService, _ uint) bool { return true },
+			ClaimPeriod: "daily",
+			Claimable:   pointActivityClaimable("daily_check_in"),
 		},
 		{
 			Code:        "bind_x_account",
 			Title:       "Bind an X account",
 			Description: "Claim after connecting at least one X account.",
 			Points:      30,
-			ClaimKey: func(_ time.Time) string {
-				return "once"
-			},
-			Claimable: func(s *PointService, userID uint) bool {
-				if s == nil || s.accountRepo == nil {
-					return false
-				}
-				n, err := s.accountRepo.CountByUserID(userID)
-				return err == nil && n > 0
-			},
+			ClaimPeriod: "once",
+			Claimable:   pointActivityClaimable("bind_x_account"),
 		},
 		{
 			Code:        "create_oaf_bot",
 			Title:       "Create an OAF Bot",
 			Description: "Claim after creating at least one OAF Bot.",
 			Points:      50,
-			ClaimKey: func(_ time.Time) string {
-				return "once"
-			},
-			Claimable: func(s *PointService, userID uint) bool {
-				if s == nil || s.oafBotRepo == nil {
-					return false
-				}
-				n, err := s.oafBotRepo.CountByUserID(userID)
-				return err == nil && n > 0
-			},
+			ClaimPeriod: "once",
+			Claimable:   pointActivityClaimable("create_oaf_bot"),
 		},
+	}
+}
+
+func pointActivityClaimable(code string) func(*PointService, uint) bool {
+	switch code {
+	case "daily_check_in":
+		return func(_ *PointService, _ uint) bool { return true }
+	case "bind_x_account":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.accountRepo == nil {
+				return false
+			}
+			n, err := s.accountRepo.CountByUserID(userID)
+			return err == nil && n > 0
+		}
+	case "create_oaf_bot":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.oafBotRepo == nil {
+				return false
+			}
+			n, err := s.oafBotRepo.CountByUserID(userID)
+			return err == nil && n > 0
+		}
+	default:
+		return func(_ *PointService, _ uint) bool { return false }
+	}
+}
+
+func normalizePointClaimPeriod(v string) string {
+	switch v {
+	case "daily", "monthly", "once":
+		return v
+	default:
+		return "once"
+	}
+}
+
+func pointClaimKey(period string, now time.Time) string {
+	now = now.UTC()
+	switch normalizePointClaimPeriod(period) {
+	case "daily":
+		return now.Format("2006-01-02")
+	case "monthly":
+		return now.Format("2006-01")
+	default:
+		return "once"
 	}
 }
 

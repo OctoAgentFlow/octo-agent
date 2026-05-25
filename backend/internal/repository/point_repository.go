@@ -36,6 +36,47 @@ func (r *PointRepository) Claims(userID uint) ([]model.PointActivityClaim, error
 	return rows, err
 }
 
+func (r *PointRepository) Activities(now time.Time) ([]model.PointActivity, error) {
+	now = now.UTC()
+	var rows []model.PointActivity
+	err := r.DB.
+		Where("enabled = ?", true).
+		Where("(starts_at IS NULL OR starts_at <= ?) AND (ends_at IS NULL OR ends_at >= ?)", now, now).
+		Order("sort_order ASC, id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PointRepository) EarnedPointsInPeriod(userID uint, start, end time.Time) (int64, error) {
+	var total int64
+	err := r.DB.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("user_id = ? AND event_type = ? AND created_at >= ? AND created_at < ?", userID, "earn", start.UTC(), end.UTC()).
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *PointRepository) DiscountPointsInPeriod(userID uint, start, end time.Time) (int64, error) {
+	var frozen int64
+	if err := r.DB.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("user_id = ? AND event_type = ? AND created_at >= ? AND created_at < ?", userID, "freeze", start.UTC(), end.UTC()).
+		Scan(&frozen).Error; err != nil {
+		return 0, err
+	}
+	var restored int64
+	if err := r.DB.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("user_id = ? AND event_type IN ? AND created_at >= ? AND created_at < ?", userID, []string{"release", "refund"}, start.UTC(), end.UTC()).
+		Scan(&restored).Error; err != nil {
+		return 0, err
+	}
+	if frozen <= restored {
+		return 0, nil
+	}
+	return frozen - restored, nil
+}
+
 func (r *PointRepository) EarnActivity(userID uint, activityCode, claimKey string, points int64, now time.Time, details string) error {
 	if points <= 0 {
 		return fmt.Errorf("points must be positive")
@@ -168,8 +209,62 @@ func (r *PointRepository) ReleaseFrozenForOrder(tx *gorm.DB, userID, orderID uin
 	}).Error
 }
 
+func (r *PointRepository) RefundConsumedForOrder(tx *gorm.DB, userID, orderID uint, points int64, details string) error {
+	if points <= 0 {
+		return nil
+	}
+	var existing int64
+	if err := tx.Model(&model.PointLedgerEntry{}).Where("unique_key = ?", fmt.Sprintf("refund_order:%d", orderID)).Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	var consumed int64
+	if err := tx.Model(&model.PointLedgerEntry{}).Where("unique_key = ?", fmt.Sprintf("consume_order:%d", orderID)).Count(&consumed).Error; err != nil {
+		return err
+	}
+	if consumed == 0 {
+		return r.ReleaseFrozenForOrder(tx, userID, orderID, points, details)
+	}
+	account, err := r.getOrCreateAccount(tx, userID, true)
+	if err != nil {
+		return err
+	}
+	account.Balance += points
+	if account.LifetimeSpent > points {
+		account.LifetimeSpent -= points
+	} else {
+		account.LifetimeSpent = 0
+	}
+	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+	return tx.Create(&model.PointLedgerEntry{
+		UserID:       userID,
+		OrderID:      orderID,
+		EventType:    "refund",
+		Points:       points,
+		BalanceAfter: account.Balance,
+		FrozenAfter:  account.Frozen,
+		UniqueKey:    fmt.Sprintf("refund_order:%d", orderID),
+		Details:      details,
+	}).Error
+}
+
 func (r *PointRepository) ReleaseExpiredOrderPoints(userID uint) error {
-	db := r.DB.Where("status = ? AND points_used > 0", "expired")
+	return r.ReleaseOrderPointsByStatus(userID, []string{"expired", "cancelled", "refunded"}, "order_closed")
+}
+
+func (r *PointRepository) ReleaseExpiredOrderPointsByID(userID, orderID uint) error {
+	return r.ReleaseOrderPointsByID(userID, orderID, []string{"expired", "cancelled", "refunded"}, "order_closed")
+}
+
+func (r *PointRepository) ReleaseOrderPointsByStatus(userID uint, statuses []string, reason string) error {
+	if len(statuses) == 0 {
+		return nil
+	}
+	db := r.DB.Where("status IN ? AND points_used > 0", statuses)
 	if userID > 0 {
 		db = db.Where("user_id = ?", userID)
 	}
@@ -179,7 +274,7 @@ func (r *PointRepository) ReleaseExpiredOrderPoints(userID uint) error {
 	}
 	for _, order := range orders {
 		if err := r.DB.Transaction(func(tx *gorm.DB) error {
-			return r.ReleaseFrozenForOrder(tx, order.UserID, order.ID, order.PointsUsed, fmt.Sprintf(`{"reason":"order_expired","order_id":%d}`, order.ID))
+			return r.restoreOrderPoints(tx, order, reason)
 		}); err != nil {
 			return err
 		}
@@ -187,9 +282,12 @@ func (r *PointRepository) ReleaseExpiredOrderPoints(userID uint) error {
 	return nil
 }
 
-func (r *PointRepository) ReleaseExpiredOrderPointsByID(userID, orderID uint) error {
+func (r *PointRepository) ReleaseOrderPointsByID(userID, orderID uint, statuses []string, reason string) error {
+	if len(statuses) == 0 {
+		return nil
+	}
 	var order model.BillingOrder
-	q := r.DB.Where("id = ? AND status = ? AND points_used > 0", orderID, "expired")
+	q := r.DB.Where("id = ? AND status IN ? AND points_used > 0", orderID, statuses)
 	if userID > 0 {
 		q = q.Where("user_id = ?", userID)
 	}
@@ -200,8 +298,16 @@ func (r *PointRepository) ReleaseExpiredOrderPointsByID(userID, orderID uint) er
 		return err
 	}
 	return r.DB.Transaction(func(tx *gorm.DB) error {
-		return r.ReleaseFrozenForOrder(tx, order.UserID, order.ID, order.PointsUsed, fmt.Sprintf(`{"reason":"order_expired","order_id":%d}`, order.ID))
+		return r.restoreOrderPoints(tx, order, reason)
 	})
+}
+
+func (r *PointRepository) restoreOrderPoints(tx *gorm.DB, order model.BillingOrder, reason string) error {
+	details := fmt.Sprintf(`{"reason":%q,"order_id":%d,"status":%q}`, reason, order.ID, order.Status)
+	if order.Status == "refunded" {
+		return r.RefundConsumedForOrder(tx, order.UserID, order.ID, order.PointsUsed, details)
+	}
+	return r.ReleaseFrozenForOrder(tx, order.UserID, order.ID, order.PointsUsed, details)
 }
 
 func (r *PointRepository) getOrCreateAccount(tx *gorm.DB, userID uint, lock bool) (*model.UserPointAccount, error) {

@@ -56,6 +56,7 @@ export default function PointsPage() {
   }
 
   const account = data?.account;
+  const positiveEvents = new Set(["earn", "release", "refund"]);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -121,8 +122,8 @@ export default function PointsPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={item.event_type === "earn" || item.event_type === "release" ? "font-semibold text-[#7ee0b5]" : "font-semibold text-amber-100"}>
-                    {item.event_type === "earn" || item.event_type === "release" ? "+" : "-"}{item.points}
+                  <p className={positiveEvents.has(item.event_type) ? "font-semibold text-[#7ee0b5]" : "font-semibold text-amber-100"}>
+                    {positiveEvents.has(item.event_type) ? "+" : "-"}{item.points}
                   </p>
                   <p className="mt-1 text-xs text-[#71767b]">{t("points.ledger.after", { balance: item.balance_after, frozen: item.frozen_after })}</p>
                 </div>

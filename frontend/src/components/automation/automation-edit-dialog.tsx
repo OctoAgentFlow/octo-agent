@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
 import type { AutomationModule, AutomationModuleConfig, AutomationTone } from "@/types/automation";
-import { autoDmSchema, autoPostSchema, autoReplySchema } from "@/schemas/automation.schema";
+import { autoCommentSchema, autoDmSchema, autoPostSchema, autoReplySchema } from "@/schemas/automation.schema";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ type Props = {
 function schemaForType(type: AutomationModule["type"]) {
   if (type === "post") return autoPostSchema;
   if (type === "reply") return autoReplySchema;
+  if (type === "comment") return autoCommentSchema;
   return autoDmSchema;
 }
 
@@ -37,6 +38,7 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
       enabled: false,
       frequency: { intervalMinutes: 60, dailyLimit: 20 },
       tone: "Professional",
+      executionMode: "review",
       safety: { requireApproval: true, maxPerHour: 5, blockedKeywords: [] },
     }) as Values,
   });
@@ -104,6 +106,18 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
         </div>
 
         <div className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-white/70 uppercase">{t("automation.edit.executionMode")}</p>
+          <select className="form-input" defaultValue={module.config.executionMode || "review"} {...form.register("executionMode")}>
+            {(["manual", "review", "autopilot"] as const).map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`automation.executionMode.${mode}`)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs leading-5 text-white/45">{t("automation.edit.executionModeHint")}</p>
+        </div>
+
+        <div className="space-y-2">
           <p className="text-xs font-semibold tracking-wide text-white/70 uppercase">{t("automation.edit.safety")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-white/75">
@@ -150,4 +164,3 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
     </Dialog>
   );
 }
-

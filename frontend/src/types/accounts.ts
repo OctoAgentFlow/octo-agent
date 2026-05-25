@@ -11,5 +11,8 @@ export type ConnectedXAccount = {
   lastSyncedKey?: string;
   lastSyncedParams?: TranslateParams;
   followers?: string;
+  publishReady?: boolean;
+  publishReauthRequired?: boolean;
+  publishIssue?: string;
+  missingScopes?: string[];
 };
-

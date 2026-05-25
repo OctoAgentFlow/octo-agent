@@ -15,8 +15,10 @@ import (
 )
 
 type AutomationController struct {
-	automationService *service.AutomationService
-	autoDMService     *service.AutoDMService
+	automationService  *service.AutomationService
+	autoReplyService   *service.AutoReplyService
+	autoDMService      *service.AutoDMService
+	autoCommentService *service.AutoCommentService
 }
 
 func getUintParam(c *gin.Context, name string) (uint, bool) {
@@ -28,8 +30,8 @@ func getUintParam(c *gin.Context, name string) (uint, bool) {
 	return uint(value), true
 }
 
-func NewAutomationController(automationService *service.AutomationService, autoDMService *service.AutoDMService) *AutomationController {
-	return &AutomationController{automationService: automationService, autoDMService: autoDMService}
+func NewAutomationController(automationService *service.AutomationService, autoReplyService *service.AutoReplyService, autoDMService *service.AutoDMService, autoCommentService *service.AutoCommentService) *AutomationController {
+	return &AutomationController{automationService: automationService, autoReplyService: autoReplyService, autoDMService: autoDMService, autoCommentService: autoCommentService}
 }
 
 func (ctl *AutomationController) List(c *gin.Context) {
@@ -102,6 +104,26 @@ func (ctl *AutomationController) Toggle(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) UpdateExecutionMode(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	typ := strings.TrimSpace(strings.ToLower(c.Param("type")))
+	var req dto.AutomationExecutionModeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.automationService.UpdateExecutionMode(userID, typ, req.ExecutionMode)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) RuntimeStatus(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -111,6 +133,107 @@ func (ctl *AutomationController) RuntimeStatus(c *gin.Context) {
 	data, err := ctl.automationService.RuntimeStatus(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListReplyDrafts(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoReplyService.ListDrafts(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) GenerateReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoReplyDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoReplyService.GenerateDraft(c.Request.Context(), userID, req)
+	if err != nil {
+		if strings.Contains(err.Error(), "ai_generation_quota_exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoReplyDraftUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoReplyService.UpdateDraft(userID, draftID, req.GeneratedReply)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ApproveReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	data, err := ctl.autoReplyService.ApproveDraft(userID, draftID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RejectReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentTaskBlockRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoReplyService.RejectDraft(userID, draftID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.OK(c, data)
@@ -326,6 +449,225 @@ func (ctl *AutomationController) PublicUnsubscribeDM(c *gin.Context) {
 	data, err := ctl.autoDMService.PublicUnsubscribe(token)
 	if err != nil {
 		response.Fail(c, http.StatusNotFound, "unsubscribe preference not found")
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListCommentTargets(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoCommentService.ListTargets(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) CreateCommentTarget(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoCommentTargetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.CreateTarget(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateCommentTargetStatus(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	targetID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid target id")
+		return
+	}
+	var req dto.AutoCommentTargetStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.UpdateTargetStatus(userID, targetID, req.Status)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) DeleteCommentTarget(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	targetID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid target id")
+		return
+	}
+	if err := ctl.autoCommentService.DeleteTarget(userID, targetID); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}
+
+func (ctl *AutomationController) ListCommentTasks(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoCommentService.ListTasks(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	targetID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid target id")
+		return
+	}
+	data, err := ctl.autoCommentService.GenerateDraft(c.Request.Context(), userID, targetID)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	data, err := ctl.autoCommentService.ApproveTask(c.Request.Context(), userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RejectCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentTaskBlockRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoCommentService.RejectTask(userID, taskID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpdateCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentDraftUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.UpdateDraft(userID, taskID, req.GeneratedComment)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) BlockCommentTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	var req dto.AutoCommentTaskBlockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.BlockTask(userID, taskID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RetryCommentTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	data, err := ctl.autoCommentService.RetryTask(c.Request.Context(), userID, taskID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.OK(c, data)

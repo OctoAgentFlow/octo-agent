@@ -48,6 +48,25 @@ func (ctl *BillingController) PaymentMethods(c *gin.Context) {
 	response.OK(c, ctl.billingService.PaymentMethods(userID))
 }
 
+func (ctl *BillingController) Quote(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.BillingQuoteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.billingService.Quote(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *BillingController) CreateOrder(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

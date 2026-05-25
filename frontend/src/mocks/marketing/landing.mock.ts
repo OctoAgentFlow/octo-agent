@@ -1,4 +1,4 @@
-import { Bot, MessageCircleReply, Send, Sparkles, Users, Wallet } from "lucide-react";
+import { Bot, MessageCircleReply, MessageSquareText, Send, Sparkles, Users, Wallet } from "lucide-react";
 
 import type {
   DashboardPreview,
@@ -12,16 +12,18 @@ import type {
 } from "@/types/marketing";
 
 export const navItems: NavItem[] = [
+  { labelKey: "marketing.nav.oafBot", href: "#oaf-bot" },
   { labelKey: "marketing.nav.capabilities", href: "#capabilities" },
+  { labelKey: "marketing.nav.autoPost", href: "#auto-post" },
   { labelKey: "marketing.nav.workflow", href: "#workflow" },
   { labelKey: "marketing.nav.pricing", href: "#pricing" },
   { labelKey: "marketing.nav.faq", href: "#faq" },
 ];
 
 export const heroStats: HeroStat[] = [
-  { labelKey: "marketing.hero.stats.teamsOnboarded", value: "200+" },
-  { labelKey: "marketing.hero.stats.tasksAutomated", value: "1.2M+" },
-  { labelKey: "marketing.hero.stats.avgResponseSpeed", value: "18s" },
+  { labelKey: "marketing.hero.stats.personaEngine", valueKey: "marketing.hero.stats.personaEngineValue" },
+  { labelKey: "marketing.hero.stats.socialActions", valueKey: "marketing.hero.stats.socialActionsValue" },
+  { labelKey: "marketing.hero.stats.guardrails", valueKey: "marketing.hero.stats.guardrailsValue" },
 ];
 
 export const features: FeatureCard[] = [
@@ -48,6 +50,17 @@ export const features: FeatureCard[] = [
     statusKey: "marketing.features.status.queued",
   },
   {
+    titleKey: "marketing.features.autoComment.title",
+    descriptionKey: "marketing.features.autoComment.description",
+    bulletKeys: [
+      "marketing.features.autoComment.bullets.targets",
+      "marketing.features.autoComment.bullets.persona",
+      "marketing.features.autoComment.bullets.review",
+    ],
+    icon: MessageSquareText,
+    statusKey: "marketing.features.status.queued",
+  },
+  {
     titleKey: "marketing.features.autoDm.title",
     descriptionKey: "marketing.features.autoDm.description",
     bulletKeys: [
@@ -62,20 +75,16 @@ export const features: FeatureCard[] = [
 
 export const workflowSteps: WorkflowStep[] = [
   {
-    titleKey: "marketing.workflow.steps.connect.title",
-    descriptionKey: "marketing.workflow.steps.connect.description",
+    titleKey: "marketing.workflow.steps.createBot.title",
+    descriptionKey: "marketing.workflow.steps.createBot.description",
   },
   {
-    titleKey: "marketing.workflow.steps.configure.title",
-    descriptionKey: "marketing.workflow.steps.configure.description",
+    titleKey: "marketing.workflow.steps.bindAccount.title",
+    descriptionKey: "marketing.workflow.steps.bindAccount.description",
   },
   {
-    titleKey: "marketing.workflow.steps.approve.title",
-    descriptionKey: "marketing.workflow.steps.approve.description",
-  },
-  {
-    titleKey: "marketing.workflow.steps.run.title",
-    descriptionKey: "marketing.workflow.steps.run.description",
+    titleKey: "marketing.workflow.steps.launchFlow.title",
+    descriptionKey: "marketing.workflow.steps.launchFlow.description",
   },
 ];
 
@@ -84,6 +93,7 @@ export const dashboardPreviewData: DashboardPreview = {
     { labelKey: "marketing.preview.kpis.postsSent", value: "124", delta: "+18%" },
     { labelKey: "marketing.preview.kpis.repliesHandled", value: "847", delta: "+31%" },
     { labelKey: "marketing.preview.kpis.dmConversions", value: "63", delta: "+12%" },
+    { labelKey: "marketing.preview.kpis.personaConsistency", value: "96%", delta: "+6%" },
   ],
   tasks: [
     { time: "09:00", taskKey: "marketing.preview.tasks.t1", statusKey: "marketing.preview.status.completed" },
@@ -94,34 +104,124 @@ export const dashboardPreviewData: DashboardPreview = {
 
 export const pricingPlans: PricingPlan[] = [
   {
-    nameKey: "marketing.pricing.freeTrial.name",
-    price: "0",
+    code: "basic",
+    name: "Basic",
+    monthlyPrice: 8,
+    yearlyPrice: 77,
     unit: "USDT",
-    period: "7 days",
-    descriptionKey: "marketing.pricing.freeTrial.description",
-    featureKeys: [
-      "marketing.pricing.freeTrial.features.autoPost",
-      "marketing.pricing.freeTrial.features.autoReply",
-      "marketing.pricing.freeTrial.features.basicDashboard",
-      "marketing.pricing.freeTrial.features.communitySupport",
-    ],
-    ctaKey: "marketing.pricing.freeTrial.cta",
+    limits: {
+      maxBots: 1,
+      maxTwitterAccounts: 1,
+      aiGenerationsMonthly: 800,
+      dailyAutoPosts: 2,
+      dailyAutoReplies: 16,
+      dailyAutoComments: 8,
+      dailyAutoDMs: 16,
+      analyticsDays: 7,
+      teamSeats: 0,
+      fullPersonaFields: false,
+      autoDMImport: false,
+      advancedBotStrategy: false,
+      bulkReview: false,
+      botPerformance: false,
+      dataExport: false,
+      multiBotMatrix: false,
+      abTesting: false,
+      advancedFlowBuilder: false,
+      advancedRiskRules: false,
+      prioritySupport: false,
+    },
     highlight: false,
   },
   {
-    nameKey: "marketing.pricing.basic.name",
-    price: "10",
+    code: "plus",
+    name: "Plus",
+    monthlyPrice: 29,
+    yearlyPrice: 279,
     unit: "USDT",
-    period: "/ month",
-    descriptionKey: "marketing.pricing.basic.description",
-    featureKeys: [
-      "marketing.pricing.basic.features.allAutomations",
-      "marketing.pricing.basic.features.unlimitedWorkflows",
-      "marketing.pricing.basic.features.prioritySupport",
-      "marketing.pricing.basic.features.advancedAnalytics",
-    ],
-    ctaKey: "marketing.pricing.basic.cta",
+    limits: {
+      maxBots: 3,
+      maxTwitterAccounts: 3,
+      aiGenerationsMonthly: 10000,
+      dailyAutoPosts: 10,
+      dailyAutoReplies: 100,
+      dailyAutoComments: 50,
+      dailyAutoDMs: 100,
+      analyticsDays: 30,
+      teamSeats: 0,
+      fullPersonaFields: true,
+      autoDMImport: true,
+      advancedBotStrategy: false,
+      bulkReview: false,
+      botPerformance: false,
+      dataExport: false,
+      multiBotMatrix: false,
+      abTesting: false,
+      advancedFlowBuilder: false,
+      advancedRiskRules: false,
+      prioritySupport: false,
+    },
     highlight: true,
+  },
+  {
+    code: "pro",
+    name: "Pro",
+    monthlyPrice: 79,
+    yearlyPrice: 759,
+    unit: "USDT",
+    limits: {
+      maxBots: 10,
+      maxTwitterAccounts: 10,
+      aiGenerationsMonthly: 50000,
+      dailyAutoPosts: 50,
+      dailyAutoReplies: 500,
+      dailyAutoComments: 300,
+      dailyAutoDMs: 500,
+      analyticsDays: 90,
+      teamSeats: 3,
+      fullPersonaFields: true,
+      autoDMImport: true,
+      advancedBotStrategy: true,
+      bulkReview: true,
+      botPerformance: true,
+      dataExport: true,
+      multiBotMatrix: false,
+      abTesting: false,
+      advancedFlowBuilder: false,
+      advancedRiskRules: false,
+      prioritySupport: false,
+    },
+    highlight: false,
+  },
+  {
+    code: "pro_plus",
+    name: "Pro+",
+    monthlyPrice: 199,
+    yearlyPrice: 1910,
+    unit: "USDT",
+    limits: {
+      maxBots: 30,
+      maxTwitterAccounts: 30,
+      aiGenerationsMonthly: 200000,
+      dailyAutoPosts: 200,
+      dailyAutoReplies: 2000,
+      dailyAutoComments: 1000,
+      dailyAutoDMs: 2000,
+      analyticsDays: 365,
+      teamSeats: 10,
+      fullPersonaFields: true,
+      autoDMImport: true,
+      advancedBotStrategy: true,
+      bulkReview: true,
+      botPerformance: true,
+      dataExport: true,
+      multiBotMatrix: true,
+      abTesting: true,
+      advancedFlowBuilder: true,
+      advancedRiskRules: true,
+      prioritySupport: true,
+    },
+    highlight: false,
   },
 ];
 
@@ -138,6 +238,26 @@ export const faqs: FAQItem[] = [
     qKey: "marketing.faq.q3.q",
     aKey: "marketing.faq.q3.a",
   },
+  {
+    qKey: "marketing.faq.q4.q",
+    aKey: "marketing.faq.q4.a",
+  },
+  {
+    qKey: "marketing.faq.q5.q",
+    aKey: "marketing.faq.q5.a",
+  },
+  {
+    qKey: "marketing.faq.q6.q",
+    aKey: "marketing.faq.q6.a",
+  },
+  {
+    qKey: "marketing.faq.q7.q",
+    aKey: "marketing.faq.q7.a",
+  },
+  {
+    qKey: "marketing.faq.q8.q",
+    aKey: "marketing.faq.q8.a",
+  },
 ];
 
 export const trustBadges: TrustBadge[] = [
@@ -145,4 +265,3 @@ export const trustBadges: TrustBadge[] = [
   { labelKey: "marketing.hero.trust.builtForTeams", icon: Users },
   { labelKey: "marketing.hero.trust.cryptoBilling", icon: Wallet },
 ];
-

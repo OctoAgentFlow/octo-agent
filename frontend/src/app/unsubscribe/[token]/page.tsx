@@ -6,11 +6,13 @@ import axios from "axios";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useT } from "@/i18n/use-t";
 import { automationService, type AutoDMPreferenceData } from "@/services/automation.service";
 
 type LoadState = "loading" | "ready" | "done" | "error";
 
 export default function UnsubscribePage() {
+  const { t } = useT();
   const params = useParams<{ token: string }>();
   const token = params.token;
   const [state, setState] = useState<LoadState>("loading");
@@ -28,13 +30,13 @@ export default function UnsubscribePage() {
       })
       .catch(() => {
         if (cancelled) return;
-        setMessage("This unsubscribe link is invalid or expired.");
+        setMessage(t("unsubscribe.errors.invalid"));
         setState("error");
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [t, token]);
 
   const unsubscribe = async () => {
     try {
@@ -43,7 +45,7 @@ export default function UnsubscribePage() {
       setState("done");
       setMessage("");
     } catch (error) {
-      setMessage(axios.isAxiosError(error) ? error.response?.data?.message || "Unable to unsubscribe." : "Unable to unsubscribe.");
+      setMessage(axios.isAxiosError(error) ? error.response?.data?.message || t("unsubscribe.errors.failed") : t("unsubscribe.errors.failed"));
       setState("error");
     }
   };
@@ -52,19 +54,19 @@ export default function UnsubscribePage() {
     <main className="flex min-h-screen items-center justify-center px-6 py-10">
       <Card className="w-full max-w-lg">
         <CardHeader
-          title="Auto DM Preferences"
-          description={preference?.recipient_username ? `Preferences for ${preference.recipient_username}` : "Manage your Auto DM preference."}
+          title={t("unsubscribe.title")}
+          description={preference?.recipient_username ? t("unsubscribe.descriptionWithUser", { username: preference.recipient_username }) : t("unsubscribe.description")}
         />
-        {state === "loading" ? <p className="text-sm text-white/60">Loading...</p> : null}
+        {state === "loading" ? <p className="text-sm text-white/60">{t("common.loading")}</p> : null}
         {state === "ready" ? (
           <div className="space-y-4">
-            <p className="text-sm text-white/68">You can stop future Auto DM messages from this sender.</p>
-            <Button onClick={unsubscribe}>Unsubscribe</Button>
+            <p className="text-sm text-white/68">{t("unsubscribe.readyDescription")}</p>
+            <Button onClick={unsubscribe}>{t("unsubscribe.action")}</Button>
           </div>
         ) : null}
         {state === "done" ? (
           <p className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-3 py-3 text-sm text-emerald-100">
-            You are unsubscribed. Future Auto DM sends to this recipient are blocked.
+            {t("unsubscribe.done")}
           </p>
         ) : null}
         {state === "error" ? <p className="text-sm text-amber-100">{message}</p> : null}

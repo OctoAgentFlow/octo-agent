@@ -1,30 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
-  Activity,
   BadgeDollarSign,
   BarChart3,
   Bot,
   FileText,
   LayoutDashboard,
-  LogOut,
+  ListChecks,
+  ReceiptText,
   Settings,
   ShieldCheck,
   UserCircle,
   Users,
+  Workflow,
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
-import { Button } from "@/components/ui/button";
-import { signOut } from "@/lib/auth-session";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "sidebar.nav.activity", href: "/activity", icon: Activity },
-  { labelKey: "sidebar.nav.automations", href: "/agents", icon: Bot },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+  { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
+  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
@@ -33,49 +34,64 @@ const navItems = [
   { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
 
+const adminNavItems = [
+  { labelKey: "sidebar.admin.overview", href: "/admin?section=overview", section: "overview", icon: LayoutDashboard },
+  { labelKey: "sidebar.admin.users", href: "/admin?section=users", section: "users", icon: Users },
+  { labelKey: "sidebar.admin.billing", href: "/admin?section=billing", section: "billing", icon: ReceiptText },
+  { labelKey: "sidebar.admin.activity", href: "/admin?section=activity", section: "activity", icon: ListChecks },
+  { labelKey: "sidebar.admin.system", href: "/admin?section=system", section: "system", icon: Settings },
+];
+
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useT();
-  const visibleNavItems = isAdminFrontend() ? navItems.filter((item) => item.href === "/admin") : navItems.filter((item) => item.href !== "/admin");
-
-  const onLogout = () => {
-    signOut();
-    router.replace("/login");
-  };
+  const adminMode = isAdminFrontend();
+  const visibleNavItems = adminMode ? adminNavItems : navItems.filter((item) => item.href !== "/admin");
+  const activeAdminSection = searchParams.get("section") || "overview";
 
   return (
-    <aside className="hidden border-r border-white/10 bg-[#0b1020]/70 p-5 backdrop-blur md:flex md:flex-col">
-      <div className="mb-8 flex items-center gap-2">
-        <span className="inline-block size-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-400" />
-        <span className="text-sm font-semibold tracking-wide text-white">{t("common.brand")}</span>
-      </div>
-      <nav className="space-y-1">
+    <aside className="hidden border-r border-[#2f3336] bg-black/88 px-5 py-4 backdrop-blur md:flex md:flex-col">
+      <Link
+        href="/"
+        className="mb-6 flex w-full items-center gap-3 rounded-full px-2 py-2 outline-none transition hover:bg-[#16181c] focus-visible:ring-2 focus-visible:ring-[#1d9bf0]/70"
+      >
+        <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#2f3336] bg-[#0f1419]">
+          <Image
+            src="/brand/oaf-octopus-icon.png"
+            alt={t("common.brand")}
+            width={32}
+            height={32}
+            sizes="32px"
+            className="size-8 object-contain"
+            priority
+          />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="whitespace-nowrap text-base font-bold leading-5 text-[#e7e9ea]">Octo-Agent</span>
+          <span className="whitespace-nowrap text-xs leading-4 text-[#71767b]">Flow</span>
+        </span>
+      </Link>
+      <nav className="space-y-1.5">
         {visibleNavItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = "section" in item
+            ? pathname === "/admin" && item.section === activeAdminSection
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
-              key={`${item.href}-${item.labelKey}`}
+              key={item.href}
               href={item.href}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                active ? "bg-white/12 text-white" : "text-white/65 hover:bg-white/8 hover:text-white"
+              className={`flex items-center gap-3 rounded-full px-3 py-2.5 text-[15px] font-medium transition-colors ${
+                active ? "bg-[#1d9bf0]/12 text-[#e7e9ea]" : "text-[#e7e9ea]/75 hover:bg-[#16181c] hover:text-[#e7e9ea]"
               }`}
             >
-              <item.icon className="size-4" />
+              <item.icon className={`size-5 ${active ? "text-[#1d9bf0]" : ""}`} />
               {t(item.labelKey)}
             </Link>
           );
         })}
       </nav>
 
-      <div className="surface-card mt-auto space-y-3 p-3">
-        <Button variant="outline" className="w-full justify-start" onClick={onLogout}>
-          <LogOut className="size-4" />
-          {t("common.logout")}
-        </Button>
-        <p className="text-xs text-white/55">{t("sidebar.workspace")}</p>
-        <p className="text-sm font-medium text-white">{t("sidebar.workspaceTeam")}</p>
-      </div>
     </aside>
   );
 }

@@ -1,0 +1,108 @@
+# WARNING: Production Admin API config.
+# TODO: Before production deployment, replace all TODO_* values in private server config.
+
+admin:
+  host: "0.0.0.0"
+  port: 12002
+mysql:
+  # Production Admin API database is configured to use the shared RDS octo_prod schema.
+  # Keep this pointed at octo_prod; never use this config for test deployments.
+  data_source: "TODO_MYSQL_DSN"
+  max_idle_conns: 10
+  max_open_conns: 100
+  max_lifetime: 3600
+  max_idletime: 1800
+log:
+  level: "info"
+  encoding: "json"
+  api_output_path: "logs/api-prod.log"
+  admin_output_path: "logs/admin-prod.log"
+  max_size: 100
+  max_backups: 30
+  max_age: 14
+  compress: true
+email:
+  provider: "resend"
+  local:
+    expose_code: false
+  resend:
+    # TODO: Set RESEND_API_KEY in backend/configs/.env or server environment.
+    api_key: ""
+    # TODO: Confirm this sender is verified in Resend before production launch.
+    from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
+  ses:
+    region: "ap-southeast-1"
+    access_key_id: ""
+    secret_access_key: ""
+    from_email: "no-reply@mail.octo-agent.com"
+
+app:
+  frontend_base_url: "https://octo-agent.com"
+
+jwt:
+  # Must match config.prod.api.yaml so API/Admin sessions survive restarts consistently.
+  # Prefer setting JWT_SECRET in the server environment or private config.
+  secret: "TODO_PROD_JWT_SECRET"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
+admin_auth:
+  emails:
+    - "owner@example.com"
+    - "ops@example.com"
+  code_ttl_seconds: 300
+
+x_oauth:
+  client_id: "TODO_X_CLIENT_ID"
+  client_secret: "TODO_X_CLIENT_SECRET"
+  redirect_uri: "https://octo-agent.com/api/v1/accounts/oauth/x/callback"
+  state_secret: "TODO_X_STATE_SECRET"
+  scopes: "tweet.read users.read offline.access"
+
+billing:
+  order_ttl_minutes: 30
+  webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
+  rpc_urls:
+    "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
+    "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+  wss_urls:
+    "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
+    "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
+  explorer_api_keys:
+    etherscan: "SBSIVP2NBF2GY5XUT7SD1DNDC1A2VEKS86"
+  payment_methods:
+    - method: "USDT"
+      network: "BEP20"
+      chain_id: 56
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 18
+      is_default: true
+      note: "推荐使用 BEP20，手续费更低"
+    - method: "USDT"
+      network: "ERC20"
+      chain_id: 1
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
+  plans:
+    basic_monthly:
+      name: "Basic"
+      amount: "8"
+      currency: "USDT"
+      period_days: 30
+      description: "Full automation for one month."
+      features:
+        - "Auto Post + Auto Reply + Auto DM"
+        - "Priority queue"

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -10,27 +11,43 @@ import (
 )
 
 type Config struct {
-	API     ServerConfig  `yaml:"api"`
-	Admin   ServerConfig  `yaml:"admin"`
-	MySQL   MySQLConfig   `yaml:"mysql"`
-	Log     LogConfig     `yaml:"log"`
-	Email   EmailConfig   `yaml:"email"`
-	App     AppConfig     `yaml:"app"`
-	XOAuth  XOAuthConfig  `yaml:"x_oauth"`
-	Billing BillingConfig `yaml:"billing"`
+	API        ServerConfig     `yaml:"api"`
+	Admin      ServerConfig     `yaml:"admin"`
+	MySQL      MySQLConfig      `yaml:"mysql"`
+	Log        LogConfig        `yaml:"log"`
+	Email      EmailConfig      `yaml:"email"`
+	App        AppConfig        `yaml:"app"`
+	JWT        JWTConfig        `yaml:"jwt"`
+	AdminAuth  AdminAuthConfig  `yaml:"admin_auth"`
+	XOAuth     XOAuthConfig     `yaml:"x_oauth"`
+	XPublisher XPublisherConfig `yaml:"x_publisher"`
+	LLM        LLMConfig        `yaml:"llm"`
+	Billing    BillingConfig    `yaml:"billing"`
 }
 
 // BillingConfig holds USDT payment settings (loaded from YAML; do not hardcode in code).
 type BillingConfig struct {
-	OrderTTLMinutes int    `yaml:"order_ttl_minutes"`
-	WebhookSecret   string `yaml:"webhook_secret"`
-	// RpcURLs maps chain id as string (e.g. "56", "1") to JSON-RPC HTTP endpoint for EVM verification.
-	RpcURLs        map[string]string           `yaml:"rpc_urls"`
-	PaymentMethods []PaymentMethodConfig       `yaml:"payment_methods"`
-	Plans          map[string]BillingPlanEntry `yaml:"plans"`
+	OrderTTLMinutes int                  `yaml:"order_ttl_minutes"`
+	WebhookSecret   string               `yaml:"webhook_secret"`
+	Scanner         BillingScannerConfig `yaml:"scanner"`
+	// RpcURLs maps chain id as string (e.g. "56", "1", "728126428") to JSON-RPC HTTP endpoint for payment verification.
+	RpcURLs map[string]string `yaml:"rpc_urls"`
+	// WssURLs maps chain id as string to WebSocket endpoints for future chain listeners.
+	WssURLs map[string]string `yaml:"wss_urls"`
+	// ExplorerAPIKeys stores per-explorer API keys for future reconciliation fallbacks.
+	ExplorerAPIKeys map[string]string           `yaml:"explorer_api_keys"`
+	PaymentMethods  []PaymentMethodConfig       `yaml:"payment_methods"`
+	Plans           map[string]BillingPlanEntry `yaml:"plans"`
 }
 
-// PaymentMethodConfig is one USDT route (MVP: BEP20 only).
+type BillingScannerConfig struct {
+	Enabled          bool  `yaml:"enabled"`
+	IntervalSeconds  int   `yaml:"interval_seconds"`
+	MaxOrdersPerTick int   `yaml:"max_orders_per_tick"`
+	BlockLookback    int64 `yaml:"block_lookback"`
+}
+
+// PaymentMethodConfig is one USDT payment route.
 type PaymentMethodConfig struct {
 	Method          string `yaml:"method"`
 	Network         string `yaml:"network"`
@@ -56,6 +73,22 @@ type BillingPlanEntry struct {
 type AppConfig struct {
 	// FrontendBaseURL is the origin used after X OAuth callback redirects (e.g. http://localhost:3000).
 	FrontendBaseURL string `yaml:"frontend_base_url"`
+	OfficialXURL    string `yaml:"official_x_url"`
+	TelegramURL     string `yaml:"telegram_url"`
+}
+
+// JWTConfig controls access/refresh token signing. Non-local deployments must
+// provide a stable secret so service restarts do not invalidate active sessions.
+type JWTConfig struct {
+	Secret               string `yaml:"secret"`
+	AccessExpireSeconds  int64  `yaml:"access_expire_seconds"`
+	RefreshExpireSeconds int64  `yaml:"refresh_expire_seconds"`
+}
+
+// AdminAuthConfig controls passwordless admin-console login.
+type AdminAuthConfig struct {
+	Emails         []string `yaml:"emails"`
+	CodeTTLSeconds int      `yaml:"code_ttl_seconds"`
 }
 
 // XOAuthConfig holds X (Twitter) OAuth 2.0 PKCE settings for account linking.
@@ -64,6 +97,31 @@ type XOAuthConfig struct {
 	ClientSecret string `yaml:"client_secret"`
 	RedirectURI  string `yaml:"redirect_uri"`
 	StateSecret  string `yaml:"state_secret"`
+	Scopes       string `yaml:"scopes"`
+}
+
+// XPublisherConfig controls manual real publishing through the unified publishing pipeline.
+type XPublisherConfig struct {
+	RealPublishEnabled        bool `yaml:"real_publish_enabled"`
+	ManualPublishEnabled      bool `yaml:"manual_publish_enabled"`
+	PerAccountDailyLimit      int  `yaml:"per_account_daily_limit"`
+	PerAccountMinIntervalSecs int  `yaml:"per_account_min_interval_seconds"`
+	DryRun                    bool `yaml:"dry_run"`
+}
+
+// LLMConfig is the shared LLM provider configuration for current and future AI features.
+type LLMConfig struct {
+	DefaultProvider string       `yaml:"default_provider"`
+	OpenAI          OpenAIConfig `yaml:"openai"`
+}
+
+type OpenAIConfig struct {
+	APIKey      string  `yaml:"api_key"`
+	Model       string  `yaml:"model"`
+	BaseURL     string  `yaml:"base_url"`
+	TimeoutSec  int     `yaml:"timeout_sec"`
+	MaxTokens   int     `yaml:"max_tokens"`
+	Temperature float32 `yaml:"temperature"`
 }
 
 type ServerConfig struct {
@@ -245,13 +303,128 @@ func Load() (*Config, error) {
 	if strings.TrimSpace(cfg.App.FrontendBaseURL) == "" {
 		cfg.App.FrontendBaseURL = "http://localhost:3000"
 	}
+	if err := applyJWTConfig(env, &cfg.JWT); err != nil {
+		return nil, err
+	}
+	if cfg.LLM.DefaultProvider == "" {
+		cfg.LLM.DefaultProvider = "openai"
+	}
+	if cfg.LLM.OpenAI.Model == "" {
+		cfg.LLM.OpenAI.Model = "gpt-4.1-mini"
+	}
+	if cfg.LLM.OpenAI.BaseURL == "" {
+		cfg.LLM.OpenAI.BaseURL = "https://api.openai.com/v1"
+	}
+	if cfg.LLM.OpenAI.TimeoutSec <= 0 {
+		cfg.LLM.OpenAI.TimeoutSec = 20
+	}
+	if cfg.LLM.OpenAI.MaxTokens <= 0 {
+		cfg.LLM.OpenAI.MaxTokens = 120
+	}
+	if cfg.LLM.OpenAI.Temperature <= 0 {
+		cfg.LLM.OpenAI.Temperature = 0.65
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_PROVIDER")); v != "" {
+		cfg.LLM.DefaultProvider = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_API_KEY")); v != "" {
+		cfg.LLM.OpenAI.APIKey = v
+	}
+	if strings.HasPrefix(strings.TrimSpace(cfg.LLM.OpenAI.APIKey), "TODO_") {
+		cfg.LLM.OpenAI.APIKey = ""
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_MODEL")); v != "" {
+		cfg.LLM.OpenAI.Model = v
+	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")); v != "" {
+		cfg.LLM.OpenAI.BaseURL = strings.TrimRight(v, "/")
+	}
+	if cfg.AdminAuth.CodeTTLSeconds <= 0 {
+		cfg.AdminAuth.CodeTTLSeconds = 300
+	}
+	if cfg.XPublisher.PerAccountDailyLimit <= 0 {
+		cfg.XPublisher.PerAccountDailyLimit = 20
+	}
+	if cfg.XPublisher.PerAccountMinIntervalSecs <= 0 {
+		cfg.XPublisher.PerAccountMinIntervalSecs = 300
+	}
+	if !cfg.XPublisher.ManualPublishEnabled && !cfg.XPublisher.RealPublishEnabled && !cfg.XPublisher.DryRun {
+		cfg.XPublisher.ManualPublishEnabled = true
+		cfg.XPublisher.DryRun = true
+	}
 	if cfg.Billing.OrderTTLMinutes <= 0 {
 		cfg.Billing.OrderTTLMinutes = 30
+	}
+	if cfg.Billing.Scanner.IntervalSeconds <= 0 {
+		cfg.Billing.Scanner.IntervalSeconds = 60
+	}
+	if cfg.Billing.Scanner.MaxOrdersPerTick <= 0 {
+		cfg.Billing.Scanner.MaxOrdersPerTick = 100
+	}
+	if cfg.Billing.Scanner.BlockLookback <= 0 {
+		cfg.Billing.Scanner.BlockLookback = 7200
 	}
 	if cfg.Billing.RpcURLs == nil {
 		cfg.Billing.RpcURLs = map[string]string{}
 	}
+	if cfg.Billing.WssURLs == nil {
+		cfg.Billing.WssURLs = map[string]string{}
+	}
+	if cfg.Billing.ExplorerAPIKeys == nil {
+		cfg.Billing.ExplorerAPIKeys = map[string]string{}
+	}
 	return &cfg, nil
+}
+
+func applyJWTConfig(env string, cfg *JWTConfig) error {
+	const (
+		defaultAccessExpireSeconds  int64 = 7200
+		defaultRefreshExpireSeconds int64 = 2592000
+	)
+
+	secret := strings.TrimSpace(cfg.Secret)
+	if v := strings.TrimSpace(os.Getenv("JWT_SECRET")); v != "" {
+		secret = v
+	}
+	if strings.HasPrefix(secret, "TODO_") {
+		secret = ""
+	}
+	if secret == "" {
+		if env != "local" {
+			return fmt.Errorf("jwt.secret is required for APP_ENV=%s; set a stable test/prod secret", env)
+		}
+		secret = "octo-agent-local-secret"
+	}
+	cfg.Secret = secret
+	_ = os.Setenv("JWT_SECRET", secret)
+
+	accessExp := cfg.AccessExpireSeconds
+	if v := strings.TrimSpace(os.Getenv("JWT_ACCESS_EXPIRE_SECONDS")); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			accessExp = parsed
+		}
+	}
+	if accessExp <= 0 {
+		accessExp = defaultAccessExpireSeconds
+	}
+	cfg.AccessExpireSeconds = accessExp
+	_ = os.Setenv("JWT_ACCESS_EXPIRE_SECONDS", strconv.FormatInt(accessExp, 10))
+
+	refreshExp := cfg.RefreshExpireSeconds
+	if v := strings.TrimSpace(os.Getenv("JWT_REFRESH_EXPIRE_SECONDS")); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			refreshExp = parsed
+		}
+	}
+	if refreshExp <= 0 {
+		refreshExp = defaultRefreshExpireSeconds
+	}
+	if refreshExp < accessExp {
+		return fmt.Errorf("jwt.refresh_expire_seconds must be greater than or equal to jwt.access_expire_seconds")
+	}
+	cfg.RefreshExpireSeconds = refreshExp
+	_ = os.Setenv("JWT_REFRESH_EXPIRE_SECONDS", strconv.FormatInt(refreshExp, 10))
+	return nil
 }
 
 func normalizeConfigService(v string) (string, error) {

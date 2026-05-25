@@ -1,5 +1,7 @@
 # MVP_ACCEPTANCE_CHECKLIST
 
+> 历史快照：本文档是早期 MVP 本地验收清单，保留用于追溯。当前继续开发和调试请使用 `CURRENT_ACCEPTANCE_CHECKLIST.md`。
+
 ## 验收状态定义
 
 - `可直接验收`：只依赖本地 MySQL、本地 API、本地前端即可完成。
@@ -694,23 +696,22 @@ curl -i -X POST http://localhost:10002/api/v1/auth/email-code/send
 - `backend/test/post_test.go`
 - `frontend/package.json`
 
-### 23. 生产级四服务部署
+### 23. 脚本化四服务部署
 
 状态：当前无法完整验收。
 
 原因：
 
 - 本地 Makefile 已拆成四服务。
-- Docker/Compose/Nginx 模板仍偏单 backend 或未完整拆分 Admin API。
+- 测试/生产部署脚本已准备，但需要在目标服务器完成真实部署后验收。
+- 项目当前暂不使用 Docker/Compose/Nginx 模板。
 
 相关文件：
 
 - `Makefile`
-- `deploy/docker/backend.Dockerfile`
-- `deploy/docker/frontend.Dockerfile`
-- `deploy/compose/docker-compose.dev.yml`
-- `deploy/compose/docker-compose.prod.yml`
-- `deploy/nginx/default.conf`
+- `scripts/deploy-all-test.sh`
+- `scripts/deploy-all-prod.sh`
+- `docs/deployment/DEPLOYMENT_SCRIPTS.md`
 
 ## MVP 结论
 

@@ -9,9 +9,20 @@ type DialogProps = {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  showCloseButton?: boolean;
+  closeLabel?: string;
 };
 
-export function Dialog({ open, onOpenChange, title, description, children, className }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  className,
+  showCloseButton = true,
+  closeLabel = "Close",
+}: DialogProps) {
   if (!open) return null;
 
   return (
@@ -28,17 +39,18 @@ export function Dialog({ open, onOpenChange, title, description, children, class
           </header>
         ) : null}
         {children}
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </button>
-        </div>
+        {showCloseButton ? (
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white"
+              onClick={() => onOpenChange(false)}
+            >
+              {closeLabel}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
-

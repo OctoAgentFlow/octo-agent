@@ -19,13 +19,12 @@ export function Card({ className, children }: CardProps) {
 export function CardHeader({ title, description, className, right }: CardHeaderProps) {
   if (!title && !description && !right) return null;
   return (
-    <header className={cn("mb-4 flex items-start justify-between gap-4", className)}>
-      <div className="space-y-1">
-        {title ? <h3 className="text-base font-semibold text-white md:text-lg">{title}</h3> : null}
-        {description ? <p className="text-sm text-white/60">{description}</p> : null}
+    <header className={cn("mb-4 flex flex-wrap items-start justify-between gap-3 md:gap-4", className)}>
+      <div className="min-w-0 space-y-1">
+        {title ? <h3 className="text-base font-bold text-[#e7e9ea] md:text-lg">{title}</h3> : null}
+        {description ? <p className="break-words text-sm text-[#71767b]">{description}</p> : null}
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
     </header>
   );
 }
-

@@ -14,6 +14,10 @@ export type AccountListItem = {
   status: "connected" | "needs_reauth" | "disconnected";
   last_synced_at?: string;
   followers?: string;
+  publish_ready?: boolean;
+  publish_reauth_required?: boolean;
+  publish_issue?: "needs_reauth" | "missing_access_token" | "missing_tweet_write" | string;
+  missing_scopes?: string[];
 };
 
 type AccountListData = {

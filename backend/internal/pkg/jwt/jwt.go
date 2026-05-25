@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	defaultExpireSeconds = 7200
+	defaultAccessExpireSeconds  = 7200
+	defaultRefreshExpireSeconds = 2592000
 )
 
 type Claims struct {
@@ -28,18 +29,23 @@ func secret() []byte {
 
 func accessExpireSeconds() int64 {
 	v := os.Getenv("JWT_ACCESS_EXPIRE_SECONDS")
-	if v == "" {
-		return defaultExpireSeconds
-	}
 	sec, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || sec <= 0 {
-		return defaultExpireSeconds
+		return defaultAccessExpireSeconds
 	}
 	return sec
 }
 
-func SignAccessToken(userID uint) (string, int64, error) {
-	expSec := accessExpireSeconds()
+func refreshExpireSeconds() int64 {
+	v := os.Getenv("JWT_REFRESH_EXPIRE_SECONDS")
+	sec, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || sec <= 0 {
+		return defaultRefreshExpireSeconds
+	}
+	return sec
+}
+
+func signToken(userID uint, expSec int64) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID: userID,
@@ -50,11 +56,13 @@ func SignAccessToken(userID uint) (string, int64, error) {
 	}
 
 	token := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims)
-	signed, err := token.SignedString(secret())
-	if err != nil {
-		return "", 0, err
-	}
-	return signed, expSec, nil
+	return token.SignedString(secret())
+}
+
+func SignAccessToken(userID uint) (string, int64, error) {
+	expSec := accessExpireSeconds()
+	signed, err := signToken(userID, expSec)
+	return signed, expSec, err
 }
 
 func ParseAccessToken(tokenStr string) (*Claims, error) {
@@ -72,10 +80,8 @@ func ParseAccessToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// Simplified refresh strategy for MVP: refresh token == access token.
 func SignRefreshToken(userID uint) (string, error) {
-	token, _, err := SignAccessToken(userID)
-	return token, err
+	return signToken(userID, refreshExpireSeconds())
 }
 
 func ParseRefreshToken(tokenStr string) (*Claims, error) {

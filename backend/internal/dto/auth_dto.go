@@ -12,6 +12,11 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
+type AdminLoginRequest struct {
+	Email            string `json:"email" binding:"required,email"`
+	VerificationCode string `json:"verification_code" binding:"required,len=6,numeric"`
+}
+
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }

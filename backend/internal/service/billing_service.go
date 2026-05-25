@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/billingevm"
+	"octo-agent/backend/internal/billingtron"
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
@@ -23,9 +25,20 @@ import (
 )
 
 type BillingService struct {
-	userRepo  *repository.UserRepository
-	orderRepo *repository.BillingOrderRepository
-	cfg       *config.Config
+	userRepo    *repository.UserRepository
+	orderRepo   *repository.BillingOrderRepository
+	accountRepo *repository.TwitterAccountRepository
+	oafBotRepo  *repository.OAFBotRepository
+	usageRepo   *repository.AIGenerationUsageRepository
+	cfg         *config.Config
+}
+
+type BillingAutoConfirmStats struct {
+	ScannedOrders int
+	ScannedEvents int
+	Confirmed     int
+	Skipped       int
+	Failed        int
 }
 
 const (
@@ -37,10 +50,51 @@ const (
 	billingReviewUnreviewed = "unreviewed"
 	billingReviewNeeded     = "review_needed"
 	billingReviewReviewed   = "reviewed"
+
+	billingAutoScanPending   = "pending"
+	billingAutoScanScanned   = "scanned"
+	billingAutoScanConfirmed = "confirmed"
+	billingAutoScanSkipped   = "skipped"
+	billingAutoScanFailed    = "failed"
 )
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, cfg: cfg}
+type billingScanGroupKey struct {
+	Network  string
+	ChainID  int64
+	Token    string
+	Receiver string
+}
+
+type billingAmountMatchKey struct {
+	Network  string
+	ChainID  int64
+	Token    string
+	Receiver string
+	Amount   string
+}
+
+type billingTransferCandidate struct {
+	TxHash    string
+	Amount    *big.Int
+	BlockTime time.Time
+}
+
+type billingQuoteCalc struct {
+	dto                dto.BillingUpgradeQuote
+	targetPlan         subscription.PlanDefinition
+	currentPlan        subscription.PlanDefinition
+	hasCurrentPlan     bool
+	originalCents      int64
+	creditCents        int64
+	payableCents       int64
+	targetCycle        string
+	currentCycle       string
+	currentPeriodStart time.Time
+	currentPeriodEnd   time.Time
+}
+
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -52,7 +106,12 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	st := subscription.EffectiveStatus(user, now)
 	pc := strings.TrimSpace(user.SubscriptionPlanCode)
 	if pc == "" {
-		pc = "free_trial"
+		pc = subscription.PlanFreeTrial
+	}
+	normPlan := subscription.NormalizePlanCode(pc)
+	cycle := subscription.NormalizeBillingCycle(user.SubscriptionBillingCycle)
+	if strings.TrimSpace(user.SubscriptionBillingCycle) == "" {
+		cycle = deriveBillingCycleFromPlanCode(pc)
 	}
 	var expStr string
 	if user.SubscriptionExpiresAt != nil {
@@ -62,50 +121,46 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	hint := ""
 	if st == "expired" {
 		hint = "Renew your subscription to restore automation and posting."
-	} else if strings.EqualFold(pc, "free_trial") {
-		hint = "Basic plan starts at 10 USDT / month"
+	} else if strings.EqualFold(normPlan, subscription.PlanFreeTrial) {
+		hint = "Basic plan starts at 8 USDT / month"
 	}
+	limits := subscription.LimitsForUser(user)
+	usage := s.subscriptionUsage(userID)
 	return &dto.BillingSubscriptionData{
-		Plan:           pc,
+		Plan:           normPlan,
+		BillingCycle:   cycle,
 		Status:         st,
 		ExpirationDate: expStr,
 		TrialDaysLeft:  trialLeft,
 		BillingHint:    hint,
+		Limits:         planLimitsToDTO(limits),
+		Usage:          usage,
 	}, nil
 }
 
 func (s *BillingService) Plans() *dto.BillingPlansResponse {
-	items := make([]dto.BillingPlanData, 0, len(s.cfg.Billing.Plans))
-	for code, p := range s.cfg.Billing.Plans {
-		period := "month"
-		if p.PeriodDays == 7 {
-			period = "7 days"
-		} else if p.PeriodDays > 0 && p.PeriodDays != 30 {
-			period = fmt.Sprintf("%d days", p.PeriodDays)
-		}
-		price := p.Amount
-		if p.Currency != "" {
-			price = p.Amount + " " + p.Currency
-		}
-		features := p.Features
-		if len(features) == 0 {
-			features = []string{"Auto Post + Auto Reply + Auto DM", "Priority queue"}
+	catalog := subscription.Catalog()
+	items := make([]dto.BillingPlanData, 0, len(catalog))
+	for _, p := range catalog {
+		if full, ok := subscription.FindPlan(p.Code); ok {
+			p = full
 		}
 		items = append(items, dto.BillingPlanData{
-			Code:        code,
-			Name:        p.Name,
-			Price:       price,
-			Period:      period,
-			Description: p.Description,
-			Features:    features,
-			Highlight:   code == "basic_monthly",
+			Code:         p.Code,
+			Name:         p.Name,
+			Price:        fmt.Sprintf("%d %s", p.MonthlyPrice, p.Currency),
+			Period:       "month",
+			MonthlyPrice: p.MonthlyPrice,
+			YearlyPrice:  p.YearlyPrice,
+			Currency:     p.Currency,
+			Audience:     p.Audience,
+			Badge:        p.Badge,
+			Description:  p.Description,
+			Features:     p.Benefits,
+			FeatureFlags: planFeaturesToDTO(p.Features),
+			Limits:       planLimitsToDTO(p.Limits),
+			Highlight:    p.Code == subscription.PlanPlus,
 		})
-	}
-	if len(items) == 0 {
-		return &dto.BillingPlansResponse{Items: []dto.BillingPlanData{
-			{Code: "free_trial", Name: "Free Trial", Price: "0", Period: "7 days", Description: "Try before upgrade.", Features: []string{"Core automation"}, Highlight: false},
-			{Code: "basic_monthly", Name: "Basic", Price: "10 USDT", Period: "month", Description: "Full automation.", Features: []string{"Auto Post", "Auto Reply"}, Highlight: true},
-		}}
 	}
 	return &dto.BillingPlansResponse{Items: items}
 }
@@ -127,12 +182,307 @@ func (s *BillingService) PaymentMethods(_ uint) *dto.BillingPaymentMethodsRespon
 	return &dto.BillingPaymentMethodsResponse{Items: out}
 }
 
+func (s *BillingService) AutoConfirmInterval() time.Duration {
+	if s == nil || s.cfg == nil || !s.cfg.Billing.Scanner.Enabled {
+		return 0
+	}
+	seconds := s.cfg.Billing.Scanner.IntervalSeconds
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.BillingUpgradeQuote, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	return &quote.dto, nil
+}
+
+func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
+	var usage dto.PlanUsageData
+	if s.oafBotRepo != nil {
+		if n, err := s.oafBotRepo.CountByUserID(userID); err == nil {
+			usage.OAFBots = n
+		}
+	}
+	if s.accountRepo != nil {
+		if n, err := s.accountRepo.CountByUserID(userID); err == nil {
+			usage.TwitterAccounts = n
+		}
+	}
+	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, time.Now().UTC())
+	return usage
+}
+
+func calculateBillingQuote(user *model.User, targetPlanCode, targetBillingCycle string, now time.Time) (billingQuoteCalc, error) {
+	targetPlan, ok := subscription.FindPlan(targetPlanCode)
+	if !ok {
+		return billingQuoteCalc{}, fmt.Errorf("unknown plan_code")
+	}
+	targetCycle := subscription.NormalizeBillingCycle(targetBillingCycle)
+	originalCents := int64(subscription.PriceForCycle(targetPlan, targetCycle)) * 100
+	out := billingQuoteCalc{
+		targetPlan:    targetPlan,
+		originalCents: originalCents,
+		payableCents:  originalCents,
+		targetCycle:   targetCycle,
+		currentCycle:  subscription.BillingCycleMonthly,
+	}
+	quote := dto.BillingUpgradeQuote{
+		CurrentPlan:         subscription.PlanFreeTrial,
+		CurrentBillingCycle: subscription.BillingCycleMonthly,
+		TargetPlan:          targetPlan.Code,
+		TargetBillingCycle:  targetCycle,
+		OriginalAmount:      centsToAmountString(originalCents),
+		CreditAmount:        "0",
+		PayableAmount:       centsToAmountString(originalCents),
+		Currency:            targetPlan.Currency,
+		OrderType:           "new",
+		IsUpgrade:           false,
+		QuoteExpiresAt:      now.Add(5 * time.Minute).UTC().Format(time.RFC3339),
+	}
+	if user == nil {
+		out.dto = quote
+		return out, nil
+	}
+	currentStatus := subscription.EffectiveStatus(user, now)
+	currentPlanCode := subscription.NormalizePlanCode(user.SubscriptionPlanCode)
+	if strings.TrimSpace(currentPlanCode) == "" {
+		currentPlanCode = subscription.PlanFreeTrial
+	}
+	currentCycle := subscription.NormalizeBillingCycle(user.SubscriptionBillingCycle)
+	if strings.TrimSpace(user.SubscriptionBillingCycle) == "" {
+		currentCycle = deriveBillingCycleFromPlanCode(user.SubscriptionPlanCode)
+	}
+	out.currentCycle = currentCycle
+	quote.CurrentPlan = currentPlanCode
+	quote.CurrentBillingCycle = currentCycle
+	if user.SubscriptionExpiresAt != nil {
+		quote.CurrentExpiresAt = user.SubscriptionExpiresAt.UTC().Format(time.RFC3339)
+	}
+
+	if currentStatus != "active" || user.SubscriptionExpiresAt == nil || !now.Before(*user.SubscriptionExpiresAt) || currentPlanCode == subscription.PlanFreeTrial {
+		out.dto = quote
+		return out, nil
+	}
+
+	currentPlan, ok := subscription.FindPlan(currentPlanCode)
+	if !ok {
+		out.dto = quote
+		return out, nil
+	}
+	out.currentPlan = currentPlan
+	out.hasCurrentPlan = true
+
+	currentRank := billingPlanRank(currentPlan.Code)
+	targetRank := billingPlanRank(targetPlan.Code)
+	if targetRank < currentRank {
+		return billingQuoteCalc{}, fmt.Errorf("downgrade_not_supported")
+	}
+	if currentCycle == subscription.BillingCycleYearly && targetCycle == subscription.BillingCycleMonthly && targetRank > currentRank {
+		return billingQuoteCalc{}, fmt.Errorf("yearly_subscription_can_only_upgrade_to_yearly")
+	}
+	if targetRank == currentRank {
+		quote.OrderType = "renew"
+		out.dto = quote
+		return out, nil
+	}
+
+	start, end := subscriptionPeriodBounds(user, currentCycle)
+	if !now.Before(end) || !start.Before(end) {
+		out.dto = quote
+		return out, nil
+	}
+	totalSeconds := int64(end.Sub(start).Seconds())
+	remainingSeconds := int64(end.Sub(now).Seconds())
+	if totalSeconds <= 0 || remainingSeconds <= 0 {
+		out.dto = quote
+		return out, nil
+	}
+	currentCents := int64(subscription.PriceForCycle(currentPlan, currentCycle)) * 100
+	creditCents := (currentCents*remainingSeconds + totalSeconds/2) / totalSeconds
+	if creditCents < 0 {
+		creditCents = 0
+	}
+	if creditCents >= originalCents {
+		creditCents = originalCents - 1
+	}
+	payableCents := originalCents - creditCents
+	quote.OrderType = "upgrade"
+	quote.IsUpgrade = true
+	quote.CreditAmount = centsToAmountString(creditCents)
+	quote.PayableAmount = centsToAmountString(payableCents)
+	out.creditCents = creditCents
+	out.payableCents = payableCents
+	out.currentPeriodStart = start
+	out.currentPeriodEnd = end
+	out.dto = quote
+	return out, nil
+}
+
+func billingPlanRank(plan string) int {
+	switch subscription.NormalizePlanCode(plan) {
+	case subscription.PlanBasic:
+		return 1
+	case subscription.PlanPlus:
+		return 2
+	case subscription.PlanPro:
+		return 3
+	case subscription.PlanProPlus:
+		return 4
+	default:
+		return 0
+	}
+}
+
+func subscriptionPeriodBounds(user *model.User, cycle string) (time.Time, time.Time) {
+	if user == nil || user.SubscriptionExpiresAt == nil {
+		now := time.Now().UTC()
+		return now, now
+	}
+	end := user.SubscriptionExpiresAt.UTC()
+	if user.SubscriptionStartedAt != nil && user.SubscriptionStartedAt.Before(end) {
+		return user.SubscriptionStartedAt.UTC(), end
+	}
+	if subscription.NormalizeBillingCycle(cycle) == subscription.BillingCycleYearly {
+		return end.AddDate(-1, 0, 0), end
+	}
+	return end.AddDate(0, -1, 0), end
+}
+
+func centsToAmountString(cents int64) string {
+	if cents <= 0 {
+		return "0"
+	}
+	whole := cents / 100
+	frac := cents % 100
+	if frac == 0 {
+		return strconv.FormatInt(whole, 10)
+	}
+	return fmt.Sprintf("%d.%02d", whole, frac)
+}
+
+func amountStringFromMinUnits(units *big.Int, decimals int) string {
+	if units == nil || units.Sign() <= 0 {
+		return "0"
+	}
+	if decimals <= 0 {
+		return units.String()
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	whole := new(big.Int)
+	frac := new(big.Int)
+	whole.QuoRem(units, scale, frac)
+	fracStr := frac.String()
+	if len(fracStr) < decimals {
+		fracStr = strings.Repeat("0", decimals-len(fracStr)) + fracStr
+	}
+	fracStr = strings.TrimRight(fracStr, "0")
+	if fracStr == "" {
+		return whole.String()
+	}
+	return whole.String() + "." + fracStr
+}
+
+func billingUniqueAmountPrecision(decimals int) int {
+	if decimals <= 0 {
+		return 0
+	}
+	if decimals < 6 {
+		return decimals
+	}
+	return 6
+}
+
+func (s *BillingService) uniquePendingOrderAmount(baseAmount string, pm *config.PaymentMethodConfig, now time.Time) (string, error) {
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil || pm == nil {
+		return baseAmount, nil
+	}
+	precision := billingUniqueAmountPrecision(pm.Decimals)
+	if precision <= 0 {
+		return baseAmount, nil
+	}
+	baseUnits, err := billingamount.ToMinUnits(baseAmount, pm.Decimals)
+	if err != nil {
+		return "", err
+	}
+	unitStep := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(pm.Decimals-precision)), nil)
+	maxSuffix := int64(999999)
+	if precision < 6 {
+		maxSuffix = 1
+		for i := 0; i < precision; i++ {
+			maxSuffix *= 10
+		}
+		maxSuffix--
+	}
+	statuses := []string{"pending", "failed"}
+	network := strings.ToUpper(strings.TrimSpace(pm.Network))
+	receiver := strings.TrimSpace(pm.ReceiverAddress)
+	token := strings.TrimSpace(pm.TokenAddress)
+	for suffix := int64(1); suffix <= maxSuffix; suffix++ {
+		offset := new(big.Int).Mul(big.NewInt(suffix), unitStep)
+		candidateUnits := new(big.Int).Add(baseUnits, offset)
+		candidate := amountStringFromMinUnits(candidateUnits, pm.Decimals)
+		var count int64
+		err := s.orderRepo.DB.Model(&model.BillingOrder{}).
+			Where("status IN ? AND expired_at > ? AND network = ? AND receiver_address = ? AND token_address = ? AND amount = ?", statuses, now, network, receiver, token, candidate).
+			Count(&count).Error
+		if err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no unique payment amount available")
+}
+
+func billingProrationSnapshot(q billingQuoteCalc) string {
+	payload := map[string]any{
+		"current_plan":          q.dto.CurrentPlan,
+		"current_billing_cycle": q.dto.CurrentBillingCycle,
+		"target_plan":           q.dto.TargetPlan,
+		"target_billing_cycle":  q.dto.TargetBillingCycle,
+		"original_amount":       q.dto.OriginalAmount,
+		"credit_amount":         q.dto.CreditAmount,
+		"payable_amount":        q.dto.PayableAmount,
+		"order_type":            q.dto.OrderType,
+		"is_upgrade":            q.dto.IsUpgrade,
+		"current_expires_at":    q.dto.CurrentExpiresAt,
+	}
+	if !q.currentPeriodStart.IsZero() {
+		payload["current_period_start"] = q.currentPeriodStart.UTC().Format(time.RFC3339)
+	}
+	if !q.currentPeriodEnd.IsZero() {
+		payload["current_period_end"] = q.currentPeriodEnd.UTC().Format(time.RFC3339)
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
-	plan, ok := s.cfg.Billing.Plans[req.PlanCode]
-	if !ok {
-		return nil, fmt.Errorf("unknown plan_code")
+	now := time.Now().UTC()
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
 	}
+	quote, err := calculateBillingQuote(user, req.PlanCode, req.BillingCycle, now)
+	if err != nil {
+		return nil, err
+	}
+	plan := quote.targetPlan
+	cycle := quote.targetCycle
 	if !strings.EqualFold(strings.TrimSpace(req.Method), "USDT") {
 		return nil, fmt.Errorf("unsupported method")
 	}
@@ -143,17 +493,31 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if pm.Decimals <= 0 {
 		return nil, fmt.Errorf("invalid payment method decimals in config")
 	}
+	basePayableAmount := centsToAmountString(quote.payableCents)
+	exactPayableAmount, err := s.uniquePendingOrderAmount(basePayableAmount, pm, now)
+	if err != nil {
+		return nil, err
+	}
+	quote.dto.PayableAmount = exactPayableAmount
 
 	ttl := s.cfg.Billing.OrderTTLMinutes
 	if ttl <= 0 {
 		ttl = 30
 	}
-	exp := time.Now().UTC().Add(time.Duration(ttl) * time.Minute)
+	exp := now.Add(time.Duration(ttl) * time.Minute)
 
 	o := &model.BillingOrder{
 		UserID:               userID,
-		PlanCode:             req.PlanCode,
-		Amount:               plan.Amount,
+		PlanCode:             plan.Code,
+		BillingCycle:         cycle,
+		Amount:               exactPayableAmount,
+		OriginalAmount:       centsToAmountString(quote.originalCents),
+		CreditAmount:         centsToAmountString(quote.creditCents),
+		PayableAmount:        exactPayableAmount,
+		OrderType:            quote.dto.OrderType,
+		FromPlanCode:         quote.dto.CurrentPlan,
+		FromBillingCycle:     quote.dto.CurrentBillingCycle,
+		ProrationSnapshot:    billingProrationSnapshot(quote),
 		Currency:             plan.Currency,
 		Method:               strings.ToUpper(strings.TrimSpace(req.Method)),
 		Network:              strings.ToUpper(strings.TrimSpace(pm.Network)),
@@ -181,6 +545,7 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		ReceiverAddress: o.ReceiverAddress,
 		ExpiredAt:       o.ExpiredAt.UTC().Format(time.RFC3339),
 		Status:          o.Status,
+		Quote:           &quote.dto,
 	}, nil
 }
 
@@ -226,6 +591,8 @@ func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) 
 		Status:               req.Status,
 		ReconciliationStatus: req.ReconciliationStatus,
 		ReviewStatus:         req.ReviewStatus,
+		AutoScanStatus:       req.AutoScanStatus,
+		AutoScanSkipReason:   req.AutoScanSkipReason,
 		Limit:                req.Limit,
 		AllUsers:             allUsers,
 	})
@@ -262,6 +629,10 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
 		UserID:               o.UserID,
 		Amount:               o.Amount,
+		OriginalAmount:       o.OriginalAmount,
+		CreditAmount:         o.CreditAmount,
+		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
+		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		Currency:             o.Currency,
 		Network:              o.Network,
 		TokenAddress:         o.TokenAddress,
@@ -284,6 +655,11 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
 	}
+	out.AutoScanStatus = firstNonEmpty(o.AutoScanStatus, billingAutoScanPending)
+	out.AutoScanSkipReason = o.AutoScanSkipReason
+	if o.AutoScannedAt != nil {
+		out.AutoScannedAt = o.AutoScannedAt.UTC().Format(time.RFC3339)
+	}
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
 	}
@@ -294,8 +670,13 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	out := dto.BillingOrderListItem{
 		OrderID:              strconv.FormatUint(uint64(o.ID), 10),
 		UserID:               o.UserID,
-		PlanCode:             o.PlanCode,
+		PlanCode:             subscription.NormalizePlanCode(o.PlanCode),
+		BillingCycle:         normalizeOrderBillingCycle(o),
 		Amount:               o.Amount,
+		OriginalAmount:       o.OriginalAmount,
+		CreditAmount:         o.CreditAmount,
+		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
+		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		Currency:             o.Currency,
 		Method:               o.Method,
 		Network:              o.Network,
@@ -308,6 +689,8 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		NextAction:           billingOrderNextAction(o, time.Now().UTC()),
 		ReconciliationStatus: billingOrderReconStatus(o),
 		ReviewStatus:         billingOrderReviewStatus(o),
+		AutoScanStatus:       firstNonEmpty(o.AutoScanStatus, billingAutoScanPending),
+		AutoScanSkipReason:   o.AutoScanSkipReason,
 		OpsNote:              o.OpsNote,
 	}
 	if o.PaidAt != nil {
@@ -315,6 +698,9 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 	}
 	if o.LastCheckedAt != nil {
 		out.LastCheckedAt = o.LastCheckedAt.UTC().Format(time.RFC3339)
+	}
+	if o.AutoScannedAt != nil {
+		out.AutoScannedAt = o.AutoScannedAt.UTC().Format(time.RFC3339)
 	}
 	if o.ReviewedAt != nil {
 		out.ReviewedAt = o.ReviewedAt.UTC().Format(time.RFC3339)
@@ -357,6 +743,9 @@ func canRetryBillingOrder(o *model.BillingOrder, now time.Time) bool {
 		return false
 	}
 	st := strings.ToLower(strings.TrimSpace(o.Status))
+	if st == "pending" && billingOrderReviewStatus(o) == billingReviewNeeded && strings.TrimSpace(o.TxHash) != "" {
+		return false
+	}
 	return (st == "pending" || st == "failed") && now.Before(o.ExpiredAt)
 }
 
@@ -372,6 +761,8 @@ func billingOrderNextAction(o *model.BillingOrder, now time.Time) string {
 		return "create_new_order"
 	case st == "failed":
 		return "submit_correct_tx_hash"
+	case st == "pending" && billingOrderReviewStatus(o) == billingReviewNeeded && strings.TrimSpace(o.TxHash) != "":
+		return "manual_review_pending"
 	case st == "pending":
 		return "submit_tx_hash_or_wait"
 	default:
@@ -496,8 +887,8 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	}
 
 	net := strings.ToUpper(strings.TrimSpace(req.Network))
-	if net != "BEP20" {
-		return fmt.Errorf("only BEP20 is supported in current MVP")
+	if net == "" {
+		return fmt.Errorf("network is required")
 	}
 
 	orderID, err := strconv.ParseUint(strings.TrimSpace(req.OrderID), 10, 64)
@@ -523,7 +914,221 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 	return s.confirmOnchainOrder(order, net, normHash, false)
 }
 
+func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingAutoConfirmStats, error) {
+	var stats BillingAutoConfirmStats
+	if s == nil || s.orderRepo == nil || s.cfg == nil || !s.cfg.Billing.Scanner.Enabled {
+		return stats, nil
+	}
+	now := time.Now().UTC()
+	limit := s.cfg.Billing.Scanner.MaxOrdersPerTick
+	orders, err := s.orderRepo.ListPendingForAutoConfirm(now, limit)
+	if err != nil {
+		return stats, err
+	}
+	stats.ScannedOrders = len(orders)
+	if len(orders) == 0 {
+		return stats, s.orderRepo.ExpireStale(now)
+	}
+
+	byGroup := make(map[billingScanGroupKey][]model.BillingOrder)
+	byAmount := make(map[billingAmountMatchKey][]model.BillingOrder)
+	for _, order := range orders {
+		if strings.TrimSpace(order.Amount) == "" || strings.TrimSpace(order.TokenAddress) == "" || strings.TrimSpace(order.ReceiverAddress) == "" || order.ChainID == 0 {
+			stats.Skipped++
+			s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "missing_payment_metadata", now)
+			continue
+		}
+		groupKey := billingScanGroupKey{
+			Network:  strings.ToUpper(strings.TrimSpace(order.Network)),
+			ChainID:  order.ChainID,
+			Token:    strings.ToLower(strings.TrimSpace(order.TokenAddress)),
+			Receiver: strings.ToLower(strings.TrimSpace(order.ReceiverAddress)),
+		}
+		amountKey := billingAmountMatchKey{
+			Network:  groupKey.Network,
+			ChainID:  groupKey.ChainID,
+			Token:    groupKey.Token,
+			Receiver: groupKey.Receiver,
+			Amount:   strings.TrimSpace(order.Amount),
+		}
+		byGroup[groupKey] = append(byGroup[groupKey], order)
+		byAmount[amountKey] = append(byAmount[amountKey], order)
+	}
+	ambiguousAmountKeys := make(map[billingAmountMatchKey]bool)
+	for amountKey, amountOrders := range byAmount {
+		if len(amountOrders) <= 1 {
+			continue
+		}
+		ambiguousAmountKeys[amountKey] = true
+		for _, order := range amountOrders {
+			stats.Skipped++
+			s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "ambiguous_payment_amount", now)
+		}
+	}
+
+	for groupKey, groupOrders := range byGroup {
+		if len(groupOrders) == 0 {
+			continue
+		}
+		events, err := s.scanBillingTransfersForGroup(ctx, groupKey, groupOrders[0])
+		if err != nil {
+			stats.Failed++
+			for _, order := range groupOrders {
+				s.markBillingAutoScan(order.ID, billingAutoScanFailed, sanitizeBillingFailureReason(err.Error()), now)
+			}
+			continue
+		}
+		stats.ScannedEvents += len(events)
+		matchedOrderIDs := make(map[uint]bool)
+		windowMissOrderIDs := make(map[uint]bool)
+		for _, event := range events {
+			amount := amountStringFromMinUnits(event.Amount, groupOrders[0].TokenDecimals)
+			amountKey := billingAmountMatchKey{
+				Network:  groupKey.Network,
+				ChainID:  groupKey.ChainID,
+				Token:    groupKey.Token,
+				Receiver: groupKey.Receiver,
+				Amount:   amount,
+			}
+			matches := byAmount[amountKey]
+			if ambiguousAmountKeys[amountKey] {
+				continue
+			}
+			if len(matches) != 1 {
+				continue
+			}
+			order := matches[0]
+			if !billingTransferWithinOrderWindow(event.BlockTime, order) {
+				windowMissOrderIDs[order.ID] = true
+				continue
+			}
+			normHash, err := normalizeEVMTxHash(event.TxHash)
+			if err != nil {
+				stats.Failed++
+				s.markBillingAutoScan(order.ID, billingAutoScanFailed, "invalid_tx_hash_from_chain", now)
+				continue
+			}
+			if err := s.confirmScannedOnchainOrder(&order, strings.ToUpper(strings.TrimSpace(order.Network)), normHash, event.BlockTime); err != nil {
+				switch {
+				case errors.Is(err, ErrBillingTxAlreadyUsed):
+					stats.Skipped++
+					s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "tx_already_used", now)
+				case errors.Is(err, ErrBillingOrderExpired):
+					stats.Skipped++
+					s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "order_expired", now)
+				default:
+					stats.Failed++
+					s.markBillingAutoScan(order.ID, billingAutoScanFailed, sanitizeBillingFailureReason(err.Error()), now)
+				}
+				continue
+			}
+			stats.Confirmed++
+			matchedOrderIDs[order.ID] = true
+			delete(byAmount, amountKey)
+		}
+		for _, order := range groupOrders {
+			if matchedOrderIDs[order.ID] || ambiguousAmountKeys[billingAmountMatchKey{
+				Network:  groupKey.Network,
+				ChainID:  groupKey.ChainID,
+				Token:    groupKey.Token,
+				Receiver: groupKey.Receiver,
+				Amount:   strings.TrimSpace(order.Amount),
+			}] {
+				continue
+			}
+			if windowMissOrderIDs[order.ID] {
+				s.markBillingAutoScan(order.ID, billingAutoScanSkipped, "transfer_outside_order_window", now)
+			} else {
+				s.markBillingAutoScan(order.ID, billingAutoScanScanned, "no_matching_transfer", now)
+			}
+		}
+	}
+	if err := s.orderRepo.ExpireStale(now); err != nil {
+		return stats, err
+	}
+	return stats, nil
+}
+
+func (s *BillingService) markBillingAutoScan(orderID uint, status, reason string, scannedAt time.Time) {
+	if s == nil || s.orderRepo == nil || orderID == 0 {
+		return
+	}
+	_ = s.orderRepo.UpdateAutoScanState(orderID, status, sanitizeBillingFailureReason(reason), scannedAt)
+}
+
+func (s *BillingService) scanBillingTransfersForGroup(ctx context.Context, key billingScanGroupKey, sample model.BillingOrder) ([]billingTransferCandidate, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rpcKey := fmt.Sprintf("%d", key.ChainID)
+	rpcURL := s.cfg.Billing.RpcURLs[rpcKey]
+	if strings.TrimSpace(rpcURL) == "" {
+		return nil, fmt.Errorf("no rpc_urls configured for chain_id %s", rpcKey)
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	lookback := uint64(s.cfg.Billing.Scanner.BlockLookback)
+	var out []billingTransferCandidate
+	if isTRONPaymentNetwork(sample.Network) {
+		events, err := billingtron.ScanTRC20Transfers(timeoutCtx, rpcURL, billingtron.ScanParams{
+			TokenAddress:    sample.TokenAddress,
+			ReceiverAddress: sample.ReceiverAddress,
+			ExpectedChainID: big.NewInt(sample.ChainID),
+			BlockLookback:   lookback,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = make([]billingTransferCandidate, 0, len(events))
+		for _, event := range events {
+			out = append(out, billingTransferCandidate{TxHash: event.TxHash, Amount: event.Amount, BlockTime: event.BlockTime})
+		}
+		return out, nil
+	}
+	events, err := billingevm.ScanERC20Transfers(timeoutCtx, rpcURL, billingevm.ScanParams{
+		TokenAddress:    sample.TokenAddress,
+		ReceiverAddress: sample.ReceiverAddress,
+		ExpectedChainID: big.NewInt(sample.ChainID),
+		BlockLookback:   lookback,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out = make([]billingTransferCandidate, 0, len(events))
+	for _, event := range events {
+		out = append(out, billingTransferCandidate{TxHash: event.TxHash, Amount: event.Amount, BlockTime: event.BlockTime})
+	}
+	return out, nil
+}
+
+func billingTransferWithinOrderWindow(blockTime time.Time, order model.BillingOrder) bool {
+	if blockTime.IsZero() {
+		return false
+	}
+	createdAt := order.CreatedAt.UTC().Add(-2 * time.Minute)
+	expiredAt := order.ExpiredAt.UTC().Add(2 * time.Minute)
+	bt := blockTime.UTC()
+	return !bt.Before(createdAt) && !bt.After(expiredAt)
+}
+
 func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, normHash string, markFailure bool) error {
+	return s.confirmOnchainOrderWithOptions(order, net, normHash, billingConfirmOptions{MarkFailure: markFailure})
+}
+
+type billingConfirmOptions struct {
+	MarkFailure  bool
+	AllowExpired bool
+	PaidAt       time.Time
+}
+
+func (s *BillingService) confirmScannedOnchainOrder(order *model.BillingOrder, net, normHash string, paidAt time.Time) error {
+	return s.confirmOnchainOrderWithOptions(order, net, normHash, billingConfirmOptions{
+		AllowExpired: true,
+		PaidAt:       paidAt,
+	})
+}
+
+func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrder, net, normHash string, opts billingConfirmOptions) error {
 	if strings.ToUpper(strings.TrimSpace(order.Network)) != net {
 		return fmt.Errorf("network does not match order")
 	}
@@ -532,19 +1137,18 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 	if order.Status == "paid" {
 		return nil
 	}
-	if order.Status == "expired" {
+	if order.Status == "expired" && !opts.AllowExpired {
 		return ErrBillingOrderExpired
 	}
-	if order.Status != "pending" && order.Status != "failed" {
+	if order.Status != "pending" && order.Status != "failed" && !(opts.AllowExpired && order.Status == "expired") {
 		return fmt.Errorf("order not pending")
 	}
-	if now.After(order.ExpiredAt) {
+	if now.After(order.ExpiredAt) && !opts.AllowExpired {
 		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
 		return ErrBillingOrderExpired
 	}
-
-	if net != "BEP20" {
-		return fmt.Errorf("unsupported network for on-chain confirmation")
+	if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, *order) {
+		return ErrBillingOrderExpired
 	}
 
 	var conflict int64
@@ -566,19 +1170,30 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		return err
 	}
 
-	txHash := common.HexToHash(normHash)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	verifyErr := billingevm.VerifyERC20Transfer(ctx, rpcURL, billingevm.VerifyParams{
-		TxHash:          txHash,
-		TokenAddress:    order.TokenAddress,
-		ReceiverAddress: order.ReceiverAddress,
-		ExpectedMinUnit: expected,
-		ExpectedChainID: big.NewInt(order.ChainID),
-	})
+	var verifyErr error
+	if isTRONPaymentNetwork(order.Network) {
+		verifyErr = billingtron.VerifyTRC20Transfer(ctx, rpcURL, billingtron.VerifyParams{
+			TxHash:          normHash,
+			TokenAddress:    order.TokenAddress,
+			ReceiverAddress: order.ReceiverAddress,
+			ExpectedMinUnit: expected,
+			ExpectedChainID: big.NewInt(order.ChainID),
+		})
+	} else {
+		txHash := common.HexToHash(normHash)
+		verifyErr = billingevm.VerifyERC20Transfer(ctx, rpcURL, billingevm.VerifyParams{
+			TxHash:          txHash,
+			TokenAddress:    order.TokenAddress,
+			ReceiverAddress: order.ReceiverAddress,
+			ExpectedMinUnit: expected,
+			ExpectedChainID: big.NewInt(order.ChainID),
+		})
+	}
 	if verifyErr != nil {
-		if markFailure {
+		if opts.MarkFailure {
 			_ = s.orderRepo.MarkFailed(order.ID, normHash, sanitizeBillingFailureReason(fmt.Sprintf("transfer verification failed: %v", verifyErr)), time.Now().UTC())
 		}
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
@@ -592,11 +1207,11 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		if ord.Status == "paid" {
 			return nil
 		}
-		if ord.Status != "pending" && ord.Status != "failed" {
+		if ord.Status != "pending" && ord.Status != "failed" && !(opts.AllowExpired && ord.Status == "expired") {
 			return fmt.Errorf("order not pending")
 		}
 		tnow := time.Now().UTC()
-		if tnow.After(ord.ExpiredAt) {
+		if tnow.After(ord.ExpiredAt) && !opts.AllowExpired {
 			_ = tx.Model(&model.BillingOrder{}).Where("id = ?", ord.ID).Updates(map[string]any{
 				"status":                "expired",
 				"failure_reason":        "order expired before payment confirmation",
@@ -605,6 +1220,9 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 				"review_status":         billingReviewNeeded,
 				"ops_note":              "Order expired before payment confirmation.",
 			})
+			return ErrBillingOrderExpired
+		}
+		if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, ord) {
 			return ErrBillingOrderExpired
 		}
 
@@ -626,12 +1244,22 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 		}
 
 		paidAt := time.Now().UTC()
-		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, []string{"pending", "failed"}).Updates(map[string]any{
+		if !opts.PaidAt.IsZero() {
+			paidAt = opts.PaidAt.UTC()
+		}
+		allowedStatuses := []string{"pending", "failed"}
+		if opts.AllowExpired {
+			allowedStatuses = append(allowedStatuses, "expired")
+		}
+		res := tx.Model(&model.BillingOrder{}).Where("id = ? AND status IN ?", ord.ID, allowedStatuses).Updates(map[string]any{
 			"status":                "paid",
 			"tx_hash":               normHash,
 			"paid_at":               paidAt,
 			"failure_reason":        "",
 			"last_checked_at":       paidAt,
+			"auto_scan_status":      billingAutoScanConfirmed,
+			"auto_scan_skip_reason": "",
+			"auto_scanned_at":       paidAt,
 			"reconciliation_status": billingReconMatched,
 			"review_status":         billingReviewReviewed,
 			"reviewed_at":           paidAt,
@@ -650,21 +1278,44 @@ func (s *BillingService) confirmOnchainOrder(order *model.BillingOrder, net, nor
 			return fmt.Errorf("order could not be marked paid")
 		}
 
-		plan, ok := s.cfg.Billing.Plans[ord.PlanCode]
+		plan, ok := subscription.FindPlan(ord.PlanCode)
 		if !ok {
 			return fmt.Errorf("plan config missing for %s", ord.PlanCode)
 		}
-		period := plan.PeriodDays
-		if period <= 0 {
-			period = 30
-		}
-		expires := paidAt.AddDate(0, 0, period)
+		cycle := normalizeOrderBillingCycle(&ord)
+		expires := billingNextSubscriptionExpiry(tx, ord, paidAt, cycle)
 		return tx.Model(&model.User{}).Where("id = ?", ord.UserID).Updates(map[string]any{
-			"subscription_plan_code":  ord.PlanCode,
-			"subscription_status":     "active",
-			"subscription_expires_at": expires,
+			"subscription_plan_code":     plan.Code,
+			"subscription_status":        "active",
+			"subscription_billing_cycle": cycle,
+			"subscription_started_at":    paidAt,
+			"subscription_expires_at":    expires,
 		}).Error
 	})
+}
+
+func billingNextSubscriptionExpiry(tx *gorm.DB, ord model.BillingOrder, paidAt time.Time, cycle string) time.Time {
+	base := paidAt
+	orderType := strings.ToLower(strings.TrimSpace(ord.OrderType))
+	if orderType == "renew" {
+		var u model.User
+		if err := tx.Select("subscription_expires_at").First(&u, ord.UserID).Error; err == nil && u.SubscriptionExpiresAt != nil && u.SubscriptionExpiresAt.After(base) {
+			base = u.SubscriptionExpiresAt.UTC()
+		}
+	}
+	if subscription.NormalizeBillingCycle(cycle) == subscription.BillingCycleYearly {
+		return base.AddDate(1, 0, 0)
+	}
+	return base.AddDate(0, 1, 0)
+}
+
+func isTRONPaymentNetwork(network string) bool {
+	switch strings.ToUpper(strings.TrimSpace(network)) {
+	case "TRC20":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeBillingFailureReason(reason string) string {
@@ -731,6 +1382,24 @@ func normalizeEVMTxHash(hex string) (string, error) {
 		return "", fmt.Errorf("invalid tx_hash")
 	}
 	return strings.ToLower(txHash.Hex()), nil
+}
+
+func deriveBillingCycleFromPlanCode(planCode string) string {
+	if strings.Contains(strings.ToLower(strings.TrimSpace(planCode)), "year") {
+		return subscription.BillingCycleYearly
+	}
+	return subscription.BillingCycleMonthly
+}
+
+func normalizeOrderBillingCycle(o *model.BillingOrder) string {
+	if o == nil {
+		return subscription.BillingCycleMonthly
+	}
+	cycle := subscription.NormalizeBillingCycle(o.BillingCycle)
+	if strings.TrimSpace(o.BillingCycle) != "" {
+		return cycle
+	}
+	return deriveBillingCycleFromPlanCode(o.PlanCode)
 }
 
 // Exported for HTTP mapping in controllers.

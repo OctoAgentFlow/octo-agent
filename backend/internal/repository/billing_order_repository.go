@@ -16,6 +16,8 @@ type BillingOrderListQuery struct {
 	Status               string
 	ReconciliationStatus string
 	ReviewStatus         string
+	AutoScanStatus       string
+	AutoScanSkipReason   string
 	Limit                int
 	AllUsers             bool
 }
@@ -33,6 +35,8 @@ type BillingOrderOpsSummary struct {
 	ReviewNeeded int64
 	Reviewed     int64
 }
+
+const billingAutoConfirmExpiredScanGrace = 24 * time.Hour
 
 func NewBillingOrderRepository(db *gorm.DB) *BillingOrderRepository {
 	return &BillingOrderRepository{DB: db}
@@ -76,6 +80,12 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 	if v := cleanBillingFilter(q.ReviewStatus); v != "" {
 		db = db.Where("review_status = ?", v)
 	}
+	if v := cleanBillingFilter(q.AutoScanStatus); v != "" {
+		db = db.Where("auto_scan_status = ?", v)
+	}
+	if v := cleanBillingFilter(q.AutoScanSkipReason); v != "" {
+		db = db.Where("auto_scan_skip_reason = ?", v)
+	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -86,6 +96,19 @@ func (r *BillingOrderRepository) List(userID uint, q BillingOrderListQuery) ([]m
 		Limit(limit).
 		Find(&orders).Error
 	return orders, total, err
+}
+
+func (r *BillingOrderRepository) ListPendingForAutoConfirm(now time.Time, limit int) ([]model.BillingOrder, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var orders []model.BillingOrder
+	err := r.DB.
+		Where("status IN ? AND expired_at > ?", []string{"pending", "failed", "expired"}, now.Add(-billingAutoConfirmExpiredScanGrace)).
+		Order("id ASC").
+		Limit(limit).
+		Find(&orders).Error
+	return orders, err
 }
 
 func (r *BillingOrderRepository) OpsSummary(userID uint, allUsers bool) (BillingOrderOpsSummary, error) {
@@ -191,6 +214,26 @@ func (r *BillingOrderRepository) MarkFailed(id uint, txHash, reason string, chec
 		"last_checked_at":       checkedAt,
 		"reconciliation_status": "mismatch",
 		"review_status":         "review_needed",
+	}).Error
+}
+
+func (r *BillingOrderRepository) UpdateAutoScanState(id uint, status, reason string, scannedAt time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
+		"auto_scan_status":      status,
+		"auto_scan_skip_reason": reason,
+		"auto_scanned_at":       scannedAt,
+	}).Error
+}
+
+func (r *BillingOrderRepository) MarkNeedsReview(id uint, txHash, note string, checkedAt time.Time) error {
+	return r.DB.Model(&model.BillingOrder{}).Where("id = ?", id).Updates(map[string]any{
+		"status":                "pending",
+		"tx_hash":               txHash,
+		"failure_reason":        "",
+		"last_checked_at":       checkedAt,
+		"reconciliation_status": "needs_review",
+		"review_status":         "review_needed",
+		"ops_note":              note,
 	}).Error
 }
 

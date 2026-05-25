@@ -5,8 +5,8 @@ admin:
   host: "0.0.0.0"
   port: 11002
 mysql:
-  # TODO: Replace TODO_MYSQL_* with the test database account.
-  # Must point to octo_test, never octo_prod.
+  # Test Admin API database is configured to use the shared RDS octo_test schema.
+  # Keep this pointed at octo_test; do not use octo_prod for test deployments.
   data_source: "TODO_MYSQL_DSN"
   max_idle_conns: 10
   max_open_conns: 100
@@ -22,13 +22,12 @@ log:
   max_age: 7
   compress: true
 email:
-  provider: "local"
+  provider: "resend"
   local:
-    expose_code: true
+    expose_code: false
   resend:
-    # TODO: Keep empty while email.provider is local. Set RESEND_API_KEY in server env when enabling resend.
-    api_key: ""
-    # TODO: Replace with a verified Resend sender only when testing real delivery.
+    # Test environment sends real verification emails through Resend.
+    api_key: "re_5h9z8KuB_Dz3mVU32rN6etBr5RmQHTCcf"
     from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"
@@ -40,17 +39,38 @@ email:
 app:
   frontend_base_url: "https://test.octo-agent.com"
 
+jwt:
+  # TEST-ONLY stable JWT secret. Keep api/admin-api identical so restarts do not invalidate sessions.
+  # TODO: Before production, move JWT secrets to server private config or secret manager.
+  secret: "octo-agent-test-jwt-secret-2026-keep-api-admin-in-sync"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
+admin_auth:
+  emails:
+    - "owner@example.com"
+    - "ops@example.com"
+  code_ttl_seconds: 300
+
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
-  client_secret: "TODO_X_CLIENT_SECRET"
+  client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
   redirect_uri: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback"
-  state_secret: "TODO_X_STATE_SECRET"
+  state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  scopes: "tweet.read users.read offline.access"
 
 billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
   rpc_urls:
-    "56": "TODO_BSC_RPC_URL"
+    "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
+    "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+  wss_urls:
+    "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
+    "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
+  explorer_api_keys:
+    etherscan: "SBSIVP2NBF2GY5XUT7SD1DNDC1A2VEKS86"
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -60,10 +80,26 @@ billing:
       decimals: 18
       is_default: true
       note: "推荐使用 BEP20，手续费更低"
+    - method: "USDT"
+      network: "ERC20"
+      chain_id: 1
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
   plans:
     basic_monthly:
       name: "Basic"
-      amount: "10"
+      amount: "8"
       currency: "USDT"
       period_days: 30
       description: "Full automation for one month."

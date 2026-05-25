@@ -1,5 +1,7 @@
 # APP_SERVICE 配置拆分后本地四服务验收结果
 
+> 历史快照：本文档记录 APP_SERVICE 配置拆分后的本地四服务验收结果，保留用于追溯，不代表当前 OAF Bot / Auto Post Planner / Publishing Pipeline 阶段的最新验收清单。继续开发请优先参考 `CURRENT_ACCEPTANCE_CHECKLIST.md`。
+
 验收时间：2026-05-13 15:51 Asia/Shanghai
 
 结论：通过。四个本地服务均可启动，`APP_SERVICE=api` / `APP_SERVICE=admin` 的配置拆分链路生效，Health Check、API 路由隔离、用户端最小业务回归、后台登录与用户管理回归均通过。

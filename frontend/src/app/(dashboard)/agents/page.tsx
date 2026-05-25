@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { ArrowRight, FileText, ListChecks, Mail, MessageCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 
 import { useToast } from "@/components/providers/toast-provider";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
@@ -14,8 +16,11 @@ import {
 } from "@/lib/app-page-refresh";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
+import { activityService } from "@/services/activity.service";
 import {
   automationService,
+  type AutoCommentTargetApi,
+  type AutoCommentTaskApi,
   type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
@@ -73,6 +78,7 @@ function mapModule(item: AutomationModuleApi): AutomationModule {
         dailyLimit: item.config.frequency.daily_limit,
       },
       tone: item.config.tone,
+      executionMode: item.config.execution_mode || "review",
       safety: {
         requireApproval: item.config.safety.require_approval,
         maxPerHour: item.config.safety.max_per_hour,
@@ -102,6 +108,7 @@ function mapRuntime(data: AutomationRuntimeStatusApi): AutomationRuntimeStatus {
 }
 
 export default function AgentsPage() {
+  const { t } = useT();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -109,9 +116,11 @@ export default function AgentsPage() {
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
-  const [dmImportCSV, setDMImportCSV] = useState("");
+  const [commentTargets, setCommentTargets] = useState<AutoCommentTargetApi[]>([]);
+  const [commentTasks, setCommentTasks] = useState<AutoCommentTaskApi[]>([]);
   const [accountCount, setAccountCount] = useState(0);
   const [postCount, setPostCount] = useState(0);
+  const [activityCount, setActivityCount] = useState(0);
   const [runtimeStatus, setRuntimeStatus] = useState<AutomationRuntimeStatus>({
     queueDepth: 0,
     lastSuccessKey: "automation.time.paused",
@@ -120,6 +129,8 @@ export default function AgentsPage() {
   });
   const [editType, setEditType] = useState<AutomationModule["type"] | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [modulesHighlighted, setModulesHighlighted] = useState(false);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editing = useMemo(
     () => (editType ? modules.find((m) => m.type === editType) ?? null : null),
@@ -140,28 +151,34 @@ export default function AgentsPage() {
       }
       setErrorMessage(null);
       try {
-        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData] = await Promise.all([
+        const [mod, runtime, dmTaskData, dmRecipientData, dmImportData, commentTargetData, commentTaskData, accountData, postData, activityData] = await Promise.all([
           automationService.list(),
           automationService.runtimeStatus(),
           automationService.dmTasks(),
           automationService.dmRecipients(),
           automationService.dmRecipientImports(),
+          automationService.commentTargets(),
+          automationService.commentTasks(),
           accountService.list(),
           postService.list({ page: 1, page_size: 1 }),
+          activityService.list({ page: 1, page_size: 1 }),
         ]);
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setCommentTargets(commentTargetData.items);
+        setCommentTasks(commentTaskData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
+        setActivityCount(activityData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to load automations."
-          : "Failed to load automations.";
+          ? error.response?.data?.message || t("dashboard.errors.loadAutomations")
+          : t("dashboard.errors.loadAutomations");
         setErrorMessage(msg);
         if (!quiet) {
           setLoadState("error");
@@ -170,7 +187,7 @@ export default function AgentsPage() {
         }
       }
     },
-    [pushToast]
+    [pushToast, t]
   );
 
   useEffect(() => {
@@ -181,34 +198,40 @@ export default function AgentsPage() {
       automationService.dmTasks(),
       automationService.dmRecipients(),
       automationService.dmRecipientImports(),
+      automationService.commentTargets(),
+      automationService.commentTasks(),
       accountService.list(),
       postService.list({ page: 1, page_size: 1 }),
+      activityService.list({ page: 1, page_size: 1 }),
     ])
-      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, accountData, postData]) => {
+      .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, commentTargetData, commentTaskData, accountData, postData, activityData]) => {
         if (cancelled) return;
         setModules(mod.modules.map(mapModule));
         setRuntimeStatus(mapRuntime(runtime));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
+        setCommentTargets(commentTargetData.items);
+        setCommentTasks(commentTaskData.items);
         setAccountCount(accountData.items.length);
         setPostCount(postData.pagination.total);
+        setActivityCount(activityData.pagination.total);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       })
       .catch((error) => {
         if (cancelled) return;
         if (axios.isAxiosError(error)) {
-          setErrorMessage(error.response?.data?.message || "Failed to load automations.");
+          setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
         } else {
-          setErrorMessage("Failed to load automations.");
+          setErrorMessage(t("dashboard.errors.loadAutomations"));
         }
         setLoadState("error");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -222,18 +245,38 @@ export default function AgentsPage() {
     });
   }, [fetchAll]);
 
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const onConfigureAutomation = useCallback(() => {
+    document.getElementById("automation-modules")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setModulesHighlighted(true);
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setModulesHighlighted(false);
+      highlightTimeoutRef.current = null;
+    }, 1800);
+  }, []);
+
   const onToggle = async (type: AutomationModule["type"], enabled: boolean) => {
     try {
       const updated = await automationService.toggle(type, enabled);
       setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
       const runtime = await automationService.runtimeStatus();
       setRuntimeStatus(mapRuntime(runtime));
-      pushToast(`Automation ${type} ${enabled ? "enabled" : "disabled"} successfully.`);
+      pushToast(t(enabled ? "automation.toast.enabled" : "automation.toast.disabled", { module: t(`automation.module.${type}.name`) }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        pushToast(error.response?.data?.message || "Failed to toggle automation.");
+        pushToast(error.response?.data?.message || t("automation.toast.toggleFailed"));
       } else {
-        pushToast("Failed to toggle automation.");
+        pushToast(t("automation.toast.toggleFailed"));
       }
     }
   };
@@ -252,6 +295,7 @@ export default function AgentsPage() {
           daily_limit: config.frequency.dailyLimit,
         },
         tone: config.tone,
+        execution_mode: config.executionMode,
         safety: {
           require_approval: config.safety.requireApproval,
           max_per_hour: config.safety.maxPerHour,
@@ -261,145 +305,65 @@ export default function AgentsPage() {
       setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
       const runtime = await automationService.runtimeStatus();
       setRuntimeStatus(mapRuntime(runtime));
-      pushToast(`Automation ${type} config saved.`);
+      pushToast(t("automation.toast.configSaved", { module: t(`automation.module.${type}.name`) }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        pushToast(error.response?.data?.message || "Failed to save automation config.");
+        pushToast(error.response?.data?.message || t("automation.toast.configFailed"));
       } else {
-        pushToast("Failed to save automation config.");
+        pushToast(t("automation.toast.configFailed"));
       }
       throw error;
-    }
-  };
-
-  const approveDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.approveDMTask(id);
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task approved.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to approve DM task." : "Failed to approve DM task.");
-    }
-  };
-
-  const blockDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.blockDMTask(id, "Blocked from Auto DM review queue.");
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task blocked.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to block DM task." : "Failed to block DM task.");
-    }
-  };
-
-  const retryDMTask = async (id: number) => {
-    try {
-      const updated = await automationService.retryDMTask(id);
-      setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
-      pushToast("Auto DM task queued for retry.");
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to retry DM task." : "Failed to retry DM task.");
-    }
-  };
-
-  const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const rule = await automationService.setDMRecipientRule(id, status, `Marked ${status} from Auto DM queue.`);
-      setDMRecipients((items) => [rule, ...items.filter((item) => item.id !== rule.id)]);
-      if (status === "blocked" || status === "unsubscribed") {
-        const dmTaskData = await automationService.dmTasks();
-        setDMTasks(dmTaskData.items);
-      }
-      pushToast(`Auto DM recipient marked ${status}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
-    }
-  };
-
-  const updateDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const rule = await automationService.updateDMRecipientRule(id, status, `Marked ${status} from Auto DM recipient manager.`);
-      setDMRecipients((items) => items.map((item) => (item.id === id ? rule : item)));
-      pushToast(`Auto DM recipient marked ${status}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to update recipient rule." : "Failed to update recipient rule.");
-    }
-  };
-
-  const bulkUpdateDMRecipientRules = async (ids: number[], status: AutoDMRecipientRuleApi["status"]) => {
-    try {
-      const data = await automationService.bulkUpdateDMRecipientRules(ids, status, `Marked ${status} from Auto DM recipient manager bulk action.`);
-      setDMRecipients((items) =>
-        items.map((item) => data.items.find((next) => next.id === item.id) ?? item)
-      );
-      pushToast(`Updated ${data.updated} Auto DM recipients.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to bulk update recipient rules." : "Failed to bulk update recipient rules.");
-    }
-  };
-
-  const importDMRecipients = async () => {
-    try {
-      const data = await automationService.importDMRecipients(dmImportCSV);
-      setDMRecipients((items) => [...data.items, ...items.filter((item) => !data.items.some((next) => next.id === item.id))]);
-      if (data.batch) {
-        setDMImports((items) => [data.batch!, ...items.filter((item) => item.id !== data.batch!.id)]);
-      }
-      setDMImportCSV("");
-      pushToast(`Imported ${data.imported} Auto DM recipients. Skipped ${data.skipped}.`);
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || "Failed to import recipients." : "Failed to import recipients.");
     }
   };
 
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
+      <AutomationTabs />
 
       {loadState === "loading" ? (
         <Card>
-          <CardHeader title="Loading automations..." description="Fetching modules and runtime status." />
+          <CardHeader title={t("automation.loading.title")} description={t("automation.loading.description")} />
         </Card>
       ) : null}
 
       {loadState === "error" ? (
         <Card>
-          <CardHeader title="Failed to load automations" description={errorMessage || "Please retry."} />
+          <CardHeader title={t("automation.error.title")} description={errorMessage || t("common.retryHint")} />
           <div className="flex justify-end">
-            <Button onClick={() => void fetchAll()}>Retry</Button>
+            <Button onClick={() => void fetchAll()}>{t("common.retry")}</Button>
           </div>
         </Card>
       ) : null}
 
       <UserOnboardingCard
         accountConnected={accountCount > 0}
-        automationEnabled={modules.some((module) => module.config.enabled)}
+        automationEnabled={accountCount > 0 && modules.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
-        activityObserved={runtimeStatus.queueDepth > 0 || runtimeStatus.needsReview > 0 || runtimeStatus.lastSuccessKey !== "automation.time.paused"}
+        activityObserved={accountCount > 0 && activityCount > 0}
+        onConfigureAutomation={onConfigureAutomation}
       />
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <AutomationEntryGrid
+        commentTargetCount={commentTargets.length}
+        commentTaskCount={commentTasks.length}
+        dmTaskCount={dmTasks.length}
+        dmRecipientCount={dmRecipients.length}
+        dmImportCount={dmImports.length}
+      />
+
+      <div
+        id="automation-modules"
+        className={`scroll-mt-24 grid gap-4 rounded-2xl transition-shadow duration-300 xl:grid-cols-2 ${
+          modulesHighlighted ? "ring-2 ring-blue-300/70 ring-offset-4 ring-offset-[#070b17]" : ""
+        }`}
+      >
         {modules.map((module) => (
           <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} onEdit={onEdit} />
         ))}
       </div>
 
       <AutomationStatusPanel status={runtimeStatus} />
-
-      <AutoDMReviewPanel
-        tasks={dmTasks}
-        recipients={dmRecipients}
-        imports={dmImports}
-        onApprove={approveDMTask}
-        onBlock={blockDMTask}
-        onRetry={retryDMTask}
-        onRule={setDMRecipientRule}
-        onUpdateRule={updateDMRecipientRule}
-        onBulkRule={bulkUpdateDMRecipientRules}
-        importCSV={dmImportCSV}
-        onImportCSVChange={setDMImportCSV}
-        onImport={importDMRecipients}
-      />
 
       <AutomationEditDialog
         module={editing}
@@ -411,6 +375,129 @@ export default function AgentsPage() {
   );
 }
 
+function AutomationTabs() {
+  const { t } = useT();
+  const tabs = [
+    { href: "/automations", label: t("automation.tabs.overview"), icon: ListChecks },
+    { href: "/auto-post", label: t("automation.tabs.autoPost"), icon: FileText },
+    { href: "/auto-replies", label: t("automation.tabs.autoReply"), icon: MessageCircle },
+    { href: "/auto-comments", label: t("automation.tabs.autoComment"), icon: MessagesSquare },
+    { href: "/auto-dms", label: t("automation.tabs.autoDm"), icon: Mail },
+    { href: "/execution-queue", label: t("automation.tabs.executionQueue"), icon: ShieldCheck },
+  ];
+  return (
+    <div className="-mx-1 overflow-x-auto px-1 pb-1">
+      <div className="flex min-w-max gap-2">
+        {tabs.map((tab, index) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+              index === 0
+                ? "border-blue-300/30 bg-blue-500/15 text-white"
+                : "border-white/10 bg-white/[0.035] text-white/65 hover:border-blue-300/20 hover:text-white"
+            }`}
+          >
+            <tab.icon className="size-4" />
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AutomationEntryGrid({
+  commentTargetCount,
+  commentTaskCount,
+  dmTaskCount,
+  dmRecipientCount,
+  dmImportCount,
+}: {
+  commentTargetCount: number;
+  commentTaskCount: number;
+  dmTaskCount: number;
+  dmRecipientCount: number;
+  dmImportCount: number;
+}) {
+  const { t } = useT();
+  const entries = [
+    {
+      title: t("automation.entry.autoPost.title"),
+      description: t("automation.entry.autoPost.description"),
+      href: "/auto-post",
+      cta: t("automation.entry.autoPost.cta"),
+      icon: FileText,
+      stats: t("automation.entry.autoPost.stats"),
+    },
+    {
+      title: t("automation.entry.autoReply.title"),
+      description: t("automation.entry.autoReply.description"),
+      href: "/auto-replies",
+      cta: t("automation.entry.autoReply.cta"),
+      icon: MessageCircle,
+      stats: t("automation.entry.autoReply.stats"),
+    },
+    {
+      title: t("automation.entry.autoComment.title"),
+      description: t("automation.entry.autoComment.description"),
+      href: "/auto-comments",
+      cta: t("automation.entry.autoComment.cta"),
+      icon: MessagesSquare,
+      stats: t("automation.entry.autoComment.stats", { targets: commentTargetCount, tasks: commentTaskCount }),
+    },
+    {
+      title: t("automation.entry.autoDm.title"),
+      description: t("automation.entry.autoDm.description"),
+      href: "/auto-dms",
+      cta: t("automation.entry.autoDm.cta"),
+      icon: Mail,
+      stats: t("automation.entry.autoDm.stats", { tasks: dmTaskCount, rules: dmRecipientCount, imports: dmImportCount }),
+    },
+  ];
+
+  return (
+    <Card className="p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-white">{t("automation.entry.title")}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-white/55">{t("automation.entry.description")}</p>
+        </div>
+        <Link href="/execution-queue" className="inline-flex">
+          <Button type="button" variant="outline">
+            {t("automation.entry.queueCta")}
+            <ArrowRight className="size-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {entries.map((entry) => (
+          <Link
+            key={entry.title}
+            href={entry.href}
+            className="group rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-300/25 hover:bg-white/[0.065]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/15 to-violet-500/15 text-blue-100">
+                <entry.icon className="size-5" />
+              </span>
+              <h4 className="font-semibold text-white">{entry.title}</h4>
+            </div>
+            <p className="mt-3 min-h-12 text-sm leading-relaxed text-white/55">{entry.description}</p>
+            <p className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-xs text-white/50">{entry.stats}</p>
+            <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-100 transition group-hover:text-white">
+              {entry.cta}
+              <ArrowRight className="size-4" />
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// Kept as a legacy reference while Auto DM moves to /auto-dms.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AutoDMReviewPanel({
   tasks,
   recipients,
@@ -477,6 +564,7 @@ function AutoDMReviewPanel({
   };
 
   return (
+    <div id="auto-dm-review">
     <Card>
       <CardHeader title={t("automation.dmReview.title")} description={t("automation.dmReview.description")} />
       <div className="space-y-2">
@@ -670,9 +758,167 @@ function AutoDMReviewPanel({
             value={importCSV}
             onChange={(event) => onImportCSVChange(event.target.value)}
             rows={3}
-            placeholder="123456789,@username"
+            placeholder={t("automation.dmReview.importExample")}
             className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35"
           />
+        </div>
+      </div>
+    </Card>
+    </div>
+  );
+}
+
+// Kept as a legacy reference while Auto Comment moves to /auto-comments.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function AutoCommentPanel({
+  targets,
+  tasks,
+  targetInput,
+  onTargetInputChange,
+  onAddTarget,
+  onTargetStatus,
+  onDeleteTarget,
+  onApproveTask,
+  onBlockTask,
+  onRetryTask,
+}: {
+  targets: AutoCommentTargetApi[];
+  tasks: AutoCommentTaskApi[];
+  targetInput: string;
+  onTargetInputChange: (value: string) => void;
+  onAddTarget: () => void;
+  onTargetStatus: (id: number, status: AutoCommentTargetApi["status"]) => void;
+  onDeleteTarget: (id: number) => void;
+  onApproveTask: (id: number) => void;
+  onBlockTask: (id: number) => void;
+  onRetryTask: (id: number) => void;
+}) {
+  const { t } = useT();
+  return (
+    <Card>
+      <CardHeader title={t("automation.comment.title")} description={t("automation.comment.description")} />
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={targetInput}
+              onChange={(event) => onTargetInputChange(event.target.value)}
+              placeholder={t("automation.comment.targetInput")}
+              className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/35"
+            />
+            <Button type="button" disabled={!targetInput.trim()} onClick={onAddTarget}>
+              {t("automation.comment.addTarget")}
+            </Button>
+          </div>
+          <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+            <p className="mb-3 text-xs font-semibold text-white/70">{t("automation.comment.targets")}</p>
+            {targets.length === 0 ? (
+              <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+                {t("automation.comment.emptyTargets")}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {targets.map((target) => (
+                  <div key={target.id} className="rounded-md border border-white/8 bg-black/10 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="break-all text-sm font-semibold text-white">@{target.target_username}</p>
+                        <p className="text-xs text-white/55">
+                          {t(`automation.comment.status.${target.status}`)}
+                          {target.last_checked_at ? ` · ${t("automation.comment.lastChecked")}: ${new Date(target.last_checked_at).toLocaleString()}` : ""}
+                        </p>
+                        {target.last_commented_at ? (
+                          <p className="text-xs text-emerald-100/80">
+                            {t("automation.comment.lastCommented")}: {new Date(target.last_commented_at).toLocaleString()}
+                          </p>
+                        ) : null}
+                        {target.last_failure_reason ? (
+                          <p className="line-clamp-2 text-xs text-amber-100/85">
+                            {t("automation.comment.failure")}: {target.last_failure_reason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onTargetStatus(target.id, target.status === "active" ? "paused" : "active")}
+                        >
+                          {target.status === "active" ? t("automation.comment.pause") : t("automation.comment.resume")}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onDeleteTarget(target.id)}>
+                          {t("automation.comment.delete")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <p className="mb-3 text-xs font-semibold text-white/70">{t("automation.comment.tasks")}</p>
+          {tasks.length === 0 ? (
+            <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/55">
+              {t("automation.comment.emptyTasks")}
+            </p>
+          ) : (
+            <div className="max-h-[560px] space-y-2 overflow-y-auto">
+              {tasks.slice(0, 8).map((task) => {
+                const canApprove = task.status === "review" || task.status === "pending_review";
+                const canRetry = task.status === "failed" && task.retryable;
+                return (
+                  <div key={task.id} className="rounded-md border border-white/8 bg-black/10 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-white">@{task.target_username}</p>
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65">
+                            {task.status}
+                          </span>
+                        </div>
+                        <div className="rounded-md border border-white/8 bg-white/[0.03] p-2">
+                          <p className="mb-1 text-xs text-white/45">{t("automation.comment.targetTweet")}</p>
+                          <p className="line-clamp-3 text-sm text-white/70">{task.target_tweet_text || task.target_tweet_id}</p>
+                        </div>
+                        <div className="rounded-md border border-blue-300/15 bg-blue-500/8 p-2">
+                          <p className="mb-1 text-xs text-blue-100/70">{t("automation.comment.generated")}</p>
+                          <p className="line-clamp-3 text-sm text-white/82">{task.generated_comment || "—"}</p>
+                        </div>
+                        {task.comment_tweet_id ? (
+                          <p className="text-xs text-emerald-100/80">Comment Tweet ID: {task.comment_tweet_id}</p>
+                        ) : null}
+                        {task.failure_reason ? (
+                          <p className="line-clamp-2 text-xs text-amber-100/85">
+                            {t("automation.comment.failure")}: {task.failure_reason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {canApprove ? (
+                          <Button size="sm" onClick={() => onApproveTask(task.id)}>
+                            {t("automation.comment.approve")}
+                          </Button>
+                        ) : null}
+                        {canRetry ? (
+                          <Button size="sm" onClick={() => onRetryTask(task.id)}>
+                            {t("automation.comment.retry")}
+                          </Button>
+                        ) : null}
+                        {task.status !== "blocked" && task.status !== "sent" ? (
+                          <Button size="sm" variant="outline" onClick={() => onBlockTask(task.id)}>
+                            {t("automation.comment.block")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </Card>

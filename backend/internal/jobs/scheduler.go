@@ -16,10 +16,15 @@ func Start(
 	postRepo *repository.PostRepository,
 	autoReply *service.AutoReplyService,
 	autoDM *service.AutoDMService,
+	autoComment *service.AutoCommentService,
+	autoPost *service.AutoPostService,
+	publishing *service.PublishingService,
+	billing *service.BillingService,
 ) {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
+		var lastBillingScan time.Time
 		runEmail := func() {
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
@@ -27,15 +32,37 @@ func Start(
 				}
 			}
 		}
+		runBillingScanner := func() {
+			interval := time.Duration(0)
+			if billing != nil {
+				interval = billing.AutoConfirmInterval()
+			}
+			if interval <= 0 {
+				return
+			}
+			if !lastBillingScan.IsZero() && time.Since(lastBillingScan) < interval {
+				return
+			}
+			lastBillingScan = time.Now()
+			RunBillingScannerOnce(context.Background(), billing)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
 		RunAutoDMOnce(context.Background(), autoDM)
+		RunAutoCommentOnce(context.Background(), autoComment)
+		RunAutoPostOnce(context.Background(), autoPost)
+		RunPublishingOnce(context.Background(), publishing)
+		runBillingScanner()
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
 			RunAutoReplyOnce(context.Background(), autoReply)
 			RunAutoDMOnce(context.Background(), autoDM)
+			RunAutoCommentOnce(context.Background(), autoComment)
+			RunAutoPostOnce(context.Background(), autoPost)
+			RunPublishingOnce(context.Background(), publishing)
+			runBillingScanner()
 		}
 	}()
 }

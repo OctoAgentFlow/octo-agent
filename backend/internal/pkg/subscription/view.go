@@ -1,6 +1,7 @@
 package subscription
 
 import (
+	"math"
 	"strings"
 	"time"
 
@@ -20,17 +21,21 @@ func EffectiveStatus(u *model.User, now time.Time) string {
 	return "expired"
 }
 
-// TrialDaysLeft returns remaining full days for free_trial while active; otherwise 0.
+// TrialDaysLeft returns remaining calendar-style days for free_trial while active; otherwise 0.
 func TrialDaysLeft(u *model.User, now time.Time) int {
-	if u == nil || !strings.EqualFold(strings.TrimSpace(u.SubscriptionPlanCode), "free_trial") {
+	if u == nil || !IsFreeTrial(u) {
 		return 0
 	}
 	if EffectiveStatus(u, now) != "active" || u.SubscriptionExpiresAt == nil {
 		return 0
 	}
-	left := int(u.SubscriptionExpiresAt.Sub(now).Hours() / 24)
-	if left < 0 {
+	left := u.SubscriptionExpiresAt.Sub(now)
+	if left <= 0 {
 		return 0
 	}
-	return left
+	return int(math.Ceil(left.Hours() / 24))
+}
+
+func IsFreeTrial(u *model.User) bool {
+	return u != nil && strings.EqualFold(strings.TrimSpace(u.SubscriptionPlanCode), "free_trial")
 }

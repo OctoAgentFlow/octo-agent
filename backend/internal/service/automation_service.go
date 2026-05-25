@@ -12,6 +12,12 @@ import (
 	"octo-agent/backend/internal/repository"
 )
 
+const (
+	ExecutionModeManual    = "manual"
+	ExecutionModeReview    = "review"
+	ExecutionModeAutopilot = "autopilot"
+)
+
 type AutomationService struct {
 	repo         *repository.AutomationRepository
 	userRepo     *repository.UserRepository
@@ -106,6 +112,16 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	cfg.FrequencyIntervalMinutes = req.Frequency.IntervalMinutes
 	cfg.FrequencyDailyLimit = req.Frequency.DailyLimit
 	cfg.Tone = req.Tone
+	if mode := normalizeExecutionMode(req.ExecutionMode); mode != "" {
+		if mode == ExecutionModeAutopilot {
+			if err := s.assertAutopilotEntitlement(userID); err != nil {
+				return nil, err
+			}
+		}
+		cfg.ExecutionMode = mode
+	} else if strings.TrimSpace(cfg.ExecutionMode) == "" {
+		cfg.ExecutionMode = ExecutionModeReview
+	}
 	cfg.SafetyRequireApproval = req.Safety.RequireApproval
 	cfg.SafetyMaxPerHour = req.Safety.MaxPerHour
 	cfg.SafetyBlockedKeywords = string(keywords)
@@ -121,6 +137,34 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		cfg.State = "Paused"
 		cfg.NextRunAt = nil
 	}
+	if err := s.repo.Save(cfg); err != nil {
+		return nil, err
+	}
+	data := toAutomationModuleData(*cfg)
+	return &data, nil
+}
+
+func (s *AutomationService) UpdateExecutionMode(userID uint, typ string, mode string) (*dto.AutomationModuleData, error) {
+	if !isValidAutomationType(typ) {
+		return nil, errors.New("invalid automation type")
+	}
+	normalized := normalizeExecutionMode(mode)
+	if normalized == "" {
+		return nil, errors.New("invalid execution mode")
+	}
+	if normalized == ExecutionModeAutopilot {
+		if err := s.assertAutopilotEntitlement(userID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.repo.EnsureDefaults(userID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.repo.GetByUserAndType(userID, typ)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ExecutionMode = normalized
 	if err := s.repo.Save(cfg); err != nil {
 		return nil, err
 	}
@@ -224,8 +268,35 @@ func (s *AutomationService) assertSubscriptionForAutomation(userID uint) error {
 	return subscription.AssertUserMayProduceContent(u, time.Now())
 }
 
+func (s *AutomationService) assertAutopilotEntitlement(userID uint) error {
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	plan := subscription.NormalizePlanCode(u.SubscriptionPlanCode)
+	if plan == subscription.PlanPlus || plan == subscription.PlanPro || plan == subscription.PlanProPlus {
+		return nil
+	}
+	return errors.New("autopilot requires Plus or higher plan")
+}
+
 func isValidAutomationType(typ string) bool {
-	return typ == "post" || typ == "reply" || typ == "dm"
+	return typ == "post" || typ == "reply" || typ == "dm" || typ == "comment"
+}
+
+func normalizeExecutionMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "":
+		return ""
+	case ExecutionModeManual:
+		return ExecutionModeManual
+	case ExecutionModeReview, "pending_review":
+		return ExecutionModeReview
+	case ExecutionModeAutopilot, "auto":
+		return ExecutionModeAutopilot
+	default:
+		return ""
+	}
 }
 
 func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
@@ -233,7 +304,7 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 	_ = json.Unmarshal([]byte(m.SafetyBlockedKeywords), &blocked)
 	data := dto.AutomationModuleData{
 		Type:  m.Type,
-		Name:  strings.ToUpper(m.Type[:1]) + m.Type[1:],
+		Name:  automationDisplayName(m.Type),
 		State: m.State,
 		Config: dto.AutomationConfigPayload{
 			Enabled: m.Enabled,
@@ -241,7 +312,8 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 				IntervalMinutes: m.FrequencyIntervalMinutes,
 				DailyLimit:      m.FrequencyDailyLimit,
 			},
-			Tone: m.Tone,
+			Tone:          m.Tone,
+			ExecutionMode: effectiveExecutionMode(m.ExecutionMode),
 			Safety: dto.AutomationSafety{
 				RequireApproval: m.SafetyRequireApproval,
 				MaxPerHour:      m.SafetyMaxPerHour,
@@ -256,4 +328,30 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 		data.NextRunAt = m.NextRunAt.UTC().Format(time.RFC3339)
 	}
 	return data
+}
+
+func effectiveExecutionMode(mode string) string {
+	normalized := normalizeExecutionMode(mode)
+	if normalized == "" {
+		return ExecutionModeReview
+	}
+	return normalized
+}
+
+func automationDisplayName(typ string) string {
+	switch typ {
+	case "post":
+		return "Post"
+	case "reply":
+		return "Reply"
+	case "dm":
+		return "DM"
+	case "comment":
+		return "Comment"
+	default:
+		if typ == "" {
+			return ""
+		}
+		return strings.ToUpper(typ[:1]) + typ[1:]
+	}
 }

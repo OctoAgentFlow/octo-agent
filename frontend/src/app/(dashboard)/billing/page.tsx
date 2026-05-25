@@ -12,9 +12,11 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { billingService, type BillingOrderListItemApi, type BillingPaymentMethodApi } from "@/services/billing.service";
+import { mapPaymentMethods } from "@/lib/billing-payment-methods";
+import { billingService, type BillingOrderListItemApi } from "@/services/billing.service";
+import { useT } from "@/i18n/use-t";
+import type { BillingPlanApi, BillingSubscriptionApi, PlanLimitsApi, PlanUsageApi } from "@/services/billing.service";
 import type {
-  BillingOpsAction,
   BillingOpsSummary,
   BillingOrderFilterState,
   BillingReconciliationStatus,
@@ -24,6 +26,8 @@ import type {
   PaymentRecord,
   PaymentStatus,
   Plan,
+  PlanLimits,
+  PlanUsage,
 } from "@/types/billing";
 
 type LoadState = "loading" | "ready" | "error";
@@ -31,39 +35,25 @@ type LoadState = "loading" | "ready" | "error";
 function mapPlanKey(code: string) {
   if (code === "free_trial") return "billing.plan.freeTrial";
   if (code === "basic_monthly" || code === "basic") return "billing.plan.basic";
+  if (code === "plus") return "Plus";
+  if (code === "pro") return "Pro";
+  if (code === "pro_plus") return "Pro+";
   return "billing.plan.basic";
+}
+
+function mapPlanName(code: string) {
+  if (code === "free_trial") return "Free Trial";
+  if (code === "basic_monthly" || code === "basic") return "Basic";
+  if (code === "plus") return "Plus";
+  if (code === "pro") return "Pro";
+  if (code === "pro_plus") return "Pro+";
+  return code || "Basic";
 }
 
 function mapSubscriptionStatusKey(status: string) {
   if (status === "active") return "billing.subscription.status.active";
   if (status === "expired") return "billing.subscription.status.expired";
   return "billing.subscription.status.active";
-}
-
-function maskAddr(addr: string) {
-  const s = addr.trim();
-  if (s.length <= 14) return s;
-  return `${s.slice(0, 8)}…${s.slice(-6)}`;
-}
-
-function networkKeyForApi(network: string) {
-  const n = network.trim().toUpperCase();
-  if (n === "BEP20") return "billing.payment.network.bep20";
-  if (n === "ERC20") return "billing.payment.network.erc20";
-  return "billing.payment.network.trc20";
-}
-
-function mapPaymentMethods(items: BillingPaymentMethodApi[]): PaymentMethodOption[] {
-  return items.map((m) => ({
-    methodKey: "billing.payment.method.usdt",
-    networkKey: networkKeyForApi(m.network),
-    networkCode: m.network.trim().toUpperCase(),
-    receiverMasked: maskAddr(m.receiver_address),
-    tokenMasked: maskAddr(m.token_address),
-    chainId: m.chain_id,
-    note: m.note,
-    isDefault: m.is_default,
-  }));
 }
 
 function mapOrderStatus(status: string): PaymentStatus {
@@ -106,13 +96,21 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     userId: order.user_id,
     date: formatOrderDate(order),
     planKey: mapPlanKey(order.plan_code),
-    amount: `${order.amount} ${order.currency}`,
+    amount: `${order.payable_amount || order.amount} ${order.currency}`,
+    originalAmount: order.original_amount || "",
+    creditAmount: order.credit_amount || "",
+    payableAmount: order.payable_amount || order.amount,
+    orderType: order.order_type || "new",
+    currency: order.currency,
     methodKey: "billing.payment.method.usdt",
     network: order.network,
     status: mapOrderStatus(order.status),
     txHash: order.tx_hash || "",
     failureReason: order.failure_reason || "",
     lastCheckedAt: order.last_checked_at || "",
+    autoScanStatus: order.auto_scan_status || "",
+    autoScanSkipReason: order.auto_scan_skip_reason || "",
+    autoScannedAt: order.auto_scanned_at || "",
     canRetry: Boolean(order.can_retry),
     nextAction: order.next_action || "",
     reconciliationStatus: mapReconciliationStatus(order.reconciliation_status || ""),
@@ -122,6 +120,78 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     lastAuditAction: order.last_audit_action || "",
     lastAuditAt: order.last_audit_at || "",
     lastAuditOperatorId: order.last_audit_operator_id || 0,
+  };
+}
+
+function mapLimits(item: PlanLimitsApi): PlanLimits {
+  return {
+    maxBots: item.max_bots,
+    maxTwitterAccounts: item.max_twitter_accounts,
+    aiGenerationsMonthly: item.ai_generations_monthly,
+    dailyAutoPosts: item.daily_auto_posts,
+    dailyAutoReplies: item.daily_auto_replies,
+    dailyAutoComments: item.daily_auto_comments,
+    dailyAutoDMs: item.daily_auto_dms,
+    analyticsDays: item.analytics_days,
+    teamSeats: item.team_seats,
+    fullPersonaFields: item.full_persona_fields,
+    autoDMImport: item.auto_dm_import,
+    advancedBotStrategy: item.advanced_bot_strategy,
+    bulkReview: item.bulk_review,
+    botPerformance: item.bot_performance,
+    dataExport: item.data_export,
+    multiBotMatrix: item.multi_bot_matrix,
+    abTesting: item.ab_testing,
+    advancedFlowBuilder: item.advanced_flow_builder,
+    advancedRiskRules: item.advanced_risk_rules,
+    prioritySupport: item.priority_support,
+  };
+}
+
+function mapUsage(item: PlanUsageApi): PlanUsage {
+  return {
+    oafBots: item.oaf_bots,
+    twitterAccounts: item.twitter_accounts,
+    aiGenerationsMonth: item.ai_generations_month,
+    autoPostsToday: item.auto_posts_today,
+    autoRepliesToday: item.auto_replies_today,
+    autoCommentsToday: item.auto_comments_today,
+    autoDMsToday: item.auto_dms_today,
+  };
+}
+
+function mapPlan(item: BillingPlanApi): Plan {
+  return {
+    code: item.code,
+    name: item.name,
+    monthlyPrice: item.monthly_price,
+    yearlyPrice: item.yearly_price,
+    currency: item.currency,
+    audience: item.audience,
+    badge: item.badge,
+    description: item.description,
+    features: item.features,
+    featureFlags: (item.feature_flags || []).map((feature) => ({
+      key: feature.key,
+      label: feature.label,
+      available: feature.available,
+      minPlan: feature.min_plan,
+    })),
+    limits: mapLimits(item.limits),
+    highlight: item.highlight,
+  };
+}
+
+function mapSubscription(item: BillingSubscriptionApi): CurrentSubscription {
+  return {
+    plan: item.plan,
+    planName: mapPlanName(item.plan),
+    billingCycle: item.billing_cycle === "yearly" ? "yearly" : "monthly",
+    expirationDate: item.expiration_date,
+    remainingTrialDays: item.trial_days_left,
+    statusKey: mapSubscriptionStatusKey(item.status),
+    limits: mapLimits(item.limits),
+    usage: mapUsage(item.usage),
   };
 }
 
@@ -140,6 +210,7 @@ const emptyOpsSummary: BillingOpsSummary = {
 };
 
 export default function BillingPage() {
+  const { t } = useT();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -148,7 +219,6 @@ export default function BillingPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   const [opsSummary, setOpsSummary] = useState<BillingOpsSummary>(emptyOpsSummary);
-  const [canOperateBilling, setCanOperateBilling] = useState(false);
   const [paymentFilters, setPaymentFilters] = useState<BillingOrderFilterState>({
     status: "all",
     reviewStatus: "all",
@@ -170,46 +240,17 @@ export default function BillingPage() {
           billingService.orders(orderQueryFromFilters(paymentFilters)),
         ]);
 
-        setSubscription({
-          planKey: mapPlanKey(subscriptionData.plan),
-          expirationDate: subscriptionData.expiration_date,
-          remainingTrialDays: subscriptionData.trial_days_left,
-          statusKey: mapSubscriptionStatusKey(subscriptionData.status),
-        });
-        setPlans(
-          plansData.items.map((item) => ({
-            nameKey: mapPlanKey(item.code),
-            price: item.price,
-            periodKey: item.period === "7 days" ? "billing.plan.period.sevenDays" : "billing.plan.period.month",
-            descriptionKey:
-              item.code === "free_trial" ? "billing.plan.freeTrial.description" : "billing.plan.basic.description",
-            featureKeys:
-              item.code === "free_trial"
-                ? [
-                    "billing.plan.features.autoPost",
-                    "billing.plan.features.autoReply",
-                    "billing.plan.features.basicAutoDm",
-                    "billing.plan.features.communitySupport",
-                  ]
-                : [
-                    "billing.plan.features.allAutomations",
-                    "billing.plan.features.unlimitedRuns",
-                    "billing.plan.features.priorityQueue",
-                    "billing.plan.features.advancedAnalytics",
-                  ],
-            highlight: item.highlight,
-          }))
-        );
+        setSubscription(mapSubscription(subscriptionData));
+        setPlans(plansData.items.map(mapPlan));
         setPaymentMethods(mapPaymentMethods(methodsData.items));
         setPaymentRecords(ordersData.items.map(mapPaymentRecord));
         setOpsSummary(ordersData.ops_summary || emptyOpsSummary);
-        setCanOperateBilling(Boolean(ordersData.can_operate_billing));
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to load billing data."
-          : "Failed to load billing data.";
+          ? error.response?.data?.message || t("billing.errors.load")
+          : t("billing.errors.load");
         setErrorMessage(msg);
         if (!quiet) {
           setLoadState("error");
@@ -218,7 +259,7 @@ export default function BillingPage() {
         }
       }
     },
-    [paymentFilters, pushToast]
+    [paymentFilters, pushToast, t]
   );
 
   useEffect(() => {
@@ -242,47 +283,27 @@ export default function BillingPage() {
       try {
         const updated = await billingService.confirmOrder(orderId, txHash);
         if (updated.status === "paid") {
-          pushToast("Payment confirmed. Subscription is active.");
+          pushToast(t("billing.toast.paymentConfirmed"));
         } else {
-          pushToast("Order check completed.");
+          pushToast(t("billing.toast.orderChecked"));
         }
         await fetchBilling({ quiet: true });
       } catch (error) {
         const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to confirm this transaction."
-          : "Failed to confirm this transaction.";
+          ? error.response?.data?.message || t("billing.errors.confirmTx")
+          : t("billing.errors.confirmTx");
         pushToast(msg);
         await fetchBilling({ quiet: true });
         throw new Error(msg);
       }
     },
-    [fetchBilling, pushToast]
-  );
-
-  const updateBillingOps = useCallback(
-    async (orderId: string, action: BillingOpsAction, payload?: { opsNote?: string }) => {
-      try {
-        await billingService.orderOpsAction(orderId, {
-          action,
-          ops_note: payload?.opsNote,
-        });
-        pushToast("Billing order updated.");
-        await fetchBilling({ quiet: true });
-      } catch (error) {
-        const msg = axios.isAxiosError(error)
-          ? error.response?.data?.message || "Failed to update billing order."
-          : "Failed to update billing order.";
-        pushToast(msg);
-        throw new Error(msg);
-      }
-    },
-    [fetchBilling, pushToast]
+    [fetchBilling, pushToast, t]
   );
 
   if (loadState === "loading") {
     return (
       <Card>
-        <CardHeader title="Loading billing data..." description="Fetching subscription, plans and payment methods." />
+        <CardHeader title={t("billing.loading.title")} description={t("billing.loading.description")} />
       </Card>
     );
   }
@@ -290,9 +311,9 @@ export default function BillingPage() {
   if (loadState === "error") {
     return (
       <Card>
-        <CardHeader title="Failed to load billing data" description={errorMessage || "Please retry."} />
+        <CardHeader title={t("billing.error.title")} description={errorMessage || t("common.retryHint")} />
         <div className="flex justify-end">
-          <Button onClick={() => void fetchBilling()}>Retry</Button>
+          <Button onClick={() => void fetchBilling()}>{t("common.retry")}</Button>
         </div>
       </Card>
     );
@@ -305,11 +326,9 @@ export default function BillingPage() {
       paymentMethods={paymentMethods}
       paymentRecords={paymentRecords}
       opsSummary={opsSummary}
-      canOperateBilling={canOperateBilling}
       filters={paymentFilters}
       onFiltersChange={setPaymentFilters}
       onConfirmTx={confirmOrderTx}
-      onOpsAction={updateBillingOps}
       onPaymentConfirmed={() => void fetchBilling({ quiet: true })}
     />
   );

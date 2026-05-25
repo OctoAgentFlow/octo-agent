@@ -20,6 +20,7 @@ import (
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/requestid"
+	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/repository"
 
 	"go.uber.org/zap"
@@ -27,15 +28,19 @@ import (
 
 type AccountService struct {
 	repo       *repository.TwitterAccountRepository
+	userRepo   *repository.UserRepository
 	oauth      config.XOAuthConfig
 	httpClient *http.Client
 }
 
-const xOAuthRequestedScopes = "tweet.read tweet.write users.read offline.access dm.read dm.write"
+const xOAuthDefaultRequestedScopes = "tweet.read users.read offline.access"
 
-func NewAccountService(repo *repository.TwitterAccountRepository, oauth config.XOAuthConfig) *AccountService {
+var ErrFreeTwitterAccountLimit = errors.New("current plan has reached the X account limit")
+
+func NewAccountService(repo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, oauth config.XOAuthConfig) *AccountService {
 	return &AccountService{
 		repo:       repo,
+		userRepo:   userRepo,
 		oauth:      oauth,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -48,13 +53,31 @@ func (s *AccountService) List(userID uint) (*dto.AccountListResponse, error) {
 	}
 	items := make([]dto.AccountItem, 0, len(accounts))
 	for _, acc := range accounts {
+		missingScopes := missingRequiredPublishScopes(acc.OAuthScopes)
+		status := strings.TrimSpace(acc.Status)
+		if status == "" {
+			status = "connected"
+		}
+		hasAccessToken := strings.TrimSpace(acc.AccessToken) != ""
+		publishIssue := ""
+		if !strings.EqualFold(status, "connected") {
+			publishIssue = "needs_reauth"
+		} else if !hasAccessToken {
+			publishIssue = "missing_access_token"
+		} else if len(missingScopes) > 0 {
+			publishIssue = "missing_tweet_write"
+		}
 		item := dto.AccountItem{
-			ID:          acc.ID,
-			AvatarURL:   acc.AvatarURL,
-			Username:    acc.Username,
-			DisplayName: acc.DisplayName,
-			Status:      acc.Status,
-			Followers:   acc.Followers,
+			ID:                    acc.ID,
+			AvatarURL:             acc.AvatarURL,
+			Username:              acc.Username,
+			DisplayName:           acc.DisplayName,
+			Status:                status,
+			Followers:             acc.Followers,
+			PublishReady:          publishIssue == "",
+			PublishReauthRequired: publishIssue != "",
+			PublishIssue:          publishIssue,
+			MissingScopes:         missingScopes,
 		}
 		if acc.LastSyncedAt != nil {
 			item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
@@ -76,7 +99,6 @@ func (s *AccountService) StartXOAuth(ctx context.Context, userID uint) (*dto.OAu
 			)...)
 		return nil, errors.New("x oauth not configured: set x_oauth.client_id and x_oauth.redirect_uri in configs/config.<env>.yaml")
 	}
-
 	codeVerifier, err := randomHexString(32)
 	if err != nil {
 		zap.L().Warn("x oauth: pkce verifier generation failed", xOAuthZapCtx(ctx, zap.Uint("user_id", userID), zap.Error(err))...)
@@ -93,7 +115,7 @@ func (s *AccountService) StartXOAuth(ctx context.Context, userID uint) (*dto.OAu
 	q.Set("response_type", "code")
 	q.Set("client_id", clientID)
 	q.Set("redirect_uri", redirectURI)
-	q.Set("scope", xOAuthRequestedScopes)
+	q.Set("scope", s.requestedOAuthScopes())
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
@@ -142,7 +164,7 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 		Followers:     "",
 		AccessToken:   tokens.AccessToken,
 		RefreshToken:  tokens.RefreshToken,
-		OAuthScopes:   normalizedOAuthScopes(tokens.Scope),
+		OAuthScopes:   s.normalizedTokenScopes(tokens.Scope),
 	}
 	if account.Username == "" {
 		zap.L().Warn("x oauth: profile missing username",
@@ -151,6 +173,16 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 				zap.String("x_user_id", profile.Data.ID),
 			)...)
 		return 0, errors.New("x oauth user info missing username")
+	}
+	if err := s.ensureCanBindXAccount(userID, account.TwitterUserID, account.Username); err != nil {
+		zap.L().Warn("x oauth: account bind rejected by account limit",
+			xOAuthZapCtx(ctx,
+				zap.Uint("user_id", userID),
+				zap.String("x_user_id", account.TwitterUserID),
+				zap.String("username", account.Username),
+				zap.Error(err),
+			)...)
+		return 0, err
 	}
 	if _, err := s.repo.UpsertByUser(userID, account); err != nil {
 		zap.L().Error("x oauth: upsert twitter account failed",
@@ -173,6 +205,22 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 
 func (s *AccountService) Delete(userID, accountID uint) error {
 	return s.repo.DeleteByUserAndID(userID, accountID)
+}
+
+func (s *AccountService) ensureCanBindXAccount(userID uint, twitterUserID, username string) error {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	limits := subscription.LimitsForUser(user)
+	count, err := s.repo.CountByUserIDExcludingIdentity(userID, strings.TrimSpace(twitterUserID), strings.TrimSpace(username))
+	if err != nil {
+		return err
+	}
+	if count >= limits.MaxTwitterAccounts {
+		return ErrFreeTwitterAccountLimit
+	}
+	return nil
 }
 
 type xTokenResponse struct {
@@ -354,6 +402,29 @@ func (s *AccountService) signOAuthState(data string) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+func (s *AccountService) requestedOAuthScopes() string {
+	scopes := normalizedOAuthScopes(s.oauth.Scopes)
+	if scopes == "" {
+		return xOAuthDefaultRequestedScopes
+	}
+	return scopes
+}
+
+func (s *AccountService) normalizedTokenScopes(scope string) string {
+	scopes := normalizedOAuthScopes(scope)
+	if scopes == "" {
+		return s.requestedOAuthScopes()
+	}
+	return scopes
+}
+
+func missingRequiredPublishScopes(scopes string) []string {
+	if hasOAuthScope(scopes, "tweet.write") {
+		return nil
+	}
+	return []string{"tweet.write"}
+}
+
 func sha256Bytes(s string) []byte {
 	sum := sha256.Sum256([]byte(s))
 	return sum[:]
@@ -398,7 +469,7 @@ func truncateForLog(s string, max int) string {
 func normalizedOAuthScopes(scope string) string {
 	fields := strings.Fields(strings.TrimSpace(scope))
 	if len(fields) == 0 {
-		return xOAuthRequestedScopes
+		return ""
 	}
 	return strings.Join(fields, " ")
 }

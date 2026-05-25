@@ -68,6 +68,33 @@ func (ctl *PostController) Create(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *PostController) Generate(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.PostGenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.postService.Generate(c.Request.Context(), userID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "x account not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *PostController) Get(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

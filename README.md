@@ -6,7 +6,7 @@ Octo-Agent is a full-stack scaffold for AI-assisted social content operations.
 
 - Frontend: Next.js (App Router) + Tailwind + shadcn/ui + React Hook Form + Zod
 - Backend: Gin + GORM + MySQL (AutoMigrate on startup)
-- Deploy templates: Docker + Docker Compose + Nginx
+- Deployment: script-based four-service deployment under `scripts/`
 
 ## Environment Prerequisites
 
@@ -60,16 +60,24 @@ Frontend services:
 - `make admin-local` - run Gin Admin service (10002)
 - `make install` - install frontend deps + tidy go mod
 - `make lint` - frontend lint + backend tests
+- `./scripts/deploy-all-test.sh` - deploy test API/Admin API/API Front/Admin Front with script-managed PID files
+- `./scripts/deploy-all-prod.sh` - deploy production API/Admin API/API Front/Admin Front with script-managed PID files
 
 ## Current Scaffold Coverage
 
 - Frontend（`frontend/src/app`）:
   - `(auth)`：登录注册
-  - `(dashboard)`：dashboard、accounts、agents、activity、billing、posts、analytics、settings、profile 等
+  - `(dashboard)`：dashboard、accounts、oaf-bots、automations、auto-post、auto-replies、auto-comments、auto-dms、execution-queue、activity、billing、posts、analytics、settings、profile 等
 - Backend 分层：
   - `controller`, `service`, `model`, `repository`, `router`, `middleware`, `dto`, `email`, `jobs` 等
 - AutoMigrate（见 `backend/internal/database/migrate.go`）:
-  - `User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `TwitterAccount`, `AutomationConfig`, `ActivityLog`, `ReplyReservation`, `Post`, `Agent`, `Task`, `BillingOrder`, `BillingChainTx`
+  - 用户/认证/钱包：`User`, `EmailVerificationCode`, `WalletChallenge`, `UserWallet`, `UserNotificationSetting`
+  - X 与自动化：`TwitterAccount`, `AutomationConfig`, `ActivityLog`, `ReplyReservation`
+  - OAF Bot / AI 用量：`OAFBot`, `AIGenerationUsage`
+  - Auto Post / 内容池：`AutoPostPlan`, `AutoPostDraft`, `AutoPostGenerationRun`, `ContentLibraryItem`
+  - Auto Reply / Auto Comment / Auto DM：`AutoReplyDraft`, `AutoCommentTarget`, `AutoCommentTask`, `AutoDMTask`, `AutoDMRecipientRule`, `AutoDMRecipientImport`
+  - Publishing / Posts / Billing：`PublishJob`, `Post`, `BillingOrder`, `BillingOrderAudit`, `BillingChainTx`
+  - 兼容 scaffold：`Agent`, `Task`
   - 启动时会执行表注释（`ApplyTableComments`）及部分活动字段回填（`BackfillActivityReplyFields`）
 - 文档：`docs/`（[API 索引](docs/api/README.md)、库表、部署环境等）
 
@@ -77,6 +85,5 @@ Frontend services:
 
 - `frontend/`: Next.js application
 - `backend/`: Gin API service
-- `deploy/`: Nginx, Docker, Compose templates
+- `scripts/`: Local helpers and script-based test/prod deployment entries
 - `docs/`: Product/API/Database/Deployment/Audit docs, see [docs/README.md](docs/README.md)
-- `scripts/`: Root helper scripts

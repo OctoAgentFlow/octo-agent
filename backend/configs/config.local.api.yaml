@@ -37,6 +37,8 @@ email:
 # OAuth 完成后浏览器跳转到此前端 origin（与 api.port 无关）
 app:
   frontend_base_url: "http://localhost:3000"
+  official_x_url: "https://x.com/octo_agent_flow"
+  telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
 
 # X（Twitter）OAuth 2.0：在 Developer Portal 配置相同 redirect_uri / Callback URL
 x_oauth:
@@ -44,12 +46,37 @@ x_oauth:
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
   state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  scopes: "tweet.read tweet.write users.read offline.access"
+
+x_publisher:
+  real_publish_enabled: false
+  manual_publish_enabled: true
+  per_account_daily_limit: 20
+  per_account_min_interval_seconds: 300
+  dry_run: true
+
+llm:
+  default_provider: "openai"
+  openai:
+    api_key: "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"
+    model: "gpt-4.1-mini"
+    base_url: "https://api.openai.com/v1"
+    timeout_sec: 20
+    max_tokens: 120
+    temperature: 0.65
 
 billing:
   order_ttl_minutes: 30
+  scanner:
+    enabled: true
+    interval_seconds: 60
+    max_orders_per_tick: 100
+    block_lookback: 7200
   webhook_secret: "local-billing-webhook-secret"
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"
+    "1": "https://ethereum.publicnode.com"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -59,10 +86,26 @@ billing:
       decimals: 18
       is_default: true
       note: "推荐使用 BEP20，手续费更低"
+    - method: "USDT"
+      network: "ERC20"
+      chain_id: 1
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
   plans:
     basic_monthly:
       name: "Basic"
-      amount: "10"
+      amount: "8"
       currency: "USDT"
       period_days: 30
       description: "Full automation for one month."

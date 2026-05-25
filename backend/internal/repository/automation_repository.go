@@ -26,6 +26,7 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			FrequencyIntervalMinutes: 180,
 			FrequencyDailyLimit:      6,
 			Tone:                     "Professional",
+			ExecutionMode:            "review",
 			SafetyRequireApproval:    true,
 			SafetyMaxPerHour:         2,
 			SafetyBlockedKeywords:    `["airdrop","giveaway"]`,
@@ -38,6 +39,7 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			FrequencyIntervalMinutes: 15,
 			FrequencyDailyLimit:      120,
 			Tone:                     "Friendly",
+			ExecutionMode:            "review",
 			SafetyRequireApproval:    false,
 			SafetyMaxPerHour:         30,
 			SafetyBlockedKeywords:    `["price","pump"]`,
@@ -50,9 +52,23 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			FrequencyIntervalMinutes: 60,
 			FrequencyDailyLimit:      40,
 			Tone:                     "Web3-native",
+			ExecutionMode:            "review",
 			SafetyRequireApproval:    true,
 			SafetyMaxPerHour:         10,
 			SafetyBlockedKeywords:    `["seed phrase","private key"]`,
+		},
+		{
+			UserID:                   userID,
+			Type:                     "comment",
+			Enabled:                  false,
+			State:                    "Paused",
+			FrequencyIntervalMinutes: 10,
+			FrequencyDailyLimit:      20,
+			Tone:                     "Friendly",
+			ExecutionMode:            "review",
+			SafetyRequireApproval:    true,
+			SafetyMaxPerHour:         6,
+			SafetyBlockedKeywords:    `["airdrop","giveaway","seed phrase","private key"]`,
 		},
 	}
 
@@ -70,7 +86,21 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			} else {
 				item.NextRunAt = nil
 			}
-			if err := r.DB.Create(&item).Error; err != nil {
+			if err := r.DB.Select(
+				"UserID",
+				"Type",
+				"Enabled",
+				"State",
+				"FrequencyIntervalMinutes",
+				"FrequencyDailyLimit",
+				"Tone",
+				"ExecutionMode",
+				"SafetyRequireApproval",
+				"SafetyMaxPerHour",
+				"SafetyBlockedKeywords",
+				"LastRunAt",
+				"NextRunAt",
+			).Create(&item).Error; err != nil {
 				return err
 			}
 		}
@@ -98,8 +128,9 @@ func (r *AutomationRepository) Save(cfg *model.AutomationConfig) error {
 }
 
 const (
-	AutomationTypeReply = "reply"
-	AutomationTypeDM    = "dm"
+	AutomationTypeReply   = "reply"
+	AutomationTypeDM      = "dm"
+	AutomationTypeComment = "comment"
 )
 
 // ListUserIDsWithReplyAutomationEnabled returns user ids with reply automation on and an active subscription.

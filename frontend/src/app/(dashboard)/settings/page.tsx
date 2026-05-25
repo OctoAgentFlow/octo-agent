@@ -4,9 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { BadgeCheck, Bell, CreditCard, KeyRound, Languages, ShieldCheck, UserCog, Wallet } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Bell,
+  CreditCard,
+  KeyRound,
+  Languages,
+  type LucideIcon,
+  Mail,
+  ShieldCheck,
+  UserCog,
+  Wallet,
+} from "lucide-react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
@@ -38,6 +50,26 @@ function maskWallet(address?: string) {
   if (!a) return "—";
   if (a.length <= 12) return a;
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+function accountInitial(me: MeData) {
+  const base = (me.name || me.email || "O").trim();
+  return base.slice(0, 1).toUpperCase();
+}
+
+function statusLabelKey(status?: string) {
+  const normalized = (status || "active").toLowerCase();
+  if (normalized === "suspended") return "settings.accountStatus.suspended";
+  if (normalized === "disabled") return "settings.accountStatus.disabled";
+  if (normalized === "inactive") return "settings.accountStatus.inactive";
+  return "settings.accountStatus.active";
+}
+
+function roleLabelKey(role?: string) {
+  const normalized = (role || "user").toLowerCase();
+  if (normalized === "admin") return "settings.accountRole.admin";
+  if (normalized === "owner") return "settings.accountRole.owner";
+  return "settings.accountRole.user";
 }
 
 export default function SettingsPage() {
@@ -226,33 +258,56 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-5">
-      <section>
-        <h2 className="text-title">{t("settings.page.title")}</h2>
-        <p className="text-subtitle mt-2">{t("settings.page.subtitle")}</p>
+    <div className="space-y-5 md:space-y-6">
+      <section className="relative overflow-hidden rounded-[28px] border border-[#2f3336] bg-black p-5 md:p-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(29,155,240,0.18),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(0,186,124,0.12),transparent_28%)]" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#1d9bf0]/12 text-xl font-bold text-[#8ecdf8]">
+              {accountInitial(me)}
+            </span>
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-medium text-[#8ecdf8]">
+                  <UserCog className="size-3.5" />
+                  {t("settings.hero.eyebrow")}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-medium text-[#7ee0b5]">
+                  <BadgeCheck className="size-3.5" />
+                  {t(statusLabelKey(me.status))}
+                </span>
+              </div>
+              <h2 className="text-2xl font-bold tracking-[-0.02em] text-[#e7e9ea] md:text-3xl">
+                {t("settings.page.title")}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#71767b] md:text-[15px]">
+                {t("settings.page.subtitle")}
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[460px]">
+            <AccountPill icon={Mail} label={t("settings.profile.email")} value={me.email || "—"} />
+            <AccountPill icon={ShieldCheck} label={t("settings.hero.role")} value={t(roleLabelKey(me.role))} />
+            <AccountPill icon={Wallet} label={t("settings.security.wallet")} value={maskWallet(me.wallet_address)} mono />
+          </div>
+        </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.profile.title")}
             description={t("settings.profile.description")}
-            right={<UserCog className="h-5 w-5 text-cyan-200" />}
+            right={<UserCog className="h-5 w-5 text-[#1d9bf0]" />}
           />
           <div className="space-y-4">
             <label className="block space-y-2">
-              <span className="text-sm text-white/60">{t("settings.profile.displayName")}</span>
+              <span className="text-sm text-[#71767b]">{t("settings.profile.displayName")}</span>
               <Input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
             </label>
             <div className="grid gap-3 text-sm md:grid-cols-2">
-              <div>
-                <p className="text-white/50">{t("settings.profile.email")}</p>
-                <p className="mt-0.5 font-medium text-white">{me.email || "—"}</p>
-              </div>
-              <div>
-                <p className="text-white/50">{t("settings.profile.status")}</p>
-                <p className="mt-0.5 font-medium text-white">{me.status || "—"}</p>
-              </div>
+              <InfoRow label={t("settings.profile.email")} value={me.email || "—"} />
+              <InfoRow label={t("settings.profile.status")} value={t(statusLabelKey(me.status))} />
             </div>
             <div className="flex justify-end">
               <Button disabled={!dirty || saving} onClick={() => void saveProfile()}>
@@ -262,35 +317,50 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0f1419]">
+          <CardHeader
+            title={t("settings.shortcuts.title")}
+            description={t("settings.shortcuts.description")}
+            right={<CreditCard className="h-5 w-5 text-[#1d9bf0]" />}
+          />
+          <div className="grid gap-3">
+            <ShortcutCard href="/accounts" icon={BadgeCheck} title={t("settings.shortcuts.accounts")} description={t("settings.shortcuts.accountsDesc")} />
+            <ShortcutCard href="/billing" icon={CreditCard} title={t("settings.shortcuts.billing")} description={t("settings.shortcuts.billingDesc")} />
+            <ShortcutCard href="/profile" icon={UserCog} title={t("settings.shortcuts.profile")} description={t("settings.shortcuts.profileDesc")} />
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.security.title")}
             description={t("settings.security.description")}
-            right={<ShieldCheck className="h-5 w-5 text-emerald-200" />}
+            right={<ShieldCheck className="h-5 w-5 text-[#00ba7c]" />}
           />
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
-              <span className="flex items-center gap-2 text-sm text-white/68">
-                <Wallet className="h-4 w-4 text-white/50" />
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+              <span className="flex items-center gap-2 text-sm text-[#b6bec5]">
+                <Wallet className="h-4 w-4 text-[#71767b]" />
                 {t("settings.security.wallet")}
               </span>
               <span className="font-mono text-xs text-white">{maskWallet(me.wallet_address)}</span>
             </div>
-            <div className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
-              <span className="flex items-center gap-2 text-sm text-white/68">
-                <BadgeCheck className="h-4 w-4 text-white/50" />
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+              <span className="flex items-center gap-2 text-sm text-[#b6bec5]">
+                <BadgeCheck className="h-4 w-4 text-[#71767b]" />
                 {t("settings.security.session")}
               </span>
               <Button variant="outline" size="sm" onClick={logout}>
                 {t("common.logout")}
               </Button>
             </div>
-            <div className="space-y-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-3">
+            <div className="space-y-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
               <div className="flex items-start gap-2">
-                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-white/50" />
+                <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#71767b]" />
                 <div>
-                  <p className="text-sm font-medium text-white/78">{t("settings.security.password")}</p>
-                  <p className="mt-1 text-xs leading-5 text-white/45">
+                  <p className="text-sm font-medium text-white">{t("settings.security.password")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">
                     {t("settings.security.passwordDescription")}
                   </p>
                 </div>
@@ -332,59 +402,25 @@ export default function SettingsPage() {
             </div>
           </div>
         </Card>
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-        <Card>
-          <CardHeader
-            title={t("settings.language.title")}
-            description={t("settings.language.description")}
-            right={<Languages className="h-5 w-5 text-blue-200" />}
-          />
-          <div className="grid gap-2 sm:grid-cols-2">
-            {languages.map((item) => {
-              const active = item.code === lang;
-              return (
-                <button
-                  key={item.code}
-                  type="button"
-                  onClick={() => {
-                    setLang(item.code);
-                    pushToast(t("settings.language.saved"));
-                  }}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                    active
-                      ? "border-cyan-200/40 bg-cyan-300/10 text-white"
-                      : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06]"
-                  )}
-                >
-                  <span className="block font-medium">{item.label}</span>
-                  <span className="text-xs text-white/45">{item.code}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card>
+        <Card className="bg-[#0f1419]">
           <CardHeader
             title={t("settings.notifications.title")}
             description={t("settings.notifications.description")}
-            right={<Bell className="h-5 w-5 text-amber-200" />}
+            right={<Bell className="h-5 w-5 text-[#f6d96b]" />}
           />
           <div className="space-y-3">
-            <NotificationToggle
-              label={t("settings.notifications.email")}
-              checked={notifications.email_enabled}
-              onChange={(value) => setNotificationValue("email_enabled", value)}
-            />
-            <NotificationToggle
-              label={t("settings.notifications.inApp")}
-              checked={notifications.in_app_enabled}
-              onChange={(value) => setNotificationValue("in_app_enabled", value)}
-            />
-            <div className="grid gap-2 pt-1 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-2">
+              <NotificationToggle
+                label={t("settings.notifications.email")}
+                checked={notifications.email_enabled}
+                onChange={(value) => setNotificationValue("email_enabled", value)}
+              />
+              <NotificationToggle
+                label={t("settings.notifications.inApp")}
+                checked={notifications.in_app_enabled}
+                onChange={(value) => setNotificationValue("in_app_enabled", value)}
+              />
               <NotificationToggle
                 label={t("settings.notifications.automationFailure")}
                 checked={notifications.automation_failure}
@@ -420,27 +456,97 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader
-            title={t("settings.shortcuts.title")}
-            description={t("settings.shortcuts.description")}
-            right={<CreditCard className="h-5 w-5 text-violet-200" />}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Link href="/billing" className={cn(buttonVariants({ variant: "outline" }))}>
-              {t("settings.shortcuts.billing")}
-            </Link>
-            <Link href="/accounts" className={cn(buttonVariants({ variant: "outline" }))}>
-              {t("settings.shortcuts.accounts")}
-            </Link>
-            <Link href="/profile" className={cn(buttonVariants({ variant: "outline" }))}>
-              {t("settings.shortcuts.profile")}
-            </Link>
-          </div>
-        </Card>
-      </div>
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("settings.language.title")}
+          description={t("settings.language.description")}
+          right={<Languages className="h-5 w-5 text-[#1d9bf0]" />}
+        />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {languages.map((item) => {
+            const active = item.code === lang;
+            return (
+              <button
+                key={item.code}
+                type="button"
+                onClick={() => {
+                  setLang(item.code);
+                  pushToast(t("settings.language.saved"));
+                }}
+                className={cn(
+                  "rounded-2xl border px-3 py-2 text-left text-sm transition-colors",
+                  active
+                    ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10 text-white"
+                    : "border-[#2f3336] bg-black text-[#b6bec5] hover:bg-[#16181c]"
+                )}
+              >
+                <span className="block font-medium">{item.label}</span>
+                <span className="text-xs text-[#71767b]">{item.code}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
     </div>
+  );
+}
+
+function AccountPill({
+  icon: Icon,
+  label,
+  value,
+  mono,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419]/82 px-3 py-2">
+      <p className="flex items-center gap-1.5 text-xs text-[#71767b]">
+        <Icon className="size-3.5" />
+        {label}
+      </p>
+      <p className={cn("mt-1 truncate text-sm font-medium text-[#e7e9ea]", mono && "font-mono text-xs")}>{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium text-white">{value}</p>
+    </div>
+  );
+}
+
+function ShortcutCard({
+  href,
+  icon: Icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center gap-3 rounded-2xl border border-[#2f3336] bg-black p-3 transition-colors hover:bg-[#080808]"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[#e7e9ea]">{title}</span>
+        <span className="mt-0.5 block truncate text-xs text-[#71767b]">{description}</span>
+      </span>
+      <ArrowUpRight className="size-4 shrink-0 text-[#71767b] transition-colors group-hover:text-[#1d9bf0]" />
+    </Link>
   );
 }
 
@@ -454,11 +560,11 @@ function NotificationToggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-3 py-2">
-      <span className="text-sm font-medium text-white/75">{label}</span>
+    <label className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2 transition-colors hover:bg-[#080808]">
+      <span className="text-sm font-medium text-[#d5d9dc]">{label}</span>
       <input
         type="checkbox"
-        className="h-5 w-5 accent-cyan-300"
+        className="h-5 w-5 accent-[#1d9bf0]"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />

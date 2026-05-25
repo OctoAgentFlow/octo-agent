@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Resolver } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import axios from "axios";
@@ -10,30 +11,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
-import { loginSchema, registerSchema } from "@/schemas/auth.schema";
+import { adminLoginSchema, loginSchema, registerSchema } from "@/schemas/auth.schema";
 import { authService } from "@/services/auth.service";
 
 type AuthMode = "login" | "register";
 
 type LoginFormProps = {
   mode: AuthMode;
+  adminMode?: boolean;
   onSuccess?: (mode: AuthMode, tokens: { accessToken: string; refreshToken: string }) => void;
 };
 
-type LoginValues = z.infer<typeof loginSchema>;
+type LoginValues = {
+  email: string;
+  password: string;
+  verificationCode: string;
+};
 type RegisterValues = z.infer<typeof registerSchema>;
 const CODE_COOLDOWN_SECONDS = 60;
-const CODE_COOLDOWN_UNTIL_KEY = "octo_auth_code_cooldown_until";
 
-export function LoginForm({ mode, onSuccess }: LoginFormProps) {
+export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps) {
   const { t } = useT();
   const { pushToast } = useToast();
   const [codeCooldown, setCodeCooldown] = useState(0);
   const [sendingCode, setSendingCode] = useState(false);
+  const codeCooldownKey = adminMode ? "octo_admin_auth_code_cooldown_until" : "octo_auth_code_cooldown_until";
 
   const loginForm = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    resolver: zodResolver(adminMode ? adminLoginSchema : loginSchema) as unknown as Resolver<LoginValues>,
+    defaultValues: { email: "", password: "", verificationCode: "" },
   });
 
   const registerForm = useForm<RegisterValues>({
@@ -45,6 +51,7 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   const emailRegister = mode === "login" ? loginForm.register("email") : registerForm.register("email");
   const passwordRegister =
     mode === "login" ? loginForm.register("password") : registerForm.register("password");
+  const loginCodeRegister = loginForm.register("verificationCode");
   const emailError =
     mode === "login"
       ? loginForm.formState.errors.email?.message
@@ -53,15 +60,21 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
     mode === "login"
       ? loginForm.formState.errors.password?.message
       : registerForm.formState.errors.password?.message;
+  const loginCodeError = loginForm.formState.errors.verificationCode?.message;
 
   const onSubmit = currentForm.handleSubmit(async (values) => {
     try {
       if (mode === "login") {
-        const data = await authService.login({
-          email: values.email,
-          password: values.password,
-        });
-        pushToast("Login success.");
+        const data = adminMode
+          ? await authService.adminLogin({
+              email: values.email,
+              verification_code: values.verificationCode || "",
+            })
+          : await authService.login({
+              email: values.email,
+              password: values.password || "",
+            });
+        pushToast(t("auth.toast.loginSuccess"));
         onSuccess?.(mode, {
           accessToken: data.tokens.access_token,
           refreshToken: data.tokens.refresh_token,
@@ -76,41 +89,41 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
         name: registerValues.name,
         verification_code: registerValues.verificationCode,
       });
-      pushToast("Account created.");
+      pushToast(t("auth.toast.accountCreated"));
       onSuccess?.(mode, {
         accessToken: data.tokens.access_token,
         refreshToken: data.tokens.refresh_token,
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const message = error.response?.data?.message || "Request failed.";
+        const message = error.response?.data?.message || t("auth.toast.requestFailed");
         pushToast(message);
         return;
       }
-      pushToast("Request failed.");
+      pushToast(t("auth.toast.requestFailed"));
     }
   });
 
   const sendEmailCode = async () => {
     if (sendingCode || codeCooldown > 0) return;
-    const email = registerForm.getValues("email");
+    const email = adminMode && mode === "login" ? loginForm.getValues("email") : registerForm.getValues("email");
     if (!email) {
-      pushToast("Please input email first.");
+      pushToast(t("auth.toast.emailRequired"));
       return;
     }
     setSendingCode(true);
     try {
-      await authService.sendEmailCode({ email, purpose: "register" });
-      pushToast("Verification code sent.");
+      await authService.sendEmailCode({ email, purpose: adminMode && mode === "login" ? "admin_login" : "register" });
+      pushToast(t("auth.toast.codeSent"));
       const cooldownUntil = Date.now() + CODE_COOLDOWN_SECONDS * 1000;
-      window.localStorage.setItem(CODE_COOLDOWN_UNTIL_KEY, String(cooldownUntil));
+      window.localStorage.setItem(codeCooldownKey, String(cooldownUntil));
       setCodeCooldown(CODE_COOLDOWN_SECONDS);
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const message = error.response?.data?.message || "Failed to send code.";
+        const message = error.response?.data?.message || t("auth.toast.codeSendFailed");
         pushToast(message);
       } else {
-        pushToast("Failed to send code.");
+        pushToast(t("auth.toast.codeSendFailed"));
       }
     } finally {
       setSendingCode(false);
@@ -126,11 +139,11 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
   }, [codeCooldown]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(CODE_COOLDOWN_UNTIL_KEY);
+    const saved = window.localStorage.getItem(codeCooldownKey);
     if (!saved) return;
     const cooldownUntil = Number(saved);
     if (!Number.isFinite(cooldownUntil)) {
-      window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
+      window.localStorage.removeItem(codeCooldownKey);
       return;
     }
     const remainSeconds = Math.ceil((cooldownUntil - Date.now()) / 1000);
@@ -138,13 +151,13 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
       setCodeCooldown(remainSeconds);
       return;
     }
-    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
-  }, []);
+    window.localStorage.removeItem(codeCooldownKey);
+  }, [codeCooldownKey]);
 
   useEffect(() => {
     if (codeCooldown > 0) return;
-    window.localStorage.removeItem(CODE_COOLDOWN_UNTIL_KEY);
-  }, [codeCooldown]);
+    window.localStorage.removeItem(codeCooldownKey);
+  }, [codeCooldown, codeCooldownKey]);
 
   return (
     <form className="space-y-3" onSubmit={onSubmit}>
@@ -161,7 +174,8 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
         />
       </div>
 
-      <div className="space-y-1.5">
+      {!(adminMode && mode === "login") ? (
+        <div className="space-y-1.5">
         <label htmlFor={`password-${mode}`} className="text-xs text-white/70">
           {t("auth.form.password.label")}
         </label>
@@ -172,25 +186,52 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
           error={passwordError}
           {...passwordRegister}
         />
-      </div>
+        </div>
+      ) : null}
+
+      {adminMode && mode === "login" ? (
+        <div className="space-y-1.5">
+          <label htmlFor="adminVerificationCode" className="text-xs text-white/70">
+            {t("auth.form.adminCode.label")}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id="adminVerificationCode"
+              type="text"
+              placeholder={t("auth.form.adminCode.placeholder")}
+              error={loginCodeError}
+              {...loginCodeRegister}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 shrink-0"
+              onClick={sendEmailCode}
+              disabled={sendingCode || codeCooldown > 0}
+            >
+              {sendingCode ? t("auth.form.code.sending") : codeCooldown > 0 ? `${codeCooldown}s` : t("auth.form.code.send")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {mode === "register" ? (
         <>
           <div className="space-y-1.5">
             <label htmlFor="name" className="text-xs text-white/70">
-              Name
+              {t("auth.form.name.label")}
             </label>
-            <Input id="name" type="text" placeholder="Your name" error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
+            <Input id="name" type="text" placeholder={t("auth.form.name.placeholder")} error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="verificationCode" className="text-xs text-white/70">
-              Verification code
+              {t("auth.form.verificationCode.label")}
             </label>
             <div className="flex gap-2">
               <Input
                 id="verificationCode"
                 type="text"
-                placeholder="6-digit code"
+                placeholder={t("auth.form.verificationCode.placeholder")}
                 error={registerForm.formState.errors.verificationCode?.message}
                 {...registerForm.register("verificationCode")}
               />
@@ -201,7 +242,7 @@ export function LoginForm({ mode, onSuccess }: LoginFormProps) {
                 onClick={sendEmailCode}
                 disabled={sendingCode || codeCooldown > 0}
               >
-                {sendingCode ? "Sending..." : codeCooldown > 0 ? `${codeCooldown}s` : "Send code"}
+                {sendingCode ? t("auth.form.code.sending") : codeCooldown > 0 ? `${codeCooldown}s` : t("auth.form.code.send")}
               </Button>
             </div>
           </div>

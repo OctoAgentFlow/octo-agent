@@ -34,6 +34,24 @@ func (ctl *AuthController) Login(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AuthController) AdminLogin(c *gin.Context) {
+	var req dto.AdminLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.authService.AdminLogin(req)
+	if err != nil {
+		if errors.Is(err, service.ErrAdminLoginForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
+		response.Fail(c, http.StatusUnauthorized, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AuthController) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -65,6 +83,8 @@ func (ctl *AuthController) SendEmailCode(c *gin.Context) {
 			response.Fail(c, http.StatusBadGateway, service.ErrSendVerificationEmail.Error())
 		case errors.Is(err, service.ErrPersistVerificationCode):
 			response.Fail(c, http.StatusInternalServerError, service.ErrPersistVerificationCode.Error())
+		case errors.Is(err, service.ErrAdminLoginForbidden):
+			response.Fail(c, http.StatusForbidden, service.ErrAdminLoginForbidden.Error())
 		default:
 			response.Fail(c, http.StatusBadRequest, err.Error())
 		}
@@ -101,6 +121,24 @@ func (ctl *AuthController) Refresh(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AuthController) AdminRefresh(c *gin.Context) {
+	var req dto.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.authService.AdminRefresh(req)
+	if err != nil {
+		if errors.Is(err, service.ErrAdminLoginForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
+		response.Fail(c, http.StatusUnauthorized, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AuthController) Me(c *gin.Context) {
 	rawUserID := c.GetString("user_id")
 	userIDValue, _ := strconv.ParseUint(rawUserID, 10, 64)
@@ -111,6 +149,26 @@ func (ctl *AuthController) Me(c *gin.Context) {
 
 	data, err := ctl.authService.Me(uint(userIDValue))
 	if err != nil {
+		response.Fail(c, http.StatusUnauthorized, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AuthController) AdminMe(c *gin.Context) {
+	rawUserID := c.GetString("user_id")
+	userIDValue, _ := strconv.ParseUint(rawUserID, 10, 64)
+	if userIDValue == 0 {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	data, err := ctl.authService.AdminMe(uint(userIDValue))
+	if err != nil {
+		if errors.Is(err, service.ErrAdminLoginForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
 		response.Fail(c, http.StatusUnauthorized, err.Error())
 		return
 	}

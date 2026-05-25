@@ -21,6 +21,7 @@ import { activityService } from "@/services/activity.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
 import { postService } from "@/services/post.service";
+import { useT } from "@/i18n/use-t";
 import type { ActivityRecord } from "@/types/activity";
 import type { AutomationModule } from "@/types/automation";
 
@@ -71,6 +72,7 @@ function mapAutomation(item: AutomationModuleApi): AutomationModule {
         dailyLimit: item.config.frequency.daily_limit,
       },
       tone: item.config.tone,
+      executionMode: item.config.execution_mode || "review",
       safety: {
         requireApproval: item.config.safety.require_approval,
         maxPerHour: item.config.safety.max_per_hour,
@@ -89,6 +91,7 @@ function mapAutomation(item: AutomationModuleApi): AutomationModule {
 }
 
 export default function DashboardPage() {
+  const { t } = useT();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -110,13 +113,13 @@ export default function DashboardPage() {
       broadcastDataSynced(Date.now());
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setErrorMessage(error.response?.data?.message || "Failed to load dashboard overview.");
+        setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadOverview"));
       } else {
-        setErrorMessage("Failed to load dashboard overview.");
+        setErrorMessage(t("dashboard.errors.loadOverview"));
       }
       setLoadState("error");
     }
-  }, []);
+  }, [t]);
 
   const fetchAutomations = useCallback(async () => {
     setAutomationLoading(true);
@@ -126,14 +129,14 @@ export default function DashboardPage() {
       setAutomations(data.modules.map(mapAutomation));
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setAutomationError(error.response?.data?.message || "Failed to load automations.");
+        setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
       } else {
-        setAutomationError("Failed to load automations.");
+        setAutomationError(t("dashboard.errors.loadAutomations"));
       }
     } finally {
       setAutomationLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const fetchRecentActivities = useCallback(async () => {
     setRecentLoading(true);
@@ -157,14 +160,14 @@ export default function DashboardPage() {
       );
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setRecentError(error.response?.data?.message || "Failed to load recent activity.");
+        setRecentError(error.response?.data?.message || t("dashboard.errors.loadRecentActivity"));
       } else {
-        setRecentError("Failed to load recent activity.");
+        setRecentError(t("dashboard.errors.loadRecentActivity"));
       }
     } finally {
       setRecentLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const fetchPostCount = useCallback(async () => {
     try {
@@ -188,16 +191,16 @@ export default function DashboardPage() {
       .catch((error) => {
         if (cancelled) return;
         if (axios.isAxiosError(error)) {
-          setErrorMessage(error.response?.data?.message || "Failed to load dashboard overview.");
+          setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadOverview"));
         } else {
-          setErrorMessage("Failed to load dashboard overview.");
+          setErrorMessage(t("dashboard.errors.loadOverview"));
         }
         setLoadState("error");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,9 +215,9 @@ export default function DashboardPage() {
       .catch((error) => {
         if (cancelled) return;
         if (axios.isAxiosError(error)) {
-          setAutomationError(error.response?.data?.message || "Failed to load automations.");
+          setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
         } else {
-          setAutomationError("Failed to load automations.");
+          setAutomationError(t("dashboard.errors.loadAutomations"));
         }
       })
       .finally(() => {
@@ -224,7 +227,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,9 +256,9 @@ export default function DashboardPage() {
       .catch((error) => {
         if (cancelled) return;
         if (axios.isAxiosError(error)) {
-          setRecentError(error.response?.data?.message || "Failed to load recent activity.");
+          setRecentError(error.response?.data?.message || t("dashboard.errors.loadRecentActivity"));
         } else {
-          setRecentError("Failed to load recent activity.");
+          setRecentError(t("dashboard.errors.loadRecentActivity"));
         }
       })
       .finally(() => {
@@ -264,7 +267,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -304,9 +307,9 @@ export default function DashboardPage() {
           overviewOk = true;
         } catch (error) {
           if (axios.isAxiosError(error)) {
-            setErrorMessage(error.response?.data?.message || "Failed to load dashboard overview.");
+            setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadOverview"));
           } else {
-            setErrorMessage("Failed to load dashboard overview.");
+            setErrorMessage(t("dashboard.errors.loadOverview"));
           }
           setLoadState((prev) => (prev === "loading" ? "error" : prev));
         }
@@ -318,9 +321,9 @@ export default function DashboardPage() {
           setAutomations(data.modules.map(mapAutomation));
         } catch (error) {
           if (axios.isAxiosError(error)) {
-            setAutomationError(error.response?.data?.message || "Failed to load automations.");
+            setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
           } else {
-            setAutomationError("Failed to load automations.");
+            setAutomationError(t("dashboard.errors.loadAutomations"));
           }
         } finally {
           setAutomationLoading(false);
@@ -347,9 +350,9 @@ export default function DashboardPage() {
           );
         } catch (error) {
           if (axios.isAxiosError(error)) {
-            setRecentError(error.response?.data?.message || "Failed to load recent activity.");
+            setRecentError(error.response?.data?.message || t("dashboard.errors.loadRecentActivity"));
           } else {
-            setRecentError("Failed to load recent activity.");
+            setRecentError(t("dashboard.errors.loadRecentActivity"));
           }
         } finally {
           setRecentLoading(false);
@@ -368,21 +371,21 @@ export default function DashboardPage() {
         broadcastPageRefreshComplete();
       })();
     });
-  }, []);
+  }, [t]);
 
   return (
     <div className="space-y-4 md:space-y-5">
       {loadState === "loading" ? (
         <Card>
-          <CardHeader title="Loading dashboard..." description="Fetching latest overview data." />
+          <CardHeader title={t("dashboard.loading.title")} description={t("dashboard.loading.description")} />
         </Card>
       ) : null}
 
       {loadState === "error" ? (
         <Card>
-          <CardHeader title="Failed to load dashboard overview" description={errorMessage || "Please retry."} />
+          <CardHeader title={t("dashboard.error.title")} description={errorMessage || t("common.retryHint")} />
           <div className="flex justify-end">
-            <Button onClick={() => void fetchOverview()}>Retry</Button>
+            <Button onClick={() => void fetchOverview()}>{t("common.retry")}</Button>
           </div>
         </Card>
       ) : null}
@@ -390,9 +393,9 @@ export default function DashboardPage() {
       <StatusOverviewCards overview={overview} />
       <UserOnboardingCard
         accountConnected={(overview?.connected_x_count ?? 0) > 0}
-        automationEnabled={automations.some((module) => module.config.enabled)}
+        automationEnabled={(overview?.connected_x_count ?? 0) > 0 && automations.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
-        activityObserved={recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0}
+        activityObserved={(overview?.connected_x_count ?? 0) > 0 && (recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0)}
       />
       <XAccountStatus overview={overview} />
       <AutomationOverview

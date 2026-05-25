@@ -20,11 +20,21 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.AutomationConfig{},
 		&model.ActivityLog{},
 		&model.ReplyReservation{},
+		&model.AutoReplyDraft{},
+		&model.AutoPostPlan{},
+		&model.AutoPostDraft{},
+		&model.AutoPostGenerationRun{},
+		&model.ContentLibraryItem{},
+		&model.AutoCommentTarget{},
+		&model.AutoCommentTask{},
+		&model.PublishJob{},
 		&model.AutoDMRecipientRule{},
 		&model.AutoDMRecipientImport{},
 		&model.AutoDMTask{},
 		&model.Post{},
 		&model.Agent{},
+		&model.OAFBot{},
+		&model.AIGenerationUsage{},
 		&model.Task{},
 		&model.BillingOrder{},
 		&model.BillingOrderAudit{},
@@ -36,6 +46,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := BackfillActivityReplyFields(db); err != nil {
+		return err
+	}
+	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
 		return err
 	}
 	return BackfillUserOwnerRole(db)
@@ -56,11 +69,21 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.AutomationConfig{}, "自动化模块配置"},
 		{&model.ActivityLog{}, "自动化执行活动日志"},
 		{&model.ReplyReservation{}, "自动回复并发占位锁"},
+		{&model.AutoReplyDraft{}, "Auto Reply生成、审批与发送任务"},
+		{&model.AutoPostPlan{}, "Auto Post Planner配置"},
+		{&model.AutoPostDraft{}, "Auto Post生成、审批与发布任务"},
+		{&model.AutoPostGenerationRun{}, "Auto Post Scheduler生成运行记录"},
+		{&model.ContentLibraryItem{}, "Auto Post轻量内容池素材"},
+		{&model.AutoCommentTarget{}, "Auto Comment目标账号配置"},
+		{&model.AutoCommentTask{}, "Auto Comment生成、审批与发送任务"},
+		{&model.PublishJob{}, "统一发布器任务"},
 		{&model.AutoDMRecipientRule{}, "Auto DM收件人白名单/黑名单/退订规则"},
 		{&model.AutoDMRecipientImport{}, "Auto DM收件人白名单导入批次"},
 		{&model.AutoDMTask{}, "Auto DM发送前审批与审计任务"},
 		{&model.Post{}, "帖子内容与发布状态"},
 		{&model.Agent{}, "Agent定义"},
+		{&model.OAFBot{}, "OAF Bot社交人格机器人配置"},
+		{&model.AIGenerationUsage{}, "AI生成次数月度用量记录"},
 		{&model.Task{}, "任务执行记录"},
 		{&model.BillingOrder{}, "订阅支付订单"},
 		{&model.BillingOrderAudit{}, "订阅支付订单运营审计"},
@@ -96,6 +119,28 @@ AND ref_tweet_id IS NOT NULL AND TRIM(ref_tweet_id) != ''
 UPDATE activity_logs
 SET ref_tweet_id = NULL
 WHERE type = 'reply' AND status <> 'success'
+`).Error
+}
+
+// BackfillAutomationDefaultsDisabled fixes historical rows created while the model default
+// allowed new automation_configs to inherit enabled=true from the database.
+func BackfillAutomationDefaultsDisabled(db *gorm.DB) error {
+	if err := db.Exec(`
+ALTER TABLE automation_configs
+MODIFY enabled boolean NOT NULL DEFAULT false,
+MODIFY state varchar(32) NOT NULL DEFAULT 'Paused'
+`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`
+UPDATE automation_configs ac
+LEFT JOIN twitter_accounts ta
+  ON ta.user_id = ac.user_id AND ta.status = 'connected'
+SET ac.enabled = false,
+    ac.state = 'Paused',
+    ac.next_run_at = NULL
+WHERE ta.id IS NULL
+  AND ac.enabled = true
 `).Error
 }
 

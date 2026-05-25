@@ -1,3 +1,8 @@
+"use client";
+
+import { useT } from "@/i18n/use-t";
+
 export function Loading() {
-  return <div className="text-sm text-muted-foreground">Loading...</div>;
+  const { t } = useT();
+  return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
 }

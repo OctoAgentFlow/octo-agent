@@ -1,5 +1,10 @@
 import { PostCreateClient } from "@/components/posts/post-create-client";
 
-export default function CreatePostPage() {
-  return <PostCreateClient />;
+type CreatePostPageProps = {
+  searchParams?: Promise<{ source?: string }>;
+};
+
+export default async function CreatePostPage({ searchParams }: CreatePostPageProps) {
+  const params = await searchParams;
+  return <PostCreateClient source={params?.source === "auto_post" ? "auto_post" : undefined} />;
 }

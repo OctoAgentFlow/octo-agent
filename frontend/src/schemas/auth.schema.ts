@@ -5,6 +5,11 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters."),
 });
 
+export const adminLoginSchema = z.object({
+  email: z.string().email("Please enter a valid email."),
+  verificationCode: z.string().length(6, "Verification code must be 6 digits."),
+});
+
 export const registerSchema = z
   .object({
     name: z.string().min(1, "Name is required."),

@@ -37,17 +37,26 @@ email:
 app:
   frontend_base_url: "http://localhost:3000"
 
+admin_auth:
+  emails:
+    - "owner@example.com"
+    - "ops@example.com"
+  code_ttl_seconds: 300
+
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
   client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
   state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  scopes: "tweet.read users.read offline.access"
 
 billing:
   order_ttl_minutes: 30
   webhook_secret: "local-billing-webhook-secret"
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"
+    "1": "https://ethereum.publicnode.com"
+    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -57,10 +66,26 @@ billing:
       decimals: 18
       is_default: true
       note: "推荐使用 BEP20，手续费更低"
+    - method: "USDT"
+      network: "ERC20"
+      chain_id: 1
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "ERC20 主网 USDT，适合从以太坊主网付款"
+    - method: "USDT"
+      network: "TRC20"
+      chain_id: 728126428
+      token_address: "TODO_TOKEN_ADDRESS"
+      receiver_address: "TODO_RECEIVER_ADDRESS"
+      decimals: 6
+      is_default: false
+      note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
   plans:
     basic_monthly:
       name: "Basic"
-      amount: "10"
+      amount: "8"
       currency: "USDT"
       period_days: 30
       description: "Full automation for one month."

@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-apple-sans);
+  --font-mono: var(--font-apple-mono);
+  --font-heading: var(--font-apple-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,38 +49,41 @@
 }
 
 :root {
-  --background: oklch(0.185 0.02 265);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.23 0.02 265);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.23 0.02 265);
-  --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.67 0.17 273);
+  --font-apple-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-apple-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-apple-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.93 0.003 247);
+  --card: oklch(0.105 0.003 247);
+  --card-foreground: oklch(0.93 0.003 247);
+  --popover: oklch(0.105 0.003 247);
+  --popover-foreground: oklch(0.93 0.003 247);
+  --primary: oklch(0.66 0.16 245);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.30 0.02 265);
-  --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.28 0.02 265);
-  --muted-foreground: oklch(0.78 0 0);
-  --accent: oklch(0.30 0.02 265);
-  --accent-foreground: oklch(0.97 0 0);
+  --secondary: oklch(0.18 0.004 247);
+  --secondary-foreground: oklch(0.93 0.003 247);
+  --muted: oklch(0.18 0.004 247);
+  --muted-foreground: oklch(0.58 0.006 247);
+  --accent: oklch(0.18 0.004 247);
+  --accent-foreground: oklch(0.93 0.003 247);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
+  --border: oklch(1 0 0 / 18%);
   --input: oklch(1 0 0 / 18%);
-  --ring: oklch(0.70 0.12 263);
+  --ring: oklch(0.66 0.16 245);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.22 0.02 265);
-  --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.67 0.17 273);
+  --sidebar: oklch(0 0 0);
+  --sidebar-foreground: oklch(0.93 0.003 247);
+  --sidebar-primary: oklch(0.66 0.16 245);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.30 0.02 265);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.70 0.12 263);
+  --sidebar-accent: oklch(0.18 0.004 247);
+  --sidebar-accent-foreground: oklch(0.93 0.003 247);
+  --sidebar-border: oklch(1 0 0 / 18%);
+  --sidebar-ring: oklch(0.66 0.16 245);
 }
 
 .dark {
@@ -123,6 +126,9 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-apple-sans);
+    font-feature-settings: "kern";
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
@@ -132,9 +138,9 @@
 @layer utilities {
   .auth-input {
     width: 100%;
-    border-radius: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: rgba(255, 255, 255, 0.05);
+    border-radius: 999px;
+    border: 1px solid #2f3336;
+    background: #000;
     padding: 0.55rem 0.75rem;
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.92);
@@ -147,16 +153,16 @@
   }
 
   .auth-input:focus {
-    border-color: rgba(96, 165, 250, 0.6);
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(29, 155, 240, 0.8);
+    box-shadow: 0 0 0 1px rgba(29, 155, 240, 0.8);
+    background: #000;
   }
 
   .form-input {
     width: 100%;
-    border-radius: 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.05);
+    border-radius: 1rem;
+    border: 1px solid #2f3336;
+    background: #000;
     padding: 0.6rem 0.8rem;
     font-size: 0.95rem;
     color: rgba(255, 255, 255, 0.92);
@@ -169,23 +175,23 @@
   }
 
   .form-input:focus {
-    border-color: rgba(96, 165, 250, 0.55);
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(29, 155, 240, 0.8);
+    box-shadow: 0 0 0 1px rgba(29, 155, 240, 0.8);
+    background: #000;
   }
 
   .surface-page {
-    background: radial-gradient(circle at 20% 0%, rgba(76, 129, 255, 0.18), transparent 45%),
-      radial-gradient(circle at 90% 15%, rgba(137, 92, 246, 0.16), transparent 40%),
-      #060915;
+    background: radial-gradient(circle at 18% -12%, rgba(29, 155, 240, 0.13), transparent 34%),
+      radial-gradient(circle at 92% 8%, rgba(29, 155, 240, 0.07), transparent 28%),
+      #000;
   }
 
   .surface-card {
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025));
+    border: 1px solid rgba(47, 51, 54, 0.95);
+    background: rgba(0, 0, 0, 0.42);
     border-radius: 1rem;
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
-    backdrop-filter: blur(8px);
+    box-shadow: none;
+    backdrop-filter: blur(10px);
   }
 
   .text-title {
@@ -197,7 +203,7 @@
   }
 
   .accent-gradient {
-    background-image: linear-gradient(90deg, rgba(59, 130, 246, 0.95), rgba(139, 92, 246, 0.95));
+    background: #1d9bf0;
   }
 
   .stable-cta-sm {

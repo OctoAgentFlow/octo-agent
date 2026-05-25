@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, ChevronDown, Clipboard, MessageCircleReply, Send } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send } from "lucide-react";
 
 import type { ActivityRecord } from "@/types/activity";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { activityNarrativeLine } from "@/lib/activity-narrative";
@@ -20,6 +20,7 @@ function statusVariant(status: ActivityRecord["status"]) {
 function typeMeta(type: ActivityRecord["type"]) {
   if (type === "post") return { labelKey: "activity.type.post", icon: Bot };
   if (type === "reply") return { labelKey: "activity.type.reply", icon: MessageCircleReply };
+  if (type === "comment") return { labelKey: "activity.type.comment", icon: MessageCircle };
   return { labelKey: "activity.type.dm", icon: Send };
 }
 
@@ -53,29 +54,46 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
   };
 
   return (
-    <Card className="p-4 transition-colors hover:bg-white/5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span className="inline-flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-            <Icon className="size-4 text-blue-200" />
+    <article className="relative border-b border-[#2f3336] bg-black p-4 transition-colors last:border-b-0 hover:bg-[#080808] md:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#16181c]">
+            <Icon className="size-4 text-[#1d9bf0]" />
+            <span className="absolute -bottom-1 -right-1 inline-flex size-5 items-center justify-center rounded-full border border-black bg-[#0f1419]">
+              {record.status === "success" ? <CheckCircle2 className="size-3 text-[#e7e9ea]" /> : null}
+              {record.status === "review" ? <Bot className="size-3 text-[#e7e9ea]" /> : null}
+              {record.status === "failed" ? <AlertTriangle className="size-3 text-[#e7e9ea]" /> : null}
+            </span>
           </span>
-          <div className="space-y-1">
+          <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
+              <span className="text-xs text-[#71767b]">{relativeTime(record.executedAt, t)}</span>
             </div>
-            <p className="line-clamp-3 text-sm text-white/80">{activityNarrativeLine(record, t)}</p>
+            <p className="line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]">{activityNarrativeLine(record, t)}</p>
             {record.errorMessage ? (
-              <p className="line-clamp-2 text-xs leading-snug text-rose-200/90">{record.errorMessage}</p>
+              <p className="rounded-2xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-3 py-2 text-xs leading-relaxed text-[#ffb6bb]">
+                {record.errorMessage}
+              </p>
             ) : null}
-            <div className="flex flex-wrap gap-4 text-xs text-white/55">
-              <span>{record.accountHandle}</span>
-              <span>{relativeTime(record.executedAt, t)}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{record.accountHandle || t("activity.detail.noAccount")}</span>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{new Date(record.executedAt).toLocaleString()}</span>
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <span className="text-xs text-white/40">{new Date(record.executedAt).toLocaleString()}</span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {record.status === "review" ? (
+            <Link href="/execution-queue" className="text-sm font-semibold text-[#1d9bf0] hover:underline">
+              {t("activity.actions.openQueue")}
+            </Link>
+          ) : null}
+          {record.status === "failed" ? (
+            <Link href="/automations" className="text-sm font-semibold text-[#ff8a91] hover:underline">
+              {t("activity.actions.troubleshoot")}
+            </Link>
+          ) : null}
           {canInspect ? (
             <Button
               type="button"
@@ -92,11 +110,12 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
         </div>
       </div>
       {expanded ? (
-        <div className="mt-4 space-y-3 rounded-lg border border-white/8 bg-black/20 p-4">
+        <div className="mt-4 space-y-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DetailField label={t("activity.detail.fields.id")} value={`#${record.id}`} />
             <DetailField label={t("activity.detail.fields.account")} value={record.accountHandle || "—"} />
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
+            <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
             <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />
             {record.xAccountId ? (
               <DetailField label={t("activity.detail.fields.accountId")} value={String(record.xAccountId)} />
@@ -107,18 +126,18 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           </div>
 
           {record.errorMessage ? (
-            <div className="rounded-md border border-rose-300/15 bg-rose-400/10 p-3">
+            <div className="rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-normal text-rose-100/80">{t("activity.detail.error")}</p>
-                <Button type="button" size="sm" variant="ghost" className="h-7 text-rose-100/80" onClick={() => void copyError()}>
+                <p className="text-xs font-semibold uppercase tracking-normal text-[#ff8a91]">{t("activity.detail.error")}</p>
+                <Button type="button" size="sm" variant="ghost" className="h-7 text-[#ff8a91]" onClick={() => void copyError()}>
                   <Clipboard className="size-3.5" />
                   {t("activity.detail.copy")}
                 </Button>
               </div>
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-rose-50">{record.errorMessage}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#ffdadd]">{record.errorMessage}</p>
             </div>
           ) : (
-            <p className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-white/55">
+            <p className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-[#71767b]">
               {t("activity.detail.noError")}
             </p>
           )}
@@ -131,24 +150,24 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           ) : null}
         </div>
       ) : null}
-    </Card>
+    </article>
   );
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs text-white/45">{label}</p>
-      <p className="mt-1 truncate text-sm font-medium text-white/82">{value}</p>
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium text-[#e7e9ea]">{value}</p>
     </div>
   );
 }
 
 function DetailText({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-white/8 bg-white/[0.03] p-3">
-      <p className="text-xs text-white/45">{label}</p>
-      <p className="mt-2 whitespace-pre-wrap break-words text-sm text-white/75">{value}</p>
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm text-[#d5d9dc]">{value}</p>
     </div>
   );
 }

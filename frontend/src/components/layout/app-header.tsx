@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCcw } from "lucide-react";
+import { LogOut, RefreshCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
@@ -16,14 +18,17 @@ import {
 } from "@/lib/app-page-refresh";
 import { cn } from "@/lib/utils";
 import { isAdminFrontend } from "@/lib/frontend-role";
+import { signOut } from "@/lib/auth-session";
 
 export function AppHeader() {
+  const router = useRouter();
   const { t } = useT();
   const { pushToast } = useToast();
   const { bindWallet, unbindWallet } = useWalletBinding({ onMessage: pushToast });
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [headerBusy, setHeaderBusy] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   useEffect(() => {
     return subscribeDataSynced((ts) => {
@@ -59,6 +64,12 @@ export function AppHeader() {
     broadcastPageRefreshRequest();
   }, []);
 
+  const handleConfirmLogout = useCallback(() => {
+    signOut();
+    setLogoutConfirmOpen(false);
+    router.replace("/login");
+  }, [router]);
+
   const syncedLabel = useMemo(() => {
     if (headerBusy) return t("dashboard.header.syncing");
     if (lastSyncedAt == null) return t("dashboard.header.syncedUnknown");
@@ -68,12 +79,13 @@ export function AppHeader() {
   }, [clock, headerBusy, lastSyncedAt, t]);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-white/10 bg-[#070b17]/80 px-4 backdrop-blur md:px-6">
-      <div>
-        <h1 className="text-sm font-semibold text-white md:text-base">{t("dashboard.header.title")}</h1>
-        <p className="hidden text-xs text-white/55 md:block">{t("dashboard.header.subtitle")}</p>
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-[#2f3336] bg-black/78 px-4 backdrop-blur-xl md:px-6">
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-bold text-[#e7e9ea] md:text-lg">{t("dashboard.header.title")}</h1>
+        <p className="hidden text-xs text-[#71767b] md:block">{t("dashboard.header.subtitle")}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
+        <LanguageSwitcher className="sm:hidden" buttonClassName="h-8 w-10 justify-center px-0" menuClassName="right-0" />
         <LanguageSwitcher className="hidden sm:block" />
         {isAdminFrontend() ? null : (
           <ConnectWalletButton
@@ -83,7 +95,7 @@ export function AppHeader() {
             onDisconnected={handleDisconnected}
           />
         )}
-        <span className="stable-meta-chip hidden rounded-full border border-white/15 bg-white/6 px-2 py-1 text-xs text-white/60 sm:inline-flex">
+        <span className="stable-meta-chip hidden rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-1 text-xs text-[#71767b] sm:inline-flex">
           {syncedLabel}
         </span>
         <Button
@@ -97,7 +109,33 @@ export function AppHeader() {
           <RefreshCcw className={cn("size-3.5", headerBusy && "animate-spin")} />
           {t("dashboard.header.refresh")}
         </Button>
+        <Button
+          variant="outline"
+          className="h-8 px-2.5 text-[#e7e9ea] sm:px-3"
+          type="button"
+          onClick={() => setLogoutConfirmOpen(true)}
+          aria-label={t("common.logout")}
+        >
+          <LogOut className="size-3.5" />
+          <span className="hidden sm:inline">{t("common.logout")}</span>
+        </Button>
       </div>
+      <Dialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+        title={t("logout.confirm.title")}
+        description={t("logout.confirm.description")}
+        showCloseButton={false}
+      >
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" className="text-[#e7e9ea]/75" onClick={() => setLogoutConfirmOpen(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="button" variant="default" onClick={handleConfirmLogout}>
+            {t("logout.confirm.confirm")}
+          </Button>
+        </div>
+      </Dialog>
     </header>
   );
 }

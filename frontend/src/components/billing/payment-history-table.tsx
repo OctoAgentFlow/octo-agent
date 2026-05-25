@@ -28,6 +28,35 @@ function reviewVariant(status: BillingReviewStatus): BadgeVariant {
   return "default";
 }
 
+function autoScanVariant(status: string): BadgeVariant {
+  if (status === "confirmed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "skipped") return "warning";
+  if (status === "scanned") return "info";
+  return "default";
+}
+
+const autoScanStatuses = new Set(["pending", "scanned", "confirmed", "skipped", "failed"]);
+const autoScanSkipReasons = new Set([
+  "missing_payment_metadata",
+  "ambiguous_payment_amount",
+  "no_matching_transfer",
+  "transfer_outside_order_window",
+  "tx_already_used",
+  "order_expired",
+  "invalid_tx_hash_from_chain",
+]);
+
+function normalizedAutoScanStatus(status: string) {
+  return autoScanStatuses.has(status) ? status : "pending";
+}
+
+function autoScanSkipReasonLabel(reason: string, t: (key: string) => string) {
+  if (!reason) return t("billing.history.autoScan.noReason");
+  if (autoScanSkipReasons.has(reason)) return t(`billing.history.autoScan.reason.${reason}`);
+  return reason;
+}
+
 function maskHash(hash: string) {
   const s = hash.trim();
   if (!s) return "—";
@@ -40,6 +69,10 @@ function formatCheckedAt(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function hasUpgradeCredit(record: PaymentRecord) {
+  return record.orderType === "upgrade" && Number.parseFloat(record.creditAmount || "0") > 0;
 }
 
 type OpsInputState = {
@@ -116,28 +149,41 @@ export function PaymentHistoryTable({
   const summaryItems = [
     { key: "billing.history.summary.total", value: opsSummary.total },
     { key: "billing.history.summary.pending", value: opsSummary.pending },
-    { key: "billing.history.summary.failed", value: opsSummary.failed },
-    { key: "billing.history.summary.reviewNeeded", value: opsSummary.review_needed },
-    { key: "billing.history.summary.mismatch", value: opsSummary.mismatch },
+    ...(canOperateBilling
+      ? [
+          { key: "billing.history.summary.failed", value: opsSummary.failed },
+          { key: "billing.history.summary.reviewNeeded", value: opsSummary.review_needed },
+          { key: "billing.history.summary.mismatch", value: opsSummary.mismatch },
+        ]
+      : [
+          { key: "billing.history.summary.paid", value: opsSummary.paid },
+          { key: "billing.history.summary.failed", value: opsSummary.failed },
+          { key: "billing.history.summary.expired", value: opsSummary.expired },
+        ]),
   ];
+  const colSpan = canOperateBilling ? 8 : 7;
 
   return (
-    <SectionCard title={t("billing.history.title")} description={t("billing.history.description")}>
+    <SectionCard
+      className="bg-[#0f1419]"
+      title={t("billing.history.title")}
+      description={t(canOperateBilling ? "billing.history.adminDescription" : "billing.history.userDescription")}
+    >
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {summaryItems.map((item) => (
-          <div key={item.key} className="rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2">
-            <div className="text-[11px] uppercase tracking-[0.08em] text-white/45">{t(item.key)}</div>
+          <div key={item.key} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
+            <div className="text-[11px] uppercase tracking-[0.08em] text-[#71767b]">{t(item.key)}</div>
             <div className="mt-1 text-lg font-semibold text-white">{item.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {canOperateBilling ? (
-          <label className="space-y-1 text-xs text-white/55">
+      {canOperateBilling ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="space-y-1 text-xs text-[#71767b]">
             <span>{t("billing.history.filters.scope")}</span>
             <select
-              className="h-9 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-300/55"
+              className="form-input h-9 py-0"
               value={filters.scope}
               onChange={(event) => updateFilter({ scope: event.target.value as BillingOrderFilterState["scope"] })}
             >
@@ -145,56 +191,56 @@ export function PaymentHistoryTable({
               <option value="all">{t("billing.history.scope.all")}</option>
             </select>
           </label>
-        ) : null}
-        <label className="space-y-1 text-xs text-white/55">
-          <span>{t("billing.history.filters.status")}</span>
-          <select
-            className="h-9 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-300/55"
-            value={filters.status}
-            onChange={(event) => updateFilter({ status: event.target.value as BillingOrderFilterState["status"] })}
-          >
-            <option value="all">{t("billing.history.filters.all")}</option>
-            <option value="pending">{t("billing.history.status.pending")}</option>
-            <option value="paid">{t("billing.history.status.paid")}</option>
-            <option value="failed">{t("billing.history.status.failed")}</option>
-            <option value="expired">{t("billing.history.status.expired")}</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs text-white/55">
-          <span>{t("billing.history.filters.review")}</span>
-          <select
-            className="h-9 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-300/55"
-            value={filters.reviewStatus}
-            onChange={(event) =>
-              updateFilter({ reviewStatus: event.target.value as BillingOrderFilterState["reviewStatus"] })
-            }
-          >
-            <option value="all">{t("billing.history.filters.all")}</option>
-            <option value="unreviewed">{t("billing.history.review.unreviewed")}</option>
-            <option value="review_needed">{t("billing.history.review.review_needed")}</option>
-            <option value="reviewed">{t("billing.history.review.reviewed")}</option>
-          </select>
-        </label>
-      </div>
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("billing.history.filters.status")}</span>
+            <select
+              className="form-input h-9 py-0"
+              value={filters.status}
+              onChange={(event) => updateFilter({ status: event.target.value as BillingOrderFilterState["status"] })}
+            >
+              <option value="all">{t("billing.history.filters.all")}</option>
+              <option value="pending">{t("billing.history.status.pending")}</option>
+              <option value="paid">{t("billing.history.status.paid")}</option>
+              <option value="failed">{t("billing.history.status.failed")}</option>
+              <option value="expired">{t("billing.history.status.expired")}</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-[#71767b]">
+            <span>{t("billing.history.filters.review")}</span>
+            <select
+              className="form-input h-9 py-0"
+              value={filters.reviewStatus}
+              onChange={(event) =>
+                updateFilter({ reviewStatus: event.target.value as BillingOrderFilterState["reviewStatus"] })
+              }
+            >
+              <option value="all">{t("billing.history.filters.all")}</option>
+              <option value="unreviewed">{t("billing.history.review.unreviewed")}</option>
+              <option value="review_needed">{t("billing.history.review.review_needed")}</option>
+              <option value="reviewed">{t("billing.history.review.reviewed")}</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-sm">
-          <thead className="text-white/55">
-            <tr className="border-b border-white/10">
+        <table className={`w-full text-left text-sm ${canOperateBilling ? "min-w-[980px]" : "min-w-[820px]"}`}>
+          <thead className="text-[#71767b]">
+            <tr className="border-b border-[#2f3336]">
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.date")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.plan")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.amount")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.method")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.status")}</th>
-              <th className="px-3 py-2 font-medium">{t("billing.history.columns.ops")}</th>
+              {canOperateBilling ? <th className="px-3 py-2 font-medium">{t("billing.history.columns.ops")}</th> : null}
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.txHash")}</th>
               <th className="px-3 py-2 font-medium">{t("billing.history.columns.action")}</th>
             </tr>
           </thead>
-          <tbody className="text-white/80">
+          <tbody className="text-[#e7e9ea]">
             {paymentRecords.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center text-sm text-white/60" colSpan={8}>
+                <td className="px-3 py-6 text-center text-sm text-[#71767b]" colSpan={colSpan}>
                   {t("billing.history.empty")}
                 </td>
               </tr>
@@ -203,59 +249,68 @@ export function PaymentHistoryTable({
                 const opsInput = opsInputs[record.id] || defaultOpsInput;
                 return (
                   <Fragment key={record.id}>
-                    <tr className="border-b border-white/8 hover:bg-white/5">
+                    <tr className="border-b border-[#2f3336] hover:bg-[#080808]">
                       <td className="px-3 py-3">{record.date}</td>
                       <td className="px-3 py-3">
                         <div>{t(record.planKey)}</div>
                         {canOperateBilling && filters.scope === "all" ? (
-                          <div className="mt-1 text-xs text-white/40">
+                          <div className="mt-1 text-xs text-[#71767b]">
                             {t("billing.history.userId")}: {record.userId}
                           </div>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3">{record.amount}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-white">{record.amount}</div>
+                        {hasUpgradeCredit(record) ? (
+                          <div className="mt-1 text-xs text-[#00ba7c]">{t("billing.history.proration.applied")}</div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-3">
                         {t(record.methodKey)} / {record.network}
                       </td>
                       <td className="px-3 py-3">
                         <Badge variant={statusVariant(record.status)}>{t(`billing.history.status.${record.status}`)}</Badge>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <Badge variant={record.reconciliationStatus === "mismatch" ? "danger" : "info"}>
-                            {t(`billing.history.reconciliation.${record.reconciliationStatus}`)}
-                          </Badge>
-                          <Badge variant={reviewVariant(record.reviewStatus)}>
-                            {t(`billing.history.review.${record.reviewStatus}`)}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs text-white/65">{maskHash(record.txHash)}</td>
-                      <td className="px-3 py-3 text-xs text-white/65">
+                      {canOperateBilling ? (
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant={record.reconciliationStatus === "mismatch" ? "danger" : "info"}>
+                              {t(`billing.history.reconciliation.${record.reconciliationStatus}`)}
+                            </Badge>
+                            <Badge variant={reviewVariant(record.reviewStatus)}>
+                              {t(`billing.history.review.${record.reviewStatus}`)}
+                            </Badge>
+                          </div>
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-3 font-mono text-xs text-[#71767b]">{maskHash(record.txHash)}</td>
+                      <td className="px-3 py-3 text-xs text-[#71767b]">
                         {record.canRetry ? t("billing.history.action.submitTx") : t(`billing.history.nextAction.${record.nextAction}`)}
                       </td>
                     </tr>
-                    <tr className="border-b border-white/8 bg-white/[0.025]">
-                      <td className="px-3 py-3" colSpan={8}>
+                    <tr className="border-b border-[#2f3336] bg-black">
+                      <td className="px-3 py-3" colSpan={colSpan}>
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
                           <div className="space-y-2">
-                            {record.failureReason ? (
-                              <p className="text-xs text-amber-100/85">
+                            {hasUpgradeCredit(record) ? <ProrationBreakdown record={record} /> : null}
+                            {canOperateBilling && record.failureReason ? (
+                              <p className="text-xs text-[#f6d96b]">
                                 {t("billing.history.failureReason")}: {record.failureReason}
                               </p>
                             ) : null}
-                            {record.opsNote ? (
-                              <p className="text-xs text-white/55">
+                            {canOperateBilling && record.opsNote ? (
+                              <p className="text-xs text-[#71767b]">
                                 {t("billing.history.opsNote")}: {record.opsNote}
                               </p>
                             ) : null}
+                            {canOperateBilling ? <AutoScanInfo record={record} /> : null}
                             {record.lastCheckedAt ? (
-                              <p className="text-xs text-white/45">
+                              <p className="text-xs text-[#71767b]">
                                 {t("billing.history.lastCheckedAt")}: {formatCheckedAt(record.lastCheckedAt)}
                               </p>
                             ) : null}
-                            {record.lastAuditAction ? (
-                              <p className="text-xs text-white/45">
+                            {canOperateBilling && record.lastAuditAction ? (
+                              <p className="text-xs text-[#71767b]">
                                 {t("billing.history.audit.last")}: {t(`billing.history.audit.action.${record.lastAuditAction}`)}
                                 {record.lastAuditOperatorId ? ` · ${t("billing.history.audit.operator")} #${record.lastAuditOperatorId}` : ""}
                                 {record.lastAuditAt ? ` · ${formatCheckedAt(record.lastAuditAt)}` : ""}
@@ -263,19 +318,22 @@ export function PaymentHistoryTable({
                             ) : null}
                             <div className="grid gap-2 md:grid-cols-3">
                               {record.canRetry ? (
-                                <input
-                                  className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
-                                  placeholder={t("billing.history.confirm.placeholder")}
-                                  value={txInputs[record.id] ?? record.txHash}
-                                  onChange={(event) =>
-                                    setTxInputs((prev) => ({ ...prev, [record.id]: event.target.value }))
-                                  }
-                                />
+                                <div className="space-y-1 md:col-span-2">
+                                  <input
+                                    className="form-input w-full font-mono text-xs"
+                                    placeholder={t("billing.history.confirm.placeholder")}
+                                    value={txInputs[record.id] ?? record.txHash}
+                                    onChange={(event) =>
+                                      setTxInputs((prev) => ({ ...prev, [record.id]: event.target.value }))
+                                    }
+                                  />
+                                  <p className="text-xs text-[#71767b]">{t("billing.history.confirm.hint")}</p>
+                                </div>
                               ) : null}
                               {canOperateBilling ? (
                                 <>
                                   <input
-                                    className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/30 focus:border-cyan-300/55"
+                                    className="form-input w-full text-xs"
                                     placeholder={t("billing.history.ops.notePlaceholder")}
                                     value={opsInput.opsNote}
                                     onChange={(event) => updateOpsInput(record.id, { opsNote: event.target.value })}
@@ -333,5 +391,58 @@ export function PaymentHistoryTable({
         </table>
       </div>
     </SectionCard>
+  );
+}
+
+function AutoScanInfo({ record }: { record: PaymentRecord }) {
+  const { t } = useT();
+  const status = normalizedAutoScanStatus(record.autoScanStatus || "pending");
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#080808] p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[#71767b]">{t("billing.history.autoScan.title")}</span>
+        <Badge variant={autoScanVariant(status)}>{t(`billing.history.autoScan.status.${status}`)}</Badge>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <span className="text-[#71767b]">{t("billing.history.autoScan.lastScannedAt")}</span>
+          <div className="mt-1 text-[#e7e9ea]">
+            {record.autoScannedAt ? formatCheckedAt(record.autoScannedAt) : t("billing.history.autoScan.notScanned")}
+          </div>
+        </div>
+        <div>
+          <span className="text-[#71767b]">{t("billing.history.autoScan.skipReason")}</span>
+          <div className="mt-1 break-words text-[#e7e9ea]">{autoScanSkipReasonLabel(record.autoScanSkipReason, t)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProrationBreakdown({ record }: { record: PaymentRecord }) {
+  const { t } = useT();
+  return (
+    <div className="grid gap-2 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/5 p-3 text-xs sm:grid-cols-3">
+      <AmountLine label={t("billing.history.proration.original")} value={`${record.originalAmount} ${record.currency}`} />
+      <AmountLine
+        label={t("billing.history.proration.credit")}
+        value={`-${record.creditAmount} ${record.currency}`}
+        valueClassName="text-[#7ee0b5]"
+      />
+      <AmountLine
+        label={t("billing.history.proration.payable")}
+        value={`${record.payableAmount} ${record.currency}`}
+        valueClassName="text-white"
+      />
+    </div>
+  );
+}
+
+function AmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[#71767b]">{label}</div>
+      <div className={`mt-1 whitespace-nowrap font-semibold ${valueClassName}`}>{value}</div>
+    </div>
   );
 }

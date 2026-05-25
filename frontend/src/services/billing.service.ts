@@ -8,10 +8,13 @@ type ApiResponse<T> = {
 
 export type BillingSubscriptionApi = {
   plan: string;
+  billing_cycle: "monthly" | "yearly";
   status: string;
   expiration_date: string;
   trial_days_left: number;
   billing_hint: string;
+  limits: PlanLimitsApi;
+  usage: PlanUsageApi;
 };
 
 export type BillingPlanApi = {
@@ -19,9 +22,56 @@ export type BillingPlanApi = {
   name: string;
   price: string;
   period: string;
+  monthly_price: number;
+  yearly_price: number;
+  currency: string;
+  audience: string;
+  badge?: string;
   description: string;
   features: string[];
+  feature_flags: PlanFeatureApi[];
+  limits: PlanLimitsApi;
   highlight: boolean;
+};
+
+export type PlanLimitsApi = {
+  max_bots: number;
+  max_twitter_accounts: number;
+  ai_generations_monthly: number;
+  daily_auto_posts: number;
+  daily_auto_replies: number;
+  daily_auto_comments: number;
+  daily_auto_dms: number;
+  analytics_days: number;
+  team_seats: number;
+  full_persona_fields: boolean;
+  auto_dm_import: boolean;
+  advanced_bot_strategy: boolean;
+  bulk_review: boolean;
+  bot_performance: boolean;
+  data_export: boolean;
+  multi_bot_matrix: boolean;
+  ab_testing: boolean;
+  advanced_flow_builder: boolean;
+  advanced_risk_rules: boolean;
+  priority_support: boolean;
+};
+
+export type PlanFeatureApi = {
+  key: string;
+  label: string;
+  available: boolean;
+  min_plan?: string;
+};
+
+export type PlanUsageApi = {
+  oaf_bots: number;
+  twitter_accounts: number;
+  ai_generations_month: number;
+  auto_posts_today: number;
+  auto_replies_today: number;
+  auto_comments_today: number;
+  auto_dms_today: number;
 };
 
 export type BillingPaymentMethodApi = {
@@ -37,8 +87,29 @@ export type BillingPaymentMethodApi = {
 
 export type BillingCreateOrderRequest = {
   plan_code: string;
+  billing_cycle?: "monthly" | "yearly";
   method: string;
   network: string;
+};
+
+export type BillingQuoteRequest = {
+  plan_code: string;
+  billing_cycle?: "monthly" | "yearly";
+};
+
+export type BillingUpgradeQuoteApi = {
+  current_plan: string;
+  current_billing_cycle: "monthly" | "yearly";
+  target_plan: string;
+  target_billing_cycle: "monthly" | "yearly";
+  original_amount: string;
+  credit_amount: string;
+  payable_amount: string;
+  currency: string;
+  order_type: "new" | "renew" | "upgrade";
+  is_upgrade: boolean;
+  current_expires_at?: string;
+  quote_expires_at?: string;
 };
 
 export type BillingCreateOrderResponse = {
@@ -50,12 +121,17 @@ export type BillingCreateOrderResponse = {
   receiver_address: string;
   expired_at: string;
   status: string;
+  quote?: BillingUpgradeQuoteApi;
 };
 
 export type BillingOrderDetailApi = {
   order_id: string;
   user_id: number;
   amount: string;
+  original_amount?: string;
+  credit_amount?: string;
+  payable_amount?: string;
+  order_type?: string;
   currency: string;
   network: string;
   token_address: string;
@@ -67,6 +143,9 @@ export type BillingOrderDetailApi = {
   paid_at?: string;
   failure_reason?: string;
   last_checked_at?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
+  auto_scanned_at?: string;
   can_retry: boolean;
   next_action: string;
   reconciliation_status: string;
@@ -80,7 +159,12 @@ export type BillingOrderListItemApi = {
   order_id: string;
   user_id: number;
   plan_code: string;
+  billing_cycle: "monthly" | "yearly";
   amount: string;
+  original_amount?: string;
+  credit_amount?: string;
+  payable_amount?: string;
+  order_type?: string;
   currency: string;
   method: string;
   network: string;
@@ -91,6 +175,9 @@ export type BillingOrderListItemApi = {
   paid_at?: string;
   failure_reason?: string;
   last_checked_at?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
+  auto_scanned_at?: string;
   can_retry: boolean;
   next_action: string;
   reconciliation_status: string;
@@ -106,6 +193,8 @@ export type BillingOrderQueryApi = {
   status?: string;
   reconciliation_status?: string;
   review_status?: string;
+  auto_scan_status?: string;
+  auto_scan_skip_reason?: string;
   limit?: number;
   scope?: string;
 };
@@ -154,7 +243,7 @@ type BillingPaymentMethodsData = {
   items: BillingPaymentMethodApi[];
 };
 
-type BillingOrdersData = {
+export type BillingOrdersData = {
   items: BillingOrderListItemApi[];
   total: number;
   ops_summary: BillingOpsSummaryApi;
@@ -177,6 +266,10 @@ export const billingService = {
   },
   async paymentMethods() {
     const res = await request.get<ApiResponse<BillingPaymentMethodsData>>("/billing/payment-methods");
+    return res.data.data;
+  },
+  async quote(body: BillingQuoteRequest) {
+    const res = await request.post<ApiResponse<BillingUpgradeQuoteApi>>("/billing/quote", body);
     return res.data.data;
   },
   async createOrder(body: BillingCreateOrderRequest) {

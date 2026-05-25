@@ -15,7 +15,7 @@ export default function PostDetailPage() {
   if (!Number.isFinite(id) || id <= 0) {
     return (
       <Card>
-        <CardHeader title={t("posts.list.error")} description="Invalid post id." />
+        <CardHeader title={t("posts.list.error")} description={t("posts.detail.invalidId")} />
       </Card>
     );
   }

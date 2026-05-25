@@ -78,11 +78,55 @@ func (ctl *AdminController) UpdateUser(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) ListBillingOrders(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var query dto.BillingOrderListQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.ListBillingOrders(userID, query)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	orderIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || orderIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid order id")
+		return
+	}
+	var req dto.BillingOrderOpsActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdateBillingOrderOpsAction(userID, uint(orderIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func adminError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrAdminForbidden):
 		response.Fail(c, http.StatusForbidden, err.Error())
-	case errors.Is(err, service.ErrAdminUserNotFound):
+	case errors.Is(err, service.ErrAdminUserNotFound),
+		errors.Is(err, service.ErrBillingOrderNotFound):
 		response.Fail(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrAdminInvalidUserRole),
 		errors.Is(err, service.ErrAdminInvalidStatus),

@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/integration/twitter"
@@ -462,6 +463,21 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 						zap.Error(markErr))...)
 				}
 			}
+			alert.Notify(ctx, alert.Event{
+				Level:      alert.LevelError,
+				Category:   alert.CategoryPublishing,
+				Title:      "Direct X publish rejected",
+				Message:    "X API rejected a direct post publish request.",
+				UserID:     userID,
+				AccountID:  p.XAccountID,
+				ResourceID: postID,
+				Error:      p2,
+				Fields: map[string]any{
+					"source":        source,
+					"account":       handle,
+					"x_status_code": p2.StatusCode,
+				},
+			})
 		}
 		if err := s.persistExecuteFailure(postID, userID, p.XAccountID, handle, at, failMsg); err != nil {
 			zap.L().Error("post execute: persist failure after x api error", append(base,

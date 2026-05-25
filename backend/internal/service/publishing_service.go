@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/integration/twitter"
@@ -265,11 +266,32 @@ func (s *PublishingService) RunOnce(ctx context.Context) {
 	jobs, err := s.jobRepo.ListDuePending(publishJobLimit, now)
 	if err != nil {
 		zap.L().Warn("publishing: list due jobs failed", zap.Error(err))
+		alert.Notify(ctx, alert.Event{
+			Level:    alert.LevelError,
+			Category: alert.CategoryPublishing,
+			Title:    "Publishing jobs list due failed",
+			Message:  "Publishing scheduler could not list due publish jobs.",
+			Error:    err,
+		})
 		return
 	}
 	for _, job := range jobs {
 		if err := s.processJob(ctx, job.ID); err != nil {
 			zap.L().Warn("publishing: process job failed", zap.Uint("job_id", job.ID), zap.Error(err))
+			alert.Notify(ctx, alert.Event{
+				Level:      alert.LevelError,
+				Category:   alert.CategoryPublishing,
+				Title:      "Publishing job process failed",
+				Message:    "Publishing scheduler failed to process a publish job.",
+				UserID:     job.UserID,
+				AccountID:  job.TwitterAccountID,
+				ResourceID: job.ID,
+				Error:      err,
+				Fields: map[string]any{
+					"source_type": job.SourceType,
+					"source_id":   job.SourceID,
+				},
+			})
 		}
 	}
 }
@@ -363,6 +385,20 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 	if err != nil {
 		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
 		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, false, "activity.preview.realPublishFailed")
+		alert.Notify(ctx, alert.Event{
+			Level:      alert.LevelError,
+			Category:   alert.CategoryPublishing,
+			Title:      "Manual X publish failed",
+			Message:    "Manual real publishing to X failed.",
+			UserID:     userID,
+			AccountID:  job.TwitterAccountID,
+			ResourceID: job.ID,
+			Error:      err,
+			Fields: map[string]any{
+				"source_type": job.SourceType,
+				"source_id":   job.SourceID,
+			},
+		})
 		return nil, publishErr
 	}
 	if err := s.completeJob(job, result, mode, previewKey); err != nil {

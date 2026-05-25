@@ -19,6 +19,7 @@ type Config struct {
 	App        AppConfig        `yaml:"app"`
 	JWT        JWTConfig        `yaml:"jwt"`
 	AdminAuth  AdminAuthConfig  `yaml:"admin_auth"`
+	Alert      AlertConfig      `yaml:"alert"`
 	XOAuth     XOAuthConfig     `yaml:"x_oauth"`
 	XPublisher XPublisherConfig `yaml:"x_publisher"`
 	LLM        LLMConfig        `yaml:"llm"`
@@ -89,6 +90,32 @@ type JWTConfig struct {
 type AdminAuthConfig struct {
 	Emails         []string `yaml:"emails"`
 	CodeTTLSeconds int      `yaml:"code_ttl_seconds"`
+}
+
+type AlertConfig struct {
+	Enabled     bool                 `yaml:"enabled"`
+	Environment string               `yaml:"environment"`
+	Service     string               `yaml:"service"`
+	Lark        LarkAlertConfig      `yaml:"lark"`
+	RateLimit   AlertRateLimitConfig `yaml:"rate_limit"`
+	Levels      AlertLevelsConfig    `yaml:"levels"`
+}
+
+type LarkAlertConfig struct {
+	WebhookURL string `yaml:"webhook_url"`
+	Secret     string `yaml:"secret"`
+}
+
+type AlertRateLimitConfig struct {
+	DedupeWindowSeconds int `yaml:"dedupe_window_seconds"`
+	MaxPerMinute        int `yaml:"max_per_minute"`
+}
+
+type AlertLevelsConfig struct {
+	Critical bool `yaml:"critical"`
+	Error    bool `yaml:"error"`
+	Warning  bool `yaml:"warning"`
+	Info     bool `yaml:"info"`
 }
 
 // XOAuthConfig holds X (Twitter) OAuth 2.0 PKCE settings for account linking.
@@ -342,6 +369,7 @@ func Load() (*Config, error) {
 	if cfg.AdminAuth.CodeTTLSeconds <= 0 {
 		cfg.AdminAuth.CodeTTLSeconds = 300
 	}
+	applyAlertConfig(env, service, &cfg.Alert)
 	if cfg.XPublisher.PerAccountDailyLimit <= 0 {
 		cfg.XPublisher.PerAccountDailyLimit = 20
 	}
@@ -374,6 +402,57 @@ func Load() (*Config, error) {
 		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
 	return &cfg, nil
+}
+
+func applyAlertConfig(env string, service string, cfg *AlertConfig) {
+	if cfg == nil {
+		return
+	}
+	if v := strings.TrimSpace(os.Getenv("ALERT_ENABLED")); v != "" {
+		cfg.Enabled = parseBool(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("ALERT_ENVIRONMENT")); v != "" {
+		cfg.Environment = v
+	}
+	if strings.TrimSpace(cfg.Environment) == "" {
+		cfg.Environment = env
+	}
+	if v := strings.TrimSpace(os.Getenv("ALERT_SERVICE")); v != "" {
+		cfg.Service = v
+	}
+	if strings.TrimSpace(cfg.Service) == "" {
+		if service == "" {
+			cfg.Service = "backend-api"
+		} else {
+			cfg.Service = "backend-" + service
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("LARK_ALERT_WEBHOOK_URL")); v != "" {
+		cfg.Lark.WebhookURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("LARK_ALERT_SECRET")); v != "" {
+		cfg.Lark.Secret = v
+	}
+	if cfg.RateLimit.DedupeWindowSeconds <= 0 {
+		cfg.RateLimit.DedupeWindowSeconds = 300
+	}
+	if cfg.RateLimit.MaxPerMinute <= 0 {
+		cfg.RateLimit.MaxPerMinute = 10
+	}
+	if !cfg.Levels.Critical && !cfg.Levels.Error && !cfg.Levels.Warning && !cfg.Levels.Info {
+		cfg.Levels.Critical = true
+		cfg.Levels.Error = true
+		cfg.Levels.Warning = true
+	}
+}
+
+func parseBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "y", "on", "enabled":
+		return true
+	default:
+		return false
+	}
 }
 
 func applyJWTConfig(env string, cfg *JWTConfig) error {

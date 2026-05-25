@@ -393,6 +393,11 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 			return nil, "", nil
 		}
 	}
+	if !s.xPublisher.DryRun {
+		if err := s.enforceMonthlyRealPostQuota(userID, u, now); err != nil {
+			return nil, "", err
+		}
+	}
 
 	handle := formatXAccountHandle(acc.Username)
 
@@ -579,6 +584,23 @@ func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit b
 		return true, "hourly_limit"
 	}
 	return false, ""
+}
+
+func (s *PostService) enforceMonthlyRealPostQuota(userID uint, user *model.User, now time.Time) error {
+	limits := subscription.LimitsForUser(user)
+	if limits.MonthlyXWrites <= 0 {
+		return errors.New("monthly real X publish quota is not available for this plan")
+	}
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	used, err := s.activityRepo.CountPostPublishSuccessBetween(userID, monthStart, monthEnd)
+	if err != nil {
+		return err
+	}
+	if used >= limits.MonthlyXWrites {
+		return errors.New("monthly real X publish quota exceeded for this plan")
+	}
+	return nil
 }
 
 func effectiveRateLimitDelay(pub *twitter.PublishError) time.Duration {

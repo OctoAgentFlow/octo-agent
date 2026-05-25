@@ -38,6 +38,9 @@ export type PlanLimitsApi = {
   max_bots: number;
   max_twitter_accounts: number;
   ai_generations_monthly: number;
+  monthly_x_writes: number;
+  monthly_x_url_posts: number;
+  monthly_cost_cap_cents: number;
   daily_auto_posts: number;
   daily_auto_replies: number;
   daily_auto_comments: number;

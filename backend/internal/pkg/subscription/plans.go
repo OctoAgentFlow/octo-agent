@@ -22,6 +22,9 @@ type PlanLimits struct {
 	MaxBots              int64 `json:"max_bots"`
 	MaxTwitterAccounts   int64 `json:"max_twitter_accounts"`
 	AIGenerationsMonthly int64 `json:"ai_generations_monthly"`
+	MonthlyXWrites       int64 `json:"monthly_x_writes"`
+	MonthlyXURLPosts     int64 `json:"monthly_x_url_posts"`
+	MonthlyCostCapCents  int64 `json:"monthly_cost_cap_cents"`
 	DailyAutoPosts       int64 `json:"daily_auto_posts"`
 	DailyAutoReplies     int64 `json:"daily_auto_replies"`
 	DailyAutoComments    int64 `json:"daily_auto_comments"`
@@ -75,7 +78,10 @@ func Catalog() []PlanDefinition {
 			Limits: PlanLimits{
 				MaxBots:              1,
 				MaxTwitterAccounts:   1,
-				AIGenerationsMonthly: 800,
+				AIGenerationsMonthly: 500,
+				MonthlyXWrites:       100,
+				MonthlyXURLPosts:     5,
+				MonthlyCostCapCents:  400,
 				DailyAutoPosts:       2,
 				DailyAutoReplies:     16,
 				DailyAutoComments:    8,
@@ -86,7 +92,8 @@ func Catalog() []PlanDefinition {
 			Benefits: []string{
 				"1 OAF Bot",
 				"1 X account",
-				"800 AI generations / month",
+				"500 AI generations / month",
+				"100 real X writes / month",
 				"Daily Auto Post 2, Auto Reply 16, Auto Comment 8, Auto DM 16",
 				"7-day basic Analytics",
 			},
@@ -103,7 +110,10 @@ func Catalog() []PlanDefinition {
 			Limits: PlanLimits{
 				MaxBots:              3,
 				MaxTwitterAccounts:   3,
-				AIGenerationsMonthly: 10000,
+				AIGenerationsMonthly: 2500,
+				MonthlyXWrites:       400,
+				MonthlyXURLPosts:     20,
+				MonthlyCostCapCents:  1450,
 				DailyAutoPosts:       10,
 				DailyAutoReplies:     100,
 				DailyAutoComments:    50,
@@ -116,7 +126,8 @@ func Catalog() []PlanDefinition {
 			Benefits: []string{
 				"3 OAF Bots",
 				"3 X accounts",
-				"10,000 AI generations / month",
+				"2,500 AI generations / month",
+				"400 real X writes / month",
 				"Full persona fields",
 				"Auto DM list import",
 				"30-day Analytics",
@@ -134,7 +145,10 @@ func Catalog() []PlanDefinition {
 			Limits: PlanLimits{
 				MaxBots:              10,
 				MaxTwitterAccounts:   10,
-				AIGenerationsMonthly: 50000,
+				AIGenerationsMonthly: 8000,
+				MonthlyXWrites:       1200,
+				MonthlyXURLPosts:     50,
+				MonthlyCostCapCents:  3950,
 				DailyAutoPosts:       50,
 				DailyAutoReplies:     500,
 				DailyAutoComments:    300,
@@ -151,7 +165,8 @@ func Catalog() []PlanDefinition {
 			Benefits: []string{
 				"10 OAF Bots",
 				"10 X accounts",
-				"50,000 AI generations / month",
+				"8,000 AI generations / month",
+				"1,200 real X writes / month",
 				"Advanced bot strategy",
 				"Bulk review and bot performance analytics",
 				"3 team seats, 90-day Analytics and data export",
@@ -168,7 +183,10 @@ func Catalog() []PlanDefinition {
 			Limits: PlanLimits{
 				MaxBots:              30,
 				MaxTwitterAccounts:   30,
-				AIGenerationsMonthly: 200000,
+				AIGenerationsMonthly: 20000,
+				MonthlyXWrites:       2500,
+				MonthlyXURLPosts:     120,
+				MonthlyCostCapCents:  9950,
 				DailyAutoPosts:       200,
 				DailyAutoReplies:     2000,
 				DailyAutoComments:    1000,
@@ -190,7 +208,8 @@ func Catalog() []PlanDefinition {
 			Benefits: []string{
 				"30 OAF Bots",
 				"30 X accounts",
-				"200,000 AI generations / month",
+				"20,000 AI generations / month",
+				"2,500 real X writes / month",
 				"Multi-bot matrix operation and A/B testing",
 				"Advanced Flow Builder and risk rules",
 				"10 team seats, 365-day Analytics and priority support",
@@ -265,6 +284,9 @@ func FreeTrialLimits() PlanLimits {
 		MaxBots:              1,
 		MaxTwitterAccounts:   FreeTrialTwitterAccountLimit,
 		AIGenerationsMonthly: 100,
+		MonthlyXWrites:       10,
+		MonthlyXURLPosts:     0,
+		MonthlyCostCapCents:  0,
 		DailyAutoPosts:       1,
 		DailyAutoReplies:     5,
 		DailyAutoComments:    3,

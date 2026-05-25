@@ -1255,6 +1255,7 @@ export const dict: I18nDict = {
   "planBenefits.oafBots": "{count} 个 OAF Bot",
   "planBenefits.xAccounts": "{count} 个 X 账号",
   "planBenefits.aiGenerationsMonthly": "每月 {count} 次 AI 生成",
+  "planBenefits.monthlyXWrites": "每月 {count} 次真实 X 发布",
   "planBenefits.dailyAutoPost": "每日自动发推 {count} 条",
   "planBenefits.dailyAutoReply": "每日自动回复 {count} 条",
   "planBenefits.dailyAutoComment": "每日自动评论 {count} 条",

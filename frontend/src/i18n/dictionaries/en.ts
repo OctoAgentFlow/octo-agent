@@ -1284,6 +1284,7 @@ export const dict: I18nDict = {
   "planBenefits.oafBots": "{count} OAF Bot(s)",
   "planBenefits.xAccounts": "{count} X account(s)",
   "planBenefits.aiGenerationsMonthly": "{count} AI generations / month",
+  "planBenefits.monthlyXWrites": "{count} real X publishes / month",
   "planBenefits.dailyAutoPost": "Daily Auto Post {count}",
   "planBenefits.dailyAutoReply": "Daily Auto Reply {count}",
   "planBenefits.dailyAutoComment": "Daily Auto Comment {count}",

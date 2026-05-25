@@ -368,7 +368,7 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 		_ = s.failJobWithPreview(job, "manual_publish_validation_failed", err.Error(), false, "activity.preview.realPublishFailed")
 		return nil, err
 	}
-	if err := s.enforceManualPublishLimits(job.TwitterAccountID, now); err != nil {
+	if err := s.enforceManualPublishLimits(userID, job.TwitterAccountID, now); err != nil {
 		return nil, err
 	}
 	_ = s.createJobActivity(job, "activity.preview.manualPublishTriggered", "")
@@ -574,7 +574,26 @@ func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.Publish
 	return nil
 }
 
-func (s *PublishingService) enforceManualPublishLimits(accountID uint, now time.Time) error {
+func (s *PublishingService) enforceManualPublishLimits(userID uint, accountID uint, now time.Time) error {
+	if !s.cfg.DryRun {
+		user, err := s.userRepo.GetByID(userID)
+		if err != nil {
+			return err
+		}
+		limits := subscription.LimitsForUser(user)
+		if limits.MonthlyXWrites <= 0 {
+			return &PublishingError{Code: "publisher_monthly_x_quota_exceeded", Message: "monthly real X publish quota is not available for this plan"}
+		}
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		monthEnd := monthStart.AddDate(0, 1, 0)
+		used, err := s.jobRepo.CountRealPublishedByUser(userID, monthStart, monthEnd)
+		if err != nil {
+			return err
+		}
+		if used >= limits.MonthlyXWrites {
+			return &PublishingError{Code: "publisher_monthly_x_quota_exceeded", Message: "monthly real X publish quota exceeded for this plan"}
+		}
+	}
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	count, err := s.jobRepo.CountManualPublishedByAccount(accountID, start, start.Add(24*time.Hour))
 	if err != nil {

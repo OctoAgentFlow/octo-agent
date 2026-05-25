@@ -159,6 +159,15 @@ func (r *PublishJobRepository) CountManualPublishedByAccount(accountID uint, fro
 	return n, err
 }
 
+func (r *PublishJobRepository) CountRealPublishedByUser(userID uint, from, to time.Time) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.PublishJob{}).
+		Where("user_id = ? AND status = ? AND publish_mode = ?", userID, PublishStatusPublished, PublishModeReal).
+		Where("published_at >= ? AND published_at < ?", from, to).
+		Count(&n).Error
+	return n, err
+}
+
 func (r *PublishJobRepository) LastManualPublishedByAccount(accountID uint) (*model.PublishJob, error) {
 	var row model.PublishJob
 	err := r.DB.

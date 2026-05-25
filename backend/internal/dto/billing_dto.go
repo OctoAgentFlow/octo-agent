@@ -36,6 +36,9 @@ type PlanLimitsData struct {
 	MaxBots              int64 `json:"max_bots"`
 	MaxTwitterAccounts   int64 `json:"max_twitter_accounts"`
 	AIGenerationsMonthly int64 `json:"ai_generations_monthly"`
+	MonthlyXWrites       int64 `json:"monthly_x_writes"`
+	MonthlyXURLPosts     int64 `json:"monthly_x_url_posts"`
+	MonthlyCostCapCents  int64 `json:"monthly_cost_cap_cents"`
 	DailyAutoPosts       int64 `json:"daily_auto_posts"`
 	DailyAutoReplies     int64 `json:"daily_auto_replies"`
 	DailyAutoComments    int64 `json:"daily_auto_comments"`

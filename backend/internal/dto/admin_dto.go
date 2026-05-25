@@ -96,3 +96,55 @@ type AdminActivityListItem struct {
 	ExecutedAt    string `json:"executed_at"`
 	ErrorMessage  string `json:"error_message,omitempty"`
 }
+
+type AdminPointActivityItem struct {
+	ID          uint   `json:"id"`
+	Code        string `json:"code"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Points      int64  `json:"points"`
+	ClaimPeriod string `json:"claim_period"`
+	Enabled     bool   `json:"enabled"`
+	StartsAt    string `json:"starts_at,omitempty"`
+	EndsAt      string `json:"ends_at,omitempty"`
+	SortOrder   int    `json:"sort_order"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type AdminUpdatePointActivityRequest struct {
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	Points      *int64  `json:"points"`
+	ClaimPeriod *string `json:"claim_period"`
+	Enabled     *bool   `json:"enabled"`
+	StartsAt    *string `json:"starts_at"`
+	EndsAt      *string `json:"ends_at"`
+	SortOrder   *int    `json:"sort_order"`
+}
+
+type AdminPointUserItem struct {
+	UserID         uint   `json:"user_id"`
+	Email          string `json:"email"`
+	Name           string `json:"name"`
+	Balance        int64  `json:"balance"`
+	Frozen         int64  `json:"frozen"`
+	LifetimeEarned int64  `json:"lifetime_earned"`
+	LifetimeSpent  int64  `json:"lifetime_spent"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+type AdminPointUsersResponse struct {
+	Items      []AdminPointUserItem `json:"items"`
+	Pagination ActivityPagination   `json:"pagination"`
+}
+
+type AdminPointUserQuery struct {
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+	Query    string `form:"query"`
+}
+
+type AdminAdjustUserPointsRequest struct {
+	Points int64  `json:"points" binding:"required"`
+	Reason string `json:"reason" binding:"required"`
+}

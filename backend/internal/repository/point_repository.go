@@ -115,6 +115,39 @@ func (r *PointRepository) EarnActivity(userID uint, activityCode, claimKey strin
 	})
 }
 
+func (r *PointRepository) AdjustUserPoints(userID uint, points int64, uniqueKey, details string) error {
+	if points == 0 {
+		return fmt.Errorf("points must not be zero")
+	}
+	return r.DB.Transaction(func(tx *gorm.DB) error {
+		account, err := r.getOrCreateAccount(tx, userID, true)
+		if err != nil {
+			return err
+		}
+		if points < 0 && account.Balance < -points {
+			return fmt.Errorf("insufficient points")
+		}
+		account.Balance += points
+		if points > 0 {
+			account.LifetimeEarned += points
+		} else {
+			account.LifetimeSpent += -points
+		}
+		if err := tx.Save(account).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.PointLedgerEntry{
+			UserID:       userID,
+			EventType:    "adjust",
+			Points:       points,
+			BalanceAfter: account.Balance,
+			FrozenAfter:  account.Frozen,
+			UniqueKey:    uniqueKey,
+			Details:      details,
+		}).Error
+	})
+}
+
 func (r *PointRepository) FreezeForOrder(tx *gorm.DB, userID, orderID uint, points int64, details string) error {
 	if points <= 0 {
 		return nil

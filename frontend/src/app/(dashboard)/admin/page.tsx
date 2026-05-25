@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Coins,
   UserCog,
   Users,
 } from "lucide-react";
@@ -28,17 +29,18 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointUserApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
 type LoadState = "loading" | "ready" | "error" | "forbidden";
-type AdminSection = "overview" | "users" | "billing" | "activity" | "system";
+type AdminSection = "overview" | "users" | "billing" | "points" | "activity" | "system";
 
 const sections: Array<{ id: AdminSection; labelKey: string; descriptionKey: string; icon: LucideIcon }> = [
   { id: "overview", labelKey: "admin.sections.overview", descriptionKey: "admin.sections.overviewDesc", icon: LayoutDashboard },
   { id: "users", labelKey: "admin.sections.users", descriptionKey: "admin.sections.usersDesc", icon: Users },
   { id: "billing", labelKey: "admin.sections.billing", descriptionKey: "admin.sections.billingDesc", icon: ReceiptText },
+  { id: "points", labelKey: "admin.sections.points", descriptionKey: "admin.sections.pointsDesc", icon: Coins },
   { id: "activity", labelKey: "admin.sections.activity", descriptionKey: "admin.sections.activityDesc", icon: Activity },
   { id: "system", labelKey: "admin.sections.system", descriptionKey: "admin.sections.systemDesc", icon: Settings },
 ];
@@ -213,6 +215,10 @@ export default function AdminPage() {
   const [status, setStatus] = useState("all");
   const [submittingUser, setSubmittingUser] = useState<number | null>(null);
   const [submittingOrder, setSubmittingOrder] = useState<string | null>(null);
+  const [pointActivities, setPointActivities] = useState<AdminPointActivityApi[]>([]);
+  const [pointUsers, setPointUsers] = useState<AdminPointUserApi[]>([]);
+  const [pointQuery, setPointQuery] = useState("");
+  const [submittingPointKey, setSubmittingPointKey] = useState("");
 
   const userParams = useMemo(
     () => ({
@@ -231,10 +237,17 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData] = await Promise.all([adminService.overview(), adminService.users(userParams)]);
+        const [overviewData, usersData, activitiesData, pointUsersData] = await Promise.all([
+          adminService.overview(),
+          adminService.users(userParams),
+          adminService.pointActivities(),
+          adminService.pointUsers({ page: 1, page_size: 20, query: pointQuery.trim() || undefined }),
+        ]);
         setOverview(overviewData);
         setUsers(usersData.items);
         setTotalUsers(usersData.pagination.total);
+        setPointActivities(activitiesData);
+        setPointUsers(pointUsersData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -245,7 +258,7 @@ export default function AdminPage() {
         if (quiet) pushToast(msg);
       }
     },
-    [pushToast, t, userParams]
+    [pointQuery, pushToast, t, userParams]
   );
 
   useEffect(() => {
@@ -298,6 +311,32 @@ export default function AdminPage() {
     }
   };
 
+  const updatePointActivity = async (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => {
+    setSubmittingPointKey(`activity:${activity.id}`);
+    try {
+      const next = await adminService.updatePointActivity(activity.id, patch);
+      setPointActivities((items) => items.map((item) => (item.id === next.id ? next : item)));
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
+  const adjustPoints = async (userId: number, points: number, reason: string) => {
+    setSubmittingPointKey(`user:${userId}`);
+    try {
+      const next = await adminService.adjustUserPoints(userId, { points, reason });
+      setPointUsers((items) => items.map((item) => (item.user_id === userId ? next : item)));
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -346,6 +385,18 @@ export default function AdminPage() {
         />
       ) : null}
       {activeSection === "billing" ? <BillingSection overview={overview} submittingOrder={submittingOrder} onUpdateOrder={updateOrder} /> : null}
+      {activeSection === "points" ? (
+        <PointsAdminSection
+          activities={pointActivities}
+          users={pointUsers}
+          query={pointQuery}
+          submittingKey={submittingPointKey}
+          onQueryChange={setPointQuery}
+          onRefresh={() => void fetchAdmin({ quiet: true })}
+          onUpdateActivity={updatePointActivity}
+          onAdjustPoints={adjustPoints}
+        />
+      ) : null}
       {activeSection === "activity" ? <ActivitySection overview={overview} /> : null}
       {activeSection === "system" ? <SystemSection overview={overview} /> : null}
     </div>
@@ -407,7 +458,7 @@ function AdminHero({
 function SectionTabs({ activeSection, onChange }: { activeSection: AdminSection; onChange: (section: AdminSection) => void }) {
   const { t } = useT();
   return (
-    <nav className="grid gap-2 md:grid-cols-5">
+    <nav className="grid gap-2 md:grid-cols-6">
       {sections.map((section) => {
         const Icon = section.icon;
         const active = section.id === activeSection;
@@ -850,6 +901,161 @@ function AdminAmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { 
     </div>
   );
 }
+
+function PointsAdminSection({
+  activities,
+  users,
+  query,
+  submittingKey,
+  onQueryChange,
+  onRefresh,
+  onUpdateActivity,
+  onAdjustPoints,
+}: {
+  activities: AdminPointActivityApi[];
+  users: AdminPointUserApi[];
+  query: string;
+  submittingKey: string;
+  onQueryChange: (value: string) => void;
+  onRefresh: () => void;
+  onUpdateActivity: (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => void;
+  onAdjustPoints: (userId: number, points: number, reason: string) => void;
+}) {
+  const { t } = useT();
+  const [adjustValues, setAdjustValues] = useState<Record<number, { points: string; reason: string }>>({});
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <Metric label={t("admin.points.metrics.activities")} value={activities.length} icon={GiftIcon} />
+        <Metric label={t("admin.points.metrics.users")} value={users.length} icon={Users} tone="good" />
+        <Metric label={t("admin.points.metrics.balance")} value={users.reduce((sum, user) => sum + user.balance, 0)} icon={Coins} />
+      </div>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("admin.points.activities.title")} description={t("admin.points.activities.description")} />
+        <div className="grid gap-3 lg:grid-cols-3">
+          {activities.map((activity) => (
+            <div key={activity.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-white">{activity.title}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{activity.code}</p>
+                </div>
+                <Badge variant={activity.enabled ? "success" : "default"}>{activity.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</Badge>
+              </div>
+              <p className="mt-3 min-h-10 text-sm leading-relaxed text-[#71767b]">{activity.description}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="text-xs text-[#71767b]">
+                  {t("admin.points.points")}
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min={1}
+                    value={activity.points}
+                    disabled={submittingKey === `activity:${activity.id}`}
+                    onChange={(event) => onUpdateActivity(activity, { points: Number(event.target.value) || 1 })}
+                  />
+                </label>
+                <label className="text-xs text-[#71767b]">
+                  {t("admin.points.period")}
+                  <select
+                    className="form-input mt-1 h-10 w-full"
+                    value={activity.claim_period}
+                    disabled={submittingKey === `activity:${activity.id}`}
+                    onChange={(event) => onUpdateActivity(activity, { claim_period: event.target.value })}
+                  >
+                    <option value="once">once</option>
+                    <option value="daily">daily</option>
+                    <option value="monthly">monthly</option>
+                  </select>
+                </label>
+              </div>
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                variant={activity.enabled ? "outline" : "default"}
+                disabled={submittingKey === `activity:${activity.id}`}
+                onClick={() => onUpdateActivity(activity, { enabled: !activity.enabled })}
+              >
+                {activity.enabled ? t("admin.points.disable") : t("admin.points.enable")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("admin.points.users.title")}
+          description={t("admin.points.users.description")}
+          right={
+            <Button type="button" size="sm" variant="outline" onClick={onRefresh}>
+              <RefreshCcw className="size-4" />
+              {t("admin.actions.refresh")}
+            </Button>
+          }
+        />
+        <div className="mb-3 max-w-md">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#71767b]" />
+            <Input className="pl-9" placeholder={t("admin.points.users.search")} value={query} onChange={(event) => onQueryChange(event.target.value)} />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="text-xs uppercase text-[#71767b]">
+              <tr>
+                <th className="px-3 py-2 font-medium">{t("admin.users.table.user")}</th>
+                <th className="px-3 py-2 font-medium">{t("points.metrics.balance")}</th>
+                <th className="px-3 py-2 font-medium">{t("points.metrics.frozen")}</th>
+                <th className="px-3 py-2 font-medium">{t("admin.points.adjust")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2f3336]">
+              {users.map((user) => {
+                const form = adjustValues[user.user_id] || { points: "", reason: "" };
+                return (
+                  <tr key={user.user_id}>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-white">{user.name || user.email || `#${user.user_id}`}</p>
+                      <p className="text-xs text-[#71767b]">{user.email || `ID ${user.user_id}`}</p>
+                    </td>
+                    <td className="px-3 py-3 text-white">{user.balance}</td>
+                    <td className="px-3 py-3 text-white">{user.frozen}</td>
+                    <td className="px-3 py-3">
+                      <div className="grid min-w-[360px] gap-2 md:grid-cols-[96px_1fr_auto]">
+                        <Input
+                          type="number"
+                          placeholder="+/-"
+                          value={form.points}
+                          onChange={(event) => setAdjustValues((prev) => ({ ...prev, [user.user_id]: { ...form, points: event.target.value } }))}
+                        />
+                        <Input
+                          placeholder={t("admin.points.reason")}
+                          value={form.reason}
+                          onChange={(event) => setAdjustValues((prev) => ({ ...prev, [user.user_id]: { ...form, reason: event.target.value } }))}
+                        />
+                        <Button
+                          type="button"
+                          disabled={submittingKey === `user:${user.user_id}` || !form.points || !form.reason.trim()}
+                          onClick={() => onAdjustPoints(user.user_id, Number(form.points), form.reason)}
+                        >
+                          {t("admin.points.apply")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const GiftIcon = Coins;
 
 function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
   const { t } = useT();

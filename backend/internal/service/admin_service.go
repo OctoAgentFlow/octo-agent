@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,6 +29,7 @@ type AdminService struct {
 	cfg              *config.Config
 	userRepo         *repository.UserRepository
 	billingOrderRepo *repository.BillingOrderRepository
+	pointRepo        *repository.PointRepository
 }
 
 func NewAdminService(db *gorm.DB, cfg *config.Config, userRepo *repository.UserRepository, billingOrderRepo *repository.BillingOrderRepository) *AdminService {
@@ -36,6 +38,7 @@ func NewAdminService(db *gorm.DB, cfg *config.Config, userRepo *repository.UserR
 		cfg:              cfg,
 		userRepo:         userRepo,
 		billingOrderRepo: billingOrderRepo,
+		pointRepo:        repository.NewPointRepository(db),
 	}
 }
 
@@ -159,6 +162,163 @@ func (s *AdminService) UpdateBillingOrderOpsAction(operatorID, orderID uint, req
 		out.AuditTrail = billingAuditItemsToDTO(audits)
 	}
 	return out, nil
+}
+
+func (s *AdminService) ListPointActivities(operatorID uint) ([]dto.AdminPointActivityItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	var rows []model.PointActivity
+	if err := s.db.Order("sort_order ASC, id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	items := make([]dto.AdminPointActivityItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, adminPointActivityDTO(row))
+	}
+	return items, nil
+}
+
+func (s *AdminService) UpdatePointActivity(operatorID, activityID uint, req dto.AdminUpdatePointActivityRequest) (*dto.AdminPointActivityItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	var activity model.PointActivity
+	if err := s.db.First(&activity, activityID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAdminUserNotFound
+		}
+		return nil, err
+	}
+	if req.Title != nil {
+		activity.Title = strings.TrimSpace(*req.Title)
+	}
+	if req.Description != nil {
+		activity.Description = strings.TrimSpace(*req.Description)
+	}
+	if req.Points != nil {
+		if *req.Points <= 0 || *req.Points > 10000 {
+			return nil, ErrAdminInvalidStatus
+		}
+		activity.Points = *req.Points
+	}
+	if req.ClaimPeriod != nil {
+		period := strings.ToLower(strings.TrimSpace(*req.ClaimPeriod))
+		if period != "once" && period != "daily" && period != "monthly" {
+			return nil, ErrAdminInvalidStatus
+		}
+		activity.ClaimPeriod = period
+	}
+	if req.Enabled != nil {
+		activity.Enabled = *req.Enabled
+	}
+	if req.SortOrder != nil {
+		activity.SortOrder = *req.SortOrder
+	}
+	if req.StartsAt != nil {
+		startsAt, err := parseOptionalAdminTime(*req.StartsAt)
+		if err != nil {
+			return nil, ErrAdminInvalidStatus
+		}
+		activity.StartsAt = startsAt
+	}
+	if req.EndsAt != nil {
+		endsAt, err := parseOptionalAdminTime(*req.EndsAt)
+		if err != nil {
+			return nil, ErrAdminInvalidStatus
+		}
+		activity.EndsAt = endsAt
+	}
+	if err := s.db.Save(&activity).Error; err != nil {
+		return nil, err
+	}
+	item := adminPointActivityDTO(activity)
+	return &item, nil
+}
+
+func (s *AdminService) ListPointUsers(operatorID uint, query dto.AdminPointUserQuery) (*dto.AdminPointUsersResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	page, pageSize := adminPagination(query.Page, query.PageSize)
+	q := s.db.Table("user_point_accounts").
+		Select("user_point_accounts.user_id, users.email, users.display_name AS name, user_point_accounts.balance, user_point_accounts.frozen, user_point_accounts.lifetime_earned, user_point_accounts.lifetime_spent, user_point_accounts.updated_at").
+		Joins("LEFT JOIN users ON users.id = user_point_accounts.user_id")
+	search := strings.TrimSpace(query.Query)
+	if search != "" {
+		like := "%" + strings.ToLower(search) + "%"
+		q = q.Where("LOWER(users.email) LIKE ? OR LOWER(users.display_name) LIKE ? OR CAST(user_point_accounts.user_id AS CHAR) = ?", like, like, search)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	type adminPointUserRow struct {
+		UserID         uint
+		Email          string
+		Name           string
+		Balance        int64
+		Frozen         int64
+		LifetimeEarned int64
+		LifetimeSpent  int64
+		UpdatedAt      time.Time
+	}
+	var rows []adminPointUserRow
+	if err := q.Order("user_point_accounts.updated_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	items := make([]dto.AdminPointUserItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, dto.AdminPointUserItem{
+			UserID:         row.UserID,
+			Email:          row.Email,
+			Name:           row.Name,
+			Balance:        row.Balance,
+			Frozen:         row.Frozen,
+			LifetimeEarned: row.LifetimeEarned,
+			LifetimeSpent:  row.LifetimeSpent,
+			UpdatedAt:      row.UpdatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return &dto.AdminPointUsersResponse{
+		Items: items,
+		Pagination: dto.ActivityPagination{
+			Page:     page,
+			PageSize: pageSize,
+			Total:    total,
+		},
+	}, nil
+}
+
+func (s *AdminService) AdjustUserPoints(operatorID, targetID uint, req dto.AdminAdjustUserPointsRequest) (*dto.AdminPointUserItem, error) {
+	operator, err := s.requireOperator(operatorID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Reason) == "" || req.Points == 0 {
+		return nil, ErrAdminInvalidStatus
+	}
+	if _, err := s.userRepo.GetByID(targetID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAdminUserNotFound
+		}
+		return nil, err
+	}
+	details, _ := json.Marshal(map[string]any{"reason": strings.TrimSpace(req.Reason), "operator_id": operator.ID, "operator_email": operator.Email})
+	uniqueKey := fmt.Sprintf("admin_adjust:%d:%d:%d", targetID, operator.ID, time.Now().UTC().UnixNano())
+	if err := s.pointRepo.AdjustUserPoints(targetID, req.Points, uniqueKey, string(details)); err != nil {
+		return nil, err
+	}
+	users, err := s.ListPointUsers(operatorID, dto.AdminPointUserQuery{Query: fmt.Sprintf("%d", targetID), Page: 1, PageSize: 1})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range users.Items {
+		if item.UserID == targetID {
+			return &item, nil
+		}
+	}
+	return &dto.AdminPointUserItem{UserID: targetID}, nil
 }
 
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {
@@ -421,6 +581,40 @@ func billingOpsSummaryDTO(summary repository.BillingOrderOpsSummary) dto.Billing
 		ReviewNeeded: summary.ReviewNeeded,
 		Reviewed:     summary.Reviewed,
 	}
+}
+
+func adminPointActivityDTO(activity model.PointActivity) dto.AdminPointActivityItem {
+	item := dto.AdminPointActivityItem{
+		ID:          activity.ID,
+		Code:        activity.Code,
+		Title:       activity.Title,
+		Description: activity.Description,
+		Points:      activity.Points,
+		ClaimPeriod: activity.ClaimPeriod,
+		Enabled:     activity.Enabled,
+		SortOrder:   activity.SortOrder,
+		UpdatedAt:   activity.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if activity.StartsAt != nil {
+		item.StartsAt = activity.StartsAt.UTC().Format(time.RFC3339)
+	}
+	if activity.EndsAt != nil {
+		item.EndsAt = activity.EndsAt.UTC().Format(time.RFC3339)
+	}
+	return item
+}
+
+func parseOptionalAdminTime(value string) (*time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, err
+	}
+	t = t.UTC()
+	return &t, nil
 }
 
 func adminBillingOrdersDTO(orders []model.BillingOrder) []dto.BillingOrderListItem {

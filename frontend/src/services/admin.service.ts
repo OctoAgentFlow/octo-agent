@@ -110,6 +110,40 @@ export type AdminUsersApi = {
   };
 };
 
+export type AdminPointActivityApi = {
+  id: number;
+  code: string;
+  title: string;
+  description: string;
+  points: number;
+  claim_period: string;
+  enabled: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  sort_order: number;
+  updated_at: string;
+};
+
+export type AdminPointUserApi = {
+  user_id: number;
+  email: string;
+  name: string;
+  balance: number;
+  frozen: number;
+  lifetime_earned: number;
+  lifetime_spent: number;
+  updated_at: string;
+};
+
+export type AdminPointUsersApi = {
+  items: AdminPointUserApi[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+  };
+};
+
 export const adminService = {
   async overview() {
     const res = await request.get<ApiResponse<AdminOverviewApi>>("/admin/overview");
@@ -129,6 +163,22 @@ export const adminService = {
   },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {
     const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/admin/billing/orders/${orderId}/ops-action`, body);
+    return res.data.data;
+  },
+  async pointActivities() {
+    const res = await request.get<ApiResponse<AdminPointActivityApi[]>>("/admin/points/activities");
+    return res.data.data;
+  },
+  async updatePointActivity(activityId: number, body: Partial<Pick<AdminPointActivityApi, "title" | "description" | "points" | "claim_period" | "enabled" | "sort_order">>) {
+    const res = await request.patch<ApiResponse<AdminPointActivityApi>>(`/admin/points/activities/${activityId}`, body);
+    return res.data.data;
+  },
+  async pointUsers(params?: { page?: number; page_size?: number; query?: string }) {
+    const res = await request.get<ApiResponse<AdminPointUsersApi>>("/admin/points/users", { params });
+    return res.data.data;
+  },
+  async adjustUserPoints(userId: number, body: { points: number; reason: string }) {
+    const res = await request.post<ApiResponse<AdminPointUserApi>>(`/admin/points/users/${userId}/adjust`, body);
     return res.data.data;
   },
 };

@@ -380,6 +380,12 @@ func (s *AdminService) UpdatePointRiskConfig(operatorID uint, req dto.AdminUpdat
 		}
 		cfg.LargeAdjustmentAlertThreshold = *req.LargeAdjustmentAlertThreshold
 	}
+	if req.PointExpiryDays != nil {
+		if *req.PointExpiryDays < 0 || *req.PointExpiryDays > 3650 {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.PointExpiryDays = *req.PointExpiryDays
+	}
 	if err := s.db.Save(cfg).Error; err != nil {
 		return nil, err
 	}
@@ -676,6 +682,7 @@ func adminPointRiskConfigDTO(cfg model.PointRiskConfig) dto.AdminPointRiskConfig
 		DailyEarnLimit:                cfg.DailyEarnLimit,
 		MonthlyDiscountLimit:          cfg.MonthlyDiscountLimit,
 		LargeAdjustmentAlertThreshold: cfg.LargeAdjustmentAlertThreshold,
+		PointExpiryDays:               cfg.PointExpiryDays,
 		UpdatedAt:                     cfg.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
@@ -694,6 +701,7 @@ func (s *AdminService) getOrCreatePointRiskConfig() (*model.PointRiskConfig, err
 		DailyEarnLimit:                100,
 		MonthlyDiscountLimit:          1000,
 		LargeAdjustmentAlertThreshold: 200,
+		PointExpiryDays:               365,
 		Enabled:                       true,
 	}
 	if err := s.db.Create(&cfg).Error; err != nil {

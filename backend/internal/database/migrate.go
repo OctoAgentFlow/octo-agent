@@ -20,6 +20,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.UserPointAccount{},
 		&model.PointActivity{},
 		&model.PointRiskConfig{},
+		&model.PointGrant{},
 		&model.PointLedgerEntry{},
 		&model.PointActivityClaim{},
 		&model.TwitterAccount{},
@@ -129,6 +130,7 @@ func SeedDefaultPointRiskConfig(db *gorm.DB) error {
 		DailyEarnLimit:                100,
 		MonthlyDiscountLimit:          1000,
 		LargeAdjustmentAlertThreshold: 200,
+		PointExpiryDays:               365,
 		Enabled:                       true,
 	}).Error
 }
@@ -147,6 +149,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.UserPointAccount{}, "用户积分账户"},
 		{&model.PointActivity{}, "积分活动配置"},
 		{&model.PointRiskConfig{}, "积分风控配置"},
+		{&model.PointGrant{}, "积分批次与有效期"},
 		{&model.PointLedgerEntry{}, "积分账本事件"},
 		{&model.PointActivityClaim{}, "积分活动领取记录"},
 		{&model.TwitterAccount{}, "用户绑定的X账号信息"},

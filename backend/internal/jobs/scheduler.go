@@ -23,6 +23,7 @@ func Start(
 	autoPost *service.AutoPostService,
 	publishing *service.PublishingService,
 	billing *service.BillingService,
+	pointRepo *repository.PointRepository,
 ) {
 	go func() {
 		defer func() {
@@ -42,6 +43,7 @@ func Start(
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		var lastBillingScan time.Time
+		var lastPointExpiry time.Time
 		runEmail := func() {
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
@@ -70,6 +72,16 @@ func Start(
 			lastBillingScan = time.Now()
 			RunBillingScannerOnce(context.Background(), billing)
 		}
+		runPointExpiry := func() {
+			if pointRepo == nil {
+				return
+			}
+			if !lastPointExpiry.IsZero() && time.Since(lastPointExpiry) < time.Hour {
+				return
+			}
+			lastPointExpiry = time.Now()
+			RunPointExpiryOnce(context.Background(), pointRepo)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
@@ -78,6 +90,7 @@ func Start(
 		RunAutoPostOnce(context.Background(), autoPost)
 		RunPublishingOnce(context.Background(), publishing)
 		runBillingScanner()
+		runPointExpiry()
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
@@ -87,6 +100,7 @@ func Start(
 			RunAutoPostOnce(context.Background(), autoPost)
 			RunPublishingOnce(context.Background(), publishing)
 			runBillingScanner()
+			runPointExpiry()
 		}
 	}()
 }

@@ -956,7 +956,7 @@ function PointsAdminSection({
       {riskConfig ? (
         <Card className="bg-[#0f1419]">
           <CardHeader title={t("admin.points.risk.title")} description={t("admin.points.risk.description")} />
-          <div className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1fr]">
+          <div className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1fr_1fr]">
             <button
               type="button"
               className={`rounded-2xl border p-4 text-left ${riskConfig.enabled ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}
@@ -983,6 +983,12 @@ function PointsAdminSection({
               value={riskConfig.large_adjustment_alert_threshold}
               disabled={submittingKey === "risk"}
               onSave={(value) => onUpdateRiskConfig({ large_adjustment_alert_threshold: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.expiryDays")}
+              value={riskConfig.point_expiry_days}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ point_expiry_days: value })}
             />
           </div>
         </Card>

@@ -149,6 +149,7 @@ export type AdminPointRiskConfigApi = {
   daily_earn_limit: number;
   monthly_discount_limit: number;
   large_adjustment_alert_threshold: number;
+  point_expiry_days: number;
   updated_at: string;
 };
 

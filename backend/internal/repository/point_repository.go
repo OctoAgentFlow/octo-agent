@@ -18,6 +18,7 @@ type PointRiskLimits struct {
 	DailyEarnLimit                int64
 	MonthlyDiscountLimit          int64
 	LargeAdjustmentAlertThreshold int64
+	PointExpiryDays               int
 }
 
 func NewPointRepository(db *gorm.DB) *PointRepository {
@@ -63,6 +64,7 @@ func (r *PointRepository) RiskLimits() (PointRiskLimits, error) {
 			DailyEarnLimit:                100,
 			MonthlyDiscountLimit:          1000,
 			LargeAdjustmentAlertThreshold: 200,
+			PointExpiryDays:               365,
 		}, nil
 	}
 	if err != nil {
@@ -73,6 +75,7 @@ func (r *PointRepository) RiskLimits() (PointRiskLimits, error) {
 		DailyEarnLimit:                cfg.DailyEarnLimit,
 		MonthlyDiscountLimit:          cfg.MonthlyDiscountLimit,
 		LargeAdjustmentAlertThreshold: cfg.LargeAdjustmentAlertThreshold,
+		PointExpiryDays:               cfg.PointExpiryDays,
 	}, nil
 }
 
@@ -131,6 +134,9 @@ func (r *PointRepository) EarnActivity(userID uint, activityCode, claimKey strin
 		if err := tx.Save(account).Error; err != nil {
 			return err
 		}
+		if err := r.createGrant(tx, userID, points, now, "activity", fmt.Sprintf("%s:%s", activityCode, claimKey), activityCode, fmt.Sprintf("grant:earn:%d:%s:%s", userID, activityCode, claimKey), details); err != nil {
+			return err
+		}
 		return tx.Create(&model.PointLedgerEntry{
 			UserID:       userID,
 			ActivityCode: activityCode,
@@ -165,6 +171,13 @@ func (r *PointRepository) AdjustUserPoints(userID uint, points int64, uniqueKey,
 		if err := tx.Save(account).Error; err != nil {
 			return err
 		}
+		if points > 0 {
+			if err := r.createGrant(tx, userID, points, time.Now().UTC(), "admin", uniqueKey, "", "grant:"+uniqueKey, details); err != nil {
+				return err
+			}
+		} else if err := r.deductAvailableGrants(tx, userID, -points); err != nil {
+			return err
+		}
 		return tx.Create(&model.PointLedgerEntry{
 			UserID:       userID,
 			EventType:    "adjust",
@@ -193,6 +206,9 @@ func (r *PointRepository) FreezeForOrder(tx *gorm.DB, userID, orderID uint, poin
 	if err := tx.Save(account).Error; err != nil {
 		return err
 	}
+	if err := r.freezeAvailableGrants(tx, userID, orderID, points); err != nil {
+		return err
+	}
 	return tx.Create(&model.PointLedgerEntry{
 		UserID:       userID,
 		OrderID:      orderID,
@@ -219,6 +235,9 @@ func (r *PointRepository) ConsumeFrozenForOrder(tx *gorm.DB, userID, orderID uin
 	account.Frozen -= points
 	account.LifetimeSpent += points
 	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+	if err := r.consumeFrozenGrants(tx, userID, orderID, points); err != nil {
 		return err
 	}
 	return tx.Create(&model.PointLedgerEntry{
@@ -257,6 +276,9 @@ func (r *PointRepository) ReleaseFrozenForOrder(tx *gorm.DB, userID, orderID uin
 	account.Frozen -= points
 	account.Balance += points
 	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+	if err := r.releaseFrozenGrants(tx, userID, orderID, points); err != nil {
 		return err
 	}
 	return tx.Create(&model.PointLedgerEntry{
@@ -300,6 +322,9 @@ func (r *PointRepository) RefundConsumedForOrder(tx *gorm.DB, userID, orderID ui
 		account.LifetimeSpent = 0
 	}
 	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+	if err := r.createGrant(tx, userID, points, time.Now().UTC(), "refund", fmt.Sprintf("order:%d", orderID), "", fmt.Sprintf("grant:refund_order:%d", orderID), details); err != nil {
 		return err
 	}
 	return tx.Create(&model.PointLedgerEntry{
@@ -370,6 +395,252 @@ func (r *PointRepository) restoreOrderPoints(tx *gorm.DB, order model.BillingOrd
 		return r.RefundConsumedForOrder(tx, order.UserID, order.ID, order.PointsUsed, details)
 	}
 	return r.ReleaseFrozenForOrder(tx, order.UserID, order.ID, order.PointsUsed, details)
+}
+
+func (r *PointRepository) createGrant(tx *gorm.DB, userID uint, points int64, now time.Time, sourceType, sourceID, activityCode, uniqueKey, details string) error {
+	if points <= 0 {
+		return nil
+	}
+	limits, err := r.RiskLimits()
+	if err != nil {
+		return err
+	}
+	var expiresAt *time.Time
+	if limits.PointExpiryDays > 0 {
+		t := now.UTC().AddDate(0, 0, limits.PointExpiryDays)
+		expiresAt = &t
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.PointGrant{
+		UserID:       userID,
+		SourceType:   sourceType,
+		SourceID:     sourceID,
+		ActivityCode: activityCode,
+		TotalPoints:  points,
+		Remaining:    points,
+		ExpiresAt:    expiresAt,
+		UniqueKey:    uniqueKey,
+		Details:      details,
+	}).Error
+}
+
+func (r *PointRepository) freezeAvailableGrants(tx *gorm.DB, userID, orderID uint, points int64) error {
+	if err := r.ensureGrantBackfill(tx, userID); err != nil {
+		return err
+	}
+	var grants []model.PointGrant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND remaining > 0 AND expired_at IS NULL", userID).
+		Order("CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END, expires_at ASC, id ASC").
+		Find(&grants).Error; err != nil {
+		return err
+	}
+	left := points
+	for i := range grants {
+		if left <= 0 {
+			break
+		}
+		n := grants[i].Remaining
+		if n > left {
+			n = left
+		}
+		grants[i].Remaining -= n
+		grants[i].Frozen += n
+		if grants[i].Details == "" {
+			grants[i].Details = fmt.Sprintf(`{"frozen_for_order_id":%d}`, orderID)
+		}
+		if err := tx.Save(&grants[i]).Error; err != nil {
+			return err
+		}
+		left -= n
+	}
+	if left > 0 {
+		return fmt.Errorf("insufficient point grants")
+	}
+	return nil
+}
+
+func (r *PointRepository) consumeFrozenGrants(tx *gorm.DB, userID, orderID uint, points int64) error {
+	var grants []model.PointGrant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND frozen > 0", userID).
+		Order("CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END, expires_at ASC, id ASC").
+		Find(&grants).Error; err != nil {
+		return err
+	}
+	left := points
+	for i := range grants {
+		if left <= 0 {
+			break
+		}
+		n := grants[i].Frozen
+		if n > left {
+			n = left
+		}
+		grants[i].Frozen -= n
+		if err := tx.Save(&grants[i]).Error; err != nil {
+			return err
+		}
+		left -= n
+	}
+	if left > 0 {
+		return fmt.Errorf("insufficient frozen point grants for order %d", orderID)
+	}
+	return nil
+}
+
+func (r *PointRepository) releaseFrozenGrants(tx *gorm.DB, userID, orderID uint, points int64) error {
+	var grants []model.PointGrant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND frozen > 0", userID).
+		Order("CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END, expires_at ASC, id ASC").
+		Find(&grants).Error; err != nil {
+		return err
+	}
+	left := points
+	for i := range grants {
+		if left <= 0 {
+			break
+		}
+		n := grants[i].Frozen
+		if n > left {
+			n = left
+		}
+		grants[i].Frozen -= n
+		grants[i].Remaining += n
+		if err := tx.Save(&grants[i]).Error; err != nil {
+			return err
+		}
+		left -= n
+	}
+	if left > 0 {
+		return fmt.Errorf("insufficient frozen point grants to release order %d", orderID)
+	}
+	return nil
+}
+
+func (r *PointRepository) deductAvailableGrants(tx *gorm.DB, userID uint, points int64) error {
+	if err := r.ensureGrantBackfill(tx, userID); err != nil {
+		return err
+	}
+	var grants []model.PointGrant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND remaining > 0 AND expired_at IS NULL", userID).
+		Order("CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END, expires_at ASC, id ASC").
+		Find(&grants).Error; err != nil {
+		return err
+	}
+	left := points
+	for i := range grants {
+		if left <= 0 {
+			break
+		}
+		n := grants[i].Remaining
+		if n > left {
+			n = left
+		}
+		grants[i].Remaining -= n
+		if err := tx.Save(&grants[i]).Error; err != nil {
+			return err
+		}
+		left -= n
+	}
+	if left > 0 {
+		return fmt.Errorf("insufficient point grants")
+	}
+	return nil
+}
+
+func (r *PointRepository) ensureGrantBackfill(tx *gorm.DB, userID uint) error {
+	var grantCount int64
+	if err := tx.Model(&model.PointGrant{}).Where("user_id = ?", userID).Count(&grantCount).Error; err != nil {
+		return err
+	}
+	if grantCount > 0 {
+		return nil
+	}
+	account, err := r.getOrCreateAccount(tx, userID, true)
+	if err != nil {
+		return err
+	}
+	accountTotal := account.Balance + account.Frozen
+	if accountTotal <= 0 {
+		return nil
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.PointGrant{
+		UserID:      userID,
+		SourceType:  "backfill",
+		SourceID:    fmt.Sprintf("account:%d", userID),
+		TotalPoints: accountTotal,
+		Remaining:   account.Balance,
+		Frozen:      account.Frozen,
+		UniqueKey:   fmt.Sprintf("grant:backfill:%d", userID),
+		Details:     `{"reason":"legacy_point_balance_backfill"}`,
+	}).Error
+}
+
+func (r *PointRepository) ExpirePointGrants(now time.Time, limit int) (int64, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	var grants []model.PointGrant
+	if err := r.DB.Where("expired_at IS NULL AND remaining > 0 AND expires_at IS NOT NULL AND expires_at <= ?", now.UTC()).
+		Order("expires_at ASC, id ASC").
+		Limit(limit).
+		Find(&grants).Error; err != nil {
+		return 0, err
+	}
+	var expiredTotal int64
+	for _, grant := range grants {
+		if err := r.DB.Transaction(func(tx *gorm.DB) error {
+			var g model.PointGrant
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&g, grant.ID).Error; err != nil {
+				return err
+			}
+			if g.ExpiredAt != nil || g.Remaining <= 0 {
+				return nil
+			}
+			account, err := r.getOrCreateAccount(tx, g.UserID, true)
+			if err != nil {
+				return err
+			}
+			points := g.Remaining
+			if account.Balance < points {
+				points = account.Balance
+			}
+			if points <= 0 {
+				t := now.UTC()
+				g.ExpiredAt = &t
+				g.Remaining = 0
+				return tx.Save(&g).Error
+			}
+			account.Balance -= points
+			if err := tx.Save(account).Error; err != nil {
+				return err
+			}
+			t := now.UTC()
+			g.ExpiredAt = &t
+			g.Remaining = 0
+			if err := tx.Save(&g).Error; err != nil {
+				return err
+			}
+			if err := tx.Create(&model.PointLedgerEntry{
+				UserID:       g.UserID,
+				EventType:    "expire",
+				Points:       points,
+				BalanceAfter: account.Balance,
+				FrozenAfter:  account.Frozen,
+				UniqueKey:    fmt.Sprintf("expire_grant:%d", g.ID),
+				Details:      fmt.Sprintf(`{"grant_id":%d,"expires_at":%q}`, g.ID, g.ExpiresAt),
+			}).Error; err != nil {
+				return err
+			}
+			expiredTotal += points
+			return nil
+		}); err != nil {
+			return expiredTotal, err
+		}
+	}
+	return expiredTotal, nil
 }
 
 func (r *PointRepository) getOrCreateAccount(tx *gorm.DB, userID uint, lock bool) (*model.UserPointAccount, error) {

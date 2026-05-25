@@ -154,6 +154,7 @@ type AdminPointRiskConfigData struct {
 	DailyEarnLimit                int64  `json:"daily_earn_limit"`
 	MonthlyDiscountLimit          int64  `json:"monthly_discount_limit"`
 	LargeAdjustmentAlertThreshold int64  `json:"large_adjustment_alert_threshold"`
+	PointExpiryDays               int    `json:"point_expiry_days"`
 	UpdatedAt                     string `json:"updated_at"`
 }
 
@@ -162,4 +163,5 @@ type AdminUpdatePointRiskConfigRequest struct {
 	DailyEarnLimit                *int64 `json:"daily_earn_limit"`
 	MonthlyDiscountLimit          *int64 `json:"monthly_discount_limit"`
 	LargeAdjustmentAlertThreshold *int64 `json:"large_adjustment_alert_threshold"`
+	PointExpiryDays               *int   `json:"point_expiry_days"`
 }

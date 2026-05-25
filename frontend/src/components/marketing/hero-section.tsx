@@ -9,18 +9,18 @@ import { cn } from "@/lib/utils";
 import { heroStats, trustBadges } from "@/mocks/landing.mock";
 
 const personaFields = [
-  ["marketing.hero.persona.occupationLabel", "marketing.hero.persona.occupationValue", "default"],
-  ["marketing.hero.persona.voiceLabel", "marketing.hero.persona.voiceValue", "default"],
-  ["marketing.hero.persona.topicsLabel", "marketing.hero.persona.topicsValue", "wide"],
-  ["marketing.hero.persona.guardrailsLabel", "marketing.hero.persona.guardrailsValue", "wide"],
-  ["marketing.hero.persona.growthGoalLabel", "marketing.hero.persona.growthGoalValue", "wide"],
+  ["marketing.hero.persona.occupationLabel", "marketing.hero.persona.occupationValue", "default", "default"],
+  ["marketing.hero.persona.voiceLabel", "marketing.hero.persona.voiceValue", "default", "default"],
+  ["marketing.hero.persona.topicsLabel", "marketing.hero.persona.topicsValue", "wide", "default"],
+  ["marketing.hero.persona.guardrailsLabel", "marketing.hero.persona.guardrailsValue", "wide", "mobileHidden"],
+  ["marketing.hero.persona.growthGoalLabel", "marketing.hero.persona.growthGoalValue", "wide", "mobileHidden"],
 ] as const;
 
 const personaTasks = [
-  ["marketing.hero.persona.task1", "marketing.hero.persona.task1Status"],
-  ["marketing.hero.persona.task2", "marketing.hero.persona.task2Status"],
-  ["marketing.hero.persona.task3", "marketing.hero.persona.task3Status"],
-  ["marketing.hero.persona.task4", "marketing.hero.persona.task4Status"],
+  ["marketing.hero.persona.task1", "marketing.hero.persona.task1Status", "default"],
+  ["marketing.hero.persona.task2", "marketing.hero.persona.task2Status", "default"],
+  ["marketing.hero.persona.task3", "marketing.hero.persona.task3Status", "mobileHidden"],
+  ["marketing.hero.persona.task4", "marketing.hero.persona.task4Status", "mobileHidden"],
 ] as const;
 
 const personaSignals = [
@@ -113,25 +113,26 @@ export function HeroSection() {
             </div>
           </div>
 
-          <div className="grid gap-2 p-3.5 sm:grid-cols-3 sm:gap-3 sm:p-5">
+          <div className="grid grid-cols-3 gap-2 p-3.5 sm:gap-3 sm:p-5">
             {personaSignals.map((signal) => (
-              <div key={signal.labelKey} className="rounded-2xl border border-white/10 bg-black/18 p-3">
-                <div className="mb-2 flex items-center gap-2 text-xs text-white/45">
+              <div key={signal.labelKey} className="min-w-0 rounded-2xl border border-white/10 bg-black/18 p-2.5 sm:p-3">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] text-white/45 sm:gap-2 sm:text-xs">
                   <signal.icon className="size-3.5 text-blue-200" />
-                  {t(signal.labelKey)}
+                  <span className="truncate">{t(signal.labelKey)}</span>
                 </div>
-                <p className="text-sm font-semibold text-white">{t(signal.valueKey)}</p>
+                <p className="truncate text-xs font-semibold text-white sm:text-sm">{t(signal.valueKey)}</p>
               </div>
             ))}
           </div>
 
           <div className="grid gap-2 px-3.5 sm:grid-cols-2 sm:gap-3 sm:px-5">
-            {personaFields.map(([labelKey, valueKey, layout]) => (
+            {personaFields.map(([labelKey, valueKey, layout, visibility]) => (
               <div
                 key={labelKey}
                 className={cn(
                   "rounded-xl border border-white/10 bg-[#0b1230]/80 p-3",
-                  layout === "wide" ? "sm:col-span-2" : ""
+                  layout === "wide" ? "sm:col-span-2" : "",
+                  visibility === "mobileHidden" ? "hidden sm:block" : ""
                 )}
               >
                 <p className="text-xs text-white/45">{t(labelKey)}</p>
@@ -151,8 +152,8 @@ export function HeroSection() {
               </span>
             </div>
             <div className="mt-3 space-y-2">
-              {personaTasks.map(([taskKey, statusKey]) => (
-                <div key={taskKey} className="flex items-start gap-2 text-sm text-white/74">
+              {personaTasks.map(([taskKey, statusKey, visibility]) => (
+                <div key={taskKey} className={cn("items-start gap-2 text-sm text-white/74", visibility === "mobileHidden" ? "hidden sm:flex" : "flex")}>
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" />
                   <span className="min-w-0 flex-1">{t(taskKey)}</span>
                   <span className="shrink-0 text-xs text-violet-100/70">{t(statusKey)}</span>

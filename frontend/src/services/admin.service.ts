@@ -175,6 +175,27 @@ export type AdminReferralSummaryApi = {
   purchase_reward_points: number;
 };
 
+export type AdminPointCostSourceApi = {
+  source: string;
+  points: number;
+  usdt_amount: string;
+};
+
+export type AdminPointCostSummaryApi = {
+  period_start: string;
+  period_end: string;
+  points_per_usdt: number;
+  earned_points: number;
+  earned_usdt: string;
+  discounted_points: number;
+  discounted_usdt: string;
+  expired_points: number;
+  expired_usdt: string;
+  outstanding_points: number;
+  outstanding_usdt: string;
+  monthly_earned_by_source: AdminPointCostSourceApi[];
+};
+
 export const adminService = {
   async overview() {
     const res = await request.get<ApiResponse<AdminOverviewApi>>("/admin/overview");
@@ -230,6 +251,10 @@ export const adminService = {
   },
   async referralSummary() {
     const res = await request.get<ApiResponse<AdminReferralSummaryApi>>("/admin/points/referral-summary");
+    return res.data.data;
+  },
+  async pointCostSummary() {
+    const res = await request.get<ApiResponse<AdminPointCostSummaryApi>>("/admin/points/cost-summary");
     return res.data.data;
   },
 };

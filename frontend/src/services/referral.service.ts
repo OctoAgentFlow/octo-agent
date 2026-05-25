@@ -12,7 +12,7 @@ export type ReferralInfoApi = {
   use_count: number;
   signup_inviter_points: number;
   signup_invitee_points: number;
-  first_purchase_points: number;
+  first_purchase_rate_bps: number;
 };
 
 export const referralService = {

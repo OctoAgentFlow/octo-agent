@@ -113,7 +113,7 @@ export default function PointsPage() {
               <p className="mt-2 break-all text-sm text-[#71767b]">{referral.invite_link}</p>
             </div>
             <div className="rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 p-4 text-sm text-white">
-              <p>{t("points.referral.rewards", { signup: referral.signup_inviter_points, invitee: referral.signup_invitee_points, purchase: referral.first_purchase_points })}</p>
+              <p>{t("points.referral.rewards", { signup: referral.signup_inviter_points, invitee: referral.signup_invitee_points, rate: `${referral.first_purchase_rate_bps / 100}%` })}</p>
               <p className="mt-2 text-[#7ee0b5]">{t("points.referral.uses", { count: referral.use_count })}</p>
               <Button type="button" className="mt-4 w-full" onClick={copyInvite}>
                 <Copy className="size-4" />

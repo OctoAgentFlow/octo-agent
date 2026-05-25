@@ -1593,7 +1593,7 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 		return err
 	}
 	if s.referralService != nil {
-		if err := s.referralService.RewardFirstPurchase(order.UserID, order.ID); err != nil {
+		if err := s.referralService.RewardFirstPurchase(order.UserID, order.ID, firstNonEmpty(order.PayableAmount, order.Amount)); err != nil {
 			return err
 		}
 	}

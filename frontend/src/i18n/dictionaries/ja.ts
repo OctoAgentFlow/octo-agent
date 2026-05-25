@@ -1468,7 +1468,7 @@ export const dict: I18nDict = {
   "points.referral.title": "Referral rewards",
   "points.referral.description": "Invite friends to sign up and subscribe. Both sides can earn points.",
   "points.referral.code": "My invite code",
-  "points.referral.rewards": "You get {signup} points when a friend signs up, they get {invitee}; you get another {purchase} after their first purchase.",
+  "points.referral.rewards": "You get {signup} points when a friend signs up, they get {invitee}; after their first purchase, you earn points worth {rate} of the paid amount.",
   "points.referral.uses": "Invited {count} users",
   "points.referral.copy": "Copy invite link",
   "points.referral.copied": "Invite link copied",

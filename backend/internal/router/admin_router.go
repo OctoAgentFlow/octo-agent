@@ -24,4 +24,5 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.GET("/points/redemption-codes", c.ListPointRedemptionCodes)
 	g.POST("/points/redemption-codes", c.CreatePointRedemptionCode)
 	g.GET("/points/referral-summary", c.ReferralSummary)
+	g.GET("/points/cost-summary", c.PointCostSummary)
 }

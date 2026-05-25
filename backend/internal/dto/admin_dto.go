@@ -198,3 +198,24 @@ type AdminReferralSummaryResponse struct {
 	SignupRewardPoints   int64 `json:"signup_reward_points"`
 	PurchaseRewardPoints int64 `json:"purchase_reward_points"`
 }
+
+type AdminPointCostSourceItem struct {
+	Source     string `json:"source"`
+	Points     int64  `json:"points"`
+	USDTAmount string `json:"usdt_amount"`
+}
+
+type AdminPointCostSummaryResponse struct {
+	PeriodStart           string                     `json:"period_start"`
+	PeriodEnd             string                     `json:"period_end"`
+	PointsPerUSDT         int64                      `json:"points_per_usdt"`
+	EarnedPoints          int64                      `json:"earned_points"`
+	EarnedUSDT            string                     `json:"earned_usdt"`
+	DiscountedPoints      int64                      `json:"discounted_points"`
+	DiscountedUSDT        string                     `json:"discounted_usdt"`
+	ExpiredPoints         int64                      `json:"expired_points"`
+	ExpiredUSDT           string                     `json:"expired_usdt"`
+	OutstandingPoints     int64                      `json:"outstanding_points"`
+	OutstandingUSDT       string                     `json:"outstanding_usdt"`
+	MonthlyEarnedBySource []AdminPointCostSourceItem `json:"monthly_earned_by_source"`
+}

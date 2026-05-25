@@ -463,9 +463,133 @@ func (s *AdminService) ReferralSummary(operatorID uint) (*dto.AdminReferralSumma
 	if err := s.db.Model(&model.ReferralRecord{}).Where("first_purchase_rewarded_at IS NOT NULL").Count(&out.FirstPurchaseRewards).Error; err != nil {
 		return nil, err
 	}
-	out.SignupRewardPoints = out.ReferralSignups * (referralSignupInviterPoints + referralSignupInviteePoints)
-	out.PurchaseRewardPoints = out.FirstPurchaseRewards * referralFirstPurchaseInviterPoints
+	if err := s.db.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("event_type = ? AND activity_code IN ?", "earn", []string{"referral_signup_inviter", "referral_signup_invitee"}).
+		Scan(&out.SignupRewardPoints).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("event_type = ? AND activity_code = ?", "earn", "referral_first_purchase").
+		Scan(&out.PurchaseRewardPoints).Error; err != nil {
+		return nil, err
+	}
 	return &out, nil
+}
+
+func (s *AdminService) PointCostSummary(operatorID uint) (*dto.AdminPointCostSummaryResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+
+	earned, err := s.sumPointLedger("created_at >= ? AND created_at < ? AND ((event_type = ?) OR (event_type = ? AND points > 0))", periodStart, periodEnd, "earn", "adjust")
+	if err != nil {
+		return nil, err
+	}
+	discounted, err := s.sumPointLedger("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "consume")
+	if err != nil {
+		return nil, err
+	}
+	expired, err := s.sumPointLedger("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "expire")
+	if err != nil {
+		return nil, err
+	}
+	var outstanding int64
+	if err := s.db.Model(&model.UserPointAccount{}).
+		Select("COALESCE(SUM(balance + frozen), 0)").
+		Scan(&outstanding).Error; err != nil {
+		return nil, err
+	}
+	sources, err := s.monthlyPointSources(periodStart, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AdminPointCostSummaryResponse{
+		PeriodStart:           periodStart.Format(time.RFC3339),
+		PeriodEnd:             periodEnd.Format(time.RFC3339),
+		PointsPerUSDT:         referralRewardPointsPerUSDT,
+		EarnedPoints:          earned,
+		EarnedUSDT:            pointUSDTAmount(earned),
+		DiscountedPoints:      discounted,
+		DiscountedUSDT:        pointUSDTAmount(discounted),
+		ExpiredPoints:         expired,
+		ExpiredUSDT:           pointUSDTAmount(expired),
+		OutstandingPoints:     outstanding,
+		OutstandingUSDT:       pointUSDTAmount(outstanding),
+		MonthlyEarnedBySource: sources,
+	}, nil
+}
+
+func (s *AdminService) sumPointLedger(where string, args ...any) (int64, error) {
+	var total int64
+	err := s.db.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where(where, args...).
+		Scan(&total).Error
+	return total, err
+}
+
+func (s *AdminService) monthlyPointSources(periodStart, periodEnd time.Time) ([]dto.AdminPointCostSourceItem, error) {
+	type sourceRow struct {
+		ActivityCode string
+		Points       int64
+	}
+	var rows []sourceRow
+	if err := s.db.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(NULLIF(activity_code, ''), 'activity') AS activity_code, COALESCE(SUM(points), 0) AS points").
+		Where("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "earn").
+		Group("COALESCE(NULLIF(activity_code, ''), 'activity')").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	sourcePoints := make(map[string]int64)
+	for _, row := range rows {
+		sourcePoints[adminPointCostSource(row.ActivityCode)] += row.Points
+	}
+	var adjustments int64
+	if err := s.db.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("created_at >= ? AND created_at < ? AND event_type = ? AND points > 0", periodStart, periodEnd, "adjust").
+		Scan(&adjustments).Error; err != nil {
+		return nil, err
+	}
+	if adjustments > 0 {
+		sourcePoints["manual_adjustment"] += adjustments
+	}
+	order := []string{"referral", "redemption", "activity", "manual_adjustment", "other"}
+	items := make([]dto.AdminPointCostSourceItem, 0, len(sourcePoints))
+	for _, source := range order {
+		points := sourcePoints[source]
+		if points <= 0 {
+			continue
+		}
+		items = append(items, dto.AdminPointCostSourceItem{Source: source, Points: points, USDTAmount: pointUSDTAmount(points)})
+	}
+	return items, nil
+}
+
+func adminPointCostSource(activityCode string) string {
+	code := strings.ToLower(strings.TrimSpace(activityCode))
+	switch {
+	case strings.HasPrefix(code, "referral_"):
+		return "referral"
+	case code == "redemption_code":
+		return "redemption"
+	default:
+		return "activity"
+	}
+}
+
+func pointUSDTAmount(points int64) string {
+	if points <= 0 {
+		return "0"
+	}
+	return centsToAmountString(points * 10)
 }
 
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {

@@ -1468,7 +1468,7 @@ export const dict: I18nDict = {
   "points.referral.title": "Referral rewards",
   "points.referral.description": "Invite friends to sign up and subscribe. Both sides can earn points.",
   "points.referral.code": "My invite code",
-  "points.referral.rewards": "You get {signup} points when a friend signs up, they get {invitee}; you get another {purchase} after their first purchase.",
+  "points.referral.rewards": "好友註冊你得 {signup} 分，對方得 {invitee} 分；好友首次購買後，你再獲得其實付金額 {rate} 的等值積分。",
   "points.referral.uses": "Invited {count} users",
   "points.referral.copy": "Copy invite link",
   "points.referral.copied": "Invite link copied",

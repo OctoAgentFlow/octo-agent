@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -220,6 +220,7 @@ export default function AdminPage() {
   const [pointRiskConfig, setPointRiskConfig] = useState<AdminPointRiskConfigApi | null>(null);
   const [redemptionCodes, setRedemptionCodes] = useState<AdminPointRedemptionCodeApi[]>([]);
   const [referralSummary, setReferralSummary] = useState<AdminReferralSummaryApi | null>(null);
+  const [pointCostSummary, setPointCostSummary] = useState<AdminPointCostSummaryApi | null>(null);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
 
@@ -240,7 +241,7 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
@@ -248,6 +249,7 @@ export default function AdminPage() {
           adminService.pointRiskConfig(),
           adminService.pointRedemptionCodes(),
           adminService.referralSummary(),
+          adminService.pointCostSummary(),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -257,6 +259,7 @@ export default function AdminPage() {
         setPointRiskConfig(pointRiskConfigData);
         setRedemptionCodes(redemptionData);
         setReferralSummary(referralData);
+        setPointCostSummary(costData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -427,6 +430,7 @@ export default function AdminPage() {
           riskConfig={pointRiskConfig}
           redemptionCodes={redemptionCodes}
           referralSummary={referralSummary}
+          pointCostSummary={pointCostSummary}
           query={pointQuery}
           submittingKey={submittingPointKey}
           onQueryChange={setPointQuery}
@@ -948,6 +952,7 @@ function PointsAdminSection({
   riskConfig,
   redemptionCodes,
   referralSummary,
+  pointCostSummary,
   query,
   submittingKey,
   onQueryChange,
@@ -962,6 +967,7 @@ function PointsAdminSection({
   riskConfig: AdminPointRiskConfigApi | null;
   redemptionCodes: AdminPointRedemptionCodeApi[];
   referralSummary: AdminReferralSummaryApi | null;
+  pointCostSummary: AdminPointCostSummaryApi | null;
   query: string;
   submittingKey: string;
   onQueryChange: (value: string) => void;
@@ -981,6 +987,27 @@ function PointsAdminSection({
         <Metric label={t("admin.points.metrics.users")} value={users.length} icon={Users} tone="good" />
         <Metric label={t("admin.points.metrics.balance")} value={users.reduce((sum, user) => sum + user.balance, 0)} icon={Coins} />
       </div>
+
+      {pointCostSummary ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.cost.title")} description={t("admin.points.cost.description", { points: pointCostSummary.points_per_usdt })} />
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label={t("admin.points.cost.earned")} value={`${pointCostSummary.earned_points} / ${pointCostSummary.earned_usdt} USDT`} icon={Coins} />
+            <Metric label={t("admin.points.cost.discounted")} value={`${pointCostSummary.discounted_points} / ${pointCostSummary.discounted_usdt} USDT`} icon={ReceiptText} tone="warn" />
+            <Metric label={t("admin.points.cost.expired")} value={`${pointCostSummary.expired_points} / ${pointCostSummary.expired_usdt} USDT`} icon={AlertTriangle} />
+            <Metric label={t("admin.points.cost.outstanding")} value={`${pointCostSummary.outstanding_points} / ${pointCostSummary.outstanding_usdt} USDT`} icon={ShieldCheck} tone="good" />
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {pointCostSummary.monthly_earned_by_source.map((item) => (
+              <div key={item.source} className="rounded-2xl border border-[#2f3336] bg-black p-3">
+                <p className="text-xs text-[#71767b]">{t(`admin.points.cost.source.${item.source}`)}</p>
+                <p className="mt-2 font-semibold text-white">{item.points}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{item.usdt_amount} USDT</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       {riskConfig ? (
         <Card className="bg-[#0f1419]">

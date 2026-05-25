@@ -10,19 +10,23 @@ import {
   Bot,
   CheckCircle2,
   ChevronRight,
+  Clock3,
   Copy,
   FilePlus2,
   Globe2,
   Info,
+  ListChecks,
   Lock,
   Mail,
   MessageCircle,
   MessagesSquare,
   RefreshCw,
+  Rocket,
   Save,
   Send,
   Sparkles,
   WalletCards,
+  Workflow,
 } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
@@ -32,12 +36,30 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import { automationService, type AutomationModuleApi } from "@/services/automation.service";
+import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
 import { oafBotService } from "@/services/oaf-bot.service";
+import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
+type BotAutomationType = "post" | "reply" | "comment" | "dm";
+type BotAutomationState = {
+  type: BotAutomationType;
+  enabled: boolean;
+  configured: boolean;
+  mode: "manual" | "review" | "autopilot";
+  href: string;
+};
+type QueueSummary = {
+  total: number;
+  pendingReview: number;
+  readyToPublish: number;
+  failed: number;
+  published: number;
+};
 
 type SelectOption = {
   value: string;
@@ -56,6 +78,7 @@ const personaChecklistKeys = ["name", "account", "role", "language", "personalit
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
+const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -214,6 +237,10 @@ export default function OAFBotsPage() {
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
+  const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
+  const [relationshipLoading, setRelationshipLoading] = useState(true);
   const [limits, setLimits] = useState<PlanLimits>(emptyLimits);
   const [usage, setUsage] = useState<PlanUsage>(emptyUsage);
   const [selectedID, setSelectedID] = useState<number | null>(null);
@@ -247,6 +274,10 @@ export default function OAFBotsPage() {
   const accountByID = useMemo(() => {
     return new Map(accounts.map((account) => [account.id, account]));
   }, [accounts]);
+  const selectedAccount = useMemo(() => {
+    if (!selectedBot?.twitter_account_id) return undefined;
+    return accountByID.get(selectedBot.twitter_account_id);
+  }, [accountByID, selectedBot]);
 
   const accountBoundByOtherBot = useMemo(() => {
     const map = new Map<number, OAFBot>();
@@ -257,6 +288,32 @@ export default function OAFBotsPage() {
     });
     return map;
   }, [bots, selectedID]);
+
+  const selectedPostPlan = useMemo(() => {
+    if (!selectedBot) return undefined;
+    return autoPostPlans.find((plan) => plan.bot_id === selectedBot.id || plan.x_account_id === selectedBot.twitter_account_id);
+  }, [autoPostPlans, selectedBot]);
+
+  const selectedQueueItems = useMemo(() => {
+    if (!selectedID) return [];
+    return queueItems.filter((item) => item.bot_id === selectedID);
+  }, [queueItems, selectedID]);
+
+  const selectedQueueSummary = useMemo(() => summarizeQueue(selectedQueueItems), [selectedQueueItems]);
+
+  const selectedAutomationStates = useMemo<BotAutomationState[]>(() => {
+    return automationTypes.map((type) => {
+      const automationModule = automationModules.find((item) => item.type === type);
+      const mode = type === "post" ? selectedPostPlan?.execution_mode || automationModule?.config.execution_mode || "review" : automationModule?.config.execution_mode || "review";
+      return {
+        type,
+        enabled: type === "post" ? Boolean(selectedPostPlan?.enabled) : Boolean(automationModule?.config.enabled),
+        configured: type === "post" ? Boolean(selectedPostPlan) : Boolean(automationModule),
+        mode,
+        href: automationHref(type),
+      };
+    });
+  }, [automationModules, selectedPostPlan]);
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
@@ -406,6 +463,30 @@ export default function OAFBotsPage() {
     void load();
   }, [load]);
 
+  const loadRelationshipContext = useCallback(async () => {
+    setRelationshipLoading(true);
+    try {
+      const [automationData, planData, queueData] = await Promise.all([
+        automationService.list(),
+        autoPostService.plans(),
+        reviewQueueService.list({ pageSize: 100 }),
+      ]);
+      setAutomationModules(automationData.modules);
+      setAutoPostPlans(planData.items);
+      setQueueItems(queueData.items);
+    } catch {
+      setAutomationModules([]);
+      setAutoPostPlans([]);
+      setQueueItems([]);
+    } finally {
+      setRelationshipLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRelationshipContext();
+  }, [loadRelationshipContext]);
+
   useEffect(() => {
     if (selectedID) return;
     setForm((prev) => {
@@ -508,6 +589,7 @@ export default function OAFBotsPage() {
       const result = await oafBotService.testGenerate(selectedID, sampleScene);
       setSamples(result);
       await loadGenerationUsages(selectedID);
+      void loadRelationshipContext();
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
       pushToast(t("oafBots.test.success"));
     } catch (error) {
@@ -968,6 +1050,15 @@ export default function OAFBotsPage() {
           </SectionCard>
 
           <div className="space-y-5">
+            <BotRelationshipCard
+              t={t}
+              bot={selectedBot}
+              account={selectedAccount}
+              automationStates={selectedAutomationStates}
+              queueItems={selectedQueueItems}
+              queueSummary={selectedQueueSummary}
+              loading={relationshipLoading}
+            />
             <BotPreview
               t={t}
               form={form}
@@ -1119,6 +1210,27 @@ function joinMultiValues(values: string[]) {
   return values.map((item) => item.trim()).filter(Boolean).join(",");
 }
 
+function summarizeQueue(items: ReviewQueueItemApi[]): QueueSummary {
+  return items.reduce<QueueSummary>(
+    (summary, item) => {
+      summary.total += 1;
+      if (item.status === "pending_review") summary.pendingReview += 1;
+      if (item.status === "ready_to_publish") summary.readyToPublish += 1;
+      if (item.status === "failed") summary.failed += 1;
+      if (item.status === "published") summary.published += 1;
+      return summary;
+    },
+    { total: 0, pendingReview: 0, readyToPublish: 0, failed: 0, published: 0 },
+  );
+}
+
+function automationHref(type: BotAutomationType) {
+  if (type === "post") return "/auto-post";
+  if (type === "reply") return "/auto-replies";
+  if (type === "comment") return "/auto-comments";
+  return "/auto-dms";
+}
+
 function getErrorBody(error: unknown): ApiErrorBody | undefined {
   if (!axios.isAxiosError(error)) return undefined;
   return error.response?.data as ApiErrorBody | undefined;
@@ -1154,6 +1266,225 @@ function BotStatusPill({ tone, label }: { tone: "success" | "warning" | "neutral
         ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
         : "border-[#2f3336] bg-black text-[#71767b]";
   return <span className={`rounded-full border px-2.5 py-1 text-[11px] leading-none ${toneClass}`}>{label}</span>;
+}
+
+function BotRelationshipCard({
+  t,
+  bot,
+  account,
+  automationStates,
+  queueItems,
+  queueSummary,
+  loading,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  bot: OAFBot | null;
+  account?: AccountListItem;
+  automationStates: BotAutomationState[];
+  queueItems: ReviewQueueItemApi[];
+  queueSummary: QueueSummary;
+  loading: boolean;
+}) {
+  const recentItems = queueItems.slice(0, 3);
+  const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
+
+  return (
+    <SectionCard title={t("oafBots.relationship.title")} description={t("oafBots.relationship.description")} className="bg-black p-4 md:p-5">
+      {!bot ? (
+        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-amber-400/10 text-amber-100">
+              <Info className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.draftTitle")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{t("oafBots.relationship.draftDescription")}</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                  <Bot className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-[#71767b]">{t("oafBots.relationship.currentBot")}</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{bot.name}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">
+                    {account
+                      ? t("oafBots.relationship.accountBoundDescription", { account: `@${account.username}` })
+                      : t("oafBots.relationship.accountMissingDescription")}
+                  </p>
+                </div>
+              </div>
+              <Link href="/accounts" className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                {account ? t("oafBots.relationship.manageAccount") : t("oafBots.relationship.bindAccount")}
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <RelationshipMetric
+                icon={<WalletCards className="size-4" />}
+                label={t("oafBots.relationship.boundAccount")}
+                value={account ? `@${account.username}` : t("oafBots.relationship.noAccount")}
+                tone={account ? "success" : "warning"}
+              />
+              <RelationshipMetric
+                icon={<Workflow className="size-4" />}
+                label={t("oafBots.relationship.enabledAutomations")}
+                value={t("oafBots.relationship.enabledAutomationsValue", { count: enabledAutomationCount })}
+                tone={enabledAutomationCount > 0 ? "success" : "neutral"}
+              />
+              <RelationshipMetric
+                icon={<ListChecks className="size-4" />}
+                label={t("oafBots.relationship.queueItems")}
+                value={t("oafBots.relationship.queueItemsValue", { count: queueSummary.total })}
+                tone={queueSummary.failed > 0 ? "warning" : queueSummary.total > 0 ? "info" : "neutral"}
+              />
+            </div>
+            {account ? (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs text-[#71767b]">
+                <span className="size-1.5 rounded-full bg-[#1d9bf0]" />
+                {t("oafBots.relationship.accountStatus", { status: t(accountStatusKey(account.status)) })}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.automationTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.automationDescription")}</p>
+              </div>
+              <Rocket className="size-5 shrink-0 text-[#1d9bf0]" />
+            </div>
+            {loading ? (
+              <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b]">{t("oafBots.relationship.loading")}</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {automationStates.map((item) => (
+                  <BotAutomationTile key={item.type} item={item} t={t} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.queueTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.queueDescription")}</p>
+              </div>
+              <Link href="/execution-queue" className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                {t("oafBots.relationship.openQueue")}
+              </Link>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <QueueMiniMetric label={t("oafBots.relationship.pendingReview")} value={queueSummary.pendingReview} />
+              <QueueMiniMetric label={t("oafBots.relationship.readyToPublish")} value={queueSummary.readyToPublish} />
+              <QueueMiniMetric label={t("oafBots.relationship.failed")} value={queueSummary.failed} tone={queueSummary.failed > 0 ? "warning" : "default"} />
+              <QueueMiniMetric label={t("oafBots.relationship.published")} value={queueSummary.published} />
+            </div>
+            <div className="mt-3 space-y-2">
+              {recentItems.length === 0 ? (
+                <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-sm leading-relaxed text-[#71767b]">{t("oafBots.relationship.queueEmpty")}</p>
+              ) : (
+                recentItems.map((item) => <QueuePreviewLine key={`${item.type}-${item.id}`} item={item} t={t} />)
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function RelationshipMetric({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  tone: "success" | "warning" | "info" | "neutral";
+}) {
+  const toneClass = {
+    success: "border-emerald-300/20 bg-emerald-400/10 text-emerald-100",
+    warning: "border-amber-300/20 bg-amber-400/10 text-amber-100",
+    info: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-blue-100",
+    neutral: "border-[#2f3336] bg-black text-[#71767b]",
+  }[tone];
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs text-[#71767b]">
+        <span className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full border ${toneClass}`}>{icon}</span>
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function BotAutomationTile({ item, t }: { item: BotAutomationState; t: (key: string, params?: Record<string, string | number>) => string }) {
+  const tone = item.enabled
+    ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+    : item.configured
+      ? "border-[#2f3336] bg-black text-[#71767b]"
+      : "border-amber-300/20 bg-amber-400/10 text-amber-100";
+  const statusKey = item.enabled ? "accounts.automation.enabled" : item.configured ? "accounts.automation.paused" : "accounts.automation.notConfigured";
+
+  return (
+    <Link href={item.href} className={`min-w-0 rounded-2xl border p-3 transition-colors hover:border-[#1d9bf0]/45 ${tone}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[#e7e9ea]">{t(`accounts.automation.type.${item.type}`)}</p>
+          <p className="mt-1 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`executionQueue.executionMode.${item.mode}`) })}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[11px]">{t(statusKey)}</span>
+      </div>
+    </Link>
+  );
+}
+
+function QueueMiniMetric({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "warning" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border border-[#2f3336] bg-black px-2 py-2 text-center ${tone === "warning" ? "text-amber-100" : "text-[#e7e9ea]"}`}>
+      <p className="text-sm font-semibold">{value}</p>
+      <p className="mt-1 truncate text-[11px] text-[#71767b]">{label}</p>
+    </div>
+  );
+}
+
+function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: string, params?: Record<string, string | number>) => string }) {
+  return (
+    <Link href={`/execution-queue?type=${item.type}`} className="block rounded-xl border border-[#2f3336] bg-black p-3 transition-colors hover:border-[#1d9bf0]/45">
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-semibold text-[#e7e9ea]">{t(`accounts.automation.type.${item.type}`)}</p>
+        <span className="shrink-0 rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] text-[#71767b]">{t(`executionQueue.status.${item.status}`)}</span>
+      </div>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.target_summary || item.content}</p>
+      <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#71767b]">
+        <Clock3 className="size-3" />
+        {formatCompactDate(item.created_at)}
+      </p>
+    </Link>
+  );
+}
+
+function accountStatusKey(status: AccountListItem["status"]) {
+  if (status === "connected") return "accounts.status.connected";
+  if (status === "needs_reauth") return "accounts.status.needsReauth";
+  return "accounts.status.disconnected";
+}
+
+function formatCompactDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {

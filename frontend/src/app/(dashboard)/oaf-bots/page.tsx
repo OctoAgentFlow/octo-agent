@@ -511,6 +511,23 @@ export default function OAFBotsPage() {
     }
   };
 
+  const handlePreviewTest = () => {
+    if (!canTestBot) {
+      pushToast(t("oafBots.test.disabledHint"));
+      return;
+    }
+    setActiveStep("test");
+    if (!selectedID) {
+      pushToast(t("oafBots.test.saveFirst"));
+      return;
+    }
+    if (formChanged) {
+      pushToast(t("oafBots.test.saveChangesFirst"));
+      return;
+    }
+    void testGenerate();
+  };
+
   const handleSampleSceneChange = (scene: SampleScene) => {
     setSampleScene(scene);
     setSamples(null);
@@ -921,7 +938,10 @@ export default function OAFBotsPage() {
               account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
               completion={personaCompleteness}
               checklist={personaChecklist}
-              onTest={goTestStep}
+              selectedID={selectedID}
+              formChanged={formChanged}
+              generating={generating}
+              onTest={handlePreviewTest}
               canTest={canTestBot}
               occupationOptions={occupationOptions}
               industryOptions={industryOptions}
@@ -1521,6 +1541,9 @@ function BotPreview({
   account,
   completion,
   checklist,
+  selectedID,
+  formChanged,
+  generating,
   onTest,
   canTest,
   occupationOptions,
@@ -1539,6 +1562,9 @@ function BotPreview({
     missing: string[];
     nextSuggestion: string;
   };
+  selectedID: number | null;
+  formChanged: boolean;
+  generating: boolean;
   onTest: () => void;
   canTest: boolean;
   occupationOptions: ChipOption[];
@@ -1554,6 +1580,20 @@ function BotPreview({
   const currentPrimaryLanguage = form.primary_language || defaultPrimaryLanguage;
   const currentLanguageStrategy = form.language_strategy || "follow_context";
   const defaultBadge = isDefaultLanguageConfig ? ` · ${t("oafBots.languageConfig.defaultBadge")}` : "";
+  const modeTone = !selectedID ? "draft" : formChanged ? "unsaved" : "ready";
+  const modeClass =
+    modeTone === "ready"
+      ? "border-emerald-300/15 bg-emerald-400/10 text-emerald-100"
+      : modeTone === "unsaved"
+        ? "border-blue-300/15 bg-blue-400/10 text-blue-100"
+        : "border-amber-300/15 bg-amber-400/10 text-amber-100";
+  const testButtonLabel = !selectedID
+    ? t("oafBots.preview.saveBeforeTest")
+    : formChanged
+      ? t("oafBots.preview.saveChangesBeforeTest")
+      : generating
+        ? t("oafBots.actions.generating")
+        : t("oafBots.actions.generate");
   const languageSummaryRows = [
     { label: t("oafBots.fields.primaryLanguage"), value: `${getSelectLabel(currentPrimaryLanguage, languageOptions)}${defaultBadge}` },
     { label: t("oafBots.fields.languageStrategy"), value: `${getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}${defaultBadge}` },
@@ -1577,6 +1617,11 @@ function BotPreview({
             <p className="truncate text-base font-bold text-[#e7e9ea]">{form.name || t("oafBots.preview.unnamed")}</p>
             <p className="text-xs text-[#71767b]">{account ? `@${account.username}` : t("oafBots.preview.noAccount")}</p>
           </div>
+        </div>
+
+        <div className={`mt-4 rounded-xl border p-3 ${modeClass}`}>
+          <p className="text-xs opacity-75">{t(`oafBots.preview.mode.${modeTone}.title`)}</p>
+          <p className="mt-1 text-sm leading-relaxed text-white/78">{t(`oafBots.preview.mode.${modeTone}.description`)}</p>
         </div>
 
         <div className="mt-5">
@@ -1610,11 +1655,13 @@ function BotPreview({
             <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
-          <Button type="button" onClick={onTest} disabled={!canTest} className="w-full disabled:opacity-50">
-            <Sparkles className="size-4" />
-            {t("oafBots.actions.testBot")}
+          <Button type="button" onClick={onTest} disabled={!canTest || generating} className="w-full disabled:opacity-50">
+            {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {testButtonLabel}
           </Button>
-          {!canTest ? <p className="text-xs leading-relaxed text-[#71767b]">{t("oafBots.test.disabledHint")}</p> : null}
+          <p className="text-xs leading-relaxed text-[#71767b]">
+            {!canTest ? t("oafBots.test.disabledHint") : selectedID && !formChanged ? t("oafBots.preview.testReadyHint") : t("oafBots.preview.testNeedsSaveHint")}
+          </p>
         </div>
 
         {showDetails && previewRows.length > 0 ? (

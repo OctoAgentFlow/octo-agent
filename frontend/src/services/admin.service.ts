@@ -144,6 +144,14 @@ export type AdminPointUsersApi = {
   };
 };
 
+export type AdminPointRiskConfigApi = {
+  enabled: boolean;
+  daily_earn_limit: number;
+  monthly_discount_limit: number;
+  large_adjustment_alert_threshold: number;
+  updated_at: string;
+};
+
 export const adminService = {
   async overview() {
     const res = await request.get<ApiResponse<AdminOverviewApi>>("/admin/overview");
@@ -179,6 +187,14 @@ export const adminService = {
   },
   async adjustUserPoints(userId: number, body: { points: number; reason: string }) {
     const res = await request.post<ApiResponse<AdminPointUserApi>>(`/admin/points/users/${userId}/adjust`, body);
+    return res.data.data;
+  },
+  async pointRiskConfig() {
+    const res = await request.get<ApiResponse<AdminPointRiskConfigApi>>("/admin/points/risk-config");
+    return res.data.data;
+  },
+  async updatePointRiskConfig(body: Partial<AdminPointRiskConfigApi>) {
+    const res = await request.patch<ApiResponse<AdminPointRiskConfigApi>>("/admin/points/risk-config", body);
     return res.data.data;
   },
 };

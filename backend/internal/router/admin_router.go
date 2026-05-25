@@ -19,4 +19,6 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.PATCH("/points/activities/:id", c.UpdatePointActivity)
 	g.GET("/points/users", c.ListPointUsers)
 	g.POST("/points/users/:id/adjust", c.AdjustUserPoints)
+	g.GET("/points/risk-config", c.PointRiskConfig)
+	g.PATCH("/points/risk-config", c.UpdatePointRiskConfig)
 }

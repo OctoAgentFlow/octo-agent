@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/billingevm"
 	"octo-agent/backend/internal/billingtron"
 	"octo-agent/backend/internal/config"
@@ -58,8 +59,6 @@ const (
 	billingAutoScanConfirmed = "confirmed"
 	billingAutoScanSkipped   = "skipped"
 	billingAutoScanFailed    = "failed"
-
-	pointMonthlyDiscountLimit = int64(1000)
 )
 
 type billingScanGroupKey struct {
@@ -227,8 +226,18 @@ func (s *BillingService) applyPointDiscount(userID uint, quote *billingQuoteCalc
 		balance = account.Balance
 	}
 	maxByAmount := (quote.payableCents / 2) / 10
-	monthlyRemaining := pointMonthlyDiscountLimit
+	monthlyRemaining := balance
 	if s.pointRepo != nil {
+		limits, err := s.pointRepo.RiskLimits()
+		if err != nil {
+			return err
+		}
+		monthlyRemaining = 0
+		if !limits.Enabled || limits.MonthlyDiscountLimit <= 0 {
+			monthlyRemaining = balance
+		} else {
+			monthlyRemaining = limits.MonthlyDiscountLimit
+		}
 		now := time.Now().UTC()
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 		usedThisMonth, err := s.pointRepo.DiscountPointsInPeriod(userID, monthStart, monthStart.AddDate(0, 1, 0))
@@ -238,6 +247,21 @@ func (s *BillingService) applyPointDiscount(userID uint, quote *billingQuoteCalc
 		monthlyRemaining -= usedThisMonth
 		if monthlyRemaining < 0 {
 			monthlyRemaining = 0
+		}
+		if limits.Enabled && requestedPoints > monthlyRemaining && limits.MonthlyDiscountLimit > 0 {
+			alert.Notify(context.Background(), alert.Event{
+				Level:    alert.LevelWarning,
+				Category: alert.CategoryBilling,
+				Title:    "Point discount risk limit hit",
+				Message:  "A user attempted to use points beyond the configured monthly discount limit.",
+				UserID:   userID,
+				Fields: map[string]any{
+					"requested_points": requestedPoints,
+					"used_this_month":  usedThisMonth,
+					"monthly_limit":    limits.MonthlyDiscountLimit,
+					"remaining":        monthlyRemaining,
+				},
+			})
 		}
 	}
 	maxPoints := minInt64(balance, minInt64(maxByAmount, monthlyRemaining))

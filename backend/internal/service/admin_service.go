@@ -1,12 +1,14 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/config"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
@@ -309,6 +311,22 @@ func (s *AdminService) AdjustUserPoints(operatorID, targetID uint, req dto.Admin
 	if err := s.pointRepo.AdjustUserPoints(targetID, req.Points, uniqueKey, string(details)); err != nil {
 		return nil, err
 	}
+	if limits, err := s.pointRepo.RiskLimits(); err == nil && limits.Enabled && limits.LargeAdjustmentAlertThreshold > 0 && absInt64(req.Points) >= limits.LargeAdjustmentAlertThreshold {
+		alert.Notify(context.Background(), alert.Event{
+			Level:    alert.LevelWarning,
+			Category: alert.CategoryBilling,
+			Title:    "Large manual point adjustment",
+			Message:  "An admin manually adjusted user points beyond the configured alert threshold.",
+			UserID:   targetID,
+			Fields: map[string]any{
+				"operator_id":       operator.ID,
+				"operator_email":    operator.Email,
+				"adjust_points":     req.Points,
+				"threshold":         limits.LargeAdjustmentAlertThreshold,
+				"adjustment_reason": strings.TrimSpace(req.Reason),
+			},
+		})
+	}
 	users, err := s.ListPointUsers(operatorID, dto.AdminPointUserQuery{Query: fmt.Sprintf("%d", targetID), Page: 1, PageSize: 1})
 	if err != nil {
 		return nil, err
@@ -319,6 +337,54 @@ func (s *AdminService) AdjustUserPoints(operatorID, targetID uint, req dto.Admin
 		}
 	}
 	return &dto.AdminPointUserItem{UserID: targetID}, nil
+}
+
+func (s *AdminService) PointRiskConfig(operatorID uint) (*dto.AdminPointRiskConfigData, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.getOrCreatePointRiskConfig()
+	if err != nil {
+		return nil, err
+	}
+	out := adminPointRiskConfigDTO(*cfg)
+	return &out, nil
+}
+
+func (s *AdminService) UpdatePointRiskConfig(operatorID uint, req dto.AdminUpdatePointRiskConfigRequest) (*dto.AdminPointRiskConfigData, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.getOrCreatePointRiskConfig()
+	if err != nil {
+		return nil, err
+	}
+	if req.Enabled != nil {
+		cfg.Enabled = *req.Enabled
+	}
+	if req.DailyEarnLimit != nil {
+		if *req.DailyEarnLimit < 0 || *req.DailyEarnLimit > 1000000 {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.DailyEarnLimit = *req.DailyEarnLimit
+	}
+	if req.MonthlyDiscountLimit != nil {
+		if *req.MonthlyDiscountLimit < 0 || *req.MonthlyDiscountLimit > 1000000 {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.MonthlyDiscountLimit = *req.MonthlyDiscountLimit
+	}
+	if req.LargeAdjustmentAlertThreshold != nil {
+		if *req.LargeAdjustmentAlertThreshold < 0 || *req.LargeAdjustmentAlertThreshold > 1000000 {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.LargeAdjustmentAlertThreshold = *req.LargeAdjustmentAlertThreshold
+	}
+	if err := s.db.Save(cfg).Error; err != nil {
+		return nil, err
+	}
+	out := adminPointRiskConfigDTO(*cfg)
+	return &out, nil
 }
 
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {
@@ -602,6 +668,45 @@ func adminPointActivityDTO(activity model.PointActivity) dto.AdminPointActivityI
 		item.EndsAt = activity.EndsAt.UTC().Format(time.RFC3339)
 	}
 	return item
+}
+
+func adminPointRiskConfigDTO(cfg model.PointRiskConfig) dto.AdminPointRiskConfigData {
+	return dto.AdminPointRiskConfigData{
+		Enabled:                       cfg.Enabled,
+		DailyEarnLimit:                cfg.DailyEarnLimit,
+		MonthlyDiscountLimit:          cfg.MonthlyDiscountLimit,
+		LargeAdjustmentAlertThreshold: cfg.LargeAdjustmentAlertThreshold,
+		UpdatedAt:                     cfg.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *AdminService) getOrCreatePointRiskConfig() (*model.PointRiskConfig, error) {
+	var cfg model.PointRiskConfig
+	err := s.db.Where("code = ?", "default").First(&cfg).Error
+	if err == nil {
+		return &cfg, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	cfg = model.PointRiskConfig{
+		Code:                          "default",
+		DailyEarnLimit:                100,
+		MonthlyDiscountLimit:          1000,
+		LargeAdjustmentAlertThreshold: 200,
+		Enabled:                       true,
+	}
+	if err := s.db.Create(&cfg).Error; err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func absInt64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func parseOptionalAdminTime(value string) (*time.Time, error) {

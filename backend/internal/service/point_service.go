@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/repository"
@@ -25,8 +27,6 @@ type pointActivityDefinition struct {
 	ClaimPeriod string
 	Claimable   func(*PointService, uint) bool
 }
-
-const pointDailyEarnLimit = int64(100)
 
 func NewPointService(pointRepo *repository.PointRepository, oafBotRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *PointService {
 	return &PointService{pointRepo: pointRepo, oafBotRepo: oafBotRepo, accountRepo: accountRepo}
@@ -100,12 +100,32 @@ func (s *PointService) Claim(userID uint, req dto.PointClaimRequest) (*dto.Point
 		return nil, fmt.Errorf("activity is not claimable")
 	}
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	earnedToday, err := s.pointRepo.EarnedPointsInPeriod(userID, dayStart, dayStart.AddDate(0, 0, 1))
+	limits, err := s.pointRepo.RiskLimits()
 	if err != nil {
 		return nil, err
 	}
-	if earnedToday+selected.Points > pointDailyEarnLimit {
-		return nil, fmt.Errorf("daily point earning limit reached")
+	if limits.Enabled && limits.DailyEarnLimit > 0 {
+		earnedToday, err := s.pointRepo.EarnedPointsInPeriod(userID, dayStart, dayStart.AddDate(0, 0, 1))
+		if err != nil {
+			return nil, err
+		}
+		if earnedToday+selected.Points > limits.DailyEarnLimit {
+			alert.Notify(context.Background(), alert.Event{
+				Level:      alert.LevelWarning,
+				Category:   alert.CategoryBilling,
+				Title:      "Point earning risk limit hit",
+				Message:    "A user attempted to claim points beyond the configured daily earning limit.",
+				UserID:     userID,
+				ResourceID: 0,
+				Fields: map[string]any{
+					"activity_code":    selected.Code,
+					"requested_points": selected.Points,
+					"earned_today":     earnedToday,
+					"daily_limit":      limits.DailyEarnLimit,
+				},
+			})
+			return nil, fmt.Errorf("daily point earning limit reached")
+		}
 	}
 	details, _ := json.Marshal(map[string]any{"activity": selected.Code, "title": selected.Title})
 	if err := s.pointRepo.EarnActivity(userID, selected.Code, pointClaimKey(selected.ClaimPeriod, now), selected.Points, now, string(details)); err != nil {

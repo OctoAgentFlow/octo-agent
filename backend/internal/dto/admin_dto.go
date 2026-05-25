@@ -148,3 +148,18 @@ type AdminAdjustUserPointsRequest struct {
 	Points int64  `json:"points" binding:"required"`
 	Reason string `json:"reason" binding:"required"`
 }
+
+type AdminPointRiskConfigData struct {
+	Enabled                       bool   `json:"enabled"`
+	DailyEarnLimit                int64  `json:"daily_earn_limit"`
+	MonthlyDiscountLimit          int64  `json:"monthly_discount_limit"`
+	LargeAdjustmentAlertThreshold int64  `json:"large_adjustment_alert_threshold"`
+	UpdatedAt                     string `json:"updated_at"`
+}
+
+type AdminUpdatePointRiskConfigRequest struct {
+	Enabled                       *bool  `json:"enabled"`
+	DailyEarnLimit                *int64 `json:"daily_earn_limit"`
+	MonthlyDiscountLimit          *int64 `json:"monthly_discount_limit"`
+	LargeAdjustmentAlertThreshold *int64 `json:"large_adjustment_alert_threshold"`
+}

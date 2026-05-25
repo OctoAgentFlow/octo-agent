@@ -202,6 +202,39 @@ func (ctl *AdminController) AdjustUserPoints(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) PointRiskConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.PointRiskConfig(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdatePointRiskConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminUpdatePointRiskConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdatePointRiskConfig(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func adminError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrAdminForbidden):

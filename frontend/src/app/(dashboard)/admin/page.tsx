@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointUserApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -217,6 +217,7 @@ export default function AdminPage() {
   const [submittingOrder, setSubmittingOrder] = useState<string | null>(null);
   const [pointActivities, setPointActivities] = useState<AdminPointActivityApi[]>([]);
   const [pointUsers, setPointUsers] = useState<AdminPointUserApi[]>([]);
+  const [pointRiskConfig, setPointRiskConfig] = useState<AdminPointRiskConfigApi | null>(null);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
 
@@ -237,17 +238,19 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
           adminService.pointUsers({ page: 1, page_size: 20, query: pointQuery.trim() || undefined }),
+          adminService.pointRiskConfig(),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
         setTotalUsers(usersData.pagination.total);
         setPointActivities(activitiesData);
         setPointUsers(pointUsersData.items);
+        setPointRiskConfig(pointRiskConfigData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -337,6 +340,19 @@ export default function AdminPage() {
     }
   };
 
+  const updatePointRiskConfig = async (patch: Partial<AdminPointRiskConfigApi>) => {
+    setSubmittingPointKey("risk");
+    try {
+      const next = await adminService.updatePointRiskConfig(patch);
+      setPointRiskConfig(next);
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -389,12 +405,14 @@ export default function AdminPage() {
         <PointsAdminSection
           activities={pointActivities}
           users={pointUsers}
+          riskConfig={pointRiskConfig}
           query={pointQuery}
           submittingKey={submittingPointKey}
           onQueryChange={setPointQuery}
           onRefresh={() => void fetchAdmin({ quiet: true })}
           onUpdateActivity={updatePointActivity}
           onAdjustPoints={adjustPoints}
+          onUpdateRiskConfig={updatePointRiskConfig}
         />
       ) : null}
       {activeSection === "activity" ? <ActivitySection overview={overview} /> : null}
@@ -905,21 +923,25 @@ function AdminAmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { 
 function PointsAdminSection({
   activities,
   users,
+  riskConfig,
   query,
   submittingKey,
   onQueryChange,
   onRefresh,
   onUpdateActivity,
   onAdjustPoints,
+  onUpdateRiskConfig,
 }: {
   activities: AdminPointActivityApi[];
   users: AdminPointUserApi[];
+  riskConfig: AdminPointRiskConfigApi | null;
   query: string;
   submittingKey: string;
   onQueryChange: (value: string) => void;
   onRefresh: () => void;
   onUpdateActivity: (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => void;
   onAdjustPoints: (userId: number, points: number, reason: string) => void;
+  onUpdateRiskConfig: (patch: Partial<AdminPointRiskConfigApi>) => void;
 }) {
   const { t } = useT();
   const [adjustValues, setAdjustValues] = useState<Record<number, { points: string; reason: string }>>({});
@@ -930,6 +952,41 @@ function PointsAdminSection({
         <Metric label={t("admin.points.metrics.users")} value={users.length} icon={Users} tone="good" />
         <Metric label={t("admin.points.metrics.balance")} value={users.reduce((sum, user) => sum + user.balance, 0)} icon={Coins} />
       </div>
+
+      {riskConfig ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.risk.title")} description={t("admin.points.risk.description")} />
+          <div className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1fr]">
+            <button
+              type="button"
+              className={`rounded-2xl border p-4 text-left ${riskConfig.enabled ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}
+              disabled={submittingKey === "risk"}
+              onClick={() => onUpdateRiskConfig({ enabled: !riskConfig.enabled })}
+            >
+              <p className="text-xs text-[#71767b]">{t("admin.points.risk.enabled")}</p>
+              <p className="mt-2 font-semibold text-white">{riskConfig.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</p>
+            </button>
+            <RiskInput
+              label={t("admin.points.risk.dailyEarn")}
+              value={riskConfig.daily_earn_limit}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ daily_earn_limit: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.monthlyDiscount")}
+              value={riskConfig.monthly_discount_limit}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ monthly_discount_limit: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.largeAdjust")}
+              value={riskConfig.large_adjustment_alert_threshold}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ large_adjustment_alert_threshold: value })}
+            />
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.points.activities.title")} description={t("admin.points.activities.description")} />
@@ -1052,6 +1109,22 @@ function PointsAdminSection({
         </div>
       </Card>
     </div>
+  );
+}
+
+function RiskInput({ label, value, disabled, onSave }: { label: string; value: number; disabled?: boolean; onSave: (value: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  return (
+    <label className="rounded-2xl border border-[#2f3336] bg-black p-4 text-xs text-[#71767b]">
+      {label}
+      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Input type="number" min={0} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} />
+        <Button type="button" disabled={disabled || Number(draft) === value || Number(draft) < 0} onClick={() => onSave(Number(draft) || 0)}>
+          OK
+        </Button>
+      </div>
+    </label>
   );
 }
 

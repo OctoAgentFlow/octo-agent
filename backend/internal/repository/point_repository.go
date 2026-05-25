@@ -13,6 +13,13 @@ import (
 
 type PointRepository struct{ DB *gorm.DB }
 
+type PointRiskLimits struct {
+	Enabled                       bool
+	DailyEarnLimit                int64
+	MonthlyDiscountLimit          int64
+	LargeAdjustmentAlertThreshold int64
+}
+
 func NewPointRepository(db *gorm.DB) *PointRepository {
 	return &PointRepository{DB: db}
 }
@@ -45,6 +52,28 @@ func (r *PointRepository) Activities(now time.Time) ([]model.PointActivity, erro
 		Order("sort_order ASC, id ASC").
 		Find(&rows).Error
 	return rows, err
+}
+
+func (r *PointRepository) RiskLimits() (PointRiskLimits, error) {
+	var cfg model.PointRiskConfig
+	err := r.DB.Where("code = ?", "default").First(&cfg).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return PointRiskLimits{
+			Enabled:                       true,
+			DailyEarnLimit:                100,
+			MonthlyDiscountLimit:          1000,
+			LargeAdjustmentAlertThreshold: 200,
+		}, nil
+	}
+	if err != nil {
+		return PointRiskLimits{}, err
+	}
+	return PointRiskLimits{
+		Enabled:                       cfg.Enabled,
+		DailyEarnLimit:                cfg.DailyEarnLimit,
+		MonthlyDiscountLimit:          cfg.MonthlyDiscountLimit,
+		LargeAdjustmentAlertThreshold: cfg.LargeAdjustmentAlertThreshold,
+	}, nil
 }
 
 func (r *PointRepository) EarnedPointsInPeriod(userID uint, start, end time.Time) (int64, error) {

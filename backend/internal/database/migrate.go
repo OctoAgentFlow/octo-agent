@@ -19,6 +19,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.UserWallet{},
 		&model.UserPointAccount{},
 		&model.PointActivity{},
+		&model.PointRiskConfig{},
 		&model.PointLedgerEntry{},
 		&model.PointActivityClaim{},
 		&model.TwitterAccount{},
@@ -60,6 +61,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := SeedDefaultPointActivities(db); err != nil {
+		return err
+	}
+	if err := SeedDefaultPointRiskConfig(db); err != nil {
 		return err
 	}
 	return BackfillUserOwnerRole(db)
@@ -111,6 +115,24 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 	return nil
 }
 
+func SeedDefaultPointRiskConfig(db *gorm.DB) error {
+	var existing model.PointRiskConfig
+	err := db.Where("code = ?", "default").First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&model.PointRiskConfig{
+		Code:                          "default",
+		DailyEarnLimit:                100,
+		MonthlyDiscountLimit:          1000,
+		LargeAdjustmentAlertThreshold: 200,
+		Enabled:                       true,
+	}).Error
+}
+
 // ApplyTableComments keeps table comments readable in MySQL.
 func ApplyTableComments(db *gorm.DB) error {
 	modelComments := []struct {
@@ -124,6 +146,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.UserWallet{}, "用户钱包绑定记录"},
 		{&model.UserPointAccount{}, "用户积分账户"},
 		{&model.PointActivity{}, "积分活动配置"},
+		{&model.PointRiskConfig{}, "积分风控配置"},
 		{&model.PointLedgerEntry{}, "积分账本事件"},
 		{&model.PointActivityClaim{}, "积分活动领取记录"},
 		{&model.TwitterAccount{}, "用户绑定的X账号信息"},

@@ -226,7 +226,18 @@ export default function OAFBotsPage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
+  const botListStats = useMemo(() => {
+    const bound = bots.filter((bot) => Boolean(bot.twitter_account_id)).length;
+    const ready = bots.filter((bot) => calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage)) >= 60).length;
+    return { bound, ready };
+  }, [bots, defaultPrimaryLanguage]);
+  const selectedMonthlyUsageTotal = useMemo(() => {
+    if (!selectedID) return 0;
+    const usageByScene = aggregateMonthlyUsage(generationUsages, currentMonth);
+    return usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
+  }, [currentMonth, generationUsages, selectedID]);
   const canCreate = usage.oafBots < limits.maxBots;
   const formChanged = useMemo(() => {
     if (!selectedBot) return false;
@@ -604,32 +615,57 @@ export default function OAFBotsPage() {
                 </div>
               </div>
             ) : (
-              bots.map((bot) => {
-                const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : null;
-                return (
-                  <button
-                    key={bot.id}
-                    type="button"
-                    onClick={() => selectBot(bot)}
-                    className={`w-full rounded-xl border p-3.5 text-left transition ${
-                      selectedID === bot.id ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419] hover:bg-[#16181c]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-[#e7e9ea]">{bot.name}</p>
-                        <p className="mt-1 text-xs text-[#71767b]">
-                          {account ? `@${account.username}` : t("oafBots.list.unbound")}
-                        </p>
+              <>
+                <div className="mb-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.list.configuredOverview")}</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <ListStat label={t("oafBots.list.totalBots")} value={bots.length} />
+                    <ListStat label={t("oafBots.list.boundBots")} value={botListStats.bound} />
+                    <ListStat label={t("oafBots.list.readyBots")} value={botListStats.ready} />
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-[#71767b]">{t("oafBots.list.configuredHint")}</p>
+                </div>
+                {bots.map((bot) => {
+                  const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : null;
+                  const botCompletion = calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage));
+                  const ready = botCompletion >= 60;
+                  const selected = selectedID === bot.id;
+                  const selectedUsageTotal = selected ? selectedMonthlyUsageTotal : null;
+                  return (
+                    <button
+                      key={bot.id}
+                      type="button"
+                      onClick={() => selectBot(bot)}
+                      className={`w-full rounded-xl border p-3.5 text-left transition ${
+                        selected ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419] hover:bg-[#16181c]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[#e7e9ea]">{bot.name}</p>
+                          <p className="mt-1 truncate text-xs text-[#71767b]">
+                            {account ? `@${account.username}` : t("oafBots.list.unbound")}
+                          </p>
+                        </div>
+                        <ChevronRight className="mt-1 size-4 shrink-0 text-[#71767b]" />
                       </div>
-                      <ChevronRight className="mt-1 size-4 shrink-0 text-[#71767b]" />
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-[#e7e9ea]/72">
-                      {bot.identity_summary || t("oafBots.list.noSummary")}
-                    </p>
-                  </button>
-                );
-              })
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <BotStatusPill tone={account ? "success" : "warning"} label={account ? t("oafBots.list.status.bound") : t("oafBots.list.status.unbound")} />
+                        <BotStatusPill tone={ready ? "success" : "warning"} label={ready ? t("oafBots.list.status.ready") : t("oafBots.list.status.needsSetup")} />
+                        <BotStatusPill tone="neutral" label={t("oafBots.list.status.completeness", { percent: botCompletion })} />
+                      </div>
+                      <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-[#e7e9ea]/72">
+                        {bot.identity_summary || t("oafBots.list.noSummary")}
+                      </p>
+                      <div className="mt-3 rounded-xl border border-[#2f3336] bg-black/40 px-3 py-2 text-xs text-[#71767b]">
+                        {selectedUsageTotal === null
+                          ? t("oafBots.list.usageSelectHint")
+                          : t("oafBots.list.usageCurrentMonth", { count: selectedUsageTotal })}
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
             )}
           </div>
         </SectionCard>
@@ -1099,6 +1135,25 @@ function QuotaCard({ label, used, limit }: { label: string; used: number; limit:
       <p className="mt-2 text-lg font-bold text-[#e7e9ea]">{used}<span className="text-sm font-normal text-[#71767b]"> / {limit}</span></p>
     </div>
   );
+}
+
+function ListStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black px-2.5 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 text-base font-bold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function BotStatusPill({ tone, label }: { tone: "success" | "warning" | "neutral"; label: string }) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+      : tone === "warning"
+        ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+        : "border-[#2f3336] bg-black text-[#71767b]";
+  return <span className={`rounded-full border px-2.5 py-1 text-[11px] leading-none ${toneClass}`}>{label}</span>;
 }
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {

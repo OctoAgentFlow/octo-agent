@@ -53,13 +53,31 @@ func (s *AccountService) List(userID uint) (*dto.AccountListResponse, error) {
 	}
 	items := make([]dto.AccountItem, 0, len(accounts))
 	for _, acc := range accounts {
+		missingScopes := missingRequiredPublishScopes(acc.OAuthScopes)
+		status := strings.TrimSpace(acc.Status)
+		if status == "" {
+			status = "connected"
+		}
+		hasAccessToken := strings.TrimSpace(acc.AccessToken) != ""
+		publishIssue := ""
+		if !strings.EqualFold(status, "connected") {
+			publishIssue = "needs_reauth"
+		} else if !hasAccessToken {
+			publishIssue = "missing_access_token"
+		} else if len(missingScopes) > 0 {
+			publishIssue = "missing_tweet_write"
+		}
 		item := dto.AccountItem{
-			ID:          acc.ID,
-			AvatarURL:   acc.AvatarURL,
-			Username:    acc.Username,
-			DisplayName: acc.DisplayName,
-			Status:      acc.Status,
-			Followers:   acc.Followers,
+			ID:                    acc.ID,
+			AvatarURL:             acc.AvatarURL,
+			Username:              acc.Username,
+			DisplayName:           acc.DisplayName,
+			Status:                status,
+			Followers:             acc.Followers,
+			PublishReady:          publishIssue == "",
+			PublishReauthRequired: publishIssue != "",
+			PublishIssue:          publishIssue,
+			MissingScopes:         missingScopes,
 		}
 		if acc.LastSyncedAt != nil {
 			item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
@@ -398,6 +416,13 @@ func (s *AccountService) normalizedTokenScopes(scope string) string {
 		return s.requestedOAuthScopes()
 	}
 	return scopes
+}
+
+func missingRequiredPublishScopes(scopes string) []string {
+	if hasOAuthScope(scopes, "tweet.write") {
+		return nil
+	}
+	return []string{"tweet.write"}
 }
 
 func sha256Bytes(s string) []byte {

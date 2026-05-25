@@ -12,6 +12,7 @@ func RegisterOAFBot(rg *gin.RouterGroup, c *controller.OAFBotController) {
 	group.Use(middleware.Auth())
 	group.GET("", c.List)
 	group.POST("", c.Create)
+	group.POST("/complete-profile", c.CompleteProfile)
 	group.GET("/:id", c.Get)
 	group.PUT("/:id", c.Update)
 	group.POST("/:id/test-generate", c.TestGenerate)

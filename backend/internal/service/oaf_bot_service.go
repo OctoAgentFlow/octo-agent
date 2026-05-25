@@ -107,6 +107,55 @@ func (s *OAFBotService) Update(userID, id uint, req dto.OAFBotUpsertRequest) (*d
 	return &item, nil
 }
 
+func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dto.OAFBotCompleteProfileRequest) (*dto.OAFBotCompleteProfileResponse, error) {
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, completeOAFBotProfileInput(req.Draft))
+	if err != nil {
+		return nil, err
+	}
+	profile.Name = limitString(firstNonEmpty(req.Draft.Name, profile.Name), 96)
+	profile.TwitterAccountID = req.Draft.TwitterAccountID
+	profile.AgeRange = limitString(firstNonEmpty(req.Draft.AgeRange, profile.AgeRange), 64)
+	profile.Gender = limitString(firstNonEmpty(req.Draft.Gender, profile.Gender), 64)
+	profile.Education = limitString(firstNonEmpty(req.Draft.Education, profile.Education), 128)
+	profile.MBTI = strings.ToUpper(limitString(firstNonEmpty(req.Draft.MBTI, profile.MBTI), 32))
+	profile.SafetyMode = normalizeSafetyMode(firstNonEmpty(profile.SafetyMode, req.Draft.SafetyMode))
+	profile.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(firstNonEmpty(profile.PrimaryLanguage, req.Draft.PrimaryLanguage))
+	profile.LanguageStrategy = normalizeOAFBotLanguageStrategy(firstNonEmpty(profile.LanguageStrategy, req.Draft.LanguageStrategy))
+	profile.Occupation = limitString(firstNonEmpty(profile.Occupation, req.Draft.Occupation), 128)
+	profile.Industry = limitString(firstNonEmpty(profile.Industry, req.Draft.Industry), 128)
+	profile.IdentitySummary = limitString(firstNonEmpty(profile.IdentitySummary, req.Draft.IdentitySummary), 2000)
+	profile.VoiceTone = limitString(firstNonEmpty(profile.VoiceTone, req.Draft.VoiceTone), 128)
+	profile.GrowthGoal = limitString(firstNonEmpty(profile.GrowthGoal, req.Draft.GrowthGoal), 2000)
+	profile.ProjectOneLiner = limitString(firstNonEmpty(profile.ProjectOneLiner, req.Draft.ProjectOneLiner), 1000)
+	profile.TargetAudience = limitString(firstNonEmpty(profile.TargetAudience, req.Draft.TargetAudience), 2000)
+	profile.CoreValueProps = limitString(firstNonEmpty(profile.CoreValueProps, req.Draft.CoreValueProps), 2000)
+	profile.ProductFeatures = limitString(firstNonEmpty(profile.ProductFeatures, req.Draft.ProductFeatures), 3000)
+	profile.Differentiators = limitString(firstNonEmpty(profile.Differentiators, req.Draft.Differentiators), 2000)
+	profile.ContentObjectives = limitString(firstNonEmpty(profile.ContentObjectives, req.Draft.ContentObjectives), 2000)
+	profile.PreferredCTA = limitString(firstNonEmpty(profile.PreferredCTA, req.Draft.PreferredCTA), 1000)
+	profile.ComplianceNotes = limitString(firstNonEmpty(profile.ComplianceNotes, req.Draft.ComplianceNotes), 2000)
+	profile.PersonalityTags = firstNonEmptyList(profile.PersonalityTags, req.Draft.PersonalityTags)
+	profile.Topics = firstNonEmptyList(profile.Topics, req.Draft.Topics)
+	profile.ForbiddenTopics = firstNonEmptyList(profile.ForbiddenTopics, req.Draft.ForbiddenTopics)
+	profile.ContentPillars = firstNonEmptyList(profile.ContentPillars, req.Draft.ContentPillars)
+	profile.Hashtags = firstNonEmptyList(profile.Hashtags, req.Draft.Hashtags)
+	profile.Keywords = firstNonEmptyList(profile.Keywords, req.Draft.Keywords)
+	profile.AvoidClaims = firstNonEmptyList(profile.AvoidClaims, req.Draft.AvoidClaims)
+	if err := recordAIGenerationUsage(s.usageRepo, userID, 0, repository.AIGenerationSceneOAFBotProfileAssist, now, usage); err != nil {
+		return nil, err
+	}
+	return &dto.OAFBotCompleteProfileResponse{
+		Profile:       profile,
+		Provider:      s.ai.providerSource(),
+		UsageConsumed: 1,
+		RawResult:     raw,
+	}, nil
+}
+
 func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
@@ -239,6 +288,55 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	}
 	bot.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(req.PrimaryLanguage)
 	bot.LanguageStrategy = normalizeOAFBotLanguageStrategy(req.LanguageStrategy)
+}
+
+func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest) CompleteOAFBotProfileInput {
+	return CompleteOAFBotProfileInput{
+		Name:              req.Name,
+		Occupation:        req.Occupation,
+		Industry:          req.Industry,
+		AgeRange:          req.AgeRange,
+		Gender:            req.Gender,
+		Education:         req.Education,
+		MBTI:              req.MBTI,
+		PersonalityTags:   req.PersonalityTags,
+		IdentitySummary:   req.IdentitySummary,
+		VoiceTone:         req.VoiceTone,
+		Topics:            req.Topics,
+		ForbiddenTopics:   req.ForbiddenTopics,
+		GrowthGoal:        req.GrowthGoal,
+		ProjectOneLiner:   req.ProjectOneLiner,
+		TargetAudience:    req.TargetAudience,
+		CoreValueProps:    req.CoreValueProps,
+		ProductFeatures:   req.ProductFeatures,
+		Differentiators:   req.Differentiators,
+		ContentPillars:    req.ContentPillars,
+		ContentObjectives: req.ContentObjectives,
+		PreferredCTA:      req.PreferredCTA,
+		Hashtags:          req.Hashtags,
+		Keywords:          req.Keywords,
+		ComplianceNotes:   req.ComplianceNotes,
+		AvoidClaims:       req.AvoidClaims,
+		SafetyMode:        req.SafetyMode,
+		PrimaryLanguage:   req.PrimaryLanguage,
+		LanguageStrategy:  req.LanguageStrategy,
+	}
+}
+
+func normalizeSafetyMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case "conservative", "balanced", "autopilot":
+		return strings.TrimSpace(value)
+	default:
+		return "balanced"
+	}
+}
+
+func firstNonEmptyList(primary, fallback []string) []string {
+	if len(primary) > 0 {
+		return primary
+	}
+	return fallback
 }
 
 func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {

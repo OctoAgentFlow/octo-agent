@@ -60,6 +60,13 @@ export type OAFBotTestGenerateResult = Partial<OAFBotSamples> & {
   raw_result?: string;
 };
 
+export type OAFBotCompleteProfileResult = {
+  profile: OAFBotPayload;
+  provider: string;
+  usage_consumed: number;
+  raw_result?: string;
+};
+
 export type OAFBotGenerationUsage = {
   bot_id: number;
   scene: string;

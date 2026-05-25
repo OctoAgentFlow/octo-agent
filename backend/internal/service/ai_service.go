@@ -124,6 +124,37 @@ type GenerateOAFBotSamplesInput struct {
 	LanguageStrategy  string
 }
 
+type CompleteOAFBotProfileInput struct {
+	Name              string
+	Occupation        string
+	Industry          string
+	AgeRange          string
+	Gender            string
+	Education         string
+	MBTI              string
+	PersonalityTags   []string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	ForbiddenTopics   []string
+	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
+	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
+}
+
 type GenerateAutoPostInput struct {
 	AccountHandle     string
 	Topic             string
@@ -440,6 +471,81 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	return &out, result.Usage, nil
 }
 
+func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBotProfileInput) (dto.OAFBotUpsertRequest, string, openaiint.TextUsage, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = "OAF Bot"
+	}
+	primaryLanguage := strings.TrimSpace(in.PrimaryLanguage)
+	if primaryLanguage == "" {
+		primaryLanguage = "zh-CN"
+	}
+	languageStrategy := strings.TrimSpace(in.LanguageStrategy)
+	if languageStrategy == "" {
+		languageStrategy = "follow_context"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's OAF Bot persona strategist.",
+		"Complete missing persona and content strategy fields for an AI social bot on X/Twitter.",
+		"Preserve user intent, keep fields concise, and avoid unsupported claims.",
+		"Return strict JSON only. Do not return markdown, comments, or extra text.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Current draft fields. Empty fields need help; non-empty fields should be refined only when necessary.\n")
+	user.WriteString("name: " + name + "\n")
+	user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+	user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
+	user.WriteString("age_range: " + strings.TrimSpace(in.AgeRange) + "\n")
+	user.WriteString("gender: " + strings.TrimSpace(in.Gender) + "\n")
+	user.WriteString("education: " + strings.TrimSpace(in.Education) + "\n")
+	user.WriteString("mbti: " + strings.TrimSpace(in.MBTI) + "\n")
+	user.WriteString("personality_tags: " + strings.Join(in.PersonalityTags, ", ") + "\n")
+	user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+	user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+	user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+	user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+	user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+	writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+		ProjectOneLiner:   in.ProjectOneLiner,
+		TargetAudience:    in.TargetAudience,
+		CoreValueProps:    in.CoreValueProps,
+		ProductFeatures:   in.ProductFeatures,
+		Differentiators:   in.Differentiators,
+		ContentPillars:    in.ContentPillars,
+		ContentObjectives: in.ContentObjectives,
+		PreferredCTA:      in.PreferredCTA,
+		Hashtags:          in.Hashtags,
+		Keywords:          in.Keywords,
+		ComplianceNotes:   in.ComplianceNotes,
+		AvoidClaims:       in.AvoidClaims,
+	})
+	user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+	user.WriteString("primary_language: " + primaryLanguage + "\n")
+	user.WriteString("language_strategy: " + languageStrategy + "\n\n")
+	user.WriteString("Return JSON with exactly these keys:\n")
+	user.WriteString("occupation, industry, personality_tags, identity_summary, voice_tone, topics, forbidden_topics, growth_goal, project_one_liner, target_audience, core_value_props, product_features, differentiators, content_pillars, content_objectives, preferred_cta, hashtags, keywords, compliance_notes, avoid_claims, safety_mode, primary_language, language_strategy.\n")
+	user.WriteString("Rules:\n")
+	user.WriteString("- Arrays must contain short strings, usually 3-6 items.\n")
+	user.WriteString("- Keep identity_summary under 260 characters.\n")
+	user.WriteString("- Keep voice_tone under 120 characters.\n")
+	user.WriteString("- If project details are thin, make practical assumptions but do not invent partnerships, guarantees, token prices, or regulated claims.\n")
+	user.WriteString("- Use the primary language for natural-language fields unless language_strategy implies bilingual or mixed output.\n")
+
+	result, err := s.openai.GenerateTextWithUsageMaxTokens(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	}, 700)
+	if err != nil {
+		return dto.OAFBotUpsertRequest{}, "", openaiint.TextUsage{}, err
+	}
+	profile, err := parseCompletedOAFBotProfile(result.Text)
+	if err != nil {
+		return dto.OAFBotUpsertRequest{}, strings.TrimSpace(result.Text), result.Usage, err
+	}
+	return profile, strings.TrimSpace(result.Text), result.Usage, nil
+}
+
 func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
@@ -683,6 +789,62 @@ func cleanupGeneratedPayload(raw string) string {
 	text = strings.TrimPrefix(text, "```")
 	text = strings.TrimSuffix(text, "```")
 	return strings.TrimSpace(text)
+}
+
+func parseCompletedOAFBotProfile(raw string) (dto.OAFBotUpsertRequest, error) {
+	text := cleanupGeneratedPayload(raw)
+	var out dto.OAFBotUpsertRequest
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return dto.OAFBotUpsertRequest{}, fmt.Errorf("parse completed oaf bot profile: %w", err)
+	}
+	out.Occupation = strings.TrimSpace(out.Occupation)
+	out.Industry = strings.TrimSpace(out.Industry)
+	out.IdentitySummary = strings.TrimSpace(out.IdentitySummary)
+	out.VoiceTone = strings.TrimSpace(out.VoiceTone)
+	out.GrowthGoal = strings.TrimSpace(out.GrowthGoal)
+	out.ProjectOneLiner = strings.TrimSpace(out.ProjectOneLiner)
+	out.TargetAudience = strings.TrimSpace(out.TargetAudience)
+	out.CoreValueProps = strings.TrimSpace(out.CoreValueProps)
+	out.ProductFeatures = strings.TrimSpace(out.ProductFeatures)
+	out.Differentiators = strings.TrimSpace(out.Differentiators)
+	out.ContentObjectives = strings.TrimSpace(out.ContentObjectives)
+	out.PreferredCTA = strings.TrimSpace(out.PreferredCTA)
+	out.ComplianceNotes = strings.TrimSpace(out.ComplianceNotes)
+	out.SafetyMode = strings.TrimSpace(out.SafetyMode)
+	out.PrimaryLanguage = strings.TrimSpace(out.PrimaryLanguage)
+	out.LanguageStrategy = strings.TrimSpace(out.LanguageStrategy)
+	out.PersonalityTags = cleanGeneratedStringList(out.PersonalityTags, 8)
+	out.Topics = cleanGeneratedStringList(out.Topics, 8)
+	out.ForbiddenTopics = cleanGeneratedStringList(out.ForbiddenTopics, 8)
+	out.ContentPillars = cleanGeneratedStringList(out.ContentPillars, 8)
+	out.Hashtags = cleanGeneratedStringList(out.Hashtags, 8)
+	out.Keywords = cleanGeneratedStringList(out.Keywords, 10)
+	out.AvoidClaims = cleanGeneratedStringList(out.AvoidClaims, 8)
+	return out, nil
+}
+
+func cleanGeneratedStringList(items []string, limit int) []string {
+	if limit <= 0 {
+		limit = 8
+	}
+	out := make([]string, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		v := strings.TrimSpace(item)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, v)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func stringifySceneValue(value any) string {

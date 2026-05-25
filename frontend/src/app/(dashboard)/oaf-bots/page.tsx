@@ -301,6 +301,7 @@ export default function OAFBotsPage() {
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [completingProfile, setCompletingProfile] = useState(false);
 
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
@@ -633,6 +634,35 @@ export default function OAFBotsPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const completeProfile = async () => {
+    if (!hasProfileAssistSeed(form)) {
+      pushToast(t("oafBots.completeProfile.needSeed"));
+      return;
+    }
+    setCompletingProfile(true);
+    try {
+      const result = await oafBotService.completeProfile(form);
+      setForm((prev) => ({
+        ...prev,
+        ...result.profile,
+        name: prev.name || result.profile.name,
+        twitter_account_id: prev.twitter_account_id || result.profile.twitter_account_id,
+      }));
+      setSamples(null);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      pushToast(t("oafBots.completeProfile.success"));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.completeProfile.failed"));
+      }
+    } finally {
+      setCompletingProfile(false);
     }
   };
 
@@ -1198,6 +1228,16 @@ export default function OAFBotsPage() {
               <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
               <Button
                 type="button"
+                variant="outline"
+                onClick={completeProfile}
+                disabled={completingProfile || saving || generating}
+                className="w-full sm:w-auto"
+              >
+                <Sparkles className="size-4" />
+                {completingProfile ? t("oafBots.completeProfile.loading") : t("oafBots.completeProfile.action")}
+              </Button>
+              <Button
+                type="button"
                 variant={activeStep === "test" ? "default" : "outline"}
                 onClick={activeStep === "test" ? testGenerate : goTestStep}
                 disabled={generating || !canTestBot}
@@ -1398,6 +1438,19 @@ function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string)
   if (form.topics.length === 0) return t("oafBots.test.needTopic");
   if (!form.identity_summary.trim() && !form.voice_tone.trim()) return t("oafBots.test.needPersona");
   return "";
+}
+
+function hasProfileAssistSeed(form: OAFBotPayload) {
+  return Boolean(
+    form.name.trim() ||
+      form.occupation.trim() ||
+      form.industry.trim() ||
+      form.project_one_liner.trim() ||
+      form.target_audience.trim() ||
+      form.core_value_props.trim() ||
+      form.product_features.trim() ||
+      form.topics.length > 0,
+  );
 }
 
 function splitMultiValue(value: string) {

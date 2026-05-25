@@ -108,6 +108,10 @@ func (c *Client) GenerateText(ctx context.Context, messages []ChatMessage) (stri
 }
 
 func (c *Client) GenerateTextWithUsage(ctx context.Context, messages []ChatMessage) (TextResult, error) {
+	return c.GenerateTextWithUsageMaxTokens(ctx, messages, 0)
+}
+
+func (c *Client) GenerateTextWithUsageMaxTokens(ctx context.Context, messages []ChatMessage, maxTokens int) (TextResult, error) {
 	if c == nil {
 		return TextResult{}, fmt.Errorf("openai client is nil")
 	}
@@ -122,6 +126,9 @@ func (c *Client) GenerateTextWithUsage(ctx context.Context, messages []ChatMessa
 		Messages:    messages,
 		MaxTokens:   c.maxTokens,
 		Temperature: c.temperature,
+	}
+	if maxTokens > 0 {
+		body.MaxTokens = maxTokens
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

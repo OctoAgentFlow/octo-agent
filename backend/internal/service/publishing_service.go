@@ -350,8 +350,8 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 	if !s.cfg.ManualPublishEnabled {
 		return nil, &PublishingError{Code: "publisher_manual_publish_disabled", Message: "manual x publishing is disabled"}
 	}
-	if job.Status != repository.PublishStatusPending && job.Status != repository.PublishStatusFailed {
-		return nil, fmt.Errorf("only pending or failed publish jobs can be manually published")
+	if !isManuallyPublishableJob(job) {
+		return nil, fmt.Errorf("only pending, failed, or simulated published jobs can be manually published")
 	}
 	if !s.cfg.DryRun && !s.cfg.RealPublishEnabled {
 		return nil, &PublishingError{Code: "publisher_real_publish_disabled", Message: "real x publishing is disabled in this environment"}
@@ -513,12 +513,35 @@ func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now 
 	}
 }
 
+func isManuallyPublishableJob(job *model.PublishJob) bool {
+	if job == nil {
+		return false
+	}
+	if job.Status == repository.PublishStatusPending || job.Status == repository.PublishStatusFailed {
+		return true
+	}
+	return job.Status == repository.PublishStatusPublished && isNonRealPublishMode(job.PublishMode)
+}
+
+func isNonRealPublishMode(mode string) bool {
+	mode = strings.TrimSpace(mode)
+	return mode == "" || mode == repository.PublishModeSimulated || mode == repository.PublishModeDryRun
+}
+
+func isNonRealCapabilityStatus(status string) bool {
+	status = strings.TrimSpace(status)
+	return status == "simulated_published" || status == "dry_run_published"
+}
+
 func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.PublishJob) error {
 	switch job.SourceType {
 	case repository.PublishSourceComment:
 		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
+		}
+		if task.Status == "published" && isNonRealCapabilityStatus(task.CapabilityStatus) {
+			return nil
 		}
 		if task.Status != "ready_to_publish" && task.Status != "failed" {
 			return fmt.Errorf("comment source status is %s", task.Status)
@@ -528,6 +551,9 @@ func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.Publish
 		if err != nil {
 			return err
 		}
+		if draft.Status == "published" && isNonRealCapabilityStatus(draft.CapabilityStatus) {
+			return nil
+		}
 		if draft.Status != "ready_to_publish" && draft.Status != "failed" {
 			return fmt.Errorf("reply source status is %s", draft.Status)
 		}
@@ -535,6 +561,9 @@ func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.Publish
 		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
+		}
+		if draft.Status == "published" && isNonRealCapabilityStatus(draft.CapabilityStatus) {
+			return nil
 		}
 		if draft.Status != "ready_to_publish" && draft.Status != "approved" && draft.Status != "failed" {
 			return fmt.Errorf("post source status is %s", draft.Status)

@@ -69,6 +69,12 @@ function sourceDescriptionKey(type: string) {
   return "executionQueue.sourceDesc.dm";
 }
 
+function canManualPublish(item: ReviewQueueItemApi) {
+  if (!item.publish_job_id) return false;
+  if (item.status === "ready_to_publish" || item.status === "failed") return true;
+  return item.status === "published" && (item.publish_mode === "simulated" || item.publish_mode === "dry_run");
+}
+
 function targetLabelKey(type: string) {
   if (type === "post") return "executionQueue.item.contentSource";
   if (type === "comment") return "executionQueue.item.targetTweet";
@@ -514,7 +520,7 @@ export default function ExecutionQueuePage() {
                               {t("executionQueue.actions.preparePublish")}
                             </Button>
                           ) : null}
-                          {(item.status === "ready_to_publish" || item.status === "failed") && item.publish_job_id ? (
+                          {canManualPublish(item) ? (
                             <Button
                               size="sm"
                               variant="outline"

@@ -31,40 +31,40 @@ export function AutoPostSection() {
       className="pt-10"
     >
       <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-2xl border border-white/12 bg-white/[0.045] p-5 md:p-6">
-          <div className="mb-5 flex items-center gap-3">
+        <div className="order-2 rounded-2xl border border-white/12 bg-white/[0.045] p-4 md:p-6 lg:order-1">
+          <div className="mb-4 flex items-start gap-3 md:mb-5 md:items-center">
             <span className="grid size-10 place-items-center rounded-lg border border-blue-300/20 bg-blue-500/12 text-blue-200">
               <Send className="size-5" />
             </span>
-            <div>
+            <div className="min-w-0">
               <p className="text-base font-semibold text-white">{t("marketing.autoPost.flowTitle")}</p>
-              <p className="text-sm text-white/55">{t("marketing.autoPost.flowDesc")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.autoPost.flowDesc")}</p>
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2.5 md:space-y-3">
             {autoPostSteps.map((step, index) => (
-              <div key={step.titleKey} className="grid gap-3 rounded-lg border border-white/10 bg-black/12 p-3 sm:grid-cols-[36px_1fr]">
-                <span className="grid size-9 place-items-center rounded-md bg-white/[0.06] text-cyan-200">
+              <div key={step.titleKey} className="grid grid-cols-[34px_1fr] gap-3 rounded-xl border border-white/10 bg-black/12 p-3">
+                <span className="grid size-8 place-items-center rounded-md bg-white/[0.06] text-cyan-200 sm:size-9">
                   <step.icon className="size-4" />
                 </span>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-white/40">0{index + 1}</span>
                     <p className="text-sm font-semibold text-white">{t(step.titleKey)}</p>
                   </div>
-                  <p className="mt-1 text-sm text-white/62">{t(step.descKey)}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-white/62">{t(step.descKey)}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-white/12 bg-[#080d20]">
-          <div className="border-b border-white/10 px-5 py-4">
+        <div className="order-1 overflow-hidden rounded-2xl border border-white/12 bg-[#080d20] lg:order-2">
+          <div className="border-b border-white/10 px-4 py-4 md:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="text-base font-semibold text-white">{t("marketing.autoPost.queueTitle")}</p>
-                <p className="text-sm text-white/55">{t("marketing.autoPost.queueDesc")}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.autoPost.queueDesc")}</p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
                 <CheckCircle2 className="size-3.5" />
@@ -74,14 +74,19 @@ export function AutoPostSection() {
           </div>
           <div className="divide-y divide-white/10">
             {sampleQueue.map((item) => (
-              <div key={item.textKey} className="grid gap-3 px-5 py-4 text-sm md:grid-cols-[82px_1fr_92px]">
-                <span className="text-white/50">{t(item.timeKey)}</span>
-                <span className="text-white/78">{t(item.textKey)}</span>
-                <span className="text-right text-cyan-100/80">{t(item.statusKey)}</span>
+              <div key={item.textKey} className="grid gap-2 px-4 py-4 text-sm md:grid-cols-[82px_1fr_92px] md:gap-3 md:px-5">
+                <div className="flex items-center justify-between gap-3 md:block">
+                  <span className="text-white/50">{t(item.timeKey)}</span>
+                  <span className="rounded-full border border-cyan-200/15 bg-cyan-300/10 px-2 py-0.5 text-xs text-cyan-100/80 md:hidden">
+                    {t(item.statusKey)}
+                  </span>
+                </div>
+                <span className="leading-relaxed text-white/78">{t(item.textKey)}</span>
+                <span className="hidden text-right text-cyan-100/80 md:block">{t(item.statusKey)}</span>
               </div>
             ))}
           </div>
-          <div className="grid gap-3 border-t border-white/10 p-5 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 border-t border-white/10 p-4 sm:gap-3 md:p-5">
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.today")}</p>
               <p className="mt-1 text-xl font-semibold text-white">6</p>

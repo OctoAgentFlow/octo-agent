@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowRight, FileText, ListChecks, Mail, MessageCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 
@@ -129,6 +129,8 @@ export default function AgentsPage() {
   });
   const [editType, setEditType] = useState<AutomationModule["type"] | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [modulesHighlighted, setModulesHighlighted] = useState(false);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editing = useMemo(
     () => (editType ? modules.find((m) => m.type === editType) ?? null : null),
@@ -243,6 +245,26 @@ export default function AgentsPage() {
     });
   }, [fetchAll]);
 
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const onConfigureAutomation = useCallback(() => {
+    document.getElementById("automation-modules")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setModulesHighlighted(true);
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setModulesHighlighted(false);
+      highlightTimeoutRef.current = null;
+    }, 1800);
+  }, []);
+
   const onToggle = async (type: AutomationModule["type"], enabled: boolean) => {
     try {
       const updated = await automationService.toggle(type, enabled);
@@ -319,6 +341,7 @@ export default function AgentsPage() {
         automationEnabled={accountCount > 0 && modules.some((module) => module.config.enabled)}
         postCreated={postCount > 0}
         activityObserved={accountCount > 0 && activityCount > 0}
+        onConfigureAutomation={onConfigureAutomation}
       />
 
       <AutomationEntryGrid
@@ -329,7 +352,12 @@ export default function AgentsPage() {
         dmImportCount={dmImports.length}
       />
 
-      <div id="automation-modules" className="grid gap-4 xl:grid-cols-2">
+      <div
+        id="automation-modules"
+        className={`scroll-mt-24 grid gap-4 rounded-2xl transition-shadow duration-300 xl:grid-cols-2 ${
+          modulesHighlighted ? "ring-2 ring-blue-300/70 ring-offset-4 ring-offset-[#070b17]" : ""
+        }`}
+      >
         {modules.map((module) => (
           <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} onEdit={onEdit} />
         ))}

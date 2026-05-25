@@ -14,6 +14,7 @@ type UserOnboardingCardProps = {
   postCreated: boolean;
   activityObserved: boolean;
   onConnectAccount?: () => void;
+  onConfigureAutomation?: () => void;
 };
 
 type Step = {
@@ -31,6 +32,7 @@ export function UserOnboardingCard({
   postCreated,
   activityObserved,
   onConnectAccount,
+  onConfigureAutomation,
 }: UserOnboardingCardProps) {
   const { t } = useT();
   const steps: Step[] = [
@@ -47,7 +49,8 @@ export function UserOnboardingCard({
       titleKey: "onboarding.step.automation.title",
       descriptionKey: "onboarding.step.automation.description",
       ctaKey: "onboarding.step.automation.cta",
-      href: "/automations",
+      href: onConfigureAutomation ? undefined : "/automations",
+      onClick: onConfigureAutomation,
     },
     {
       done: postCreated,

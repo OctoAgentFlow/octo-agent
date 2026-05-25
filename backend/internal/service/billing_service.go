@@ -45,6 +45,23 @@ type BillingAutoConfirmStats struct {
 	Failed        int
 }
 
+type GrossMarginHealth struct {
+	PeriodStart         time.Time
+	PeriodEnd           time.Time
+	RevenueCents        int64
+	TotalCostCents      int64
+	GrossProfitCents    int64
+	GrossMarginBps      int64
+	TargetBps           int64
+	Status              string
+	OpenAICostCents     int64
+	XCostCents          int64
+	PointDiscountCents  int64
+	OpenAIQuantity      int64
+	XQuantity           int64
+	PointDiscountPoints int64
+}
+
 const (
 	billingReconUnchecked   = "unchecked"
 	billingReconMatched     = "matched"
@@ -197,6 +214,137 @@ func (s *BillingService) AutoConfirmInterval() time.Duration {
 		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func (s *BillingService) GrossMarginHealth(now time.Time) (GrossMarginHealth, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+	revenueCents, err := s.monthlyPaidRevenueCents(periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	openAICents, openAIQuantity, err := s.monthlyProviderCost("openai", periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	xCents, xQuantity, err := s.monthlyProviderCost("x", periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	pointDiscountPoints, err := s.monthlyPointDiscountPoints(periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	pointDiscountCents := pointDiscountPoints * 10
+	totalCostCents := openAICents + xCents + pointDiscountCents
+	grossProfitCents := revenueCents - totalCostCents
+	grossMarginBps := int64(0)
+	if revenueCents > 0 {
+		grossMarginBps = grossProfitCents * 10000 / revenueCents
+	}
+	status := "no_revenue"
+	if revenueCents > 0 && grossMarginBps >= 5000 {
+		status = "healthy"
+	} else if revenueCents > 0 {
+		status = "below_target"
+	}
+	return GrossMarginHealth{
+		PeriodStart:         periodStart,
+		PeriodEnd:           periodEnd,
+		RevenueCents:        revenueCents,
+		TotalCostCents:      totalCostCents,
+		GrossProfitCents:    grossProfitCents,
+		GrossMarginBps:      grossMarginBps,
+		TargetBps:           5000,
+		Status:              status,
+		OpenAICostCents:     openAICents,
+		XCostCents:          xCents,
+		PointDiscountCents:  pointDiscountCents,
+		OpenAIQuantity:      openAIQuantity,
+		XQuantity:           xQuantity,
+		PointDiscountPoints: pointDiscountPoints,
+	}, nil
+}
+
+func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.Time) error {
+	health, err := s.GrossMarginHealth(now)
+	if err != nil {
+		return err
+	}
+	if health.RevenueCents <= 0 {
+		return nil
+	}
+	reasons := grossMarginAlertReasons(health)
+	if len(reasons) == 0 {
+		return nil
+	}
+	alert.Notify(ctx, alert.Event{
+		Level:    alert.LevelWarning,
+		Category: alert.CategoryBilling,
+		Title:    "Gross margin risk detected",
+		Message:  "Monthly gross margin or cost share breached the configured billing threshold.",
+		Fields: map[string]any{
+			"period":                health.PeriodStart.Format("2006-01"),
+			"status":                health.Status,
+			"reasons":               strings.Join(reasons, ", "),
+			"revenue_usdt":          centsToAmountString(health.RevenueCents),
+			"total_cost_usdt":       centsToAmountString(health.TotalCostCents),
+			"gross_profit_usdt":     signedCentsToAmountString(health.GrossProfitCents),
+			"gross_margin":          formatBps(health.GrossMarginBps),
+			"target_margin":         formatBps(health.TargetBps),
+			"openai_cost_usdt":      centsToAmountString(health.OpenAICostCents),
+			"x_cost_usdt":           centsToAmountString(health.XCostCents),
+			"point_discount_usdt":   centsToAmountString(health.PointDiscountCents),
+			"openai_usage":          health.OpenAIQuantity,
+			"x_writes":              health.XQuantity,
+			"point_discount_points": health.PointDiscountPoints,
+		},
+	})
+	return nil
+}
+
+func (s *BillingService) monthlyPaidRevenueCents(periodStart, periodEnd time.Time) (int64, error) {
+	var orders []model.BillingOrder
+	if err := s.orderRepo.DB.
+		Where("status = ? AND paid_at IS NOT NULL AND paid_at >= ? AND paid_at < ?", "paid", periodStart, periodEnd).
+		Find(&orders).Error; err != nil {
+		return 0, err
+	}
+	total := int64(0)
+	for _, order := range orders {
+		cents, err := referralAmountToCents(firstNonEmpty(order.PayableAmount, order.Amount))
+		if err != nil {
+			return 0, err
+		}
+		total += cents
+	}
+	return total, nil
+}
+
+func (s *BillingService) monthlyProviderCost(provider string, periodStart, periodEnd time.Time) (int64, int64, error) {
+	type rowData struct {
+		Cents    int64
+		Quantity int64
+	}
+	var row rowData
+	err := s.orderRepo.DB.Model(&model.CostUsageLedger{}).
+		Select("COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE estimated_cost_cents END), 0) AS cents, COALESCE(SUM(quantity), 0) AS quantity").
+		Where("provider = ? AND occurred_at >= ? AND occurred_at < ?", provider, periodStart, periodEnd).
+		Scan(&row).Error
+	return row.Cents, row.Quantity, err
+}
+
+func (s *BillingService) monthlyPointDiscountPoints(periodStart, periodEnd time.Time) (int64, error) {
+	var points int64
+	err := s.orderRepo.DB.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "consume").
+		Scan(&points).Error
+	return points, err
 }
 
 func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.BillingUpgradeQuote, error) {
@@ -451,6 +599,37 @@ func centsToAmountString(cents int64) string {
 		return strconv.FormatInt(whole, 10)
 	}
 	return fmt.Sprintf("%d.%02d", whole, frac)
+}
+
+func signedCentsToAmountString(cents int64) string {
+	if cents < 0 {
+		return "-" + centsToAmountString(-cents)
+	}
+	return centsToAmountString(cents)
+}
+
+func formatBps(bps int64) string {
+	return fmt.Sprintf("%.2f%%", float64(bps)/100)
+}
+
+func grossMarginAlertReasons(health GrossMarginHealth) []string {
+	reasons := make([]string, 0, 4)
+	if health.RevenueCents <= 0 {
+		return reasons
+	}
+	if health.GrossMarginBps < health.TargetBps {
+		reasons = append(reasons, "gross_margin_below_50_percent")
+	}
+	if health.OpenAICostCents*10000/health.RevenueCents >= 2000 {
+		reasons = append(reasons, "openai_cost_share_at_or_above_20_percent")
+	}
+	if health.XCostCents*10000/health.RevenueCents >= 2000 {
+		reasons = append(reasons, "x_cost_share_at_or_above_20_percent")
+	}
+	if health.PointDiscountCents*10000/health.RevenueCents >= 2000 {
+		reasons = append(reasons, "point_discount_share_at_or_above_20_percent")
+	}
+	return reasons
 }
 
 func minInt64(a, b int64) int64 {

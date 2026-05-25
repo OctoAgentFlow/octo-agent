@@ -44,6 +44,7 @@ func Start(
 		defer ticker.Stop()
 		var lastBillingScan time.Time
 		var lastPointExpiry time.Time
+		var lastGrossMarginCheck time.Time
 		runEmail := func() {
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
@@ -82,6 +83,16 @@ func Start(
 			lastPointExpiry = time.Now()
 			RunPointExpiryOnce(context.Background(), pointRepo)
 		}
+		runGrossMarginCheck := func() {
+			if billing == nil {
+				return
+			}
+			if !lastGrossMarginCheck.IsZero() && time.Since(lastGrossMarginCheck) < 24*time.Hour {
+				return
+			}
+			lastGrossMarginCheck = time.Now()
+			RunGrossMarginAlertOnce(context.Background(), billing)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
@@ -91,6 +102,7 @@ func Start(
 		RunPublishingOnce(context.Background(), publishing)
 		runBillingScanner()
 		runPointExpiry()
+		runGrossMarginCheck()
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
@@ -101,6 +113,7 @@ func Start(
 			RunPublishingOnce(context.Background(), publishing)
 			runBillingScanner()
 			runPointExpiry()
+			runGrossMarginCheck()
 		}
 	}()
 }

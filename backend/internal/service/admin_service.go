@@ -141,51 +141,35 @@ func (s *AdminService) GrossMarginSummary(operatorID uint) (*dto.AdminGrossMargi
 	if err != nil {
 		return nil, err
 	}
-	openAICents, openAIQuantity, err := s.monthlyProviderCost("openai", periodStart, periodEnd)
+	billingService := serviceBillingForAdmin(s)
+	health, err := billingService.GrossMarginHealth(now)
 	if err != nil {
 		return nil, err
-	}
-	xCents, xQuantity, err := s.monthlyProviderCost("x", periodStart, periodEnd)
-	if err != nil {
-		return nil, err
-	}
-	pointDiscountPoints, err := s.sumPointLedger("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "consume")
-	if err != nil {
-		return nil, err
-	}
-	pointDiscountCents := pointDiscountPoints * 10
-	totalCostCents := openAICents + xCents + pointDiscountCents
-	grossProfitCents := revenueCents - totalCostCents
-	var grossMarginBps int64
-	if revenueCents > 0 {
-		grossMarginBps = grossProfitCents * 10000 / revenueCents
-	}
-	status := "no_revenue"
-	if revenueCents > 0 && grossMarginBps >= 5000 {
-		status = "healthy"
-	} else if revenueCents > 0 {
-		status = "below_target"
 	}
 	costs := []dto.AdminGrossMarginCostItem{
-		adminGrossMarginCostItem("openai", openAICents, revenueCents, openAIQuantity, "requests"),
-		adminGrossMarginCostItem("x", xCents, revenueCents, xQuantity, "writes"),
-		adminGrossMarginCostItem("point_discount", pointDiscountCents, revenueCents, pointDiscountPoints, "points"),
+		adminGrossMarginCostItem("openai", health.OpenAICostCents, revenueCents, health.OpenAIQuantity, "requests"),
+		adminGrossMarginCostItem("x", health.XCostCents, revenueCents, health.XQuantity, "writes"),
+		adminGrossMarginCostItem("point_discount", health.PointDiscountCents, revenueCents, health.PointDiscountPoints, "points"),
 	}
 	return &dto.AdminGrossMarginSummaryResponse{
 		PeriodStart:      periodStart.Format(time.RFC3339),
 		PeriodEnd:        periodEnd.Format(time.RFC3339),
 		RevenueAmount:    adminCentsAmountString(revenueCents),
 		RevenueCents:     revenueCents,
-		TotalCost:        adminCentsAmountString(totalCostCents),
-		TotalCostCents:   totalCostCents,
-		GrossProfit:      adminCentsAmountString(grossProfitCents),
-		GrossProfitCents: grossProfitCents,
-		GrossMarginBps:   grossMarginBps,
-		TargetBps:        5000,
-		Status:           status,
+		TotalCost:        adminCentsAmountString(health.TotalCostCents),
+		TotalCostCents:   health.TotalCostCents,
+		GrossProfit:      adminCentsAmountString(health.GrossProfitCents),
+		GrossProfitCents: health.GrossProfitCents,
+		GrossMarginBps:   health.GrossMarginBps,
+		TargetBps:        health.TargetBps,
+		Status:           health.Status,
 		Costs:            costs,
 		RevenueByPlan:    revenueByPlan,
 	}, nil
+}
+
+func serviceBillingForAdmin(s *AdminService) *BillingService {
+	return NewBillingService(s.userRepo, s.billingOrderRepo, s.pointRepo, nil, nil, nil, nil, s.cfg)
 }
 
 func (s *AdminService) monthlyPaidRevenue(periodStart, periodEnd time.Time) (int64, []dto.AdminGrossMarginRevenueItem, error) {
@@ -232,19 +216,6 @@ func (s *AdminService) monthlyPaidRevenue(periodStart, periodEnd time.Time) (int
 		return items[i].Cents > items[j].Cents
 	})
 	return total, items, nil
-}
-
-func (s *AdminService) monthlyProviderCost(provider string, periodStart, periodEnd time.Time) (int64, int64, error) {
-	type rowData struct {
-		Cents    int64
-		Quantity int64
-	}
-	var row rowData
-	err := s.db.Model(&model.CostUsageLedger{}).
-		Select("COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE estimated_cost_cents END), 0) AS cents, COALESCE(SUM(quantity), 0) AS quantity").
-		Where("provider = ? AND occurred_at >= ? AND occurred_at < ?", provider, periodStart, periodEnd).
-		Scan(&row).Error
-	return row.Cents, row.Quantity, err
 }
 
 func adminGrossMarginCostItem(key string, cents, revenueCents, quantity int64, unitLabel string) dto.AdminGrossMarginCostItem {

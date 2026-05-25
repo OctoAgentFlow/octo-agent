@@ -73,6 +73,17 @@ type OAFBotUpsertRequest struct {
 	LanguageStrategy  string   `json:"language_strategy"`
 }
 
+type OAFBotCompleteProfileRequest struct {
+	Draft OAFBotUpsertRequest `json:"draft"`
+}
+
+type OAFBotCompleteProfileResponse struct {
+	Profile       OAFBotUpsertRequest `json:"profile"`
+	Provider      string              `json:"provider"`
+	UsageConsumed int                 `json:"usage_consumed"`
+	RawResult     string              `json:"raw_result,omitempty"`
+}
+
 type OAFBotTestGenerateRequest struct {
 	Scene string `json:"scene"`
 }

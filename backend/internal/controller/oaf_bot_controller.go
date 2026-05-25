@@ -106,6 +106,29 @@ func (ctl *OAFBotController) Update(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) CompleteProfile(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.OAFBotCompleteProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.oafBotService.CompleteProfile(c.Request.Context(), userID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 	userID, id, ok := ctl.userAndBotID(c)
 	if !ok {

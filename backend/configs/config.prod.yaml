@@ -43,6 +43,13 @@ email:
 app:
   frontend_base_url: "https://octo-agent.com"
 
+jwt:
+  # Compatibility config only. Must match split prod API/Admin configs if used.
+  # Prefer setting JWT_SECRET in the server environment or private config.
+  secret: "TODO_PROD_JWT_SECRET"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
 admin_auth:
   emails:
     - "owner@example.com"
@@ -57,12 +64,12 @@ x_oauth:
   scopes: "tweet.read users.read offline.access"
 
 x_publisher:
-  # Production should remain disabled until X posting permissions, legal review, and rate limits are verified.
-  real_publish_enabled: false
+  # Production real publishing is enabled. Keep manual controls and rate limits conservative.
+  real_publish_enabled: true
   manual_publish_enabled: true
   per_account_daily_limit: 20
   per_account_min_interval_seconds: 300
-  dry_run: true
+  dry_run: false
 
 billing:
   order_ttl_minutes: 30

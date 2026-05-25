@@ -16,6 +16,18 @@ export type OAFBot = {
   topics: string[];
   forbidden_topics: string[];
   growth_goal: string;
+  project_one_liner: string;
+  target_audience: string;
+  core_value_props: string;
+  product_features: string;
+  differentiators: string;
+  content_pillars: string[];
+  content_objectives: string;
+  preferred_cta: string;
+  hashtags: string[];
+  keywords: string[];
+  compliance_notes: string;
+  avoid_claims: string[];
   safety_mode: string;
   primary_language: string;
   language_strategy: string;

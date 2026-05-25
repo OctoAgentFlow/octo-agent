@@ -121,23 +121,35 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 		return nil, err
 	}
 	out, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
-		Scene:            scene,
-		Name:             bot.Name,
-		Occupation:       bot.Occupation,
-		Industry:         bot.Industry,
-		AgeRange:         bot.AgeRange,
-		Gender:           bot.Gender,
-		Education:        bot.Education,
-		MBTI:             bot.MBTI,
-		PersonalityTags:  decodeStringList(bot.PersonalityTags),
-		IdentitySummary:  bot.IdentitySummary,
-		VoiceTone:        bot.VoiceTone,
-		Topics:           decodeStringList(bot.Topics),
-		ForbiddenTopics:  decodeStringList(bot.ForbiddenTopics),
-		GrowthGoal:       bot.GrowthGoal,
-		SafetyMode:       bot.SafetyMode,
-		PrimaryLanguage:  normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
-		LanguageStrategy: normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
+		Scene:             scene,
+		Name:              bot.Name,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 	})
 	if err != nil {
 		return nil, err
@@ -209,6 +221,18 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	bot.Topics = encodeStringList(req.Topics)
 	bot.ForbiddenTopics = encodeStringList(req.ForbiddenTopics)
 	bot.GrowthGoal = limitString(req.GrowthGoal, 2000)
+	bot.ProjectOneLiner = limitString(req.ProjectOneLiner, 1000)
+	bot.TargetAudience = limitString(req.TargetAudience, 2000)
+	bot.CoreValueProps = limitString(req.CoreValueProps, 2000)
+	bot.ProductFeatures = limitString(req.ProductFeatures, 3000)
+	bot.Differentiators = limitString(req.Differentiators, 2000)
+	bot.ContentPillars = encodeStringList(req.ContentPillars)
+	bot.ContentObjectives = limitString(req.ContentObjectives, 2000)
+	bot.PreferredCTA = limitString(req.PreferredCTA, 1000)
+	bot.Hashtags = encodeStringList(req.Hashtags)
+	bot.Keywords = encodeStringList(req.Keywords)
+	bot.ComplianceNotes = limitString(req.ComplianceNotes, 2000)
+	bot.AvoidClaims = encodeStringList(req.AvoidClaims)
 	bot.SafetyMode = limitString(req.SafetyMode, 64)
 	if bot.SafetyMode == "" {
 		bot.SafetyMode = "balanced"
@@ -219,26 +243,38 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 
 func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 	return dto.OAFBotItem{
-		ID:               bot.ID,
-		Name:             bot.Name,
-		TwitterAccountID: bot.TwitterAccountID,
-		Occupation:       bot.Occupation,
-		Industry:         bot.Industry,
-		AgeRange:         bot.AgeRange,
-		Gender:           bot.Gender,
-		Education:        bot.Education,
-		MBTI:             bot.MBTI,
-		PersonalityTags:  decodeStringList(bot.PersonalityTags),
-		IdentitySummary:  bot.IdentitySummary,
-		VoiceTone:        bot.VoiceTone,
-		Topics:           decodeStringList(bot.Topics),
-		ForbiddenTopics:  decodeStringList(bot.ForbiddenTopics),
-		GrowthGoal:       bot.GrowthGoal,
-		SafetyMode:       bot.SafetyMode,
-		PrimaryLanguage:  normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
-		LanguageStrategy: normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
-		CreatedAt:        bot.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:        bot.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                bot.ID,
+		Name:              bot.Name,
+		TwitterAccountID:  bot.TwitterAccountID,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
+		CreatedAt:         bot.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:         bot.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

@@ -824,6 +824,7 @@ func evaluateAutoCommentRisk(content string, bot *model.OAFBot, blockedWords []s
 	topics := append([]string{}, blockedWords...)
 	if bot != nil {
 		topics = append(topics, decodeStringList(bot.ForbiddenTopics)...)
+		topics = append(topics, decodeStringList(bot.AvoidClaims)...)
 	}
 	for _, word := range topics {
 		w := strings.ToLower(strings.TrimSpace(word))
@@ -914,6 +915,18 @@ func autoCommentInputFromValues(username, tweet, tone string, blocked []string, 
 	in.Topics = decodeStringList(bot.Topics)
 	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
 	in.GrowthGoal = bot.GrowthGoal
+	in.ProjectOneLiner = bot.ProjectOneLiner
+	in.TargetAudience = bot.TargetAudience
+	in.CoreValueProps = bot.CoreValueProps
+	in.ProductFeatures = bot.ProductFeatures
+	in.Differentiators = bot.Differentiators
+	in.ContentPillars = decodeStringList(bot.ContentPillars)
+	in.ContentObjectives = bot.ContentObjectives
+	in.PreferredCTA = bot.PreferredCTA
+	in.Hashtags = decodeStringList(bot.Hashtags)
+	in.Keywords = decodeStringList(bot.Keywords)
+	in.ComplianceNotes = bot.ComplianceNotes
+	in.AvoidClaims = decodeStringList(bot.AvoidClaims)
 	in.SafetyMode = bot.SafetyMode
 	in.PrimaryLanguage = bot.PrimaryLanguage
 	in.LanguageStrategy = bot.LanguageStrategy

@@ -15,72 +15,108 @@ type AIService struct {
 }
 
 type GenerateAutoCommentInput struct {
-	TargetUsername   string
-	TargetTweet      string
-	Tone             string
-	BlockedWords     []string
-	HasBot           bool
-	Name             string
-	Occupation       string
-	Industry         string
-	AgeRange         string
-	Gender           string
-	Education        string
-	MBTI             string
-	PersonalityTags  []string
-	IdentitySummary  string
-	VoiceTone        string
-	Topics           []string
-	ForbiddenTopics  []string
-	GrowthGoal       string
-	SafetyMode       string
-	PrimaryLanguage  string
-	LanguageStrategy string
+	TargetUsername    string
+	TargetTweet       string
+	Tone              string
+	BlockedWords      []string
+	HasBot            bool
+	Name              string
+	Occupation        string
+	Industry          string
+	AgeRange          string
+	Gender            string
+	Education         string
+	MBTI              string
+	PersonalityTags   []string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	ForbiddenTopics   []string
+	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
+	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
 }
 
 type GenerateAutoReplyInput struct {
-	CommentAuthor    string
-	RootTweet        string
-	CommentText      string
-	Tone             string
-	BlockedWords     []string
-	HasBot           bool
-	Name             string
-	Occupation       string
-	Industry         string
-	AgeRange         string
-	Gender           string
-	Education        string
-	MBTI             string
-	PersonalityTags  []string
-	IdentitySummary  string
-	VoiceTone        string
-	Topics           []string
-	ForbiddenTopics  []string
-	GrowthGoal       string
-	SafetyMode       string
-	PrimaryLanguage  string
-	LanguageStrategy string
+	CommentAuthor     string
+	RootTweet         string
+	CommentText       string
+	Tone              string
+	BlockedWords      []string
+	HasBot            bool
+	Name              string
+	Occupation        string
+	Industry          string
+	AgeRange          string
+	Gender            string
+	Education         string
+	MBTI              string
+	PersonalityTags   []string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	ForbiddenTopics   []string
+	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
+	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
 }
 
 type GenerateOAFBotSamplesInput struct {
-	Scene            string
-	Name             string
-	Occupation       string
-	Industry         string
-	AgeRange         string
-	Gender           string
-	Education        string
-	MBTI             string
-	PersonalityTags  []string
-	IdentitySummary  string
-	VoiceTone        string
-	Topics           []string
-	ForbiddenTopics  []string
-	GrowthGoal       string
-	SafetyMode       string
-	PrimaryLanguage  string
-	LanguageStrategy string
+	Scene             string
+	Name              string
+	Occupation        string
+	Industry          string
+	AgeRange          string
+	Gender            string
+	Education         string
+	MBTI              string
+	PersonalityTags   []string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	ForbiddenTopics   []string
+	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
+	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
 }
 
 type GenerateAutoPostInput struct {
@@ -109,6 +145,18 @@ type GenerateAutoPostInput struct {
 	Topics            []string
 	ForbiddenTopics   []string
 	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
@@ -168,6 +216,20 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner:   in.ProjectOneLiner,
+			TargetAudience:    in.TargetAudience,
+			CoreValueProps:    in.CoreValueProps,
+			ProductFeatures:   in.ProductFeatures,
+			Differentiators:   in.Differentiators,
+			ContentPillars:    in.ContentPillars,
+			ContentObjectives: in.ContentObjectives,
+			PreferredCTA:      in.PreferredCTA,
+			Hashtags:          in.Hashtags,
+			Keywords:          in.Keywords,
+			ComplianceNotes:   in.ComplianceNotes,
+			AvoidClaims:       in.AvoidClaims,
+		})
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
@@ -240,6 +302,20 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner:   in.ProjectOneLiner,
+			TargetAudience:    in.TargetAudience,
+			CoreValueProps:    in.CoreValueProps,
+			ProductFeatures:   in.ProductFeatures,
+			Differentiators:   in.Differentiators,
+			ContentPillars:    in.ContentPillars,
+			ContentObjectives: in.ContentObjectives,
+			PreferredCTA:      in.PreferredCTA,
+			Hashtags:          in.Hashtags,
+			Keywords:          in.Keywords,
+			ComplianceNotes:   in.ComplianceNotes,
+			AvoidClaims:       in.AvoidClaims,
+		})
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
@@ -314,6 +390,20 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	user.WriteString("Topics: " + strings.Join(in.Topics, ", ") + "\n")
 	user.WriteString("Forbidden topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 	user.WriteString("Growth goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+	writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+		ProjectOneLiner:   in.ProjectOneLiner,
+		TargetAudience:    in.TargetAudience,
+		CoreValueProps:    in.CoreValueProps,
+		ProductFeatures:   in.ProductFeatures,
+		Differentiators:   in.Differentiators,
+		ContentPillars:    in.ContentPillars,
+		ContentObjectives: in.ContentObjectives,
+		PreferredCTA:      in.PreferredCTA,
+		Hashtags:          in.Hashtags,
+		Keywords:          in.Keywords,
+		ComplianceNotes:   in.ComplianceNotes,
+		AvoidClaims:       in.AvoidClaims,
+	})
 	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	user.WriteString("No external input context is provided for this sample. If language_strategy is follow_context, use primary_language for this sample.\n")
@@ -395,6 +485,20 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
 		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
 		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner:   in.ProjectOneLiner,
+			TargetAudience:    in.TargetAudience,
+			CoreValueProps:    in.CoreValueProps,
+			ProductFeatures:   in.ProductFeatures,
+			Differentiators:   in.Differentiators,
+			ContentPillars:    in.ContentPillars,
+			ContentObjectives: in.ContentObjectives,
+			PreferredCTA:      in.PreferredCTA,
+			Hashtags:          in.Hashtags,
+			Keywords:          in.Keywords,
+			ComplianceNotes:   in.ComplianceNotes,
+			AvoidClaims:       in.AvoidClaims,
+		})
 		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	} else {
@@ -429,6 +533,36 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		return "", err
 	}
 	return truncateRunes(strings.TrimSpace(text), 260), nil
+}
+
+type oafBotStrategyContext struct {
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	ContentPillars    []string
+	ContentObjectives string
+	PreferredCTA      string
+	Hashtags          []string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
+}
+
+func writeOAFBotStrategyContext(user *strings.Builder, in oafBotStrategyContext) {
+	user.WriteString("project_one_liner: " + strings.TrimSpace(in.ProjectOneLiner) + "\n")
+	user.WriteString("target_audience: " + strings.TrimSpace(in.TargetAudience) + "\n")
+	user.WriteString("core_value_props: " + strings.TrimSpace(in.CoreValueProps) + "\n")
+	user.WriteString("product_features: " + strings.TrimSpace(in.ProductFeatures) + "\n")
+	user.WriteString("differentiators: " + strings.TrimSpace(in.Differentiators) + "\n")
+	user.WriteString("content_pillars: " + strings.Join(in.ContentPillars, ", ") + "\n")
+	user.WriteString("content_objectives: " + strings.TrimSpace(in.ContentObjectives) + "\n")
+	user.WriteString("preferred_cta: " + strings.TrimSpace(in.PreferredCTA) + "\n")
+	user.WriteString("preferred_hashtags: " + strings.Join(in.Hashtags, ", ") + "\n")
+	user.WriteString("keywords: " + strings.Join(in.Keywords, ", ") + "\n")
+	user.WriteString("compliance_notes: " + strings.TrimSpace(in.ComplianceNotes) + "\n")
+	user.WriteString("avoid_claims: " + strings.Join(in.AvoidClaims, ", ") + "\n")
 }
 
 func writeLanguageConfig(user *strings.Builder, primaryLanguage, strategy string) {

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -14,6 +15,10 @@ const (
 	AIGenerationSceneAutoReply          = "auto_reply"
 	AIGenerationSceneAutoComment        = "auto_comment"
 	AIGenerationSceneOAFBotTestGenerate = "oaf_bot_test_generate"
+
+	defaultAIInputTokensPerGeneration  = int64(3000)
+	defaultAIOutputTokensPerGeneration = int64(120)
+	defaultAIEstimatedCostCents        = int64(1)
 )
 
 type AIGenerationUsageRepository struct{ DB *gorm.DB }
@@ -51,6 +56,10 @@ func (r *AIGenerationUsageRepository) ListByUserBot(userID, botID uint, limit in
 }
 
 func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string, at time.Time, delta int64) error {
+	return r.IncrementWithCost(userID, botID, scene, at, delta, 0, 0, "")
+}
+
+func (r *AIGenerationUsageRepository) IncrementWithCost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string) error {
 	if delta <= 0 {
 		delta = 1
 	}
@@ -61,7 +70,7 @@ func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string
 		Month:  UsageMonth(at),
 		Count:  delta,
 	}
-	return r.DB.Clauses(clause.OnConflict{
+	if err := r.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "user_id"},
 			{Name: "bot_id"},
@@ -72,5 +81,56 @@ func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string
 			"count":      gorm.Expr("count + ?", delta),
 			"updated_at": at.UTC(),
 		}),
-	}).Create(&row).Error
+	}).Create(&row).Error; err != nil {
+		return err
+	}
+	return r.recordEstimatedAICost(userID, botID, scene, at, delta, inputTokens, outputTokens, modelName)
+}
+
+func (r *AIGenerationUsageRepository) recordEstimatedAICost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string) error {
+	if delta <= 0 {
+		delta = 1
+	}
+	unitBasis := "provider_usage"
+	if inputTokens <= 0 && outputTokens <= 0 {
+		unitBasis = "estimated_default"
+		inputTokens = defaultAIInputTokensPerGeneration * delta
+		outputTokens = defaultAIOutputTokensPerGeneration * delta
+	}
+	details, _ := json.Marshal(map[string]any{
+		"scene":      scene,
+		"model":      modelName,
+		"unit_basis": unitBasis,
+	})
+	row := model.CostUsageLedger{
+		UserID:             userID,
+		BotID:              botID,
+		SourceType:         "ai_generation",
+		Provider:           "openai",
+		Metric:             "chat_completion",
+		Quantity:           delta,
+		InputTokens:        inputTokens,
+		OutputTokens:       outputTokens,
+		EstimatedCostCents: estimatedOpenAICostCents(inputTokens, outputTokens, delta),
+		Currency:           "USD",
+		OccurredAt:         at.UTC(),
+		Details:            string(details),
+	}
+	return r.DB.Create(&row).Error
+}
+
+func estimatedOpenAICostCents(inputTokens, outputTokens, delta int64) int64 {
+	if inputTokens <= 0 && outputTokens <= 0 {
+		if delta <= 0 {
+			delta = 1
+		}
+		return defaultAIEstimatedCostCents * delta
+	}
+	// Mirrors subscription.DefaultUnitCosts: $0.40/M input and $1.60/M output.
+	microCents := inputTokens*40 + outputTokens*160
+	cents := (microCents + 999999) / 1000000
+	if cents <= 0 {
+		return 1
+	}
+	return cents
 }

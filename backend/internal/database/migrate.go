@@ -39,6 +39,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.BillingOrder{},
 		&model.BillingOrderAudit{},
 		&model.BillingChainTx{},
+		&model.BillingLedgerEntry{},
+		&model.SubscriptionChangeEvent{},
+		&model.CostUsageLedger{},
 	); err != nil {
 		return err
 	}
@@ -88,6 +91,9 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.BillingOrder{}, "订阅支付订单"},
 		{&model.BillingOrderAudit{}, "订阅支付订单运营审计"},
 		{&model.BillingChainTx{}, "已消费的链上交易哈希"},
+		{&model.BillingLedgerEntry{}, "订阅支付账本事件"},
+		{&model.SubscriptionChangeEvent{}, "订阅套餐变更事件"},
+		{&model.CostUsageLedger{}, "成本用量账本"},
 	}
 	for _, item := range modelComments {
 		stmt := &gorm.Statement{DB: db}

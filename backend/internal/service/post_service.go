@@ -293,12 +293,12 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 			bot = nil
 		}
 	}
-	content, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
+	generated, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
 	if err != nil {
 		return nil, err
 	}
 	botID := botIDForUsage(bot)
-	if err := s.usageRepo.Increment(userID, botID, repository.AIGenerationSceneAutoPost, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, botID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	user, err := s.userRepo.GetByID(userID)
@@ -307,7 +307,7 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	}
 	limits := subscription.LimitsForUser(user)
 	return &dto.PostGenerateResponse{
-		Content: content,
+		Content: generated.Text,
 		BotID:   botID,
 		Scene:   repository.AIGenerationSceneAutoPost,
 		Usage: dto.PlanUsageData{

@@ -93,6 +93,7 @@ export type BillingCreateOrderRequest = {
   billing_cycle?: "monthly" | "yearly";
   method: string;
   network: string;
+  idempotency_key?: string;
 };
 
 export type BillingQuoteRequest = {
@@ -135,6 +136,7 @@ export type BillingOrderDetailApi = {
   credit_amount?: string;
   payable_amount?: string;
   order_type?: string;
+  idempotency_key?: string;
   currency: string;
   network: string;
   token_address: string;
@@ -168,6 +170,7 @@ export type BillingOrderListItemApi = {
   credit_amount?: string;
   payable_amount?: string;
   order_type?: string;
+  idempotency_key?: string;
   currency: string;
   method: string;
   network: string;

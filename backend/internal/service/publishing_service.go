@@ -695,6 +695,9 @@ func (s *PublishingService) completeJob(job *model.PublishJob, result PublishRes
 	if err := s.jobRepo.Save(job); err != nil {
 		return err
 	}
+	if mode == repository.PublishModeReal {
+		_ = s.jobRepo.RecordXPublishCost(job, now)
+	}
 	if err := s.markSourcePublished(job, now, mode); err != nil {
 		return err
 	}

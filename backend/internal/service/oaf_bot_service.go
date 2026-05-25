@@ -120,7 +120,7 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	out, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
+	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
 		Scene:             scene,
 		Name:              bot.Name,
 		Occupation:        bot.Occupation,
@@ -154,7 +154,7 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	if err != nil {
 		return nil, err
 	}
-	if err := s.usageRepo.Increment(userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, usage); err != nil {
 		return nil, err
 	}
 	out.BotID = bot.ID

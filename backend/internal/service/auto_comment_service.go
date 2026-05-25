@@ -208,10 +208,11 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		}
 	}
 	blocked := blockedWordsFromConfig(cfg)
-	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromBot(target, bot, blocked))
+	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromBot(target, bot, blocked))
 	if err != nil {
 		return nil, err
 	}
+	comment := generated.Text
 	risk := evaluateAutoCommentRisk(comment, bot, blocked)
 	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)
 	task := &model.AutoCommentTask{
@@ -238,7 +239,7 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	if err := s.taskRepo.Create(task); err != nil {
 		return nil, err
 	}
-	if err := s.usageRepo.Increment(userID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
@@ -369,7 +370,7 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, task.UserID, now); err != nil {
 		return err
 	}
-	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(task.TargetUsername, task.TargetTweetText, cfg.Tone, blocked, bot))
+	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(task.TargetUsername, task.TargetTweetText, cfg.Tone, blocked, bot))
 	if err != nil {
 		task.FailureCategory = "llm_error"
 		task.FailureReason = truncateErrMsg(err.Error())
@@ -377,6 +378,7 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 		_ = s.taskRepo.Save(task)
 		return err
 	}
+	comment := generated.Text
 	task.GeneratedComment = truncateRunes(comment, autoCommentPreviewRunes)
 	task.GeneratedAt = &now
 	task.BotID = botIDForUsage(bot)
@@ -385,7 +387,7 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 	if err := s.taskRepo.Save(task); err != nil {
 		return err
 	}
-	return s.usageRepo.Increment(task.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1)
+	return recordAIGenerationUsage(s.usageRepo, task.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage)
 }
 
 func (s *AutoCommentService) RunTick(ctx context.Context) {
@@ -504,7 +506,8 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 			return nil, err
 		}
 	}
-	comment, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot))
+	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot))
+	comment := generated.Text
 	risk := evaluateAutoCommentRisk(comment, bot, blocked)
 	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)
 	task := &model.AutoCommentTask{
@@ -542,7 +545,7 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if err := s.taskRepo.Create(task); err != nil {
 		return nil, err
 	}
-	if err := s.usageRepo.Increment(target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {

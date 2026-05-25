@@ -92,10 +92,11 @@ type BillingPaymentMethodsResponse struct {
 }
 
 type BillingCreateOrderRequest struct {
-	PlanCode     string `json:"plan_code" binding:"required"`
-	BillingCycle string `json:"billing_cycle"`
-	Method       string `json:"method" binding:"required"`
-	Network      string `json:"network" binding:"required"`
+	PlanCode       string `json:"plan_code" binding:"required"`
+	BillingCycle   string `json:"billing_cycle"`
+	Method         string `json:"method" binding:"required"`
+	Network        string `json:"network" binding:"required"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type BillingQuoteRequest struct {
@@ -139,6 +140,7 @@ type BillingOrderDetailResponse struct {
 	CreditAmount         string                  `json:"credit_amount,omitempty"`
 	PayableAmount        string                  `json:"payable_amount,omitempty"`
 	OrderType            string                  `json:"order_type,omitempty"`
+	IdempotencyKey       string                  `json:"idempotency_key,omitempty"`
 	Currency             string                  `json:"currency"`
 	Network              string                  `json:"network"`
 	TokenAddress         string                  `json:"token_address"`
@@ -172,6 +174,7 @@ type BillingOrderListItem struct {
 	CreditAmount         string `json:"credit_amount,omitempty"`
 	PayableAmount        string `json:"payable_amount,omitempty"`
 	OrderType            string `json:"order_type,omitempty"`
+	IdempotencyKey       string `json:"idempotency_key,omitempty"`
 	Currency             string `json:"currency"`
 	Method               string `json:"method"`
 	Network              string `json:"network"`

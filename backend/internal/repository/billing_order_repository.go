@@ -46,6 +46,22 @@ func (r *BillingOrderRepository) Create(o *model.BillingOrder) error {
 	return r.DB.Create(o).Error
 }
 
+func (r *BillingOrderRepository) GetReusableIdempotentOrder(userID uint, key string, now time.Time) (*model.BillingOrder, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var o model.BillingOrder
+	err := r.DB.
+		Where("user_id = ? AND idempotency_key = ? AND status IN ? AND expired_at > ?", userID, key, []string{"pending", "paid"}, now).
+		Order("id DESC").
+		First(&o).Error
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
 func (r *BillingOrderRepository) GetByID(id uint) (*model.BillingOrder, error) {
 	var o model.BillingOrder
 	if err := r.DB.First(&o, id).Error; err != nil {
@@ -292,6 +308,20 @@ func (r *BillingOrderRepository) ListAuditsByOrder(orderID uint, limit int) ([]m
 	var rows []model.BillingOrderAudit
 	err := r.DB.Where("order_id = ?", orderID).Order("id DESC").Limit(limit).Find(&rows).Error
 	return rows, err
+}
+
+func (r *BillingOrderRepository) CreateLedgerEntry(tx *gorm.DB, entry *model.BillingLedgerEntry) error {
+	if tx == nil {
+		tx = r.DB
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(entry).Error
+}
+
+func (r *BillingOrderRepository) CreateSubscriptionChange(tx *gorm.DB, entry *model.SubscriptionChangeEvent) error {
+	if tx == nil {
+		tx = r.DB
+	}
+	return tx.Create(entry).Error
 }
 
 func cleanBillingFilter(v string) string {

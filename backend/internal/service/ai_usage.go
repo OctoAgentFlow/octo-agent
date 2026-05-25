@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	openaiint "octo-agent/backend/internal/integration/openai"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/repository"
@@ -42,6 +43,13 @@ func currentAIGenerationUsage(usageRepo *repository.AIGenerationUsageRepository,
 		return 0
 	}
 	return used
+}
+
+func recordAIGenerationUsage(usageRepo *repository.AIGenerationUsageRepository, userID, botID uint, scene string, now time.Time, usage openaiint.TextUsage) error {
+	if usageRepo == nil {
+		return nil
+	}
+	return usageRepo.IncrementWithCost(userID, botID, scene, now, 1, usage.InputTokens, usage.OutputTokens, usage.Model)
 }
 
 func botIDForUsage(bot *model.OAFBot) uint {

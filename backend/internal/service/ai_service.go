@@ -14,6 +14,11 @@ type AIService struct {
 	openai *openaiint.Client
 }
 
+type AIGeneratedText struct {
+	Text  string
+	Usage openaiint.TextUsage
+}
+
 type GenerateAutoCommentInput struct {
 	TargetUsername    string
 	TargetTweet       string
@@ -173,10 +178,10 @@ func (s *AIService) providerSource() string {
 	return "unconfigured"
 }
 
-func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyInput) (string, error) {
+func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyInput) (AIGeneratedText, error) {
 	commentText := strings.TrimSpace(in.CommentText)
 	if commentText == "" {
-		return "", fmt.Errorf("comment text is required")
+		return AIGeneratedText{}, fmt.Errorf("comment text is required")
 	}
 	tone := strings.TrimSpace(in.Tone)
 	if tone == "" {
@@ -253,20 +258,20 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
 	user.WriteString("- Do not include surrounding quotes.\n")
 
-	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
 	})
 	if err != nil {
-		return "", err
+		return AIGeneratedText{}, err
 	}
-	return truncateRunes(strings.TrimSpace(text), 220), nil
+	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
 }
 
-func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoCommentInput) (string, error) {
+func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoCommentInput) (AIGeneratedText, error) {
 	targetTweet := strings.TrimSpace(in.TargetTweet)
 	if targetTweet == "" {
-		return "", fmt.Errorf("target tweet is required")
+		return AIGeneratedText{}, fmt.Errorf("target tweet is required")
 	}
 	tone := strings.TrimSpace(in.Tone)
 	if tone == "" {
@@ -342,17 +347,17 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
 	user.WriteString("- Do not include surrounding quotes.\n")
 
-	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
 	})
 	if err != nil {
-		return "", err
+		return AIGeneratedText{}, err
 	}
-	return truncateRunes(strings.TrimSpace(text), 220), nil
+	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
 }
 
-func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, error) {
+func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		name = "OAF Bot"
@@ -415,13 +420,14 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	user.WriteString("- Keep the examples specific to the persona.\n")
 	user.WriteString("- Do not mention the bot name in the content unless explicitly instructed by the user.\n")
 
-	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
 	})
 	if err != nil {
-		return nil, err
+		return nil, openaiint.TextUsage{}, err
 	}
+	text := result.Text
 	content := extractSceneContent(text, scene)
 	content = truncateRunes(stripGeneratedJSONWrapper(content, scene), maxChars)
 	out := dto.OAFBotTestGenerateResponse{
@@ -431,10 +437,10 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 		RawResult: strings.TrimSpace(text),
 	}
 	setSampleSceneContent(&out, scene, content)
-	return &out, nil
+	return &out, result.Usage, nil
 }
 
-func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (string, error) {
+func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
 		handle = "@account"
@@ -525,14 +531,14 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	user.WriteString("- Do not ask for private keys, seed phrases, wallet connections, airdrops, or guaranteed returns.\n")
 	user.WriteString("- Avoid forbidden topics if any are listed.\n")
 
-	text, err := s.openai.GenerateText(ctx, []openaiint.ChatMessage{
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
 	})
 	if err != nil {
-		return "", err
+		return AIGeneratedText{}, err
 	}
-	return truncateRunes(strings.TrimSpace(text), 260), nil
+	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 260), Usage: result.Usage}, nil
 }
 
 type oafBotStrategyContext struct {

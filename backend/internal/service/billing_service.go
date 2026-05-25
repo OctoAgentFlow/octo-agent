@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -470,6 +471,26 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 	return string(b)
 }
 
+func billingOrderFingerprint(planCode, cycle, method, network, amount string) string {
+	parts := []string{
+		subscription.NormalizePlanCode(planCode),
+		subscription.NormalizeBillingCycle(cycle),
+		strings.ToUpper(strings.TrimSpace(method)),
+		strings.ToUpper(strings.TrimSpace(network)),
+		strings.TrimSpace(amount),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+func sanitizeBillingIdempotencyKey(raw string) string {
+	key := strings.TrimSpace(raw)
+	if len(key) > 128 {
+		key = key[:128]
+	}
+	return key
+}
+
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
 	now := time.Now().UTC()
@@ -494,6 +515,18 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		return nil, fmt.Errorf("invalid payment method decimals in config")
 	}
 	basePayableAmount := centsToAmountString(quote.payableCents)
+	idempotencyKey := sanitizeBillingIdempotencyKey(req.IdempotencyKey)
+	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount)
+	if idempotencyKey != "" {
+		if existing, err := s.orderRepo.GetReusableIdempotentOrder(userID, idempotencyKey, now); err == nil {
+			if existing.RequestFingerprint != "" && existing.RequestFingerprint != baseFingerprint {
+				return nil, fmt.Errorf("idempotency key reused with a different billing request")
+			}
+			return billingCreateResponseFromOrder(existing, &quote.dto), nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
 	exactPayableAmount, err := s.uniquePendingOrderAmount(basePayableAmount, pm, now)
 	if err != nil {
 		return nil, err
@@ -515,6 +548,8 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		CreditAmount:         centsToAmountString(quote.creditCents),
 		PayableAmount:        exactPayableAmount,
 		OrderType:            quote.dto.OrderType,
+		IdempotencyKey:       idempotencyKey,
+		RequestFingerprint:   baseFingerprint,
 		FromPlanCode:         quote.dto.CurrentPlan,
 		FromBillingCycle:     quote.dto.CurrentBillingCycle,
 		ProrationSnapshot:    billingProrationSnapshot(quote),
@@ -536,6 +571,21 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if err := s.orderRepo.Create(o); err != nil {
 		return nil, err
 	}
+	_ = s.orderRepo.CreateLedgerEntry(nil, &model.BillingLedgerEntry{
+		UserID:         userID,
+		OrderID:        o.ID,
+		EventType:      "order_created",
+		Amount:         o.Amount,
+		Currency:       o.Currency,
+		Status:         o.Status,
+		IdempotencyKey: o.IdempotencyKey,
+		UniqueKey:      fmt.Sprintf("order_created:%d", o.ID),
+		Details:        billingLedgerDetails(o),
+	})
+	return billingCreateResponseFromOrder(o, &quote.dto), nil
+}
+
+func billingCreateResponseFromOrder(o *model.BillingOrder, quote *dto.BillingUpgradeQuote) *dto.BillingCreateOrderResponse {
 	return &dto.BillingCreateOrderResponse{
 		OrderID:         strconv.FormatUint(uint64(o.ID), 10),
 		Amount:          o.Amount,
@@ -545,8 +595,33 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		ReceiverAddress: o.ReceiverAddress,
 		ExpiredAt:       o.ExpiredAt.UTC().Format(time.RFC3339),
 		Status:          o.Status,
-		Quote:           &quote.dto,
-	}, nil
+		Quote:           quote,
+	}
+}
+
+func billingLedgerDetails(o *model.BillingOrder) string {
+	if o == nil {
+		return ""
+	}
+	payload := map[string]any{
+		"plan_code":           o.PlanCode,
+		"billing_cycle":       o.BillingCycle,
+		"order_type":          o.OrderType,
+		"method":              o.Method,
+		"network":             o.Network,
+		"chain_id":            o.ChainID,
+		"token_address":       o.TokenAddress,
+		"receiver_address":    o.ReceiverAddress,
+		"original_amount":     o.OriginalAmount,
+		"credit_amount":       o.CreditAmount,
+		"payable_amount":      o.PayableAmount,
+		"request_fingerprint": o.RequestFingerprint,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // GetOrder returns one order for the authenticated user (polling).
@@ -633,6 +708,7 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		CreditAmount:         o.CreditAmount,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
+		IdempotencyKey:       o.IdempotencyKey,
 		Currency:             o.Currency,
 		Network:              o.Network,
 		TokenAddress:         o.TokenAddress,
@@ -677,6 +753,7 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		CreditAmount:         o.CreditAmount,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
+		IdempotencyKey:       o.IdempotencyKey,
 		Currency:             o.Currency,
 		Method:               o.Method,
 		Network:              o.Network,
@@ -1284,6 +1361,51 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 		}
 		cycle := normalizeOrderBillingCycle(&ord)
 		expires := billingNextSubscriptionExpiry(tx, ord, paidAt, cycle)
+		var before model.User
+		_ = tx.Select("subscription_plan_code", "subscription_billing_cycle", "subscription_expires_at").First(&before, ord.UserID).Error
+		if err := s.orderRepo.CreateLedgerEntry(tx, &model.BillingLedgerEntry{
+			UserID:         ord.UserID,
+			OrderID:        ord.ID,
+			EventType:      "payment_confirmed",
+			Amount:         ord.Amount,
+			Currency:       ord.Currency,
+			Status:         "paid",
+			TxHash:         normHash,
+			IdempotencyKey: ord.IdempotencyKey,
+			UniqueKey:      fmt.Sprintf("payment_confirmed:%d:%s", ord.ChainID, normHash),
+			Details:        billingLedgerDetails(&ord),
+		}); err != nil {
+			return err
+		}
+		if err := s.orderRepo.CreateSubscriptionChange(tx, &model.SubscriptionChangeEvent{
+			UserID:           ord.UserID,
+			OrderID:          ord.ID,
+			ChangeType:       firstNonEmpty(ord.OrderType, "new"),
+			FromPlanCode:     before.SubscriptionPlanCode,
+			FromBillingCycle: before.SubscriptionBillingCycle,
+			FromExpiresAt:    before.SubscriptionExpiresAt,
+			ToPlanCode:       plan.Code,
+			ToBillingCycle:   cycle,
+			StartedAt:        paidAt,
+			ExpiresAt:        expires,
+			Details:          billingLedgerDetails(&ord),
+		}); err != nil {
+			return err
+		}
+		if err := s.orderRepo.CreateLedgerEntry(tx, &model.BillingLedgerEntry{
+			UserID:         ord.UserID,
+			OrderID:        ord.ID,
+			EventType:      "subscription_changed",
+			Amount:         ord.Amount,
+			Currency:       ord.Currency,
+			Status:         "active",
+			TxHash:         normHash,
+			IdempotencyKey: ord.IdempotencyKey,
+			UniqueKey:      fmt.Sprintf("subscription_changed:%d", ord.ID),
+			Details:        billingLedgerDetails(&ord),
+		}); err != nil {
+			return err
+		}
 		return tx.Model(&model.User{}).Where("id = ?", ord.UserID).Updates(map[string]any{
 			"subscription_plan_code":     plan.Code,
 			"subscription_status":        "active",

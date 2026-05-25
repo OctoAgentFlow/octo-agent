@@ -64,6 +64,18 @@ type ChatMessage struct {
 	Content string `json:"content"`
 }
 
+type TextUsage struct {
+	Model        string `json:"model"`
+	InputTokens  int64  `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+	TotalTokens  int64  `json:"total_tokens"`
+}
+
+type TextResult struct {
+	Text  string
+	Usage TextUsage
+}
+
 type chatCompletionRequest struct {
 	Model       string        `json:"model"`
 	Messages    []ChatMessage `json:"messages"`
@@ -72,9 +84,15 @@ type chatCompletionRequest struct {
 }
 
 type chatCompletionResponse struct {
+	Model   string `json:"model"`
 	Choices []struct {
 		Message ChatMessage `json:"message"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int64 `json:"prompt_tokens"`
+		CompletionTokens int64 `json:"completion_tokens"`
+		TotalTokens      int64 `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
@@ -82,14 +100,22 @@ type chatCompletionResponse struct {
 }
 
 func (c *Client) GenerateText(ctx context.Context, messages []ChatMessage) (string, error) {
+	result, err := c.GenerateTextWithUsage(ctx, messages)
+	if err != nil {
+		return "", err
+	}
+	return result.Text, nil
+}
+
+func (c *Client) GenerateTextWithUsage(ctx context.Context, messages []ChatMessage) (TextResult, error) {
 	if c == nil {
-		return "", fmt.Errorf("openai client is nil")
+		return TextResult{}, fmt.Errorf("openai client is nil")
 	}
 	if c.apiKey == "" {
-		return "", fmt.Errorf("openai api key is empty")
+		return TextResult{}, fmt.Errorf("openai api key is empty")
 	}
 	if len(messages) == 0 {
-		return "", fmt.Errorf("openai messages are empty")
+		return TextResult{}, fmt.Errorf("openai messages are empty")
 	}
 	body := chatCompletionRequest{
 		Model:       c.model,
@@ -99,38 +125,53 @@ func (c *Client) GenerateText(ctx context.Context, messages []ChatMessage) (stri
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("marshal openai request: %w", err)
+		return TextResult{}, fmt.Errorf("marshal openai request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(raw))
 	if err != nil {
-		return "", fmt.Errorf("build openai request: %w", err)
+		return TextResult{}, fmt.Errorf("build openai request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("call openai: %w", err)
+		return TextResult{}, fmt.Errorf("call openai: %w", err)
 	}
 	defer resp.Body.Close()
 	respRaw, _ := io.ReadAll(resp.Body)
 	var out chatCompletionResponse
 	if err := json.Unmarshal(respRaw, &out); err != nil {
-		return "", fmt.Errorf("decode openai response: %w", err)
+		return TextResult{}, fmt.Errorf("decode openai response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if out.Error != nil && strings.TrimSpace(out.Error.Message) != "" {
-			return "", fmt.Errorf("openai api error: status=%d message=%s", resp.StatusCode, strings.TrimSpace(out.Error.Message))
+			return TextResult{}, fmt.Errorf("openai api error: status=%d message=%s", resp.StatusCode, strings.TrimSpace(out.Error.Message))
 		}
-		return "", fmt.Errorf("openai api error: status=%d", resp.StatusCode)
+		return TextResult{}, fmt.Errorf("openai api error: status=%d", resp.StatusCode)
 	}
 	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("openai response has no choices")
+		return TextResult{}, fmt.Errorf("openai response has no choices")
 	}
 	text := strings.TrimSpace(out.Choices[0].Message.Content)
 	text = strings.Trim(text, "\"“”")
 	if text == "" {
-		return "", fmt.Errorf("openai response is empty")
+		return TextResult{}, fmt.Errorf("openai response is empty")
 	}
-	return text, nil
+	usage := TextUsage{Model: firstNonEmpty(out.Model, c.model)}
+	if out.Usage != nil {
+		usage.InputTokens = out.Usage.PromptTokens
+		usage.OutputTokens = out.Usage.CompletionTokens
+		usage.TotalTokens = out.Usage.TotalTokens
+	}
+	return TextResult{Text: text, Usage: usage}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }

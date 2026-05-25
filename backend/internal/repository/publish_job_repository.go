@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -122,6 +124,33 @@ func (r *PublishJobRepository) ListBySources(userID uint, sourceType string, sou
 
 func (r *PublishJobRepository) Save(job *model.PublishJob) error {
 	return r.DB.Save(job).Error
+}
+
+func (r *PublishJobRepository) RecordXPublishCost(job *model.PublishJob, occurredAt time.Time) error {
+	if job == nil || strings.TrimSpace(job.ExternalID) == "" {
+		return nil
+	}
+	details, _ := json.Marshal(map[string]any{
+		"source_type":  job.SourceType,
+		"source_id":    job.SourceID,
+		"publish_mode": job.PublishMode,
+		"external_url": job.ExternalURL,
+	})
+	row := model.CostUsageLedger{
+		UserID:              job.UserID,
+		BotID:               job.BotID,
+		SourceType:          job.SourceType,
+		SourceID:            job.SourceID,
+		Provider:            "x",
+		Metric:              "write_post",
+		Quantity:            1,
+		EstimatedCostCents:  2,
+		Currency:            "USD",
+		OccurredAt:          occurredAt.UTC(),
+		ExternalReferenceID: "x_publish:" + strings.TrimSpace(job.ExternalID),
+		Details:             string(details),
+	}
+	return r.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
 }
 
 func (r *PublishJobRepository) ResetForRetry(job *model.PublishJob, now time.Time) error {

@@ -53,6 +53,7 @@ export function BillingCheckoutDialog({
   const [confirmTxHash, setConfirmTxHash] = useState("");
   const [confirmingTx, setConfirmingTx] = useState(false);
   const [confirmTxError, setConfirmTxError] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
 
   const options = paymentMethods;
   const selectedNetworkValue = selectedNetwork || defaultNetwork;
@@ -75,6 +76,7 @@ export function BillingCheckoutDialog({
     setConfirmTxHash("");
     setConfirmTxError("");
     setConfirmingTx(false);
+    setIdempotencyKey("");
   }, []);
 
   const handleOpenChange = useCallback(
@@ -151,11 +153,16 @@ export function BillingCheckoutDialog({
 
   const startPay = async () => {
     try {
+      const nextIdempotencyKey =
+        idempotencyKey ||
+        `checkout:${planCode}:${billingCycle}:${selectedNetworkValue}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      setIdempotencyKey(nextIdempotencyKey);
       const order = await billingService.createOrder({
         plan_code: planCode,
         billing_cycle: billingCycle,
         method: "USDT",
         network: selectedNetworkValue,
+        idempotency_key: nextIdempotencyKey,
       });
       setCreated(order);
       setOrderId(order.order_id);

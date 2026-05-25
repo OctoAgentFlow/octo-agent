@@ -41,6 +41,13 @@ app:
   official_x_url: "https://x.com/octo_agent_flow"
   telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
 
+jwt:
+  # Production requires a stable random secret shared by API and Admin API.
+  # Prefer setting JWT_SECRET in the server environment or private config.
+  secret: "TODO_PROD_JWT_SECRET"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
   client_secret: "TODO_X_CLIENT_SECRET"
@@ -49,12 +56,12 @@ x_oauth:
   scopes: "tweet.read tweet.write users.read offline.access"
 
 x_publisher:
-  # Production should remain disabled until X posting permissions, legal review, and rate limits are verified.
-  real_publish_enabled: false
+  # Production real publishing is enabled. Keep manual controls and rate limits conservative.
+  real_publish_enabled: true
   manual_publish_enabled: true
   per_account_daily_limit: 20
   per_account_min_interval_seconds: 300
-  dry_run: true
+  dry_run: false
 
 llm:
   default_provider: "openai"

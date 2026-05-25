@@ -56,12 +56,12 @@ x_oauth:
   scopes: "tweet.read users.read offline.access"
 
 x_publisher:
-  # Test defaults: show manual publish controls, but do not send real requests to X.
-  real_publish_enabled: false
+  # Test real publishing is enabled for X integration verification.
+  real_publish_enabled: true
   manual_publish_enabled: true
   per_account_daily_limit: 1
   per_account_min_interval_seconds: 300
-  dry_run: true
+  dry_run: false
 
 billing:
   order_ttl_minutes: 30

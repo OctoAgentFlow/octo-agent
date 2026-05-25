@@ -39,6 +39,13 @@ email:
 app:
   frontend_base_url: "https://octo-agent.com"
 
+jwt:
+  # Must match config.prod.api.yaml so API/Admin sessions survive restarts consistently.
+  # Prefer setting JWT_SECRET in the server environment or private config.
+  secret: "TODO_PROD_JWT_SECRET"
+  access_expire_seconds: 7200
+  refresh_expire_seconds: 2592000
+
 admin_auth:
   emails:
     - "wang13704032425@163.com"

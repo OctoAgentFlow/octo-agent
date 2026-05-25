@@ -8,22 +8,14 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
+import { ScheduledDateTimePicker, isoToLocalDateTimeValue } from "@/components/posts/scheduled-date-time-picker";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { postService } from "@/services/post.service";
 import type { PostItem, PostStatus } from "@/types/post";
 
 type LoadState = "loading" | "ready" | "error";
-
-function isoToDatetimeLocalValue(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function localDatetimeToISO(local: string): string | null {
   if (!local.trim()) return null;
@@ -53,7 +45,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setPost(p);
       setContent(p.content);
       setStatus(p.status);
-      setScheduledLocal(isoToDatetimeLocalValue(p.scheduled_at));
+      setScheduledLocal(isoToLocalDateTimeValue(p.scheduled_at));
       setLoadState("ready");
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -120,7 +112,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setPost(result.post);
       setStatus(result.post.status);
       setContent(result.post.content);
-      setScheduledLocal(isoToDatetimeLocalValue(result.post.scheduled_at));
+      setScheduledLocal(isoToLocalDateTimeValue(result.post.scheduled_at));
       pushToast(t("posts.detail.executeSuccess"));
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -240,14 +232,12 @@ export function PostDetailClient({ postId }: { postId: number }) {
             {status === "scheduled" ? (
               <label className="block text-xs text-[#71767b]">
                 {t("posts.create.scheduledAt")}
-                <Input
-                  type="datetime-local"
-                  className="mt-1 max-w-md"
-                  value={scheduledLocal}
-                  onChange={(e) => setScheduledLocal(e.target.value)}
-                  required
-                  disabled={post.status === "processing"}
-                />
+                  <ScheduledDateTimePicker
+                    className="mt-1"
+                    value={scheduledLocal}
+                    onChange={setScheduledLocal}
+                    disabled={post.status === "processing"}
+                  />
               </label>
             ) : null}
             {post.published_at ? (

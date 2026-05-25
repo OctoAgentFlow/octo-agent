@@ -8,8 +8,8 @@ import { AlertCircle, Bot, CalendarClock, FileText, Send, ShieldCheck, Sparkles,
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
+import { ScheduledDateTimePicker } from "@/components/posts/scheduled-date-time-picker";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
@@ -320,12 +320,10 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
               {status === "scheduled" ? (
                 <label className="block text-xs text-[#71767b]">
                   {t("posts.create.scheduledAt")}
-                  <Input
-                    type="datetime-local"
-                    className="mt-1 max-w-md"
+                  <ScheduledDateTimePicker
+                    className="mt-1"
                     value={scheduledLocal}
-                    onChange={(e) => setScheduledLocal(e.target.value)}
-                    required
+                    onChange={setScheduledLocal}
                   />
                   {!autoPostEnabled ? (
                     <span className="mt-2 flex items-center gap-1 text-xs text-[#f6d96b]">

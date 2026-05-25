@@ -28,6 +28,7 @@ import (
 type BillingService struct {
 	userRepo    *repository.UserRepository
 	orderRepo   *repository.BillingOrderRepository
+	pointRepo   *repository.PointRepository
 	accountRepo *repository.TwitterAccountRepository
 	oafBotRepo  *repository.OAFBotRepository
 	usageRepo   *repository.AIGenerationUsageRepository
@@ -92,10 +93,12 @@ type billingQuoteCalc struct {
 	currentCycle       string
 	currentPeriodStart time.Time
 	currentPeriodEnd   time.Time
+	pointsUsed         int64
+	pointDiscountCents int64
 }
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -203,7 +206,46 @@ func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.B
 	if err != nil {
 		return nil, err
 	}
+	if err := s.applyPointDiscount(userID, &quote, req.PointsToUse); err != nil {
+		return nil, err
+	}
 	return &quote.dto, nil
+}
+
+func (s *BillingService) applyPointDiscount(userID uint, quote *billingQuoteCalc, requestedPoints int64) error {
+	if quote == nil {
+		return nil
+	}
+	var balance int64
+	if s.pointRepo != nil {
+		account, err := s.pointRepo.Account(userID)
+		if err != nil {
+			return err
+		}
+		balance = account.Balance
+	}
+	maxByAmount := (quote.payableCents / 2) / 10
+	maxPoints := minInt64(balance, maxByAmount)
+	if requestedPoints < 0 {
+		requestedPoints = 0
+	}
+	pointsUsed := minInt64(requestedPoints, maxPoints)
+	discountCents := pointsUsed * 10
+	if discountCents > quote.payableCents {
+		discountCents = quote.payableCents
+	}
+	quote.pointsUsed = pointsUsed
+	quote.pointDiscountCents = discountCents
+	quote.payableCents -= discountCents
+	if quote.payableCents < 0 {
+		quote.payableCents = 0
+	}
+	quote.dto.PointBalance = balance
+	quote.dto.MaxPointsUsable = maxPoints
+	quote.dto.PointsUsed = pointsUsed
+	quote.dto.PointDiscountAmount = centsToAmountString(discountCents)
+	quote.dto.PayableAmount = centsToAmountString(quote.payableCents)
+	return nil
 }
 
 func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
@@ -243,6 +285,7 @@ func calculateBillingQuote(user *model.User, targetPlanCode, targetBillingCycle 
 		TargetBillingCycle:  targetCycle,
 		OriginalAmount:      centsToAmountString(originalCents),
 		CreditAmount:        "0",
+		PointDiscountAmount: "0",
 		PayableAmount:       centsToAmountString(originalCents),
 		Currency:            targetPlan.Currency,
 		OrderType:           "new",
@@ -370,6 +413,13 @@ func centsToAmountString(cents int64) string {
 	return fmt.Sprintf("%d.%02d", whole, frac)
 }
 
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func amountStringFromMinUnits(units *big.Int, decimals int) string {
 	if units == nil || units.Sign() <= 0 {
 		return "0"
@@ -453,6 +503,8 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 		"target_billing_cycle":  q.dto.TargetBillingCycle,
 		"original_amount":       q.dto.OriginalAmount,
 		"credit_amount":         q.dto.CreditAmount,
+		"point_discount_amount": q.dto.PointDiscountAmount,
+		"points_used":           q.dto.PointsUsed,
 		"payable_amount":        q.dto.PayableAmount,
 		"order_type":            q.dto.OrderType,
 		"is_upgrade":            q.dto.IsUpgrade,
@@ -471,13 +523,14 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 	return string(b)
 }
 
-func billingOrderFingerprint(planCode, cycle, method, network, amount string) string {
+func billingOrderFingerprint(planCode, cycle, method, network, amount string, pointsUsed int64) string {
 	parts := []string{
 		subscription.NormalizePlanCode(planCode),
 		subscription.NormalizeBillingCycle(cycle),
 		strings.ToUpper(strings.TrimSpace(method)),
 		strings.ToUpper(strings.TrimSpace(network)),
 		strings.TrimSpace(amount),
+		strconv.FormatInt(pointsUsed, 10),
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return fmt.Sprintf("%x", sum[:])
@@ -510,6 +563,9 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if err != nil {
 		return nil, err
 	}
+	if err := s.applyPointDiscount(userID, &quote, req.PointsToUse); err != nil {
+		return nil, err
+	}
 	plan := quote.targetPlan
 	cycle := quote.targetCycle
 	if !strings.EqualFold(strings.TrimSpace(req.Method), "USDT") {
@@ -529,7 +585,7 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if idempotencyScope != "" {
 		idempotencyScopePtr = &idempotencyScope
 	}
-	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount)
+	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount, quote.pointsUsed)
 	if idempotencyKey != "" {
 		if existing, err := s.orderRepo.GetReusableIdempotentOrder(userID, idempotencyKey, now); err == nil {
 			if existing.RequestFingerprint != "" && existing.RequestFingerprint != baseFingerprint {
@@ -559,6 +615,8 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		Amount:               exactPayableAmount,
 		OriginalAmount:       centsToAmountString(quote.originalCents),
 		CreditAmount:         centsToAmountString(quote.creditCents),
+		PointDiscountAmount:  centsToAmountString(quote.pointDiscountCents),
+		PointsUsed:           quote.pointsUsed,
 		PayableAmount:        exactPayableAmount,
 		OrderType:            quote.dto.OrderType,
 		IdempotencyKey:       idempotencyKey,
@@ -585,6 +643,11 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if err := s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
 		if err := s.orderRepo.CreateInTx(tx, o); err != nil {
 			return err
+		}
+		if s.pointRepo != nil && o.PointsUsed > 0 {
+			if err := s.pointRepo.FreezeForOrder(tx, userID, o.ID, o.PointsUsed, billingLedgerDetails(o)); err != nil {
+				return err
+			}
 		}
 		return s.orderRepo.CreateLedgerEntry(tx, &model.BillingLedgerEntry{
 			UserID:         userID,
@@ -630,18 +693,20 @@ func billingLedgerDetails(o *model.BillingOrder) string {
 		return ""
 	}
 	payload := map[string]any{
-		"plan_code":           o.PlanCode,
-		"billing_cycle":       o.BillingCycle,
-		"order_type":          o.OrderType,
-		"method":              o.Method,
-		"network":             o.Network,
-		"chain_id":            o.ChainID,
-		"token_address":       o.TokenAddress,
-		"receiver_address":    o.ReceiverAddress,
-		"original_amount":     o.OriginalAmount,
-		"credit_amount":       o.CreditAmount,
-		"payable_amount":      o.PayableAmount,
-		"request_fingerprint": o.RequestFingerprint,
+		"plan_code":             o.PlanCode,
+		"billing_cycle":         o.BillingCycle,
+		"order_type":            o.OrderType,
+		"method":                o.Method,
+		"network":               o.Network,
+		"chain_id":              o.ChainID,
+		"token_address":         o.TokenAddress,
+		"receiver_address":      o.ReceiverAddress,
+		"original_amount":       o.OriginalAmount,
+		"credit_amount":         o.CreditAmount,
+		"point_discount_amount": o.PointDiscountAmount,
+		"points_used":           o.PointsUsed,
+		"payable_amount":        o.PayableAmount,
+		"request_fingerprint":   o.RequestFingerprint,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -655,6 +720,11 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 	now := time.Now().UTC()
 	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, now); err != nil {
 		return nil, err
+	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(userID, orderID); err != nil {
+			return nil, err
+		}
 	}
 	o, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
@@ -687,6 +757,15 @@ func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) 
 		}
 	} else if err := s.orderRepo.ExpireStaleByUser(userID, now); err != nil {
 		return nil, err
+	}
+	if s.pointRepo != nil {
+		if allUsers {
+			if err := s.pointRepo.ReleaseExpiredOrderPoints(0); err != nil {
+				return nil, err
+			}
+		} else if err := s.pointRepo.ReleaseExpiredOrderPoints(userID); err != nil {
+			return nil, err
+		}
 	}
 	orders, total, err := s.orderRepo.List(userID, repository.BillingOrderListQuery{
 		Status:               req.Status,
@@ -732,6 +811,8 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		Amount:               o.Amount,
 		OriginalAmount:       o.OriginalAmount,
 		CreditAmount:         o.CreditAmount,
+		PointDiscountAmount:  o.PointDiscountAmount,
+		PointsUsed:           o.PointsUsed,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		IdempotencyKey:       o.IdempotencyKey,
@@ -777,6 +858,8 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		Amount:               o.Amount,
 		OriginalAmount:       o.OriginalAmount,
 		CreditAmount:         o.CreditAmount,
+		PointDiscountAmount:  o.PointDiscountAmount,
+		PointsUsed:           o.PointsUsed,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		IdempotencyKey:       o.IdempotencyKey,
@@ -894,6 +977,11 @@ func (s *BillingService) ConfirmOrderTx(userID, orderID uint, req dto.BillingCon
 	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, time.Now().UTC()); err != nil {
 		return nil, err
 	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(userID, orderID); err != nil {
+			return nil, err
+		}
+	}
 	order, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1006,6 +1094,11 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 
 	if err := s.orderRepo.ExpireStaleByID(uint(orderID), time.Now().UTC()); err != nil {
 		return err
+	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(0, uint(orderID)); err != nil {
+			return err
+		}
 	}
 	order, err := s.orderRepo.GetByID(uint(orderID))
 	if err != nil {
@@ -1149,6 +1242,11 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 	if err := s.orderRepo.ExpireStale(now); err != nil {
 		return stats, err
 	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPoints(0); err != nil {
+			return stats, err
+		}
+	}
 	return stats, nil
 }
 
@@ -1248,6 +1346,9 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 	}
 	if now.After(order.ExpiredAt) && !opts.AllowExpired {
 		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
+		if s.pointRepo != nil {
+			_ = s.pointRepo.ReleaseExpiredOrderPointsByID(0, order.ID)
+		}
 		return ErrBillingOrderExpired
 	}
 	if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, *order) {
@@ -1323,6 +1424,9 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 				"review_status":         billingReviewNeeded,
 				"ops_note":              "Order expired before payment confirmation.",
 			})
+			if s.pointRepo != nil && ord.PointsUsed > 0 {
+				_ = s.pointRepo.ReleaseFrozenForOrder(tx, ord.UserID, ord.ID, ord.PointsUsed, billingLedgerDetails(&ord))
+			}
 			return ErrBillingOrderExpired
 		}
 		if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, ord) {
@@ -1402,6 +1506,11 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 			Details:        billingLedgerDetails(&ord),
 		}); err != nil {
 			return err
+		}
+		if s.pointRepo != nil && ord.PointsUsed > 0 {
+			if err := s.pointRepo.ConsumeFrozenForOrder(tx, ord.UserID, ord.ID, ord.PointsUsed, billingLedgerDetails(&ord)); err != nil {
+				return err
+			}
 		}
 		if err := s.orderRepo.CreateSubscriptionChange(tx, &model.SubscriptionChangeEvent{
 			UserID:           ord.UserID,

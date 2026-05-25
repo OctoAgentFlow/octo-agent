@@ -99,6 +99,8 @@ function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
     amount: `${order.payable_amount || order.amount} ${order.currency}`,
     originalAmount: order.original_amount || "",
     creditAmount: order.credit_amount || "",
+    pointDiscountAmount: order.point_discount_amount || "",
+    pointsUsed: order.points_used || 0,
     payableAmount: order.payable_amount || order.amount,
     orderType: order.order_type || "new",
     currency: order.currency,

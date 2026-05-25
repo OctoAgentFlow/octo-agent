@@ -27,6 +27,7 @@ const PATHS_WITH_DATA_REFRESH = new Set([
   "/oaf-bots",
   "/activity",
   "/analytics",
+  "/points",
   "/admin",
   "/billing",
   "/profile",

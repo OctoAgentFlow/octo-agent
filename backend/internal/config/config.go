@@ -401,7 +401,103 @@ func Load() (*Config, error) {
 	if cfg.Billing.ExplorerAPIKeys == nil {
 		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
+	if err := applyExternalSecretConfig(env, &cfg); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+func applyExternalSecretConfig(env string, cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if v := strings.TrimSpace(os.Getenv("MYSQL_DSN")); v != "" {
+		cfg.MySQL.DataSource = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_OAUTH_CLIENT_ID")); v != "" {
+		cfg.XOAuth.ClientID = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_OAUTH_CLIENT_SECRET")); v != "" {
+		cfg.XOAuth.ClientSecret = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_OAUTH_STATE_SECRET")); v != "" {
+		cfg.XOAuth.StateSecret = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_OAUTH_SCOPES")); v != "" {
+		cfg.XOAuth.Scopes = v
+	}
+	if v := strings.TrimSpace(os.Getenv("BILLING_WEBHOOK_SECRET")); v != "" {
+		cfg.Billing.WebhookSecret = v
+	}
+	if v := strings.TrimSpace(os.Getenv("BILLING_ETHERSCAN_API_KEY")); v != "" {
+		cfg.Billing.ExplorerAPIKeys["etherscan"] = v
+	}
+	applyMapEnvOverrides(cfg.Billing.RpcURLs, "BILLING_RPC_URL_")
+	applyMapEnvOverrides(cfg.Billing.WssURLs, "BILLING_WSS_URL_")
+	applyMapEnvOverrides(cfg.Billing.ExplorerAPIKeys, "BILLING_EXPLORER_API_KEY_")
+	applyPaymentMethodEnvOverrides(cfg.Billing.PaymentMethods)
+
+	if env == "local" || env == "test" {
+		return nil
+	}
+	required := map[string]string{
+		"mysql.data_source/MYSQL_DSN":                 cfg.MySQL.DataSource,
+		"x_oauth.client_id/X_OAUTH_CLIENT_ID":         cfg.XOAuth.ClientID,
+		"x_oauth.client_secret/X_OAUTH_CLIENT_SECRET": cfg.XOAuth.ClientSecret,
+		"x_oauth.state_secret/X_OAUTH_STATE_SECRET":   cfg.XOAuth.StateSecret,
+	}
+	if strings.EqualFold(cfg.Email.Provider, "resend") {
+		required["email.resend.api_key/RESEND_API_KEY"] = cfg.Email.Resend.APIKey
+	}
+	if strings.EqualFold(cfg.LLM.DefaultProvider, "openai") {
+		required["llm.openai.api_key/OPENAI_API_KEY"] = cfg.LLM.OpenAI.APIKey
+	}
+	if cfg.Billing.Scanner.Enabled {
+		required["billing.webhook_secret/BILLING_WEBHOOK_SECRET"] = cfg.Billing.WebhookSecret
+	}
+	for name, value := range required {
+		if isMissingSecret(value) {
+			return fmt.Errorf("%s is required for APP_ENV=%s", name, env)
+		}
+	}
+	return nil
+}
+
+func applyMapEnvOverrides(target map[string]string, prefix string) {
+	if target == nil {
+		return
+	}
+	for _, item := range os.Environ() {
+		k, v, ok := strings.Cut(item, "=")
+		if !ok || !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		key := strings.TrimPrefix(k, prefix)
+		key = strings.ReplaceAll(key, "_", "-")
+		if strings.TrimSpace(key) != "" && strings.TrimSpace(v) != "" {
+			target[key] = strings.TrimSpace(v)
+		}
+	}
+}
+
+func applyPaymentMethodEnvOverrides(items []PaymentMethodConfig) {
+	for i := range items {
+		network := strings.ToUpper(strings.TrimSpace(items[i].Network))
+		if network == "" {
+			continue
+		}
+		if v := strings.TrimSpace(os.Getenv("BILLING_" + network + "_TOKEN_ADDRESS")); v != "" {
+			items[i].TokenAddress = v
+		}
+		if v := strings.TrimSpace(os.Getenv("BILLING_" + network + "_RECEIVER_ADDRESS")); v != "" {
+			items[i].ReceiverAddress = v
+		}
+	}
+}
+
+func isMissingSecret(value string) bool {
+	v := strings.TrimSpace(value)
+	return v == "" || strings.HasPrefix(v, "TODO_") || strings.Contains(v, "TODO_")
 }
 
 func applyAlertConfig(env string, service string, cfg *AlertConfig) {

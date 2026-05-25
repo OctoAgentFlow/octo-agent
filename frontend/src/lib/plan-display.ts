@@ -49,6 +49,7 @@ export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Languag
     t("planBenefits.oafBots", { count: count(limits.maxBots) }),
     t("planBenefits.xAccounts", { count: count(limits.maxTwitterAccounts) }),
     t("planBenefits.aiGenerationsMonthly", { count: count(limits.aiGenerationsMonthly) }),
+    t("planBenefits.monthlyXWrites", { count: count(limits.monthlyXWrites) }),
     t("planBenefits.dailyAutoPost", { count: count(limits.dailyAutoPosts) }),
     t("planBenefits.dailyAutoReply", { count: count(limits.dailyAutoReplies) }),
     t("planBenefits.dailyAutoComment", { count: count(limits.dailyAutoComments) }),

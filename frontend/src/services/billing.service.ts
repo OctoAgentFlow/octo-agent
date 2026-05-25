@@ -38,6 +38,9 @@ export type PlanLimitsApi = {
   max_bots: number;
   max_twitter_accounts: number;
   ai_generations_monthly: number;
+  monthly_x_writes: number;
+  monthly_x_url_posts: number;
+  monthly_cost_cap_cents: number;
   daily_auto_posts: number;
   daily_auto_replies: number;
   daily_auto_comments: number;
@@ -90,6 +93,7 @@ export type BillingCreateOrderRequest = {
   billing_cycle?: "monthly" | "yearly";
   method: string;
   network: string;
+  idempotency_key?: string;
 };
 
 export type BillingQuoteRequest = {
@@ -132,6 +136,7 @@ export type BillingOrderDetailApi = {
   credit_amount?: string;
   payable_amount?: string;
   order_type?: string;
+  idempotency_key?: string;
   currency: string;
   network: string;
   token_address: string;
@@ -165,6 +170,7 @@ export type BillingOrderListItemApi = {
   credit_amount?: string;
   payable_amount?: string;
   order_type?: string;
+  idempotency_key?: string;
   currency: string;
   method: string;
   network: string;

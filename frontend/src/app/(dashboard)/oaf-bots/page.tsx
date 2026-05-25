@@ -43,7 +43,7 @@ import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-q
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
-type WizardStep = "identity" | "style" | "topics" | "goals" | "test";
+type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
 type BotAutomationType = "post" | "reply" | "comment" | "dm";
 type BotAutomationState = {
@@ -73,8 +73,8 @@ type ApiErrorBody = {
   error_code?: string;
 };
 
-const wizardStepOrder: WizardStep[] = ["identity", "style", "topics", "goals", "test"];
-const personaChecklistKeys = ["name", "account", "role", "language", "personality", "topics", "guardrails", "summary", "goal"] as const;
+const wizardStepOrder: WizardStep[] = ["identity", "brand", "style", "topics", "goals", "test"];
+const personaChecklistKeys = ["name", "account", "role", "brand", "audience", "language", "personality", "topics", "contentStrategy", "guardrails", "summary", "goal"] as const;
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
@@ -84,6 +84,9 @@ const emptyLimits: PlanLimits = {
   maxBots: 1,
   maxTwitterAccounts: 1,
   aiGenerationsMonthly: 100,
+  monthlyXWrites: 10,
+  monthlyXUrlPosts: 0,
+  monthlyCostCapCents: 0,
   dailyAutoPosts: 1,
   dailyAutoReplies: 5,
   dailyAutoComments: 3,
@@ -129,6 +132,18 @@ function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
     topics: [],
     forbidden_topics: [],
     growth_goal: "",
+    project_one_liner: "",
+    target_audience: "",
+    core_value_props: "",
+    product_features: "",
+    differentiators: "",
+    content_pillars: [],
+    content_objectives: "",
+    preferred_cta: "",
+    hashtags: [],
+    keywords: [],
+    compliance_notes: "",
+    avoid_claims: [],
     safety_mode: "balanced",
     primary_language: defaultPrimaryLanguage,
     language_strategy: "follow_context",
@@ -201,6 +216,32 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     cryptoTrends: "Crypto Trends",
     startup: "Startup",
   },
+  contentPillars: {
+    productValue: "Product value",
+    userPainPoints: "User pain points",
+    useCases: "Use cases",
+    founderInsight: "Founder insight",
+    marketEducation: "Market education",
+    communityProof: "Community proof",
+    roadmap: "Roadmap updates",
+    ecosystem: "Ecosystem collaborations",
+  },
+  hashtags: {
+    ai: "#AI",
+    web3: "#Web3",
+    socialfi: "#SocialFi",
+    aiAgent: "#AIAgent",
+    crypto: "#Crypto",
+    builders: "#BuildInPublic",
+  },
+  keywords: {
+    automation: "automation",
+    socialGrowth: "social growth",
+    engagement: "engagement",
+    creatorEconomy: "creator economy",
+    tokenUtility: "token utility",
+    communityOps: "community operations",
+  },
   forbidden: {
     investmentAdvice: "Investment advice",
     profitPromise: "Profit promises",
@@ -209,6 +250,14 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     attacks: "Aggressive language",
     impersonation: "Impersonating officials",
     pricePrediction: "Price predictions",
+  },
+  avoidClaims: {
+    guaranteedReturns: "Guaranteed returns",
+    tokenPrice: "Token price prediction",
+    officialPartnership: "Unverified official partnership",
+    legalAdvice: "Legal or financial advice",
+    medicalClaims: "Medical or health claims",
+    absoluteSuperiority: "Absolute superiority claims",
   },
   growthGoals: {
     activity: "Increase account activity",
@@ -327,6 +376,7 @@ export default function OAFBotsPage() {
   const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
     () => [
       { id: "identity", label: t("oafBots.wizard.identity"), description: t("oafBots.wizard.identityDesc") },
+      { id: "brand", label: t("oafBots.wizard.brand"), description: t("oafBots.wizard.brandDesc") },
       { id: "style", label: t("oafBots.wizard.style"), description: t("oafBots.wizard.styleDesc") },
       { id: "topics", label: t("oafBots.wizard.topics"), description: t("oafBots.wizard.topicsDesc") },
       { id: "goals", label: t("oafBots.wizard.goals"), description: t("oafBots.wizard.goalsDesc") },
@@ -361,8 +411,24 @@ export default function OAFBotsPage() {
     () => optionKeys("topics", ["aiAgent", "web3Growth", "socialfi", "xMarketing", "communityBuilding", "tokenEconomy", "productLaunch", "cryptoTrends", "startup"], t),
     [t],
   );
+  const contentPillarOptions = useMemo(
+    () => optionKeys("contentPillars", ["productValue", "userPainPoints", "useCases", "founderInsight", "marketEducation", "communityProof", "roadmap", "ecosystem"], t),
+    [t],
+  );
+  const hashtagOptions = useMemo(
+    () => optionKeys("hashtags", ["ai", "web3", "socialfi", "aiAgent", "crypto", "builders"], t),
+    [t],
+  );
+  const keywordOptions = useMemo(
+    () => optionKeys("keywords", ["automation", "socialGrowth", "engagement", "creatorEconomy", "tokenUtility", "communityOps"], t),
+    [t],
+  );
   const forbiddenTopicOptions = useMemo(
     () => optionKeys("forbidden", ["investmentAdvice", "profitPromise", "politics", "adult", "attacks", "impersonation", "pricePrediction"], t),
+    [t],
+  );
+  const avoidClaimOptions = useMemo(
+    () => optionKeys("avoidClaims", ["guaranteedReturns", "tokenPrice", "officialPartnership", "legalAdvice", "medicalClaims", "absoluteSuperiority"], t),
     [t],
   );
   const growthGoalOptions = useMemo(
@@ -873,6 +939,53 @@ export default function OAFBotsPage() {
               </WizardPanel>
             ) : null}
 
+            {activeStep === "brand" ? (
+              <WizardPanel title={t("oafBots.section.brand")} description={t("oafBots.section.brandDesc")}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextArea
+                    label={t("oafBots.fields.projectOneLiner")}
+                    value={form.project_one_liner}
+                    onChange={(value) => updateForm("project_one_liner", value)}
+                    placeholder={t("oafBots.placeholders.projectOneLiner")}
+                    helper={t("oafBots.helpers.projectOneLiner")}
+                    recommended
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.targetAudience")}
+                    value={form.target_audience}
+                    onChange={(value) => updateForm("target_audience", value)}
+                    placeholder={t("oafBots.placeholders.targetAudience")}
+                    helper={t("oafBots.helpers.targetAudience")}
+                    recommended
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.coreValueProps")}
+                    value={form.core_value_props}
+                    onChange={(value) => updateForm("core_value_props", value)}
+                    placeholder={t("oafBots.placeholders.coreValueProps")}
+                    helper={t("oafBots.helpers.coreValueProps")}
+                    recommended
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.productFeatures")}
+                    value={form.product_features}
+                    onChange={(value) => updateForm("product_features", value)}
+                    placeholder={t("oafBots.placeholders.productFeatures")}
+                    helper={t("oafBots.helpers.productFeatures")}
+                  />
+                  <div className="md:col-span-2">
+                    <TextArea
+                      label={t("oafBots.fields.differentiators")}
+                      value={form.differentiators}
+                      onChange={(value) => updateForm("differentiators", value)}
+                      placeholder={t("oafBots.placeholders.differentiators")}
+                      helper={t("oafBots.helpers.differentiators")}
+                    />
+                  </div>
+                </div>
+              </WizardPanel>
+            ) : null}
+
             {activeStep === "style" ? (
               <WizardPanel title={t("oafBots.section.style")} description={t("oafBots.section.styleDesc")}>
                 <LanguageConfigPanel
@@ -946,6 +1059,23 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.safetyMode")}
                   />
                 </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <TagPicker
+                    label={t("oafBots.fields.avoidClaims")}
+                    values={form.avoid_claims}
+                    options={avoidClaimOptions}
+                    onChange={(values) => updateForm("avoid_claims", values)}
+                    helper={t("oafBots.helpers.avoidClaims")}
+                    placeholder={t("oafBots.placeholders.tagInput")}
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.complianceNotes")}
+                    value={form.compliance_notes}
+                    onChange={(value) => updateForm("compliance_notes", value)}
+                    placeholder={t("oafBots.placeholders.complianceNotes")}
+                    helper={t("oafBots.helpers.complianceNotes")}
+                  />
+                </div>
               </WizardPanel>
             ) : null}
 
@@ -968,6 +1098,46 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.growthGoal")}
                     options={growthGoalOptions}
                     recommended
+                  />
+                  <TagPicker
+                    label={t("oafBots.fields.contentPillars")}
+                    values={form.content_pillars}
+                    options={contentPillarOptions}
+                    onChange={(values) => updateForm("content_pillars", values)}
+                    helper={t("oafBots.helpers.contentPillars")}
+                    placeholder={t("oafBots.placeholders.tagInput")}
+                    recommended
+                  />
+                  <TextArea
+                    label={t("oafBots.fields.contentObjectives")}
+                    value={form.content_objectives}
+                    onChange={(value) => updateForm("content_objectives", value)}
+                    placeholder={t("oafBots.placeholders.contentObjectives")}
+                    helper={t("oafBots.helpers.contentObjectives")}
+                  />
+                  <ChipTextArea
+                    label={t("oafBots.fields.preferredCTA")}
+                    value={form.preferred_cta}
+                    onChange={(value) => updateForm("preferred_cta", value)}
+                    placeholder={t("oafBots.placeholders.preferredCTA")}
+                    helper={t("oafBots.helpers.preferredCTA")}
+                    options={growthGoalOptions}
+                  />
+                  <TagPicker
+                    label={t("oafBots.fields.hashtags")}
+                    values={form.hashtags}
+                    options={hashtagOptions}
+                    onChange={(values) => updateForm("hashtags", values)}
+                    helper={t("oafBots.helpers.hashtags")}
+                    placeholder={t("oafBots.placeholders.tagInput")}
+                  />
+                  <TagPicker
+                    label={t("oafBots.fields.keywords")}
+                    values={form.keywords}
+                    options={keywordOptions}
+                    onChange={(values) => updateForm("keywords", values)}
+                    helper={t("oafBots.helpers.keywords")}
+                    placeholder={t("oafBots.placeholders.tagInput")}
                   />
                 </div>
               </WizardPanel>
@@ -1108,6 +1278,18 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     topics: bot.topics || [],
     forbidden_topics: bot.forbidden_topics || [],
     growth_goal: bot.growth_goal,
+    project_one_liner: bot.project_one_liner || "",
+    target_audience: bot.target_audience || "",
+    core_value_props: bot.core_value_props || "",
+    product_features: bot.product_features || "",
+    differentiators: bot.differentiators || "",
+    content_pillars: bot.content_pillars || [],
+    content_objectives: bot.content_objectives || "",
+    preferred_cta: bot.preferred_cta || "",
+    hashtags: bot.hashtags || [],
+    keywords: bot.keywords || [],
+    compliance_notes: bot.compliance_notes || "",
+    avoid_claims: bot.avoid_claims || [],
     safety_mode: bot.safety_mode || "balanced",
     primary_language: bot.primary_language || defaultPrimaryLanguage,
     language_strategy: bot.language_strategy || "follow_context",
@@ -1130,6 +1312,18 @@ function isUnconfiguredDraft(form: OAFBotPayload) {
     form.topics.length === 0 &&
     form.forbidden_topics.length === 0 &&
     !form.growth_goal.trim() &&
+    !form.project_one_liner.trim() &&
+    !form.target_audience.trim() &&
+    !form.core_value_props.trim() &&
+    !form.product_features.trim() &&
+    !form.differentiators.trim() &&
+    form.content_pillars.length === 0 &&
+    !form.content_objectives.trim() &&
+    !form.preferred_cta.trim() &&
+    form.hashtags.length === 0 &&
+    form.keywords.length === 0 &&
+    !form.compliance_notes.trim() &&
+    form.avoid_claims.length === 0 &&
     form.safety_mode === "balanced"
   );
 }
@@ -1146,21 +1340,25 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   if (form.name.trim()) score += 10;
   if (form.twitter_account_id) score += 10;
   if (form.occupation.trim() || form.industry.trim()) score += 10;
-  if (form.primary_language.trim() && form.language_strategy.trim()) score += 10;
-  if (form.personality_tags.length > 0) score += 10;
-  if (form.topics.length > 0) score += 15;
-  if (form.forbidden_topics.length > 0) score += 10;
-  if (form.identity_summary.trim()) score += 15;
-  if (form.growth_goal.trim()) score += 10;
-  return score;
+  if (form.project_one_liner.trim()) score += 10;
+  if (form.target_audience.trim() || form.core_value_props.trim()) score += 10;
+  if (form.primary_language.trim() && form.language_strategy.trim()) score += 8;
+  if (form.personality_tags.length > 0) score += 8;
+  if (form.topics.length > 0) score += 10;
+  if (form.content_pillars.length > 0 || form.content_objectives.trim()) score += 8;
+  if (form.forbidden_topics.length > 0 || form.avoid_claims.length > 0 || form.compliance_notes.trim()) score += 8;
+  if (form.identity_summary.trim()) score += 10;
+  if (form.growth_goal.trim()) score += 8;
+  return Math.min(score, 100);
 }
 
 function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
   return {
     identity: Boolean(form.name.trim() && form.twitter_account_id && (form.occupation.trim() || form.industry.trim())),
+    brand: Boolean(form.project_one_liner.trim() && (form.target_audience.trim() || form.core_value_props.trim())),
     style: Boolean((form.primary_language.trim() && form.language_strategy.trim()) || form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
     topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
-    goals: Boolean(form.identity_summary.trim() && form.growth_goal.trim()),
+    goals: Boolean(form.identity_summary.trim() && form.growth_goal.trim() && (form.content_pillars.length > 0 || form.content_objectives.trim())),
     test: hasSavedBot,
   };
 }
@@ -1170,10 +1368,13 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
   if (form.name.trim()) completed.add("name");
   if (form.twitter_account_id) completed.add("account");
   if (form.occupation.trim() || form.industry.trim()) completed.add("role");
+  if (form.project_one_liner.trim() || form.core_value_props.trim()) completed.add("brand");
+  if (form.target_audience.trim()) completed.add("audience");
   if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
   if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
   if (form.topics.length > 0) completed.add("topics");
-  if (form.forbidden_topics.length > 0 || form.safety_mode.trim()) completed.add("guardrails");
+  if (form.content_pillars.length > 0 || form.content_objectives.trim() || form.preferred_cta.trim()) completed.add("contentStrategy");
+  if (form.forbidden_topics.length > 0 || form.avoid_claims.length > 0 || form.compliance_notes.trim() || form.safety_mode.trim()) completed.add("guardrails");
   if (form.identity_summary.trim()) completed.add("summary");
   if (form.growth_goal.trim()) completed.add("goal");
 
@@ -1987,8 +2188,13 @@ function BotPreview({
   const previewRows = [
     { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
     { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
+    { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
+    { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
+    { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
     { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
+    { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
+    { label: t("oafBots.fields.preferredCTA"), value: form.preferred_cta },
     { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
     { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
   ].filter((row) => row.value.trim());
@@ -2388,8 +2594,13 @@ function getSamplePersonaRows(
     { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
     { label: t("oafBots.fields.primaryLanguage"), value: getSelectLabel(form.primary_language, languageOptions) },
     { label: t("oafBots.fields.languageStrategy"), value: getSelectLabel(form.language_strategy, languageStrategyOptions) },
+    { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
+    { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
+    { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
     { label: t("oafBots.fields.voiceTone"), value: form.voice_tone },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
+    { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
+    { label: t("oafBots.fields.preferredCTA"), value: form.preferred_cta },
     { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
     { label: t("oafBots.fields.safetyMode"), value: safetyOptions.find((option) => option.value === form.safety_mode)?.label || form.safety_mode },
   ].filter((row) => row.value.trim());

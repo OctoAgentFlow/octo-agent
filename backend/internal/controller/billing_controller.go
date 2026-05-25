@@ -78,6 +78,9 @@ func (ctl *BillingController) CreateOrder(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = c.GetHeader("Idempotency-Key")
+	}
 	data, err := ctl.billingService.CreateOrder(userID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())

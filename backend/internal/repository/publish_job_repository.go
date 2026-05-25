@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -124,6 +126,33 @@ func (r *PublishJobRepository) Save(job *model.PublishJob) error {
 	return r.DB.Save(job).Error
 }
 
+func (r *PublishJobRepository) RecordXPublishCost(job *model.PublishJob, occurredAt time.Time) error {
+	if job == nil || strings.TrimSpace(job.ExternalID) == "" {
+		return nil
+	}
+	details, _ := json.Marshal(map[string]any{
+		"source_type":  job.SourceType,
+		"source_id":    job.SourceID,
+		"publish_mode": job.PublishMode,
+		"external_url": job.ExternalURL,
+	})
+	row := model.CostUsageLedger{
+		UserID:              job.UserID,
+		BotID:               job.BotID,
+		SourceType:          job.SourceType,
+		SourceID:            job.SourceID,
+		Provider:            "x",
+		Metric:              "write_post",
+		Quantity:            1,
+		EstimatedCostCents:  2,
+		Currency:            "USD",
+		OccurredAt:          occurredAt.UTC(),
+		ExternalReferenceID: "x_publish:" + strings.TrimSpace(job.ExternalID),
+		Details:             string(details),
+	}
+	return r.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
+}
+
 func (r *PublishJobRepository) ResetForRetry(job *model.PublishJob, now time.Time) error {
 	return r.DB.Model(job).Updates(map[string]any{
 		"status":          PublishStatusPending,
@@ -154,6 +183,15 @@ func (r *PublishJobRepository) CountManualPublishedByAccount(accountID uint, fro
 	err := r.DB.Model(&model.PublishJob{}).
 		Where("twitter_account_id = ? AND status = ?", accountID, PublishStatusPublished).
 		Where("publish_mode IN ?", []string{PublishModeDryRun, PublishModeReal}).
+		Where("published_at >= ? AND published_at < ?", from, to).
+		Count(&n).Error
+	return n, err
+}
+
+func (r *PublishJobRepository) CountRealPublishedByUser(userID uint, from, to time.Time) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.PublishJob{}).
+		Where("user_id = ? AND status = ? AND publish_mode = ?", userID, PublishStatusPublished, PublishModeReal).
 		Where("published_at >= ? AND published_at < ?", from, to).
 		Count(&n).Error
 	return n, err

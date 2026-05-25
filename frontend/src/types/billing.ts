@@ -15,6 +15,9 @@ export type PlanLimits = {
   maxBots: number;
   maxTwitterAccounts: number;
   aiGenerationsMonthly: number;
+  monthlyXWrites: number;
+  monthlyXUrlPosts: number;
+  monthlyCostCapCents: number;
   dailyAutoPosts: number;
   dailyAutoReplies: number;
   dailyAutoComments: number;

@@ -138,3 +138,93 @@ func TestApplyAlertConfigUsesEnvironmentOverrides(t *testing.T) {
 		t.Fatalf("secret = %q", cfg.Lark.Secret)
 	}
 }
+
+func TestApplyExternalSecretConfigOverridesSensitiveValues(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "user:pass@tcp(localhost:3306)/octo")
+	t.Setenv("X_OAUTH_CLIENT_ID", "x-client")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "x-secret")
+	t.Setenv("X_OAUTH_STATE_SECRET", "state-secret")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "billing-secret")
+	t.Setenv("BILLING_RPC_URL_56", "https://rpc.example")
+	t.Setenv("BILLING_BEP20_TOKEN_ADDRESS", "0xToken")
+	t.Setenv("BILLING_BEP20_RECEIVER_ADDRESS", "0xReceiver")
+
+	cfg := Config{
+		Billing: BillingConfig{
+			Scanner: BillingScannerConfig{Enabled: true},
+			RpcURLs: map[string]string{
+				"56": "old",
+			},
+			PaymentMethods: []PaymentMethodConfig{
+				{Network: "BEP20", TokenAddress: "old-token", ReceiverAddress: "old-receiver"},
+			},
+		},
+	}
+	if err := applyExternalSecretConfig("test", &cfg); err != nil {
+		t.Fatalf("applyExternalSecretConfig returned error: %v", err)
+	}
+	if cfg.MySQL.DataSource != "user:pass@tcp(localhost:3306)/octo" {
+		t.Fatalf("mysql dsn = %q", cfg.MySQL.DataSource)
+	}
+	if cfg.XOAuth.ClientID != "x-client" || cfg.XOAuth.ClientSecret != "x-secret" || cfg.XOAuth.StateSecret != "state-secret" {
+		t.Fatalf("unexpected x oauth config: %+v", cfg.XOAuth)
+	}
+	if cfg.Billing.WebhookSecret != "billing-secret" {
+		t.Fatalf("webhook secret = %q", cfg.Billing.WebhookSecret)
+	}
+	if cfg.Billing.RpcURLs["56"] != "https://rpc.example" {
+		t.Fatalf("rpc override = %q", cfg.Billing.RpcURLs["56"])
+	}
+	if cfg.Billing.PaymentMethods[0].TokenAddress != "0xToken" || cfg.Billing.PaymentMethods[0].ReceiverAddress != "0xReceiver" {
+		t.Fatalf("payment method override failed: %+v", cfg.Billing.PaymentMethods[0])
+	}
+}
+
+func TestApplyExternalSecretConfigRequiresProdSecrets(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "")
+	t.Setenv("X_OAUTH_CLIENT_ID", "")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("X_OAUTH_STATE_SECRET", "")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "")
+
+	cfg := Config{
+		Email: EmailConfig{Provider: "local"},
+		MySQL: MySQLConfig{DataSource: "TODO_MYSQL_DSN"},
+		XOAuth: XOAuthConfig{
+			ClientID:     "TODO_X_CLIENT_ID",
+			ClientSecret: "TODO_X_CLIENT_SECRET",
+			StateSecret:  "TODO_X_STATE_SECRET",
+		},
+		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
+	}
+	if err := applyExternalSecretConfig("prod", &cfg); err == nil {
+		t.Fatal("expected prod TODO secrets to fail")
+	}
+}
+
+func TestApplyExternalSecretConfigRequiresProdOpenAIKey(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "")
+	t.Setenv("X_OAUTH_CLIENT_ID", "")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("X_OAUTH_STATE_SECRET", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "")
+
+	cfg := Config{
+		Email: EmailConfig{Provider: "local"},
+		MySQL: MySQLConfig{DataSource: "mysql-dsn"},
+		XOAuth: XOAuthConfig{
+			ClientID:     "x-client",
+			ClientSecret: "x-secret",
+			StateSecret:  "state-secret",
+		},
+		LLM: LLMConfig{
+			DefaultProvider: "openai",
+			OpenAI:          OpenAIConfig{APIKey: "TODO_OPENAI_API_KEY"},
+		},
+		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
+	}
+	if err := applyExternalSecretConfig("prod", &cfg); err == nil {
+		t.Fatal("expected prod openai TODO secret to fail")
+	}
+}

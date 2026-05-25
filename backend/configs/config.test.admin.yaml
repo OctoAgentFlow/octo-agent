@@ -41,7 +41,7 @@ email:
     expose_code: false
   resend:
     # Test environment sends real verification emails through Resend.
-    api_key: "re_5h9z8KuB_Dz3mVU32rN6etBr5RmQHTCcf"
+    api_key: ""
     from_email: "Octo Agent <no-reply@mail.octo-agent.com>"
   ses:
     region: "ap-southeast-1"
@@ -56,7 +56,7 @@ app:
 jwt:
   # TEST-ONLY stable JWT secret. Keep api/admin-api identical so restarts do not invalidate sessions.
   # TODO: Before production, move JWT secrets to server private config or secret manager.
-  secret: "octo-agent-test-jwt-secret-2026-keep-api-admin-in-sync"
+  secret: ""
   access_expire_seconds: 7200
   refresh_expire_seconds: 2592000
 
@@ -68,23 +68,23 @@ admin_auth:
 
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
-  client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
+  client_secret: ""
   redirect_uri: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback"
-  state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  state_secret: ""
   scopes: "tweet.read users.read offline.access"
 
 billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
   rpc_urls:
-    "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
-    "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
-    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+    "56": ""
+    "1": ""
+    "728126428": ""
   wss_urls:
-    "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
-    "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
+    "56": ""
+    "1": ""
   explorer_api_keys:
-    etherscan: "SBSIVP2NBF2GY5XUT7SD1DNDC1A2VEKS86"
+    etherscan: ""
   payment_methods:
     - method: "USDT"
       network: "BEP20"
@@ -112,11 +112,90 @@ billing:
       note: "TRC20 主网 USDT，手续费低；提交交易哈希后系统自动链上确认，无需人工审核"
   plans:
     basic_monthly:
-      name: "Basic"
+      name: "Basic Monthly"
       amount: "8"
       currency: "USDT"
       period_days: 30
-      description: "Full automation for one month."
+      description: "1 OAF Bot, 1 X account, 500 AI generations, and 100 real X publishes per month."
       features:
-        - "Auto Post + Auto Reply + Auto DM"
-        - "Priority queue"
+        - "1 OAF Bot"
+        - "1 X account"
+        - "500 AI generations per month"
+        - "100 real X publishes per month"
+    basic_yearly:
+      name: "Basic Yearly"
+      amount: "77"
+      currency: "USDT"
+      period_days: 365
+      description: "Annual Basic plan with the same monthly quotas and yearly billing discount."
+      features:
+        - "1 OAF Bot"
+        - "1 X account"
+        - "500 AI generations per month"
+        - "100 real X publishes per month"
+    plus_monthly:
+      name: "Plus Monthly"
+      amount: "29"
+      currency: "USDT"
+      period_days: 30
+      description: "3 OAF Bots, 3 X accounts, 2,500 AI generations, and 400 real X publishes per month."
+      features:
+        - "3 OAF Bots"
+        - "3 X accounts"
+        - "2,500 AI generations per month"
+        - "400 real X publishes per month"
+    plus_yearly:
+      name: "Plus Yearly"
+      amount: "279"
+      currency: "USDT"
+      period_days: 365
+      description: "Annual Plus plan with the same monthly quotas and yearly billing discount."
+      features:
+        - "3 OAF Bots"
+        - "3 X accounts"
+        - "2,500 AI generations per month"
+        - "400 real X publishes per month"
+    pro_monthly:
+      name: "Pro Monthly"
+      amount: "79"
+      currency: "USDT"
+      period_days: 30
+      description: "10 OAF Bots, 10 X accounts, 8,000 AI generations, and 1,200 real X publishes per month."
+      features:
+        - "10 OAF Bots"
+        - "10 X accounts"
+        - "8,000 AI generations per month"
+        - "1,200 real X publishes per month"
+    pro_yearly:
+      name: "Pro Yearly"
+      amount: "759"
+      currency: "USDT"
+      period_days: 365
+      description: "Annual Pro plan with the same monthly quotas and yearly billing discount."
+      features:
+        - "10 OAF Bots"
+        - "10 X accounts"
+        - "8,000 AI generations per month"
+        - "1,200 real X publishes per month"
+    pro_plus_monthly:
+      name: "Pro+ Monthly"
+      amount: "199"
+      currency: "USDT"
+      period_days: 30
+      description: "30 OAF Bots, 30 X accounts, 20,000 AI generations, and 2,500 real X publishes per month."
+      features:
+        - "30 OAF Bots"
+        - "30 X accounts"
+        - "20,000 AI generations per month"
+        - "2,500 real X publishes per month"
+    pro_plus_yearly:
+      name: "Pro+ Yearly"
+      amount: "1910"
+      currency: "USDT"
+      period_days: 365
+      description: "Annual Pro+ plan with the same monthly quotas and yearly billing discount."
+      features:
+        - "30 OAF Bots"
+        - "30 X accounts"
+        - "20,000 AI generations per month"
+        - "2,500 real X publishes per month"

@@ -293,12 +293,12 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 			bot = nil
 		}
 	}
-	content, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
+	generated, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
 	if err != nil {
 		return nil, err
 	}
 	botID := botIDForUsage(bot)
-	if err := s.usageRepo.Increment(userID, botID, repository.AIGenerationSceneAutoPost, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, botID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	user, err := s.userRepo.GetByID(userID)
@@ -307,7 +307,7 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	}
 	limits := subscription.LimitsForUser(user)
 	return &dto.PostGenerateResponse{
-		Content: content,
+		Content: generated.Text,
 		BotID:   botID,
 		Scene:   repository.AIGenerationSceneAutoPost,
 		Usage: dto.PlanUsageData{
@@ -391,6 +391,11 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 			_ = s.postRepo.RevertProcessingToScheduled(userID, postID, now.Add(time.Minute))
 			zap.L().Info("post execute: deferred by automation limits", append(base, zap.String("reason", why))...)
 			return nil, "", nil
+		}
+	}
+	if !s.xPublisher.DryRun {
+		if err := s.enforceMonthlyRealPostQuota(userID, u, now); err != nil {
+			return nil, "", err
 		}
 	}
 
@@ -537,6 +542,18 @@ func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic st
 	in.Topics = decodeStringList(bot.Topics)
 	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
 	in.GrowthGoal = bot.GrowthGoal
+	in.ProjectOneLiner = bot.ProjectOneLiner
+	in.TargetAudience = bot.TargetAudience
+	in.CoreValueProps = bot.CoreValueProps
+	in.ProductFeatures = bot.ProductFeatures
+	in.Differentiators = bot.Differentiators
+	in.ContentPillars = decodeStringList(bot.ContentPillars)
+	in.ContentObjectives = bot.ContentObjectives
+	in.PreferredCTA = bot.PreferredCTA
+	in.Hashtags = decodeStringList(bot.Hashtags)
+	in.Keywords = decodeStringList(bot.Keywords)
+	in.ComplianceNotes = bot.ComplianceNotes
+	in.AvoidClaims = decodeStringList(bot.AvoidClaims)
 	in.SafetyMode = bot.SafetyMode
 	in.PrimaryLanguage = bot.PrimaryLanguage
 	in.LanguageStrategy = bot.LanguageStrategy
@@ -567,6 +584,23 @@ func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit b
 		return true, "hourly_limit"
 	}
 	return false, ""
+}
+
+func (s *PostService) enforceMonthlyRealPostQuota(userID uint, user *model.User, now time.Time) error {
+	limits := subscription.LimitsForUser(user)
+	if limits.MonthlyXWrites <= 0 {
+		return errors.New("monthly real X publish quota is not available for this plan")
+	}
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	used, err := s.activityRepo.CountPostPublishSuccessBetween(userID, monthStart, monthEnd)
+	if err != nil {
+		return err
+	}
+	if used >= limits.MonthlyXWrites {
+		return errors.New("monthly real X publish quota exceeded for this plan")
+	}
+	return nil
 }
 
 func effectiveRateLimitDelay(pub *twitter.PublishError) time.Duration {

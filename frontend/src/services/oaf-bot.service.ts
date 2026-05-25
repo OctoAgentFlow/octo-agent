@@ -22,6 +22,9 @@ type OAFBotListApi = {
     max_bots: number;
     max_twitter_accounts: number;
     ai_generations_monthly: number;
+    monthly_x_writes: number;
+    monthly_x_url_posts: number;
+    monthly_cost_cap_cents: number;
     daily_auto_posts: number;
     daily_auto_replies: number;
     daily_auto_comments: number;
@@ -62,6 +65,9 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       maxBots: data.limits.max_bots,
       maxTwitterAccounts: data.limits.max_twitter_accounts,
       aiGenerationsMonthly: data.limits.ai_generations_monthly,
+      monthlyXWrites: data.limits.monthly_x_writes,
+      monthlyXUrlPosts: data.limits.monthly_x_url_posts,
+      monthlyCostCapCents: data.limits.monthly_cost_cap_cents,
       dailyAutoPosts: data.limits.daily_auto_posts,
       dailyAutoReplies: data.limits.daily_auto_replies,
       dailyAutoComments: data.limits.daily_auto_comments,

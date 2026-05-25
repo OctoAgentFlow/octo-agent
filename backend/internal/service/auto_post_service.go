@@ -246,7 +246,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	if contentDirection == "" && contentItem != nil {
 		contentDirection = contentItem.Title
 	}
-	content, contentHash, err := s.generateUniqueAutoPost(ctx, userID, acc.ID, input)
+	content, contentHash, generated, err := s.generateUniqueAutoPost(ctx, userID, acc.ID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	if err := s.draftRepo.Create(draft); err != nil {
 		return nil, err
 	}
-	if err := s.usageRepo.Increment(userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	if contentItem != nil {
@@ -541,7 +541,7 @@ func (s *AutoPostService) assertDailyQuota(userID, xAccountID uint, plan *model.
 	return nil
 }
 
-func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, error) {
+func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, AIGeneratedText, error) {
 	since := time.Now().UTC().AddDate(0, 0, -30)
 	var lastContent string
 	var lastHash string
@@ -554,22 +554,23 @@ func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xA
 				input.ContentDirection += "\nGenerate a different angle from the same content source."
 			}
 		}
-		content, err := s.ai.GenerateAutoPost(ctx, input)
+		generated, err := s.ai.GenerateAutoPost(ctx, input)
 		if err != nil {
-			return "", "", err
+			return "", "", AIGeneratedText{}, err
 		}
+		content := generated.Text
 		hash := autoPostContentHash(content)
 		exists, err := s.draftRepo.ExistsContentHashForAccountSince(userID, xAccountID, hash, since)
 		if err != nil {
-			return "", "", err
+			return "", "", AIGeneratedText{}, err
 		}
 		lastContent = content
 		lastHash = hash
 		if !exists {
-			return content, hash, nil
+			return content, hash, generated, nil
 		}
 	}
-	return "", lastHash, ErrAutoPostDuplicateContent
+	return "", lastHash, AIGeneratedText{}, ErrAutoPostDuplicateContent
 }
 
 func autoPostContentHash(content string) string {

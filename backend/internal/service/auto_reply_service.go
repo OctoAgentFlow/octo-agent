@@ -131,10 +131,11 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 		return nil, err
 	}
 	blocked := blockedWordsFromConfig(cfg)
-	reply, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(req.CommentAuthorHandle, req.RootTweetText, req.CommentText, cfg.Tone, blocked, bot))
+	generated, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(req.CommentAuthorHandle, req.RootTweetText, req.CommentText, cfg.Tone, blocked, bot))
 	if err != nil {
 		return nil, err
 	}
+	reply := generated.Text
 	risk := evaluateAutoCommentRisk(reply, bot, blocked)
 	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)
 	draft := &model.AutoReplyDraft{
@@ -159,7 +160,7 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 	if err := s.replyDraftRepo.Create(draft); err != nil {
 		return nil, err
 	}
-	if err := s.usageRepo.Increment(userID, draft.BotID, repository.AIGenerationSceneAutoReply, now, 1); err != nil {
+	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoReply, now, generated.Usage); err != nil {
 		return nil, err
 	}
 	if mode == ExecutionModeAutopilot && draft.Status == "ready_to_publish" {
@@ -557,6 +558,18 @@ func autoReplyInputFromValues(author, rootTweet, comment, tone string, blocked [
 	in.Topics = decodeStringList(bot.Topics)
 	in.ForbiddenTopics = decodeStringList(bot.ForbiddenTopics)
 	in.GrowthGoal = bot.GrowthGoal
+	in.ProjectOneLiner = bot.ProjectOneLiner
+	in.TargetAudience = bot.TargetAudience
+	in.CoreValueProps = bot.CoreValueProps
+	in.ProductFeatures = bot.ProductFeatures
+	in.Differentiators = bot.Differentiators
+	in.ContentPillars = decodeStringList(bot.ContentPillars)
+	in.ContentObjectives = bot.ContentObjectives
+	in.PreferredCTA = bot.PreferredCTA
+	in.Hashtags = decodeStringList(bot.Hashtags)
+	in.Keywords = decodeStringList(bot.Keywords)
+	in.ComplianceNotes = bot.ComplianceNotes
+	in.AvoidClaims = decodeStringList(bot.AvoidClaims)
 	in.SafetyMode = bot.SafetyMode
 	in.PrimaryLanguage = bot.PrimaryLanguage
 	in.LanguageStrategy = bot.LanguageStrategy

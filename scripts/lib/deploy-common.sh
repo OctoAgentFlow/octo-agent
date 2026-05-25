@@ -342,7 +342,7 @@ octo_prepare_node_runtime() {
   fi
 
   local candidate
-  for candidate in "$HOME/.nvm/versions/node/v20.11.1/bin" "$HOME/.nvm/versions/node/v20.9.0/bin" "$HOME/.nvm/versions/node/v20.20.2/bin"; do
+  for candidate in "$HOME"/.nvm/versions/node/v20*/bin "$HOME/.nvm/versions/node/v20.20.2/bin" "$HOME/.nvm/versions/node/v20.11.1/bin" "$HOME/.nvm/versions/node/v20.9.0/bin"; do
     if [ -x "$candidate/node" ]; then
       export PATH="$candidate:$PATH"
       break

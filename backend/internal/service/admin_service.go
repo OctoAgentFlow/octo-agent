@@ -393,6 +393,81 @@ func (s *AdminService) UpdatePointRiskConfig(operatorID uint, req dto.AdminUpdat
 	return &out, nil
 }
 
+func (s *AdminService) ListPointRedemptionCodes(operatorID uint) ([]dto.AdminPointRedemptionCodeItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	rows, err := s.pointRepo.RedemptionCodes()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AdminPointRedemptionCodeItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, adminPointRedemptionCodeDTO(row))
+	}
+	return items, nil
+}
+
+func (s *AdminService) CreatePointRedemptionCode(operatorID uint, req dto.AdminCreatePointRedemptionCodeRequest) (*dto.AdminPointRedemptionCodeItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	if code == "" || strings.TrimSpace(req.Title) == "" || req.Points <= 0 || req.Points > 10000 || req.MaxUses < 0 {
+		return nil, ErrAdminInvalidStatus
+	}
+	startsAt, err := parseOptionalAdminTime(req.StartsAt)
+	if err != nil {
+		return nil, ErrAdminInvalidStatus
+	}
+	endsAt, err := parseOptionalAdminTime(req.EndsAt)
+	if err != nil {
+		return nil, ErrAdminInvalidStatus
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	perUserUses := req.PerUserUses
+	if perUserUses <= 0 {
+		perUserUses = 1
+	}
+	row := &model.PointRedemptionCode{
+		Code:        code,
+		Title:       strings.TrimSpace(req.Title),
+		Points:      req.Points,
+		MaxUses:     req.MaxUses,
+		PerUserUses: perUserUses,
+		Enabled:     enabled,
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+	}
+	if err := s.pointRepo.CreateRedemptionCode(row); err != nil {
+		return nil, err
+	}
+	item := adminPointRedemptionCodeDTO(*row)
+	return &item, nil
+}
+
+func (s *AdminService) ReferralSummary(operatorID uint) (*dto.AdminReferralSummaryResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	var out dto.AdminReferralSummaryResponse
+	if err := s.db.Model(&model.ReferralInvite{}).Count(&out.InviteCodes).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.Model(&model.ReferralRecord{}).Count(&out.ReferralSignups).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.Model(&model.ReferralRecord{}).Where("first_purchase_rewarded_at IS NOT NULL").Count(&out.FirstPurchaseRewards).Error; err != nil {
+		return nil, err
+	}
+	out.SignupRewardPoints = out.ReferralSignups * (referralSignupInviterPoints + referralSignupInviteePoints)
+	out.PurchaseRewardPoints = out.FirstPurchaseRewards * referralFirstPurchaseInviterPoints
+	return &out, nil
+}
+
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {
 	operator, err := s.requireOperator(operatorID)
 	if err != nil {
@@ -685,6 +760,27 @@ func adminPointRiskConfigDTO(cfg model.PointRiskConfig) dto.AdminPointRiskConfig
 		PointExpiryDays:               cfg.PointExpiryDays,
 		UpdatedAt:                     cfg.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func adminPointRedemptionCodeDTO(row model.PointRedemptionCode) dto.AdminPointRedemptionCodeItem {
+	item := dto.AdminPointRedemptionCodeItem{
+		ID:          row.ID,
+		Code:        row.Code,
+		Title:       row.Title,
+		Points:      row.Points,
+		MaxUses:     row.MaxUses,
+		UsedCount:   row.UsedCount,
+		PerUserUses: row.PerUserUses,
+		Enabled:     row.Enabled,
+		UpdatedAt:   row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.StartsAt != nil {
+		item.StartsAt = row.StartsAt.UTC().Format(time.RFC3339)
+	}
+	if row.EndsAt != nil {
+		item.EndsAt = row.EndsAt.UTC().Format(time.RFC3339)
+	}
+	return item
 }
 
 func (s *AdminService) getOrCreatePointRiskConfig() (*model.PointRiskConfig, error) {

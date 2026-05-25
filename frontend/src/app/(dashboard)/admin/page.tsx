@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -218,6 +218,8 @@ export default function AdminPage() {
   const [pointActivities, setPointActivities] = useState<AdminPointActivityApi[]>([]);
   const [pointUsers, setPointUsers] = useState<AdminPointUserApi[]>([]);
   const [pointRiskConfig, setPointRiskConfig] = useState<AdminPointRiskConfigApi | null>(null);
+  const [redemptionCodes, setRedemptionCodes] = useState<AdminPointRedemptionCodeApi[]>([]);
+  const [referralSummary, setReferralSummary] = useState<AdminReferralSummaryApi | null>(null);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
 
@@ -238,12 +240,14 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
           adminService.pointUsers({ page: 1, page_size: 20, query: pointQuery.trim() || undefined }),
           adminService.pointRiskConfig(),
+          adminService.pointRedemptionCodes(),
+          adminService.referralSummary(),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -251,6 +255,8 @@ export default function AdminPage() {
         setPointActivities(activitiesData);
         setPointUsers(pointUsersData.items);
         setPointRiskConfig(pointRiskConfigData);
+        setRedemptionCodes(redemptionData);
+        setReferralSummary(referralData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -353,6 +359,19 @@ export default function AdminPage() {
     }
   };
 
+  const createRedemptionCode = async (payload: { code: string; title: string; points: number; max_uses: number }) => {
+    setSubmittingPointKey("redemption");
+    try {
+      const next = await adminService.createPointRedemptionCode({ ...payload, per_user_uses: 1, enabled: true });
+      setRedemptionCodes((items) => [next, ...items]);
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -406,6 +425,8 @@ export default function AdminPage() {
           activities={pointActivities}
           users={pointUsers}
           riskConfig={pointRiskConfig}
+          redemptionCodes={redemptionCodes}
+          referralSummary={referralSummary}
           query={pointQuery}
           submittingKey={submittingPointKey}
           onQueryChange={setPointQuery}
@@ -413,6 +434,7 @@ export default function AdminPage() {
           onUpdateActivity={updatePointActivity}
           onAdjustPoints={adjustPoints}
           onUpdateRiskConfig={updatePointRiskConfig}
+          onCreateRedemptionCode={createRedemptionCode}
         />
       ) : null}
       {activeSection === "activity" ? <ActivitySection overview={overview} /> : null}
@@ -924,6 +946,8 @@ function PointsAdminSection({
   activities,
   users,
   riskConfig,
+  redemptionCodes,
+  referralSummary,
   query,
   submittingKey,
   onQueryChange,
@@ -931,10 +955,13 @@ function PointsAdminSection({
   onUpdateActivity,
   onAdjustPoints,
   onUpdateRiskConfig,
+  onCreateRedemptionCode,
 }: {
   activities: AdminPointActivityApi[];
   users: AdminPointUserApi[];
   riskConfig: AdminPointRiskConfigApi | null;
+  redemptionCodes: AdminPointRedemptionCodeApi[];
+  referralSummary: AdminReferralSummaryApi | null;
   query: string;
   submittingKey: string;
   onQueryChange: (value: string) => void;
@@ -942,9 +969,11 @@ function PointsAdminSection({
   onUpdateActivity: (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => void;
   onAdjustPoints: (userId: number, points: number, reason: string) => void;
   onUpdateRiskConfig: (patch: Partial<AdminPointRiskConfigApi>) => void;
+  onCreateRedemptionCode: (payload: { code: string; title: string; points: number; max_uses: number }) => void;
 }) {
   const { t } = useT();
   const [adjustValues, setAdjustValues] = useState<Record<number, { points: string; reason: string }>>({});
+  const [codeForm, setCodeForm] = useState({ code: "", title: "", points: "10", maxUses: "100" });
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
@@ -993,6 +1022,51 @@ function PointsAdminSection({
           </div>
         </Card>
       ) : null}
+
+      {referralSummary ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.referral.title")} description={t("admin.points.referral.description")} />
+          <div className="grid gap-3 md:grid-cols-5">
+            <Metric label={t("admin.points.referral.inviteCodes")} value={referralSummary.invite_codes} icon={Users} />
+            <Metric label={t("admin.points.referral.signups")} value={referralSummary.referral_signups} icon={Users} tone="good" />
+            <Metric label={t("admin.points.referral.purchases")} value={referralSummary.first_purchase_rewards} icon={CheckCircle2} tone="good" />
+            <Metric label={t("admin.points.referral.signupPoints")} value={referralSummary.signup_reward_points} icon={Coins} />
+            <Metric label={t("admin.points.referral.purchasePoints")} value={referralSummary.purchase_reward_points} icon={Coins} />
+          </div>
+        </Card>
+      ) : null}
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("admin.points.redemption.title")} description={t("admin.points.redemption.description")} />
+        <div className="grid gap-2 lg:grid-cols-[1fr_1fr_120px_120px_auto]">
+          <Input placeholder={t("admin.points.redemption.code")} value={codeForm.code} onChange={(event) => setCodeForm((v) => ({ ...v, code: event.target.value.toUpperCase() }))} />
+          <Input placeholder={t("admin.points.redemption.name")} value={codeForm.title} onChange={(event) => setCodeForm((v) => ({ ...v, title: event.target.value }))} />
+          <Input type="number" min={1} placeholder={t("admin.points.points")} value={codeForm.points} onChange={(event) => setCodeForm((v) => ({ ...v, points: event.target.value }))} />
+          <Input type="number" min={0} placeholder={t("admin.points.redemption.maxUses")} value={codeForm.maxUses} onChange={(event) => setCodeForm((v) => ({ ...v, maxUses: event.target.value }))} />
+          <Button
+            type="button"
+            disabled={submittingKey === "redemption" || !codeForm.code.trim() || !codeForm.title.trim()}
+            onClick={() => onCreateRedemptionCode({ code: codeForm.code, title: codeForm.title, points: Number(codeForm.points) || 1, max_uses: Number(codeForm.maxUses) || 0 })}
+          >
+            {t("admin.points.redemption.create")}
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {redemptionCodes.slice(0, 8).map((code) => (
+            <div key={code.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black p-3 text-sm">
+              <div>
+                <p className="font-mono font-semibold text-white">{code.code}</p>
+                <p className="text-xs text-[#71767b]">{code.title}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+                <Badge variant={code.enabled ? "success" : "default"}>{code.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</Badge>
+                <span>+{code.points}</span>
+                <span>{code.used_count}/{code.max_uses || "∞"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.points.activities.title")} description={t("admin.points.activities.description")} />

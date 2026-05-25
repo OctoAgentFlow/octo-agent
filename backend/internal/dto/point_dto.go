@@ -38,3 +38,7 @@ type PointCenterResponse struct {
 type PointClaimRequest struct {
 	ActivityCode string `json:"activity_code" binding:"required"`
 }
+
+type PointRedeemRequest struct {
+	Code string `json:"code" binding:"required"`
+}

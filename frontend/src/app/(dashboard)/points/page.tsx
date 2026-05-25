@@ -19,6 +19,8 @@ export default function PointsPage() {
   const [referral, setReferral] = useState<ReferralInfoApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState("");
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -64,6 +66,21 @@ export default function PointsPage() {
     }
   };
 
+  const redeem = async () => {
+    if (!redeemCode.trim()) return;
+    setRedeeming(true);
+    try {
+      const next = await pointService.redeem(redeemCode.trim());
+      setData(next);
+      setRedeemCode("");
+      pushToast(t("points.redeem.success"));
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : t("points.redeem.failed"));
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
   if (loading && !data) {
     return <Card><CardHeader title={t("points.loading.title")} description={t("points.loading.description")} /></Card>;
   }
@@ -106,6 +123,16 @@ export default function PointsPage() {
           </div>
         </SectionCard>
       ) : null}
+
+      <SectionCard title={t("points.redeem.title")} description={t("points.redeem.description")}>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <input className="form-input h-10 w-full font-mono uppercase" value={redeemCode} placeholder={t("points.redeem.placeholder")} onChange={(event) => setRedeemCode(event.target.value.toUpperCase())} />
+          <Button type="button" disabled={redeeming || !redeemCode.trim()} onClick={redeem}>
+            <Gift className="size-4" />
+            {redeeming ? t("points.redeem.redeeming") : t("points.redeem.submit")}
+          </Button>
+        </div>
+      </SectionCard>
 
       <SectionCard title={t("points.activities.title")} description={t("points.activities.description")}>
         <div className="grid gap-3 md:grid-cols-3">

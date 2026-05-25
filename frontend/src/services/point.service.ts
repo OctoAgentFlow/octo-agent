@@ -52,4 +52,8 @@ export const pointService = {
     });
     return res.data.data;
   },
+  async redeem(code: string) {
+    const res = await request.post<ApiResponse<PointCenterApi>>("/points/redeem", { code });
+    return res.data.data;
+  },
 };

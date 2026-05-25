@@ -165,3 +165,36 @@ type AdminUpdatePointRiskConfigRequest struct {
 	LargeAdjustmentAlertThreshold *int64 `json:"large_adjustment_alert_threshold"`
 	PointExpiryDays               *int   `json:"point_expiry_days"`
 }
+
+type AdminPointRedemptionCodeItem struct {
+	ID          uint   `json:"id"`
+	Code        string `json:"code"`
+	Title       string `json:"title"`
+	Points      int64  `json:"points"`
+	MaxUses     int64  `json:"max_uses"`
+	UsedCount   int64  `json:"used_count"`
+	PerUserUses int64  `json:"per_user_uses"`
+	Enabled     bool   `json:"enabled"`
+	StartsAt    string `json:"starts_at,omitempty"`
+	EndsAt      string `json:"ends_at,omitempty"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type AdminCreatePointRedemptionCodeRequest struct {
+	Code        string `json:"code" binding:"required"`
+	Title       string `json:"title" binding:"required"`
+	Points      int64  `json:"points" binding:"required"`
+	MaxUses     int64  `json:"max_uses"`
+	PerUserUses int64  `json:"per_user_uses"`
+	Enabled     *bool  `json:"enabled"`
+	StartsAt    string `json:"starts_at"`
+	EndsAt      string `json:"ends_at"`
+}
+
+type AdminReferralSummaryResponse struct {
+	InviteCodes          int64 `json:"invite_codes"`
+	ReferralSignups      int64 `json:"referral_signups"`
+	FirstPurchaseRewards int64 `json:"first_purchase_rewards"`
+	SignupRewardPoints   int64 `json:"signup_reward_points"`
+	PurchaseRewardPoints int64 `json:"purchase_reward_points"`
+}

@@ -134,6 +134,13 @@ func (s *PointService) Claim(userID uint, req dto.PointClaimRequest) (*dto.Point
 	return s.Center(userID)
 }
 
+func (s *PointService) Redeem(userID uint, req dto.PointRedeemRequest) (*dto.PointCenterResponse, error) {
+	if err := s.pointRepo.RedeemCode(userID, req.Code, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	return s.Center(userID)
+}
+
 func (s *PointService) activities(now time.Time) ([]pointActivityDefinition, error) {
 	rows, err := s.pointRepo.Activities(now)
 	if err != nil {

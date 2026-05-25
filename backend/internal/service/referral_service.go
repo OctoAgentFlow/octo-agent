@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	referralSignupInviterPoints        = int64(50)
-	referralSignupInviteePoints        = int64(20)
-	referralFirstPurchaseInviterPoints = int64(100)
+	referralSignupInviterPoints        = int64(10)
+	referralSignupInviteePoints        = int64(5)
+	referralFirstPurchaseInviterPoints = int64(30)
 )
 
 type ReferralService struct {

@@ -235,6 +235,53 @@ func (ctl *AdminController) UpdatePointRiskConfig(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) ListPointRedemptionCodes(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ListPointRedemptionCodes(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) CreatePointRedemptionCode(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminCreatePointRedemptionCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.CreatePointRedemptionCode(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ReferralSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ReferralSummary(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func adminError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrAdminForbidden):

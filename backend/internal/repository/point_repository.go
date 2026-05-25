@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -42,6 +43,69 @@ func (r *PointRepository) Claims(userID uint) ([]model.PointActivityClaim, error
 	var rows []model.PointActivityClaim
 	err := r.DB.Where("user_id = ?", userID).Order("id DESC").Limit(100).Find(&rows).Error
 	return rows, err
+}
+
+func (r *PointRepository) RedemptionCodes() ([]model.PointRedemptionCode, error) {
+	var rows []model.PointRedemptionCode
+	err := r.DB.Order("id DESC").Limit(100).Find(&rows).Error
+	return rows, err
+}
+
+func (r *PointRepository) CreateRedemptionCode(code *model.PointRedemptionCode) error {
+	return r.DB.Create(code).Error
+}
+
+func (r *PointRepository) RedeemCode(userID uint, rawCode string, now time.Time) error {
+	codeValue := strings.ToUpper(strings.TrimSpace(rawCode))
+	if codeValue == "" {
+		return fmt.Errorf("invalid redemption code")
+	}
+	return r.DB.Transaction(func(tx *gorm.DB) error {
+		var code model.PointRedemptionCode
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("code = ? AND enabled = ?", codeValue, true).First(&code).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("redemption code not found")
+			}
+			return err
+		}
+		if code.StartsAt != nil && now.Before(*code.StartsAt) {
+			return fmt.Errorf("redemption code is not active")
+		}
+		if code.EndsAt != nil && now.After(*code.EndsAt) {
+			return fmt.Errorf("redemption code expired")
+		}
+		if code.MaxUses > 0 && code.UsedCount >= code.MaxUses {
+			return fmt.Errorf("redemption code has reached its usage limit")
+		}
+		var userUses int64
+		if err := tx.Model(&model.PointRedemptionClaim{}).Where("user_id = ? AND redemption_code_id = ?", userID, code.ID).Count(&userUses).Error; err != nil {
+			return err
+		}
+		perUserUses := code.PerUserUses
+		if perUserUses <= 0 {
+			perUserUses = 1
+		}
+		if userUses >= perUserUses {
+			return fmt.Errorf("redemption code already used")
+		}
+		claim := model.PointRedemptionClaim{
+			UserID:           userID,
+			RedemptionCodeID: code.ID,
+			Code:             code.Code,
+			Points:           code.Points,
+			RedeemedAt:       now.UTC(),
+			UniqueKey:        fmt.Sprintf("redeem:%d:%d:%d", userID, code.ID, userUses+1),
+		}
+		if err := tx.Create(&claim).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.PointRedemptionCode{}).Where("id = ?", code.ID).UpdateColumn("used_count", gorm.Expr("used_count + 1")).Error; err != nil {
+			return err
+		}
+		redeemSeq := userUses + 1
+		details := fmt.Sprintf(`{"redemption_code":%q,"redemption_code_id":%d,"redeem_seq":%d}`, code.Code, code.ID, redeemSeq)
+		return r.AwardSystemPointsInTx(tx, userID, "redemption", fmt.Sprintf("code:%s:%d", code.Code, redeemSeq), "redemption_code", code.Points, fmt.Sprintf("redemption_code:%d:%d:%d", userID, code.ID, redeemSeq), details)
+	})
 }
 
 func (r *PointRepository) Activities(now time.Time) ([]model.PointActivity, error) {

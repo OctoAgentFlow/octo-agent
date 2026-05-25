@@ -12,4 +12,5 @@ func RegisterPoint(rg *gin.RouterGroup, c *controller.PointController) {
 	g.Use(middleware.Auth())
 	g.GET("/center", c.Center)
 	g.POST("/claim", c.Claim)
+	g.POST("/redeem", c.Redeem)
 }

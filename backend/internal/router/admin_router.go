@@ -21,4 +21,7 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.POST("/points/users/:id/adjust", c.AdjustUserPoints)
 	g.GET("/points/risk-config", c.PointRiskConfig)
 	g.PATCH("/points/risk-config", c.UpdatePointRiskConfig)
+	g.GET("/points/redemption-codes", c.ListPointRedemptionCodes)
+	g.POST("/points/redemption-codes", c.CreatePointRedemptionCode)
+	g.GET("/points/referral-summary", c.ReferralSummary)
 }

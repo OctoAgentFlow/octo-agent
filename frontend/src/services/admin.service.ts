@@ -153,6 +153,28 @@ export type AdminPointRiskConfigApi = {
   updated_at: string;
 };
 
+export type AdminPointRedemptionCodeApi = {
+  id: number;
+  code: string;
+  title: string;
+  points: number;
+  max_uses: number;
+  used_count: number;
+  per_user_uses: number;
+  enabled: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  updated_at: string;
+};
+
+export type AdminReferralSummaryApi = {
+  invite_codes: number;
+  referral_signups: number;
+  first_purchase_rewards: number;
+  signup_reward_points: number;
+  purchase_reward_points: number;
+};
+
 export const adminService = {
   async overview() {
     const res = await request.get<ApiResponse<AdminOverviewApi>>("/admin/overview");
@@ -196,6 +218,18 @@ export const adminService = {
   },
   async updatePointRiskConfig(body: Partial<AdminPointRiskConfigApi>) {
     const res = await request.patch<ApiResponse<AdminPointRiskConfigApi>>("/admin/points/risk-config", body);
+    return res.data.data;
+  },
+  async pointRedemptionCodes() {
+    const res = await request.get<ApiResponse<AdminPointRedemptionCodeApi[]>>("/admin/points/redemption-codes");
+    return res.data.data;
+  },
+  async createPointRedemptionCode(body: { code: string; title: string; points: number; max_uses: number; per_user_uses?: number; enabled?: boolean }) {
+    const res = await request.post<ApiResponse<AdminPointRedemptionCodeApi>>("/admin/points/redemption-codes", body);
+    return res.data.data;
+  },
+  async referralSummary() {
+    const res = await request.get<ApiResponse<AdminReferralSummaryApi>>("/admin/points/referral-summary");
     return res.data.data;
   },
 };

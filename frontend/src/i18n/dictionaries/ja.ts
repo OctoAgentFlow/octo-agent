@@ -1394,4 +1394,17 @@ export const dict: I18nDict = {
   "dashboard.header.syncedUnknown": "未同期",
   "dashboard.header.syncing": "同期中…",
   "dashboard.header.refresh": "更新",
+  "oafBots.list.configuredOverview": "Configured OAF Bots",
+  "oafBots.list.configuredHint": "Select a Bot to view monthly AI usage, edit its persona, or generate samples.",
+  "oafBots.list.totalBots": "Total",
+  "oafBots.list.boundBots": "Bound",
+  "oafBots.list.readyBots": "Testable",
+  "oafBots.list.status.bound": "Account bound",
+  "oafBots.list.status.unbound": "No account",
+  "oafBots.list.status.ready": "Persona ready",
+  "oafBots.list.status.needsSetup": "Needs setup",
+  "oafBots.list.status.completeness": "{percent}% complete",
+  "oafBots.list.usageSelectHint": "Select to view monthly AI usage",
+  "oafBots.list.usageCurrentMonth": "{count} AI generations this month",
+
 };

@@ -77,14 +77,14 @@ billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"
   rpc_urls:
-    "56": "https://shared.us-east-1.getblock.io/ac26b24192644931ba95a34c4cf23ec3"
-    "1": "https://go.getblock.asia/f70ca23b084b4edf9492ca70fcdb99a6"
-    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+    "56": ""
+    "1": ""
+    "728126428": ""
   wss_urls:
-    "56": "wss://go.getblock.asia/d892b57a848f459588fd9aa994afa614"
-    "1": "wss://go.getblock.asia/af31063fddc84b7f88ba18c32672adca"
+    "56": ""
+    "1": ""
   explorer_api_keys:
-    etherscan: "SBSIVP2NBF2GY5XUT7SD1DNDC1A2VEKS86"
+    etherscan: ""
   payment_methods:
     - method: "USDT"
       network: "BEP20"

@@ -491,6 +491,14 @@ func sanitizeBillingIdempotencyKey(raw string) string {
 	return key
 }
 
+func billingIdempotencyScope(userID uint, key string) string {
+	key = sanitizeBillingIdempotencyKey(key)
+	if key == "" {
+		return ""
+	}
+	return fmt.Sprintf("%d:%s", userID, key)
+}
+
 // CreateOrder creates a pending on-chain USDT order for the given plan and network.
 func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequest) (*dto.BillingCreateOrderResponse, error) {
 	now := time.Now().UTC()
@@ -516,6 +524,11 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	}
 	basePayableAmount := centsToAmountString(quote.payableCents)
 	idempotencyKey := sanitizeBillingIdempotencyKey(req.IdempotencyKey)
+	idempotencyScope := billingIdempotencyScope(userID, idempotencyKey)
+	var idempotencyScopePtr *string
+	if idempotencyScope != "" {
+		idempotencyScopePtr = &idempotencyScope
+	}
 	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount)
 	if idempotencyKey != "" {
 		if existing, err := s.orderRepo.GetReusableIdempotentOrder(userID, idempotencyKey, now); err == nil {
@@ -549,6 +562,7 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		PayableAmount:        exactPayableAmount,
 		OrderType:            quote.dto.OrderType,
 		IdempotencyKey:       idempotencyKey,
+		IdempotencyScope:     idempotencyScopePtr,
 		RequestFingerprint:   baseFingerprint,
 		FromPlanCode:         quote.dto.CurrentPlan,
 		FromBillingCycle:     quote.dto.CurrentBillingCycle,
@@ -568,20 +582,32 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if o.Currency == "" {
 		o.Currency = "USDT"
 	}
-	if err := s.orderRepo.Create(o); err != nil {
+	if err := s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
+		if err := s.orderRepo.CreateInTx(tx, o); err != nil {
+			return err
+		}
+		return s.orderRepo.CreateLedgerEntry(tx, &model.BillingLedgerEntry{
+			UserID:         userID,
+			OrderID:        o.ID,
+			EventType:      "order_created",
+			Amount:         o.Amount,
+			Currency:       o.Currency,
+			Status:         o.Status,
+			IdempotencyKey: o.IdempotencyKey,
+			UniqueKey:      fmt.Sprintf("order_created:%d", o.ID),
+			Details:        billingLedgerDetails(o),
+		})
+	}); err != nil {
+		if idempotencyKey != "" {
+			if existing, getErr := s.orderRepo.GetReusableIdempotentOrder(userID, idempotencyKey, now); getErr == nil {
+				if existing.RequestFingerprint != "" && existing.RequestFingerprint != baseFingerprint {
+					return nil, fmt.Errorf("idempotency key reused with a different billing request")
+				}
+				return billingCreateResponseFromOrder(existing, &quote.dto), nil
+			}
+		}
 		return nil, err
 	}
-	_ = s.orderRepo.CreateLedgerEntry(nil, &model.BillingLedgerEntry{
-		UserID:         userID,
-		OrderID:        o.ID,
-		EventType:      "order_created",
-		Amount:         o.Amount,
-		Currency:       o.Currency,
-		Status:         o.Status,
-		IdempotencyKey: o.IdempotencyKey,
-		UniqueKey:      fmt.Sprintf("order_created:%d", o.ID),
-		Details:        billingLedgerDetails(o),
-	})
 	return billingCreateResponseFromOrder(o, &quote.dto), nil
 }
 

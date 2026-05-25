@@ -370,9 +370,6 @@ func Load() (*Config, error) {
 		cfg.AdminAuth.CodeTTLSeconds = 300
 	}
 	applyAlertConfig(env, service, &cfg.Alert)
-	if err := applyExternalSecretConfig(env, &cfg); err != nil {
-		return nil, err
-	}
 	if cfg.XPublisher.PerAccountDailyLimit <= 0 {
 		cfg.XPublisher.PerAccountDailyLimit = 20
 	}
@@ -404,6 +401,9 @@ func Load() (*Config, error) {
 	if cfg.Billing.ExplorerAPIKeys == nil {
 		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
+	if err := applyExternalSecretConfig(env, &cfg); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
 }
 
@@ -429,6 +429,9 @@ func applyExternalSecretConfig(env string, cfg *Config) error {
 	if v := strings.TrimSpace(os.Getenv("BILLING_WEBHOOK_SECRET")); v != "" {
 		cfg.Billing.WebhookSecret = v
 	}
+	if v := strings.TrimSpace(os.Getenv("BILLING_ETHERSCAN_API_KEY")); v != "" {
+		cfg.Billing.ExplorerAPIKeys["etherscan"] = v
+	}
 	applyMapEnvOverrides(cfg.Billing.RpcURLs, "BILLING_RPC_URL_")
 	applyMapEnvOverrides(cfg.Billing.WssURLs, "BILLING_WSS_URL_")
 	applyMapEnvOverrides(cfg.Billing.ExplorerAPIKeys, "BILLING_EXPLORER_API_KEY_")
@@ -445,6 +448,9 @@ func applyExternalSecretConfig(env string, cfg *Config) error {
 	}
 	if strings.EqualFold(cfg.Email.Provider, "resend") {
 		required["email.resend.api_key/RESEND_API_KEY"] = cfg.Email.Resend.APIKey
+	}
+	if strings.EqualFold(cfg.LLM.DefaultProvider, "openai") {
+		required["llm.openai.api_key/OPENAI_API_KEY"] = cfg.LLM.OpenAI.APIKey
 	}
 	if cfg.Billing.Scanner.Enabled {
 		required["billing.webhook_secret/BILLING_WEBHOOK_SECRET"] = cfg.Billing.WebhookSecret

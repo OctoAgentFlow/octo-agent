@@ -46,6 +46,13 @@ func (r *BillingOrderRepository) Create(o *model.BillingOrder) error {
 	return r.DB.Create(o).Error
 }
 
+func (r *BillingOrderRepository) CreateInTx(tx *gorm.DB, o *model.BillingOrder) error {
+	if tx == nil {
+		tx = r.DB
+	}
+	return tx.Create(o).Error
+}
+
 func (r *BillingOrderRepository) GetReusableIdempotentOrder(userID uint, key string, now time.Time) (*model.BillingOrder, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {

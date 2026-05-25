@@ -59,9 +59,9 @@ admin_auth:
 
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
-  client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
+  client_secret: ""
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
-  state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  state_secret: ""
   scopes: "tweet.read users.read offline.access"
 
 billing:
@@ -70,7 +70,7 @@ billing:
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"
     "1": "https://ethereum.publicnode.com"
-    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+    "728126428": ""
   payment_methods:
     - method: "USDT"
       network: "BEP20"

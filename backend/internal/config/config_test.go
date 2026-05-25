@@ -201,3 +201,30 @@ func TestApplyExternalSecretConfigRequiresProdSecrets(t *testing.T) {
 		t.Fatal("expected prod TODO secrets to fail")
 	}
 }
+
+func TestApplyExternalSecretConfigRequiresProdOpenAIKey(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "")
+	t.Setenv("X_OAUTH_CLIENT_ID", "")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("X_OAUTH_STATE_SECRET", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "")
+
+	cfg := Config{
+		Email: EmailConfig{Provider: "local"},
+		MySQL: MySQLConfig{DataSource: "mysql-dsn"},
+		XOAuth: XOAuthConfig{
+			ClientID:     "x-client",
+			ClientSecret: "x-secret",
+			StateSecret:  "state-secret",
+		},
+		LLM: LLMConfig{
+			DefaultProvider: "openai",
+			OpenAI:          OpenAIConfig{APIKey: "TODO_OPENAI_API_KEY"},
+		},
+		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
+	}
+	if err := applyExternalSecretConfig("prod", &cfg); err == nil {
+		t.Fatal("expected prod openai TODO secret to fail")
+	}
+}

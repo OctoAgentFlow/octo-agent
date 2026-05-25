@@ -57,9 +57,9 @@ app:
 # X（Twitter）OAuth 2.0：在 Developer Portal 配置相同 redirect_uri / Callback URL
 x_oauth:
   client_id: "TODO_X_CLIENT_ID"
-  client_secret: "dDyI-ENvnsIPHhZRZqdZrn_Lti77OcjIkH9PCI6l51nO81p6VV"
+  client_secret: ""
   redirect_uri: "http://localhost:10001/api/v1/accounts/oauth/x/callback"
-  state_secret: "T9@vQ7#kL2!zX5$M8^pR"
+  state_secret: ""
   scopes: "tweet.read tweet.write users.read offline.access"
 
 x_publisher:
@@ -72,7 +72,7 @@ x_publisher:
 llm:
   default_provider: "openai"
   openai:
-    api_key: "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"
+    api_key: ""
     model: "gpt-4.1-mini"
     base_url: "https://api.openai.com/v1"
     timeout_sec: 20
@@ -90,7 +90,7 @@ billing:
   rpc_urls:
     "56": "https://bsc-dataseed.binance.org"
     "1": "https://ethereum.publicnode.com"
-    "728126428": "https://go.getblock.asia/66e67d066d504e3396ef2d4d6d43065b"
+    "728126428": ""
   payment_methods:
     - method: "USDT"
       network: "BEP20"

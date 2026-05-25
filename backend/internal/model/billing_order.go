@@ -14,6 +14,7 @@ type BillingOrder struct {
 	PayableAmount        string     `gorm:"size:32;comment:本次实际应付金额" json:"payable_amount,omitempty"`
 	OrderType            string     `gorm:"size:32;index;not null;default:new;comment:订单类型（new/renew/upgrade）" json:"order_type,omitempty"`
 	IdempotencyKey       string     `gorm:"size:128;index;comment:创建订单幂等键" json:"idempotency_key,omitempty"`
+	IdempotencyScope     *string    `gorm:"size:191;uniqueIndex;comment:创建订单幂等唯一作用域（user:key）" json:"-"`
 	RequestFingerprint   string     `gorm:"size:128;index;comment:创建订单请求指纹" json:"request_fingerprint,omitempty"`
 	FromPlanCode         string     `gorm:"size:64;comment:升级前订阅方案编码" json:"from_plan_code,omitempty"`
 	FromBillingCycle     string     `gorm:"size:16;comment:升级前计费周期" json:"from_billing_cycle,omitempty"`

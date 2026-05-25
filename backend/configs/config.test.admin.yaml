@@ -21,6 +21,20 @@ log:
   max_backups: 30
   max_age: 7
   compress: true
+alert:
+  enabled: true
+  environment: "test"
+  lark:
+    webhook_url: ""
+    secret: ""
+  rate_limit:
+    dedupe_window_seconds: 300
+    max_per_minute: 10
+  levels:
+    critical: true
+    error: true
+    warning: true
+    info: false
 email:
   provider: "resend"
   local:

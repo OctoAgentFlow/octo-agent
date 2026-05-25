@@ -2,8 +2,11 @@ package jobs
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/repository"
 	"octo-agent/backend/internal/service"
 
@@ -22,6 +25,20 @@ func Start(
 	billing *service.BillingService,
 ) {
 	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				zap.L().Error("scheduler panic recovered",
+					zap.Any("panic", recovered),
+					zap.String("stacktrace", string(debug.Stack())))
+				alert.Notify(context.Background(), alert.Event{
+					Level:    alert.LevelCritical,
+					Category: alert.CategoryScheduler,
+					Title:    "Scheduler panic recovered",
+					Message:  "Background scheduler goroutine panicked and stopped.",
+					Error:    fmt.Errorf("panic: %v", recovered),
+				})
+			}
+		}()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		var lastBillingScan time.Time
@@ -29,6 +46,13 @@ func Start(
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
 					zap.L().Error("cleanup expired email codes failed", zap.Error(err))
+					alert.Notify(context.Background(), alert.Event{
+						Level:    alert.LevelError,
+						Category: alert.CategoryScheduler,
+						Title:    "Cleanup expired email codes failed",
+						Message:  "The scheduler failed to clean expired email verification codes.",
+						Error:    err,
+					})
 				}
 			}
 		}

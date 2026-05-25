@@ -13,6 +13,202 @@ octo_print_recent_log() {
   fi
 }
 
+octo_send_deploy_alert() {
+  local label="$1"
+  local status="$2"
+  local exit_code="${3:-0}"
+  local failed_command="${4:-}"
+
+  local webhook_url="${DEPLOY_ALERT_WEBHOOK_URL:-}"
+  if [ -z "${webhook_url:-}" ] || [ "${DEPLOY_ALERT_ENABLED:-1}" = "0" ]; then
+    return 0
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "[$label] deploy alert skipped: python3 not found"
+    return 0
+  fi
+
+  DEPLOY_ALERT_WEBHOOK_URL="$webhook_url" \
+  DEPLOY_ALERT_LABEL="$label" \
+  DEPLOY_ALERT_STATUS="$status" \
+  DEPLOY_ALERT_EXIT_CODE="$exit_code" \
+  DEPLOY_ALERT_FAILED_COMMAND="$failed_command" \
+  DEPLOY_ALERT_ROOT_DIR="${ROOT_DIR:-}" \
+  DEPLOY_ALERT_LOG_FILE="${LOG_FILE:-}" \
+  DEPLOY_ALERT_PID_FILE="${PID_FILE:-}" \
+  DEPLOY_ALERT_PORT="${PORT:-}" \
+  DEPLOY_ALERT_HOST="${HOST:-}" \
+  DEPLOY_ALERT_APP_ENV="${APP_ENV_VALUE:-}" \
+  DEPLOY_ALERT_APP_SERVICE="${APP_SERVICE_VALUE:-}" \
+  DEPLOY_ALERT_FRONTEND_ROLE="${NEXT_PUBLIC_FRONTEND_ROLE_VALUE:-}" \
+  DEPLOY_ALERT_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL_VALUE:-}" \
+  python3 <<'PY' || true
+import json
+import os
+import socket
+import subprocess
+import time
+import urllib.request
+
+
+def env(name, default=""):
+    return os.environ.get(name, default).strip()
+
+
+def git_value(root, *args):
+    if not root:
+        return ""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", root, *args],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+        ).strip()
+    except Exception:
+        return ""
+
+
+def tail_log(path, max_lines=18, max_chars=1800):
+    if not path or not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()[-max_lines:]
+        return "".join(lines)[-max_chars:].strip()
+    except Exception:
+        return ""
+
+
+def field(label, value):
+    if value is None:
+        value = ""
+    value = str(value).strip()
+    if not value:
+        value = "-"
+    return {
+        "is_short": True,
+        "text": {
+            "tag": "lark_md",
+            "content": f"**{label}**\n{value}",
+        },
+    }
+
+
+webhook = env("DEPLOY_ALERT_WEBHOOK_URL")
+label = env("DEPLOY_ALERT_LABEL")
+status = env("DEPLOY_ALERT_STATUS")
+exit_code = env("DEPLOY_ALERT_EXIT_CODE", "0")
+failed_command = env("DEPLOY_ALERT_FAILED_COMMAND")
+root = env("DEPLOY_ALERT_ROOT_DIR")
+log_file = env("DEPLOY_ALERT_LOG_FILE")
+pid_file = env("DEPLOY_ALERT_PID_FILE")
+port = env("DEPLOY_ALERT_PORT")
+host = env("DEPLOY_ALERT_HOST")
+app_env = env("DEPLOY_ALERT_APP_ENV")
+app_service = env("DEPLOY_ALERT_APP_SERVICE")
+frontend_role = env("DEPLOY_ALERT_FRONTEND_ROLE")
+api_base_url = env("DEPLOY_ALERT_API_BASE_URL")
+
+status_text = "部署成功" if status == "success" else "部署失败"
+template = "green" if status == "success" else "red"
+summary = f"{label} {status_text}"
+if status != "success" and failed_command:
+    summary += f"\n失败命令：{failed_command}"
+
+branch = git_value(root, "branch", "--show-current")
+commit = git_value(root, "rev-parse", "--short", "HEAD")
+commit_subject = git_value(root, "log", "-1", "--pretty=%s")
+
+fields = [
+    field("服务", label),
+    field("状态", status_text),
+    field("主机", socket.gethostname()),
+    field("时间", time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())),
+    field("环境", app_env or ("prod" if ":prod" in label else "test" if ":test" in label else "-")),
+    field("端口", port),
+    field("Git 分支", branch),
+    field("Git 提交", f"{commit} {commit_subject}".strip()),
+]
+if app_service:
+    fields.append(field("后端服务", app_service))
+if frontend_role:
+    fields.append(field("前端角色", frontend_role))
+if host:
+    fields.append(field("监听地址", host))
+if api_base_url:
+    fields.append(field("API Base URL", api_base_url))
+if pid_file and os.path.exists(pid_file):
+    try:
+        fields.append(field("PID", open(pid_file, "r", encoding="utf-8").read().strip()))
+    except Exception:
+        pass
+if status != "success":
+    fields.append(field("退出码", exit_code))
+
+elements = [
+    {
+        "tag": "div",
+        "text": {"tag": "lark_md", "content": f"**摘要**\n{summary}"},
+    },
+    {"tag": "hr"},
+    {"tag": "div", "fields": fields},
+]
+
+recent_log = tail_log(log_file)
+if recent_log:
+    safe_log = recent_log.replace("`", "'")
+    elements.extend([
+        {"tag": "hr"},
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**最近日志**\n```text\n{safe_log}\n```",
+            },
+        },
+    ])
+
+payload = {
+    "msg_type": "interactive",
+    "card": {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "template": template,
+            "title": {"tag": "plain_text", "content": f"[{status_text}] {label}"},
+        },
+        "elements": elements,
+    },
+}
+
+req = urllib.request.Request(
+    webhook,
+    data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        body = resp.read(4096).decode("utf-8", errors="replace")
+        if resp.status < 200 or resp.status >= 300:
+            print(f"[{label}] deploy alert failed: http {resp.status} {body}")
+        else:
+            print(f"[{label}] deploy alert sent: {status}")
+except Exception as exc:
+    print(f"[{label}] deploy alert failed: {exc}")
+PY
+}
+
+octo_deploy_failed() {
+  local code="$1"
+  local command="$2"
+  echo "[$LABEL] deploy failed: $command (exit=$code)"
+  octo_print_recent_log "$LABEL" "$LOG_FILE" 80
+  octo_send_deploy_alert "$LABEL" "failed" "$code" "$command"
+  exit "$code"
+}
+
 octo_stop_from_pid_file() {
   local label="$1"
   local pid_file="$2"

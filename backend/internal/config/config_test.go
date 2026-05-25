@@ -86,3 +86,55 @@ func TestApplyJWTConfigUsesFixedSecret(t *testing.T) {
 		t.Fatalf("unexpected secret %q", cfg.Secret)
 	}
 }
+
+func TestApplyAlertConfigDefaultsServiceAndLimits(t *testing.T) {
+	t.Setenv("ALERT_ENABLED", "")
+	t.Setenv("ALERT_ENVIRONMENT", "")
+	t.Setenv("ALERT_SERVICE", "")
+	t.Setenv("LARK_ALERT_WEBHOOK_URL", "")
+	t.Setenv("LARK_ALERT_SECRET", "")
+
+	var cfg AlertConfig
+	applyAlertConfig("test", "api", &cfg)
+	if cfg.Environment != "test" {
+		t.Fatalf("environment = %q, want test", cfg.Environment)
+	}
+	if cfg.Service != "backend-api" {
+		t.Fatalf("service = %q, want backend-api", cfg.Service)
+	}
+	if cfg.RateLimit.DedupeWindowSeconds != 300 {
+		t.Fatalf("dedupe window = %d, want 300", cfg.RateLimit.DedupeWindowSeconds)
+	}
+	if cfg.RateLimit.MaxPerMinute != 10 {
+		t.Fatalf("max per minute = %d, want 10", cfg.RateLimit.MaxPerMinute)
+	}
+	if !cfg.Levels.Critical || !cfg.Levels.Error || !cfg.Levels.Warning || cfg.Levels.Info {
+		t.Fatalf("unexpected default levels: %+v", cfg.Levels)
+	}
+}
+
+func TestApplyAlertConfigUsesEnvironmentOverrides(t *testing.T) {
+	t.Setenv("ALERT_ENABLED", "true")
+	t.Setenv("ALERT_ENVIRONMENT", "prod")
+	t.Setenv("ALERT_SERVICE", "backend-worker")
+	t.Setenv("LARK_ALERT_WEBHOOK_URL", "https://example.com/lark")
+	t.Setenv("LARK_ALERT_SECRET", "secret")
+
+	var cfg AlertConfig
+	applyAlertConfig("test", "api", &cfg)
+	if !cfg.Enabled {
+		t.Fatal("expected alert enabled")
+	}
+	if cfg.Environment != "prod" {
+		t.Fatalf("environment = %q, want prod", cfg.Environment)
+	}
+	if cfg.Service != "backend-worker" {
+		t.Fatalf("service = %q, want backend-worker", cfg.Service)
+	}
+	if cfg.Lark.WebhookURL != "https://example.com/lark" {
+		t.Fatalf("webhook = %q", cfg.Lark.WebhookURL)
+	}
+	if cfg.Lark.Secret != "secret" {
+		t.Fatalf("secret = %q", cfg.Lark.Secret)
+	}
+}

@@ -17,7 +17,7 @@ STARTUP_CHECK_INTERVAL_SECONDS="${STARTUP_CHECK_INTERVAL_SECONDS:-1}"
 
 source "$ROOT_DIR/scripts/lib/deploy-common.sh"
 
-trap 'code=$?; echo "[$LABEL] deploy failed: $BASH_COMMAND (exit=$code)"; octo_print_recent_log "$LABEL" "$LOG_FILE" 80; exit $code' ERR
+trap 'code=$?; cmd=$BASH_COMMAND; octo_deploy_failed "$code" "$cmd"' ERR
 
 echo "[$LABEL] root=$ROOT_DIR"
 echo "[$LABEL] web=$WEB_DIR"
@@ -48,3 +48,4 @@ echo "$!" >"$PID_FILE"
 
 octo_wait_for_port "$LABEL" "$PORT" "$PID_FILE" "$STARTUP_TIMEOUT_SECONDS" "$STARTUP_CHECK_INTERVAL_SECONDS"
 echo "[$LABEL] log: $LOG_FILE"
+octo_send_deploy_alert "$LABEL" "success" "0" ""

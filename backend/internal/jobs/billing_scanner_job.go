@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/pkg/requestid"
 	"octo-agent/backend/internal/service"
 
@@ -19,6 +20,13 @@ func RunBillingScannerOnce(ctx context.Context, svc *service.BillingService) {
 	stats, err := svc.AutoConfirmPendingOrders(requestid.NewContext(ctx, "scheduler"))
 	if err != nil {
 		zap.L().Warn("billing scanner failed", zap.Error(err))
+		alert.Notify(ctx, alert.Event{
+			Level:    alert.LevelError,
+			Category: alert.CategoryBilling,
+			Title:    "Billing scanner failed",
+			Message:  "Billing auto-confirm scanner failed during scheduled execution.",
+			Error:    err,
+		})
 		return
 	}
 	if stats.Confirmed > 0 || stats.Failed > 0 {

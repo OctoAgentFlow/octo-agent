@@ -175,6 +175,38 @@ export type AdminReferralSummaryApi = {
   purchase_reward_points: number;
 };
 
+export type AdminGrossMarginCostApi = {
+  key: string;
+  amount: string;
+  cents: number;
+  share_bps: number;
+  quantity?: number;
+  unit_label?: string;
+};
+
+export type AdminGrossMarginRevenueApi = {
+  plan_code: string;
+  orders: number;
+  amount: string;
+  cents: number;
+};
+
+export type AdminGrossMarginSummaryApi = {
+  period_start: string;
+  period_end: string;
+  revenue_amount: string;
+  revenue_cents: number;
+  total_cost: string;
+  total_cost_cents: number;
+  gross_profit: string;
+  gross_profit_cents: number;
+  gross_margin_bps: number;
+  target_bps: number;
+  status: string;
+  costs: AdminGrossMarginCostApi[];
+  revenue_by_plan: AdminGrossMarginRevenueApi[];
+};
+
 export type AdminPointCostSourceApi = {
   source: string;
   points: number;
@@ -211,6 +243,10 @@ export const adminService = {
   },
   async billingOrders(params?: BillingOrderQueryApi) {
     const res = await request.get<ApiResponse<BillingOrdersData>>("/admin/billing/orders", { params });
+    return res.data.data;
+  },
+  async grossMarginSummary() {
+    const res = await request.get<ApiResponse<AdminGrossMarginSummaryApi>>("/admin/billing/gross-margin");
     return res.data.data;
   },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {

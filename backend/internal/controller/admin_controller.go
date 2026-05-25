@@ -97,6 +97,20 @@ func (ctl *AdminController) ListBillingOrders(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) GrossMarginSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.GrossMarginSummary(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

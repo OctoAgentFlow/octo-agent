@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -134,6 +134,10 @@ function formatDate(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatBps(value: number) {
+  return `${(value / 100).toFixed(1)}%`;
 }
 
 function statusVariant(status: string): BadgeVariant {
@@ -763,6 +767,7 @@ function BillingSection({
   const [scanStatusFilter, setScanStatusFilter] = useState("all");
   const [skipReasonFilter, setSkipReasonFilter] = useState("all");
   const [orders, setOrders] = useState(overview.recent_orders);
+  const [grossMargin, setGrossMargin] = useState<AdminGrossMarginSummaryApi | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
@@ -794,6 +799,22 @@ function BillingSection({
     };
   }, [overview.recent_orders, scanStatusFilter, skipReasonFilter, t]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadGrossMargin = async () => {
+      try {
+        const data = await adminService.grossMarginSummary();
+        if (!cancelled) setGrossMargin(data);
+      } catch {
+        if (!cancelled) setGrossMargin(null);
+      }
+    };
+    void loadGrossMargin();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -803,6 +824,45 @@ function BillingSection({
         <Metric label={t("admin.billing.review")} value={reviewCount} icon={AlertTriangle} tone={reviewCount > 0 ? "warn" : "good"} />
         <Metric label={t("admin.billing.mismatch")} value={overview.billing.mismatch} icon={AlertTriangle} tone={overview.billing.mismatch > 0 ? "danger" : "default"} />
       </section>
+      {grossMargin ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.billing.margin.title")} description={t("admin.billing.margin.description", { target: formatBps(grossMargin.target_bps) })} />
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label={t("admin.billing.margin.revenue")} value={`${grossMargin.revenue_amount} USDT`} icon={ReceiptText} tone="good" />
+            <Metric label={t("admin.billing.margin.cost")} value={`${grossMargin.total_cost} USDT`} icon={AlertTriangle} tone={grossMargin.status === "below_target" ? "danger" : "warn"} />
+            <Metric label={t("admin.billing.margin.profit")} value={`${grossMargin.gross_profit} USDT`} icon={Coins} tone={grossMargin.gross_profit_cents >= 0 ? "good" : "danger"} />
+            <Metric label={t("admin.billing.margin.rate")} value={formatBps(grossMargin.gross_margin_bps)} icon={ShieldCheck} tone={grossMargin.status === "healthy" ? "good" : "danger"} />
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.costBreakdown")}</p>
+              <div className="mt-3 space-y-2">
+                {grossMargin.costs.map((item) => (
+                  <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <span className="text-[#71767b]">{t(`admin.billing.margin.cost.${item.key}`)}</span>
+                    <span className="font-semibold text-white">{item.amount} USDT · {formatBps(item.share_bps)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.revenueByPlan")}</p>
+              <div className="mt-3 space-y-2">
+                {grossMargin.revenue_by_plan.length === 0 ? (
+                  <p className="text-sm text-[#71767b]">{t("admin.billing.margin.noRevenue")}</p>
+                ) : (
+                  grossMargin.revenue_by_plan.map((item) => (
+                    <div key={item.plan_code} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                      <span className="text-[#71767b]">{planLabel(item.plan_code, t)} · {item.orders}</span>
+                      <span className="font-semibold text-white">{item.amount} USDT</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.billing.recentTitle")} description={t("admin.billing.recentDesc")} />
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">

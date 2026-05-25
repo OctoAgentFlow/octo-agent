@@ -191,6 +191,38 @@ type AdminCreatePointRedemptionCodeRequest struct {
 	EndsAt      string `json:"ends_at"`
 }
 
+type AdminGrossMarginCostItem struct {
+	Key       string `json:"key"`
+	Amount    string `json:"amount"`
+	Cents     int64  `json:"cents"`
+	ShareBps  int64  `json:"share_bps"`
+	Quantity  int64  `json:"quantity,omitempty"`
+	UnitLabel string `json:"unit_label,omitempty"`
+}
+
+type AdminGrossMarginRevenueItem struct {
+	PlanCode string `json:"plan_code"`
+	Orders   int64  `json:"orders"`
+	Amount   string `json:"amount"`
+	Cents    int64  `json:"cents"`
+}
+
+type AdminGrossMarginSummaryResponse struct {
+	PeriodStart      string                        `json:"period_start"`
+	PeriodEnd        string                        `json:"period_end"`
+	RevenueAmount    string                        `json:"revenue_amount"`
+	RevenueCents     int64                         `json:"revenue_cents"`
+	TotalCost        string                        `json:"total_cost"`
+	TotalCostCents   int64                         `json:"total_cost_cents"`
+	GrossProfit      string                        `json:"gross_profit"`
+	GrossProfitCents int64                         `json:"gross_profit_cents"`
+	GrossMarginBps   int64                         `json:"gross_margin_bps"`
+	TargetBps        int64                         `json:"target_bps"`
+	Status           string                        `json:"status"`
+	Costs            []AdminGrossMarginCostItem    `json:"costs"`
+	RevenueByPlan    []AdminGrossMarginRevenueItem `json:"revenue_by_plan"`
+}
+
 type AdminReferralSummaryResponse struct {
 	InviteCodes          int64 `json:"invite_codes"`
 	ReferralSignups      int64 `json:"referral_signups"`

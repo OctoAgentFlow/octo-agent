@@ -14,6 +14,7 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.GET("/users", c.ListUsers)
 	g.PATCH("/users/:id", c.UpdateUser)
 	g.GET("/billing/orders", c.ListBillingOrders)
+	g.GET("/billing/gross-margin", c.GrossMarginSummary)
 	g.POST("/billing/orders/:id/ops-action", c.UpdateBillingOrderOpsAction)
 	g.GET("/points/activities", c.ListPointActivities)
 	g.PATCH("/points/activities/:id", c.UpdatePointActivity)

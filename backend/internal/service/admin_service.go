@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -126,6 +127,139 @@ func (s *AdminService) ListBillingOrders(operatorID uint, query dto.BillingOrder
 		Scope:             "all",
 		CanOperateBilling: true,
 	}, nil
+}
+
+func (s *AdminService) GrossMarginSummary(operatorID uint) (*dto.AdminGrossMarginSummaryResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+
+	revenueCents, revenueByPlan, err := s.monthlyPaidRevenue(periodStart, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	openAICents, openAIQuantity, err := s.monthlyProviderCost("openai", periodStart, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	xCents, xQuantity, err := s.monthlyProviderCost("x", periodStart, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	pointDiscountPoints, err := s.sumPointLedger("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "consume")
+	if err != nil {
+		return nil, err
+	}
+	pointDiscountCents := pointDiscountPoints * 10
+	totalCostCents := openAICents + xCents + pointDiscountCents
+	grossProfitCents := revenueCents - totalCostCents
+	var grossMarginBps int64
+	if revenueCents > 0 {
+		grossMarginBps = grossProfitCents * 10000 / revenueCents
+	}
+	status := "no_revenue"
+	if revenueCents > 0 && grossMarginBps >= 5000 {
+		status = "healthy"
+	} else if revenueCents > 0 {
+		status = "below_target"
+	}
+	costs := []dto.AdminGrossMarginCostItem{
+		adminGrossMarginCostItem("openai", openAICents, revenueCents, openAIQuantity, "requests"),
+		adminGrossMarginCostItem("x", xCents, revenueCents, xQuantity, "writes"),
+		adminGrossMarginCostItem("point_discount", pointDiscountCents, revenueCents, pointDiscountPoints, "points"),
+	}
+	return &dto.AdminGrossMarginSummaryResponse{
+		PeriodStart:      periodStart.Format(time.RFC3339),
+		PeriodEnd:        periodEnd.Format(time.RFC3339),
+		RevenueAmount:    adminCentsAmountString(revenueCents),
+		RevenueCents:     revenueCents,
+		TotalCost:        adminCentsAmountString(totalCostCents),
+		TotalCostCents:   totalCostCents,
+		GrossProfit:      adminCentsAmountString(grossProfitCents),
+		GrossProfitCents: grossProfitCents,
+		GrossMarginBps:   grossMarginBps,
+		TargetBps:        5000,
+		Status:           status,
+		Costs:            costs,
+		RevenueByPlan:    revenueByPlan,
+	}, nil
+}
+
+func (s *AdminService) monthlyPaidRevenue(periodStart, periodEnd time.Time) (int64, []dto.AdminGrossMarginRevenueItem, error) {
+	var orders []model.BillingOrder
+	if err := s.db.
+		Where("status = ? AND paid_at IS NOT NULL AND paid_at >= ? AND paid_at < ?", "paid", periodStart, periodEnd).
+		Find(&orders).Error; err != nil {
+		return 0, nil, err
+	}
+	type planAgg struct {
+		orders int64
+		cents  int64
+	}
+	total := int64(0)
+	byPlan := make(map[string]planAgg)
+	for _, order := range orders {
+		cents, err := referralAmountToCents(firstNonEmpty(order.PayableAmount, order.Amount))
+		if err != nil {
+			return 0, nil, err
+		}
+		total += cents
+		planCode := strings.TrimSpace(order.PlanCode)
+		if planCode == "" {
+			planCode = "unknown"
+		}
+		agg := byPlan[planCode]
+		agg.orders++
+		agg.cents += cents
+		byPlan[planCode] = agg
+	}
+	items := make([]dto.AdminGrossMarginRevenueItem, 0, len(byPlan))
+	for planCode, agg := range byPlan {
+		items = append(items, dto.AdminGrossMarginRevenueItem{
+			PlanCode: planCode,
+			Orders:   agg.orders,
+			Amount:   adminCentsAmountString(agg.cents),
+			Cents:    agg.cents,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Cents == items[j].Cents {
+			return items[i].PlanCode < items[j].PlanCode
+		}
+		return items[i].Cents > items[j].Cents
+	})
+	return total, items, nil
+}
+
+func (s *AdminService) monthlyProviderCost(provider string, periodStart, periodEnd time.Time) (int64, int64, error) {
+	type rowData struct {
+		Cents    int64
+		Quantity int64
+	}
+	var row rowData
+	err := s.db.Model(&model.CostUsageLedger{}).
+		Select("COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE estimated_cost_cents END), 0) AS cents, COALESCE(SUM(quantity), 0) AS quantity").
+		Where("provider = ? AND occurred_at >= ? AND occurred_at < ?", provider, periodStart, periodEnd).
+		Scan(&row).Error
+	return row.Cents, row.Quantity, err
+}
+
+func adminGrossMarginCostItem(key string, cents, revenueCents, quantity int64, unitLabel string) dto.AdminGrossMarginCostItem {
+	shareBps := int64(0)
+	if revenueCents > 0 {
+		shareBps = cents * 10000 / revenueCents
+	}
+	return dto.AdminGrossMarginCostItem{
+		Key:       key,
+		Amount:    adminCentsAmountString(cents),
+		Cents:     cents,
+		ShareBps:  shareBps,
+		Quantity:  quantity,
+		UnitLabel: unitLabel,
+	}
 }
 
 func (s *AdminService) UpdateBillingOrderOpsAction(operatorID, orderID uint, req dto.BillingOrderOpsActionRequest) (*dto.BillingOrderDetailResponse, error) {
@@ -590,6 +724,13 @@ func pointUSDTAmount(points int64) string {
 		return "0"
 	}
 	return centsToAmountString(points * 10)
+}
+
+func adminCentsAmountString(cents int64) string {
+	if cents < 0 {
+		return "-" + centsToAmountString(-cents)
+	}
+	return centsToAmountString(cents)
 }
 
 func (s *AdminService) UpdateUser(operatorID, targetID uint, req dto.AdminUpdateUserRequest) (*dto.AdminUserListItem, error) {

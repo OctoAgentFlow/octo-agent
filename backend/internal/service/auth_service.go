@@ -27,6 +27,7 @@ type AuthService struct {
 	walletRepo       *repository.WalletRepository
 	verificationRepo *repository.EmailVerificationRepository
 	notificationRepo *repository.UserNotificationSettingRepository
+	referralService  *ReferralService
 	emailService     *email.Service
 	exposeEmailCode  bool
 	adminAuth        config.AdminAuthConfig
@@ -58,6 +59,11 @@ func NewAuthService(
 		exposeEmailCode:  exposeEmailCode,
 		adminAuth:        adminAuth,
 	}
+}
+
+func (s *AuthService) WithReferralService(referralService *ReferralService) *AuthService {
+	s.referralService = referralService
+	return s
 }
 
 func (s *AuthService) Register(req dto.RegisterRequest) (*dto.AuthResponse, error) {
@@ -99,7 +105,17 @@ func (s *AuthService) Register(req dto.RegisterRequest) (*dto.AuthResponse, erro
 		SubscriptionStatus:    "active",
 		SubscriptionExpiresAt: &trialEnd,
 	}
-	if err := s.userRepo.Create(user); err != nil {
+	if err := s.userRepo.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		if s.referralService != nil {
+			if err := s.referralService.ApplySignupReferral(tx, user.ID, req.InviteCode); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 

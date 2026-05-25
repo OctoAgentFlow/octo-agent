@@ -27,13 +27,14 @@ import (
 )
 
 type BillingService struct {
-	userRepo    *repository.UserRepository
-	orderRepo   *repository.BillingOrderRepository
-	pointRepo   *repository.PointRepository
-	accountRepo *repository.TwitterAccountRepository
-	oafBotRepo  *repository.OAFBotRepository
-	usageRepo   *repository.AIGenerationUsageRepository
-	cfg         *config.Config
+	userRepo        *repository.UserRepository
+	orderRepo       *repository.BillingOrderRepository
+	pointRepo       *repository.PointRepository
+	referralService *ReferralService
+	accountRepo     *repository.TwitterAccountRepository
+	oafBotRepo      *repository.OAFBotRepository
+	usageRepo       *repository.AIGenerationUsageRepository
+	cfg             *config.Config
 }
 
 type BillingAutoConfirmStats struct {
@@ -98,8 +99,8 @@ type billingQuoteCalc struct {
 	pointDiscountCents int64
 }
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -1442,7 +1443,7 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
 	}
 
-	return s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
+	err = s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
 		var ord model.BillingOrder
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&ord, order.ID).Error; err != nil {
 			return err
@@ -1588,6 +1589,15 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 			"subscription_expires_at":    expires,
 		}).Error
 	})
+	if err != nil {
+		return err
+	}
+	if s.referralService != nil {
+		if err := s.referralService.RewardFirstPurchase(order.UserID, order.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func billingNextSubscriptionExpiry(tx *gorm.DB, ord model.BillingOrder, paidAt time.Time, cycle string) time.Time {

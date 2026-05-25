@@ -18,13 +18,14 @@ type AuthMode = "login" | "register";
 type AuthCardProps = {
   nextPath?: string;
   adminMode?: boolean;
+  inviteCode?: string;
 };
 
-export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCardProps) {
+export function AuthCard({ nextPath = "/dashboard", adminMode = false, inviteCode = "" }: AuthCardProps) {
   const router = useRouter();
   const { t } = useT();
   const { pushToast } = useToast();
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode>(inviteCode ? "register" : "login");
   const { bindWallet } = useWalletBinding({
     unauthMessage: t("wallet.toast.loginRequired"),
     bindSuccessMessage: t("wallet.toast.bound"),
@@ -73,7 +74,7 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false }: AuthCar
 
         <div className="space-y-4">
           {adminMode ? null : <AuthModeSwitch mode={mode} onChange={setMode} />}
-          <LoginForm mode={mode} adminMode={adminMode} onSuccess={handleAuthSuccess} />
+          <LoginForm mode={mode} adminMode={adminMode} inviteCode={inviteCode} onSuccess={handleAuthSuccess} />
 
           {adminMode ? null : (
             <>

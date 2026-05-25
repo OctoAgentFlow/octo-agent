@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Coins, Gift, History, Lock } from "lucide-react";
+import { Coins, Copy, Gift, History, Lock } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useToast } from "@/components/providers/toast-provider";
@@ -10,19 +10,22 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib/app-page-refresh";
 import { pointService, type PointCenterApi } from "@/services/point.service";
+import { referralService, type ReferralInfoApi } from "@/services/referral.service";
 
 export default function PointsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
   const [data, setData] = useState<PointCenterApi | null>(null);
+  const [referral, setReferral] = useState<ReferralInfoApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState("");
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const next = await pointService.center();
+      const [next, referralInfo] = await Promise.all([pointService.center(), referralService.info()]);
       setData(next);
+      setReferral(referralInfo);
       broadcastDataSynced(Date.now());
     } catch {
       pushToast(t("points.toast.loadFailed"));
@@ -51,6 +54,16 @@ export default function PointsPage() {
     }
   };
 
+  const copyInvite = async () => {
+    if (!referral?.invite_link) return;
+    try {
+      await navigator.clipboard.writeText(referral.invite_link);
+      pushToast(t("points.referral.copied"));
+    } catch {
+      pushToast(t("points.referral.copyFailed"));
+    }
+  };
+
   if (loading && !data) {
     return <Card><CardHeader title={t("points.loading.title")} description={t("points.loading.description")} /></Card>;
   }
@@ -73,6 +86,26 @@ export default function PointsPage() {
         <PointMetric label={t("points.metrics.earned")} value={account?.lifetime_earned ?? 0} />
         <PointMetric label={t("points.metrics.spent")} value={account?.lifetime_spent ?? 0} />
       </div>
+
+      {referral ? (
+        <SectionCard title={t("points.referral.title")} description={t("points.referral.description")}>
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-xs text-[#71767b]">{t("points.referral.code")}</p>
+              <p className="mt-2 font-mono text-2xl font-semibold text-white">{referral.code}</p>
+              <p className="mt-2 break-all text-sm text-[#71767b]">{referral.invite_link}</p>
+            </div>
+            <div className="rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 p-4 text-sm text-white">
+              <p>{t("points.referral.rewards", { signup: referral.signup_inviter_points, invitee: referral.signup_invitee_points, purchase: referral.first_purchase_points })}</p>
+              <p className="mt-2 text-[#7ee0b5]">{t("points.referral.uses", { count: referral.use_count })}</p>
+              <Button type="button" className="mt-4 w-full" onClick={copyInvite}>
+                <Copy className="size-4" />
+                {t("points.referral.copy")}
+              </Button>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title={t("points.activities.title")} description={t("points.activities.description")}>
         <div className="grid gap-3 md:grid-cols-3">

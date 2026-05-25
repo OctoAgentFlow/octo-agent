@@ -190,6 +190,48 @@ func (r *PointRepository) AdjustUserPoints(userID uint, points int64, uniqueKey,
 	})
 }
 
+func (r *PointRepository) AwardSystemPoints(userID uint, sourceType, sourceID, activityCode string, points int64, uniqueKey, details string) error {
+	return r.DB.Transaction(func(tx *gorm.DB) error {
+		return r.AwardSystemPointsInTx(tx, userID, sourceType, sourceID, activityCode, points, uniqueKey, details)
+	})
+}
+
+func (r *PointRepository) AwardSystemPointsInTx(tx *gorm.DB, userID uint, sourceType, sourceID, activityCode string, points int64, uniqueKey, details string) error {
+	if points <= 0 {
+		return fmt.Errorf("points must be positive")
+	}
+	now := time.Now().UTC()
+	var existing int64
+	if err := tx.Model(&model.PointLedgerEntry{}).Where("unique_key = ?", uniqueKey).Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	account, err := r.getOrCreateAccount(tx, userID, true)
+	if err != nil {
+		return err
+	}
+	account.Balance += points
+	account.LifetimeEarned += points
+	if err := tx.Save(account).Error; err != nil {
+		return err
+	}
+	if err := r.createGrant(tx, userID, points, now, sourceType, sourceID, activityCode, "grant:"+uniqueKey, details); err != nil {
+		return err
+	}
+	return tx.Create(&model.PointLedgerEntry{
+		UserID:       userID,
+		ActivityCode: activityCode,
+		EventType:    "earn",
+		Points:       points,
+		BalanceAfter: account.Balance,
+		FrozenAfter:  account.Frozen,
+		UniqueKey:    uniqueKey,
+		Details:      details,
+	}).Error
+}
+
 func (r *PointRepository) FreezeForOrder(tx *gorm.DB, userID, orderID uint, points int64, details string) error {
 	if points <= 0 {
 		return nil

@@ -15,6 +15,7 @@ export const registerSchema = z
     name: z.string().min(1, "Name is required."),
     email: z.string().email("Please enter a valid email."),
     verificationCode: z.string().length(6, "Verification code must be 6 digits."),
+    inviteCode: z.string().optional(),
     password: z.string().min(6, "Password must be at least 6 characters."),
     confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters."),
   })

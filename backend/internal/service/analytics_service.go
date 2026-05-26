@@ -93,7 +93,7 @@ func (s *AnalyticsService) Overview(userID uint, query dto.AnalyticsOverviewQuer
 	if err != nil {
 		return nil, err
 	}
-	failureRows, err := s.activityRepo.CountFailureReasonsBetween(userID, start, now, accountID, accountHandle, analyticsFailureReasonLimit)
+	failureRows, err := s.activityRepo.CountFailureCategoriesBetween(userID, start, now, accountID, accountHandle, analyticsFailureReasonLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -292,9 +292,14 @@ func buildDailyActivity(start time.Time, days int, rows []repository.ActivityDai
 func buildFailureReasons(rows []repository.ActivityFailureReasonCount) []dto.AnalyticsFailureReason {
 	out := make([]dto.AnalyticsFailureReason, 0, len(rows))
 	for _, row := range rows {
+		category := row.Category
+		if category == "" {
+			category = classifyActivityFailure("failed", row.Reason)
+		}
 		item := dto.AnalyticsFailureReason{
-			Reason: row.Reason,
-			Count:  row.Count,
+			Reason:   category,
+			Category: category,
+			Count:    row.Count,
 		}
 		if row.LastAt != nil {
 			item.LastAt = row.LastAt.UTC().Format(time.RFC3339)

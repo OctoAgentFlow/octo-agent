@@ -32,9 +32,10 @@ type ActivityDailyStatusCount struct {
 }
 
 type ActivityFailureReasonCount struct {
-	Reason string
-	Count  int64
-	LastAt *time.Time
+	Reason   string
+	Category string
+	Count    int64
+	LastAt   *time.Time
 }
 
 type ActivityAccountStatusCount struct {
@@ -371,6 +372,47 @@ func (r *ActivityRepository) CountFailureReasonsBetween(userID uint, from, to ti
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group(reasonExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
 	return rows, err
+}
+
+// CountFailureCategoriesBetween aggregates failed activities by normalized failure category in [from, to).
+func (r *ActivityRepository) CountFailureCategoriesBetween(userID uint, from, to time.Time, accountID uint, accountHandle string, limit int) ([]ActivityFailureReasonCount, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	var rows []ActivityFailureReasonCount
+	categoryExpr := activityFailureCategoryCaseExpr()
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select(categoryExpr+" AS category, "+categoryExpr+" AS reason, COUNT(*) AS count, MAX(executed_at) AS last_at").
+		Where("user_id = ? AND status = ?", userID, "failed")
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Group(categoryExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+func activityFailureCategoryCaseExpr() string {
+	text := "LOWER(COALESCE(error_message, ''))"
+	return "CASE" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%"}) + " THEN 'x_auth'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%rate limit%", "%too many requests%", "%429%", "%retry after%"}) + " THEN 'rate_limit'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%"}) + " THEN 'safety'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%"}) + " THEN 'configuration'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%"}) + " THEN 'network'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%"}) + " THEN 'system'" +
+		" ELSE 'unknown' END"
+}
+
+func activityCategoryLikeExpr(textExpr string, patterns []string) string {
+	parts := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		parts = append(parts, textExpr+" LIKE '"+pattern+"'")
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
 }
 
 // ListAttentionBetween returns recent failed or review activities in [from, to).

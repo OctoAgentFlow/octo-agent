@@ -58,9 +58,10 @@ type AnalyticsDailyActivity struct {
 }
 
 type AnalyticsFailureReason struct {
-	Reason string `json:"reason"`
-	Count  int64  `json:"count"`
-	LastAt string `json:"last_at,omitempty"`
+	Reason   string `json:"reason"`
+	Category string `json:"category,omitempty"`
+	Count    int64  `json:"count"`
+	LastAt   string `json:"last_at,omitempty"`
 }
 
 type AnalyticsAttentionItem struct {

@@ -74,6 +74,7 @@ func (s *AccountService) List(userID uint) (*dto.AccountListResponse, error) {
 			DisplayName:           acc.DisplayName,
 			Status:                status,
 			Followers:             acc.Followers,
+			XSubscriptionTier:     normalizeXSubscriptionTier(acc.XSubscriptionTier),
 			PublishReady:          publishIssue == "",
 			PublishReauthRequired: publishIssue != "",
 			PublishIssue:          publishIssue,
@@ -205,6 +206,48 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 
 func (s *AccountService) Delete(userID, accountID uint) error {
 	return s.repo.DeleteByUserAndID(userID, accountID)
+}
+
+func (s *AccountService) UpdateSettings(userID, accountID uint, req dto.AccountSettingsRequest) (*dto.AccountItem, error) {
+	tier := normalizeXSubscriptionTier(req.XSubscriptionTier)
+	if err := s.repo.UpdateSettings(userID, accountID, map[string]any{"x_subscription_tier": tier}); err != nil {
+		return nil, err
+	}
+	acc, err := s.repo.GetConnectedByUserAndAccountID(userID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	missingScopes := missingRequiredPublishScopes(acc.OAuthScopes)
+	status := strings.TrimSpace(acc.Status)
+	if status == "" {
+		status = "connected"
+	}
+	hasAccessToken := strings.TrimSpace(acc.AccessToken) != ""
+	publishIssue := ""
+	if !strings.EqualFold(status, "connected") {
+		publishIssue = "needs_reauth"
+	} else if !hasAccessToken {
+		publishIssue = "missing_access_token"
+	} else if len(missingScopes) > 0 {
+		publishIssue = "missing_tweet_write"
+	}
+	item := &dto.AccountItem{
+		ID:                    acc.ID,
+		AvatarURL:             acc.AvatarURL,
+		Username:              acc.Username,
+		DisplayName:           acc.DisplayName,
+		Status:                status,
+		Followers:             acc.Followers,
+		XSubscriptionTier:     normalizeXSubscriptionTier(acc.XSubscriptionTier),
+		PublishReady:          publishIssue == "",
+		PublishReauthRequired: publishIssue != "",
+		PublishIssue:          publishIssue,
+		MissingScopes:         missingScopes,
+	}
+	if acc.LastSyncedAt != nil {
+		item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
+	}
+	return item, nil
 }
 
 func (s *AccountService) ensureCanBindXAccount(userID uint, twitterUserID, username string) error {

@@ -167,6 +167,8 @@ type GenerateAutoPostInput struct {
 	ContentItemGoal   string
 	ContentItemCTA    string
 	RecentPosts       []string
+	ContentLengthMode string
+	MaxCharacters     int
 	HasBot            bool
 	Name              string
 	Occupation        string
@@ -628,8 +630,18 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 			user.WriteString("\n")
 		}
 	}
+	maxCharacters := in.MaxCharacters
+	if maxCharacters <= 0 {
+		maxCharacters = xStandardDraftMax
+	}
+	lengthMode := strings.ToLower(strings.TrimSpace(in.ContentLengthMode))
 	user.WriteString("Hard rules:\n")
-	user.WriteString("- Target 180-220 characters; never write close to the X 280-character limit.\n")
+	if lengthMode == autoPostLengthModeLong {
+		user.WriteString(fmt.Sprintf("- X Premium longer-post mode: target 700-1200 characters, hard maximum %d characters.\n", maxCharacters))
+		user.WriteString("- Use short paragraphs and keep the post readable in the X timeline.\n")
+	} else {
+		user.WriteString("- Target 180-220 characters; never write close to the X 280-character limit.\n")
+	}
 	user.WriteString("- Use at most 2 hashtags, and only when they fit naturally.\n")
 	user.WriteString("- Make it useful and specific, not hype.\n")
 	user.WriteString("- Do not mention that you are AI.\n")
@@ -645,7 +657,13 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	if err != nil {
 		return AIGeneratedText{}, err
 	}
-	return AIGeneratedText{Text: fitGeneratedTweet(strings.TrimSpace(result.Text), 240), Usage: result.Usage}, nil
+	text := strings.TrimSpace(result.Text)
+	if lengthMode == autoPostLengthModeLong {
+		text = fitGeneratedTweet(text, maxCharacters)
+	} else {
+		text = fitXStandardPost(text)
+	}
+	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
 }
 
 type oafBotStrategyContext struct {

@@ -107,6 +107,7 @@ type AutoPostPlanRequest struct {
 	MinIntervalMinutes int    `json:"min_interval_minutes"`
 	PostingWindows     string `json:"posting_windows"`
 	Timezone           string `json:"timezone"`
+	ContentLengthMode  string `json:"content_length_mode"`
 }
 
 type AutoPostGenerateRequest struct {
@@ -135,6 +136,7 @@ type AutoPostPlanItem struct {
 	MinIntervalMinutes int    `json:"min_interval_minutes"`
 	PostingWindows     string `json:"posting_windows"`
 	Timezone           string `json:"timezone"`
+	ContentLengthMode  string `json:"content_length_mode"`
 	LastRunAt          string `json:"last_run_at,omitempty"`
 	NextRunAt          string `json:"next_run_at,omitempty"`
 	ProcessingAt       string `json:"processing_at,omitempty"`

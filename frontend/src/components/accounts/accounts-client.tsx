@@ -54,6 +54,7 @@ function mapAccount(item: AccountListItem): ConnectedXAccount {
     displayName: item.display_name || item.username || `#${item.id}`,
     status: item.status,
     followers: item.followers,
+    xSubscriptionTier: item.x_subscription_tier || "unknown",
     publishReady: item.publish_ready,
     publishReauthRequired: item.publish_reauth_required,
     publishIssue: item.publish_issue,

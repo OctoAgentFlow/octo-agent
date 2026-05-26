@@ -8,6 +8,7 @@ type AccountItem struct {
 	Status                string   `json:"status"`
 	LastSyncedAt          string   `json:"last_synced_at,omitempty"`
 	Followers             string   `json:"followers,omitempty"`
+	XSubscriptionTier     string   `json:"x_subscription_tier"`
 	PublishReady          bool     `json:"publish_ready"`
 	PublishReauthRequired bool     `json:"publish_reauth_required"`
 	PublishIssue          string   `json:"publish_issue,omitempty"`
@@ -21,4 +22,8 @@ type AccountListResponse struct {
 type OAuthStartResponse struct {
 	AuthURL string `json:"auth_url"`
 	State   string `json:"state"`
+}
+
+type AccountSettingsRequest struct {
+	XSubscriptionTier string `json:"x_subscription_tier" binding:"required"`
 }

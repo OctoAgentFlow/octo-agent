@@ -24,12 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
-import { accountService, type AccountListItem } from "@/services/account.service";
+import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
   autoPostService,
   type AutoPostDraftApi,
   type AutoPostExecutionMode,
   type AutoPostGenerationRunApi,
+  type AutoPostLengthMode,
   type AutoPostPlanApi,
 } from "@/services/auto-post.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
@@ -53,10 +54,13 @@ type PlannerForm = {
   minIntervalMinutes: number;
   postingWindows: string;
   timezone: string;
+  contentLengthMode: AutoPostLengthMode;
 };
 
 const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
+const xSubscriptionTiers: XSubscriptionTier[] = ["unknown", "free", "premium", "premium_plus"];
+const autoPostLengthModes: AutoPostLengthMode[] = ["standard", "long"];
 const contentItemTypes: ContentLibraryItemType[] = ["idea", "product_update", "faq", "case_study", "announcement", "link", "thread_seed"];
 const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; descriptionKey: string }> = [
   { id: "generate", labelKey: "autoPost.tabs.generate", descriptionKey: "autoPost.tabs.generateDesc" },
@@ -85,6 +89,7 @@ function defaultForm(limit?: number): PlannerForm {
     minIntervalMinutes: 120,
     postingWindows: "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    contentLengthMode: "standard",
   };
 }
 
@@ -146,6 +151,7 @@ export default function AutoPostPage() {
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [runningPlanner, setRunningPlanner] = useState(false);
+  const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -186,6 +192,7 @@ export default function AutoPostPage() {
   }, []);
 
   const selectedBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === selectedAccountID) || null, [bots, selectedAccountID]);
+  const selectedAccount = useMemo(() => accounts.find((account) => account.id === selectedAccountID) || null, [accounts, selectedAccountID]);
   const selectedPlan = useMemo(() => plans.find((plan) => plan.x_account_id === selectedAccountID) || null, [plans, selectedAccountID]);
   const availableContentItems = useMemo(
     () =>
@@ -219,6 +226,8 @@ export default function AutoPostPage() {
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
   const latestRun = accountRuns[0];
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
+  const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
+  const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -263,6 +272,7 @@ export default function AutoPostPage() {
         min_interval_minutes: Number(form.minIntervalMinutes) || 1,
         posting_windows: form.postingWindows.trim(),
         timezone: form.timezone.trim() || "UTC",
+        content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
       };
       const saved = selectedPlan ? await autoPostService.updatePlan(selectedPlan.id, payload) : await autoPostService.createPlan(payload);
       setPlans((current) => {
@@ -275,6 +285,23 @@ export default function AutoPostPage() {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.save") : t("autoPost.errors.save"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const updateAccountTier = async (tier: XSubscriptionTier) => {
+    if (!selectedAccountID) return;
+    setSavingAccountTier(true);
+    try {
+      const saved = await accountService.updateSettings(selectedAccountID, { x_subscription_tier: tier });
+      setAccounts((current) => current.map((account) => (account.id === selectedAccountID ? { ...account, x_subscription_tier: saved.x_subscription_tier } : account)));
+      if (tier !== "premium" && tier !== "premium_plus") {
+        setForm((current) => ({ ...current, contentLengthMode: "standard" }));
+      }
+      pushToast(t("autoPost.account.tierSaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.account.tierSaveFailed") : t("autoPost.account.tierSaveFailed"));
+    } finally {
+      setSavingAccountTier(false);
     }
   };
 
@@ -389,6 +416,7 @@ export default function AutoPostPage() {
           min_interval_minutes: Number(form.minIntervalMinutes) || 1,
           posting_windows: form.postingWindows.trim(),
           timezone: form.timezone.trim() || "UTC",
+          content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
         });
         plan = saved;
         setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
@@ -498,6 +526,24 @@ export default function AutoPostPage() {
                   {t("autoPost.account.empty")}
                 </div>
               )}
+              {selectedAccount ? (
+                <label className="mt-4 block space-y-2">
+                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.tierLabel")}</span>
+                  <select
+                    value={selectedAccountTier}
+                    onChange={(event) => void updateAccountTier(event.target.value as XSubscriptionTier)}
+                    disabled={savingAccountTier}
+                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0] disabled:opacity-60"
+                  >
+                    {xSubscriptionTiers.map((tier) => (
+                      <option key={tier} value={tier}>
+                        {t(`autoPost.xTier.${tier}`)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs leading-5 text-[#71767b]">{t("autoPost.account.tierHelper")}</span>
+                </label>
+              ) : null}
               <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black">
@@ -555,6 +601,7 @@ export default function AutoPostPage() {
                 <StatusRow label={t("autoPost.status.dailyLimit")} value={String(selectedPlan?.daily_limit || form.dailyLimit)} />
                 <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
                 <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
+                <StatusRow label={t("autoPost.status.lengthMode")} value={t(`autoPost.lengthMode.${selectedPlan?.content_length_mode || form.contentLengthMode}`)} />
               </div>
             </Card>
           </div>
@@ -678,6 +725,36 @@ export default function AutoPostPage() {
                     ))}
                   </select>
                 </label>
+
+                <div className="grid gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.lengthMode")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                      {selectedAccountIsPremium ? t("autoPost.fields.lengthModeHelperPremium") : t("autoPost.fields.lengthModeHelperStandard")}
+                    </p>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {autoPostLengthModes.map((mode) => {
+                      const disabled = mode === "long" && !selectedAccountIsPremium;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setForm((current) => ({ ...current, contentLengthMode: mode }))}
+                          className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                            form.contentLengthMode === mode
+                              ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]"
+                              : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold">{t(`autoPost.lengthMode.${mode}`)}</span>
+                          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoPost.lengthMode.${mode}Helper`)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <Button type="button" onClick={() => void savePlan()} disabled={saving || !selectedAccountID}>
                   {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
@@ -1301,6 +1378,7 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
     minIntervalMinutes: plan.min_interval_minutes,
     postingWindows: plan.posting_windows || "",
     timezone: plan.timezone || "UTC",
+    contentLengthMode: plan.content_length_mode || "standard",
   };
 }
 

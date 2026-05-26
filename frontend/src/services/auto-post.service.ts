@@ -7,6 +7,7 @@ type ApiResponse<T> = {
 };
 
 export type AutoPostExecutionMode = "manual" | "review" | "autopilot";
+export type AutoPostLengthMode = "standard" | "long";
 
 export type AutoPostPlanApi = {
   id: number;
@@ -21,6 +22,7 @@ export type AutoPostPlanApi = {
   min_interval_minutes: number;
   posting_windows?: string;
   timezone: string;
+  content_length_mode: AutoPostLengthMode;
   last_run_at?: string;
   next_run_at?: string;
   processing_at?: string;
@@ -93,6 +95,7 @@ export type AutoPostPlanPayload = {
   min_interval_minutes: number;
   posting_windows: string;
   timezone: string;
+  content_length_mode: AutoPostLengthMode;
 };
 
 export const autoPostService = {

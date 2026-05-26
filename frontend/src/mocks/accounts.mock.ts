@@ -10,6 +10,7 @@ export const accountsMock: ConnectedXAccount[] = [
     lastSyncedKey: "accounts.lastSync.minutesAgo",
     lastSyncedParams: { minutes: 2 },
     followers: "12.8K",
+    xSubscriptionTier: "premium",
   },
   {
     id: "acc_2",
@@ -20,6 +21,7 @@ export const accountsMock: ConnectedXAccount[] = [
     lastSyncedKey: "accounts.lastSync.hoursAgo",
     lastSyncedParams: { hours: 3 },
     followers: "2.1K",
+    xSubscriptionTier: "unknown",
   },
 ];
 

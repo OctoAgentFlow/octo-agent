@@ -101,6 +101,9 @@ export function AccountCard({
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-base font-semibold text-white">{account.displayName}</p>
                 <Badge variant={statusVariant(account.status)}>{t(statusLabel(account.status))}</Badge>
+                <Badge variant={account.xSubscriptionTier === "premium" || account.xSubscriptionTier === "premium_plus" ? "info" : "default"}>
+                  {t(`accounts.xTier.${account.xSubscriptionTier}`)}
+                </Badge>
               </div>
               <p className="truncate text-sm text-[#71767b]">@{account.username}</p>
               <div className="flex flex-wrap items-center gap-4 text-xs text-[#71767b]">

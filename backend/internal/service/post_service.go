@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	maxPostContentRunes = 5000
+	maxPostContentRunes = xPremiumLongMax
 	minPostContentRunes = 1
 
 	staleProcessingRecovery = 5 * time.Minute
@@ -385,6 +385,12 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 			zap.String("account_handle", formatXAccountHandle(acc.Username)))...)
 		return nil, "", errors.New("x account has no access token; reconnect the account")
 	}
+	if err := validateXPostContentForAccount(p.Content, acc.XSubscriptionTier); err != nil {
+		zap.L().Warn("post execute: rejected (x content length)", append(base,
+			zap.String("account_handle", formatXAccountHandle(acc.Username)),
+			zap.Error(err))...)
+		return nil, "", err
+	}
 
 	if source == "scheduler" {
 		if hit, why := s.schedulerLimitsExceeded(userID, now); hit {
@@ -522,8 +528,10 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 
 func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic string) GenerateAutoPostInput {
 	in := GenerateAutoPostInput{
-		AccountHandle: formatXAccountHandle(acc.Username),
-		Topic:         topic,
+		AccountHandle:     formatXAccountHandle(acc.Username),
+		Topic:             topic,
+		ContentLengthMode: autoPostLengthModeStandard,
+		MaxCharacters:     autoPostDraftMaxFor(acc.XSubscriptionTier, autoPostLengthModeStandard),
 	}
 	if bot == nil {
 		return in

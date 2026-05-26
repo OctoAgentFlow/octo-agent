@@ -23,6 +23,7 @@ type AutomationService struct {
 	userRepo     *repository.UserRepository
 	activityRepo *repository.ActivityRepository
 	postRepo     *repository.PostRepository
+	autoPostRepo *repository.AutoPostPlanRepository
 }
 
 func NewAutomationService(
@@ -30,8 +31,9 @@ func NewAutomationService(
 	userRepo *repository.UserRepository,
 	activityRepo *repository.ActivityRepository,
 	postRepo *repository.PostRepository,
+	autoPostRepo *repository.AutoPostPlanRepository,
 ) *AutomationService {
-	return &AutomationService{repo: repo, userRepo: userRepo, activityRepo: activityRepo, postRepo: postRepo}
+	return &AutomationService{repo: repo, userRepo: userRepo, activityRepo: activityRepo, postRepo: postRepo, autoPostRepo: autoPostRepo}
 }
 
 func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) {
@@ -44,7 +46,13 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 	}
 	items := make([]dto.AutomationModuleData, 0, len(modules))
 	for _, m := range modules {
-		items = append(items, toAutomationModuleData(m))
+		item := toAutomationModuleData(m)
+		if item.Type == repository.AutomationTypePost {
+			if err := s.applyAutoPostPlannerState(userID, &item); err != nil {
+				return nil, err
+			}
+		}
+		items = append(items, item)
 	}
 	if s.activityRepo != nil {
 		now := time.Now().UTC()
@@ -125,6 +133,9 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	cfg.SafetyRequireApproval = req.Safety.RequireApproval
 	cfg.SafetyMaxPerHour = req.Safety.MaxPerHour
 	cfg.SafetyBlockedKeywords = string(keywords)
+	if err := s.syncAutoPostPlannerEnabled(userID, typ, req.Enabled, cfg.FrequencyIntervalMinutes); err != nil {
+		return nil, err
+	}
 
 	now := time.Now()
 	if cfg.Enabled {
@@ -141,6 +152,11 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		return nil, err
 	}
 	data := toAutomationModuleData(*cfg)
+	if typ == repository.AutomationTypePost {
+		if err := s.applyAutoPostPlannerState(userID, &data); err != nil {
+			return nil, err
+		}
+	}
 	return &data, nil
 }
 
@@ -189,6 +205,9 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 		}
 	}
 	cfg.Enabled = enabled
+	if err := s.syncAutoPostPlannerEnabled(userID, typ, enabled, cfg.FrequencyIntervalMinutes); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	if enabled {
 		if cfg.State == "Paused" {
@@ -204,6 +223,11 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 		return nil, err
 	}
 	data := toAutomationModuleData(*cfg)
+	if typ == repository.AutomationTypePost {
+		if err := s.applyAutoPostPlannerState(userID, &data); err != nil {
+			return nil, err
+		}
+	}
 	return &data, nil
 }
 
@@ -258,6 +282,83 @@ func (s *AutomationService) RuntimeStatus(userID uint) (*dto.AutomationRuntimeSt
 		RetriesLast24: int(retries24hRows),
 		NeedsReview:   int(needsReviewRows),
 	}, nil
+}
+
+func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, enabled bool, intervalMinutes int) error {
+	if typ != repository.AutomationTypePost || s.autoPostRepo == nil {
+		return nil
+	}
+	if !enabled {
+		return s.autoPostRepo.PauseAllByUser(userID)
+	}
+	plans, err := s.autoPostRepo.ListByUser(userID)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for i := range plans {
+		plans[i].Enabled = true
+		if plans[i].MinIntervalMinutes <= 0 {
+			plans[i].MinIntervalMinutes = intervalMinutes
+		}
+		if plans[i].MinIntervalMinutes <= 0 {
+			plans[i].MinIntervalMinutes = 120
+		}
+		if strings.TrimSpace(plans[i].Timezone) == "" {
+			plans[i].Timezone = "UTC"
+		}
+		if plans[i].NextRunAt == nil || plans[i].NextRunAt.Before(now) {
+			next := computeAutoPostNextRun(plans[i].MinIntervalMinutes, plans[i].PostingWindows, plans[i].Timezone, now)
+			plans[i].NextRunAt = &next
+		}
+		plans[i].ProcessingAt = nil
+	}
+	return s.autoPostRepo.SaveAll(plans)
+}
+
+func (s *AutomationService) applyAutoPostPlannerState(userID uint, item *dto.AutomationModuleData) error {
+	if s.autoPostRepo == nil || item == nil {
+		return nil
+	}
+	plans, err := s.autoPostRepo.ListByUser(userID)
+	if err != nil {
+		return err
+	}
+	if len(plans) == 0 {
+		return nil
+	}
+	var earliestNext *time.Time
+	var latestLast *time.Time
+	enabled := false
+	for i := range plans {
+		plan := plans[i]
+		if plan.LastRunAt != nil && (latestLast == nil || plan.LastRunAt.After(*latestLast)) {
+			t := *plan.LastRunAt
+			latestLast = &t
+		}
+		if !plan.Enabled {
+			continue
+		}
+		enabled = true
+		if plan.NextRunAt != nil && (earliestNext == nil || plan.NextRunAt.Before(*earliestNext)) {
+			t := *plan.NextRunAt
+			earliestNext = &t
+		}
+	}
+	item.Config.Enabled = enabled
+	if enabled {
+		item.State = "Queued"
+		if earliestNext != nil {
+			item.NextRunAt = earliestNext.UTC().Format(time.RFC3339)
+		}
+	} else {
+		item.State = "Paused"
+		item.NextRunAt = ""
+	}
+	if latestLast != nil {
+		item.LastRunAt = latestLast.UTC().Format(time.RFC3339)
+	}
+	return nil
 }
 
 func (s *AutomationService) assertSubscriptionForAutomation(userID uint) error {

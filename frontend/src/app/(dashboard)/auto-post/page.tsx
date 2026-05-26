@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -155,6 +156,7 @@ export default function AutoPostPage() {
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -177,6 +179,7 @@ export default function AutoPostPage() {
       setRuns(runData.items);
       setContentItems(libraryData.items);
       setSubscription(subscriptionData);
+      setQuotaUpgradeVisible(false);
       const firstAccountID = selectedAccountID || connected[0]?.id || 0;
       setSelectedAccountID(firstAccountID);
       const currentPlan = planData.items.find((item) => item.x_account_id === firstAccountID);
@@ -274,7 +277,6 @@ export default function AutoPostPage() {
         x_account_id: selectedAccountID,
         enabled: form.enabled,
         execution_mode: form.executionMode,
-        daily_limit: 0,
         min_interval_minutes: Number(form.minIntervalMinutes) || 1,
         posting_windows: form.postingWindows.trim(),
         timezone: form.timezone.trim() || "UTC",
@@ -286,6 +288,7 @@ export default function AutoPostPage() {
         return [saved, ...without];
       });
       setForm(formFromPlan(saved));
+      setQuotaUpgradeVisible(false);
       pushToast(t("autoPost.toast.saved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.save") : t("autoPost.errors.save"));
@@ -448,7 +451,6 @@ export default function AutoPostPage() {
           x_account_id: selectedAccountID,
           enabled: form.enabled,
           execution_mode: form.executionMode,
-          daily_limit: 0,
           min_interval_minutes: Number(form.minIntervalMinutes) || 1,
           posting_windows: form.postingWindows.trim(),
           timezone: form.timezone.trim() || "UTC",
@@ -460,14 +462,17 @@ export default function AutoPostPage() {
       const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id);
       setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
       setContentDirection("");
+      setQuotaUpgradeVisible(false);
       pushToast(t("autoPost.toast.generated"));
       setActivePanel("history");
       void load();
     } catch (error) {
       const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
       if (code === "ai_generation_quota_exceeded") {
+        setQuotaUpgradeVisible(true);
         pushToast(t("autoPost.errors.aiQuotaExceeded"));
       } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
+        setQuotaUpgradeVisible(true);
         pushToast(t("autoPost.errors.dailyLimitExceeded"));
       } else if (code === "auto_post_duplicate_content") {
         pushToast(t("autoPost.errors.duplicateContent"));
@@ -538,6 +543,8 @@ export default function AutoPostPage() {
       ) : null}
 
       <AutomationModulePausedNotice type="post" onEnabledChange={setModuleEnabled} />
+
+      {quotaUpgradeVisible ? <QuotaUpgradeCallout /> : null}
 
       {loadState === "ready" ? (
         <>

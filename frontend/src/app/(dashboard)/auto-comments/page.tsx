@@ -8,6 +8,7 @@ import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -71,6 +72,7 @@ export default function AutoCommentsPage() {
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -105,6 +107,7 @@ export default function AutoCommentsPage() {
       setTargets(targetData.items);
       setDrafts(draftData.items);
       setPlan(subscriptionData.plan);
+      setQuotaUpgradeVisible(false);
       const commentModule = automationData.modules.find((item) => item.type === "comment");
       setExecutionMode(commentModule?.config.execution_mode || "review");
       setXAccountID((current) => current || connected[0]?.id || 0);
@@ -140,11 +143,14 @@ export default function AutoCommentsPage() {
       setTweetURL("");
       setAuthorHandle("");
       setTargetText("");
+      setQuotaUpgradeVisible(false);
       pushToast(t(draft.status === "ready_to_publish" ? "autoComment.toast.readyToPublish" : "autoComment.toast.generated"));
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
+      const isQuotaError = body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_comment_monthly_limit_exceeded";
+      if (isQuotaError) setQuotaUpgradeVisible(true);
       const message =
-        body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_comment_monthly_limit_exceeded"
+        isQuotaError
           ? t("autoComment.errors.quota")
           : body?.message || t("autoComment.errors.generate");
       pushToast(message);
@@ -245,6 +251,8 @@ export default function AutoCommentsPage() {
       ) : null}
 
       <AutomationModulePausedNotice type="comment" onEnabledChange={setModuleEnabled} />
+
+      {quotaUpgradeVisible ? <QuotaUpgradeCallout /> : null}
 
       {loadState === "ready" ? (
         <>

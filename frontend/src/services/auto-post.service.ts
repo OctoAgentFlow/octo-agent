@@ -18,7 +18,7 @@ export type AutoPostPlanApi = {
   bot_name?: string;
   enabled: boolean;
   execution_mode: AutoPostExecutionMode;
-  daily_limit: number;
+  daily_limit?: number;
   min_interval_minutes: number;
   posting_windows?: string;
   timezone: string;
@@ -91,7 +91,6 @@ export type AutoPostPlanPayload = {
   x_account_id: number;
   enabled: boolean;
   execution_mode: AutoPostExecutionMode;
-  daily_limit: number;
   min_interval_minutes: number;
   posting_windows: string;
   timezone: string;

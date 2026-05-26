@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -105,6 +109,8 @@ type PublishingService struct {
 	userRepo    *repository.UserRepository
 	activity    *repository.ActivityRepository
 	cfg         config.XPublisherConfig
+	oauth       config.XOAuthConfig
+	httpClient  *http.Client
 	publisher   XPublisher
 }
 
@@ -117,6 +123,7 @@ func NewPublishingService(
 	userRepo *repository.UserRepository,
 	activity *repository.ActivityRepository,
 	cfg config.XPublisherConfig,
+	oauth config.XOAuthConfig,
 	publisher XPublisher,
 ) *PublishingService {
 	if publisher == nil {
@@ -131,6 +138,8 @@ func NewPublishingService(
 		userRepo:    userRepo,
 		activity:    activity,
 		cfg:         normalizeXPublisherConfig(cfg),
+		oauth:       oauth,
+		httpClient:  &http.Client{Timeout: 20 * time.Second},
 		publisher:   publisher,
 	}
 }
@@ -381,7 +390,7 @@ func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*d
 	if err := s.markManualProcessing(job, now); err != nil {
 		return nil, err
 	}
-	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
+	result, mode, previewKey, err := s.publishWithAdapterRetryingUnauthorized(ctx, job, account, targetTweetID)
 	if err != nil {
 		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
 		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, false, "activity.preview.realPublishFailed")
@@ -466,7 +475,7 @@ func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *
 	if err != nil {
 		return s.failJobWithPreview(job, "auto_publish_target_missing", err.Error(), false, "activity.preview.realPublishFailed")
 	}
-	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
+	result, mode, previewKey, err := s.publishWithAdapterRetryingUnauthorized(ctx, job, account, targetTweetID)
 	if err != nil {
 		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
 		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, true, "activity.preview.realPublishFailed")
@@ -742,6 +751,85 @@ func (s *PublishingService) publishWithAdapter(ctx context.Context, job *model.P
 	default:
 		return PublishResult{}, "", "", fmt.Errorf("unsupported publish source type %s", job.SourceType)
 	}
+}
+
+func (s *PublishingService) publishWithAdapterRetryingUnauthorized(ctx context.Context, job *model.PublishJob, account *model.TwitterAccount, targetTweetID string) (PublishResult, string, string, error) {
+	if account == nil {
+		return PublishResult{}, "", "", fmt.Errorf("x account is not connected")
+	}
+	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
+	if err == nil || !isXUnauthorizedError(err) || s.cfg.DryRun {
+		return result, mode, previewKey, err
+	}
+	refreshed, refreshErr := s.refreshXAccessToken(ctx, account)
+	if refreshErr != nil {
+		_ = s.accountRepo.MarkNeedsReauth(job.UserID, job.TwitterAccountID)
+		return PublishResult{}, "", "", fmt.Errorf("%w; token_refresh_failed: %v", err, refreshErr)
+	}
+	return s.publishWithAdapter(ctx, job, *refreshed, targetTweetID)
+}
+
+func isXUnauthorizedError(err error) bool {
+	var pub *twitter.PublishError
+	return errors.As(err, &pub) && pub.StatusCode == http.StatusUnauthorized
+}
+
+func (s *PublishingService) refreshXAccessToken(ctx context.Context, account *model.TwitterAccount) (*model.TwitterAccount, error) {
+	if account == nil {
+		return nil, fmt.Errorf("x account is not connected")
+	}
+	refreshToken := strings.TrimSpace(account.RefreshToken)
+	if refreshToken == "" {
+		return nil, fmt.Errorf("missing x refresh token")
+	}
+	clientID := strings.TrimSpace(s.oauth.ClientID)
+	clientSecret := strings.TrimSpace(s.oauth.ClientSecret)
+	if clientID == "" || clientSecret == "" {
+		return nil, fmt.Errorf("x oauth refresh is not configured")
+	}
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.x.com/2/oauth2/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(clientID, clientSecret)
+	client := s.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("x oauth refresh failed: %s", truncateErrMsg(string(body)))
+	}
+	var tokenResp xTokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(tokenResp.AccessToken) == "" {
+		return nil, fmt.Errorf("x oauth refresh returned empty access_token")
+	}
+	now := time.Now().UTC()
+	account.AccessToken = strings.TrimSpace(tokenResp.AccessToken)
+	if strings.TrimSpace(tokenResp.RefreshToken) != "" {
+		account.RefreshToken = strings.TrimSpace(tokenResp.RefreshToken)
+	}
+	if strings.TrimSpace(tokenResp.Scope) != "" {
+		account.OAuthScopes = normalizedOAuthScopes(tokenResp.Scope)
+	}
+	account.Status = "connected"
+	account.LastSyncedAt = &now
+	if err := s.accountRepo.UpdateOAuthTokens(account); err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 func (s *PublishingService) completeJob(job *model.PublishJob, result PublishResult, mode string, previewKey string) error {

@@ -74,6 +74,8 @@ func (s *AccountService) List(userID uint) (*dto.AccountListResponse, error) {
 			DisplayName:           acc.DisplayName,
 			Status:                status,
 			Followers:             acc.Followers,
+			XSubscriptionTier:     normalizeXSubscriptionTier(acc.XSubscriptionTier),
+			XSubscriptionSource:   normalizeXSubscriptionSource(acc.XSubscriptionSource),
 			PublishReady:          publishIssue == "",
 			PublishReauthRequired: publishIssue != "",
 			PublishIssue:          publishIssue,
@@ -157,14 +159,16 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 	}
 
 	account := &model.TwitterAccount{
-		TwitterUserID: profile.Data.ID,
-		Username:      strings.TrimSpace(profile.Data.Username),
-		DisplayName:   strings.TrimSpace(profile.Data.Name),
-		AvatarURL:     strings.TrimSpace(profile.Data.ProfileImageURL),
-		Followers:     "",
-		AccessToken:   tokens.AccessToken,
-		RefreshToken:  tokens.RefreshToken,
-		OAuthScopes:   s.normalizedTokenScopes(tokens.Scope),
+		TwitterUserID:       profile.Data.ID,
+		Username:            strings.TrimSpace(profile.Data.Username),
+		DisplayName:         strings.TrimSpace(profile.Data.Name),
+		AvatarURL:           strings.TrimSpace(profile.Data.ProfileImageURL),
+		Followers:           "",
+		XSubscriptionTier:   normalizeXSubscriptionTypeFromAPI(profile.Data.SubscriptionType),
+		XSubscriptionSource: "x_api",
+		AccessToken:         tokens.AccessToken,
+		RefreshToken:        tokens.RefreshToken,
+		OAuthScopes:         s.normalizedTokenScopes(tokens.Scope),
 	}
 	if account.Username == "" {
 		zap.L().Warn("x oauth: profile missing username",
@@ -205,6 +209,77 @@ func (s *AccountService) HandleXOAuthCallback(ctx context.Context, code string, 
 
 func (s *AccountService) Delete(userID, accountID uint) error {
 	return s.repo.DeleteByUserAndID(userID, accountID)
+}
+
+func (s *AccountService) UpdateSettings(userID, accountID uint, req dto.AccountSettingsRequest) (*dto.AccountItem, error) {
+	tier := normalizeXSubscriptionTier(req.XSubscriptionTier)
+	if err := s.repo.UpdateSettings(userID, accountID, map[string]any{
+		"x_subscription_tier":   tier,
+		"x_subscription_source": "manual",
+	}); err != nil {
+		return nil, err
+	}
+	return s.accountItem(userID, accountID)
+}
+
+func (s *AccountService) SyncXSubscription(ctx context.Context, userID, accountID uint) (*dto.AccountItem, error) {
+	acc, err := s.repo.GetConnectedByUserAndAccountID(userID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(acc.AccessToken) == "" {
+		return nil, errors.New("x account has no access token; reconnect the account")
+	}
+	profile, err := s.fetchXProfile(ctx, acc.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateSettings(userID, accountID, map[string]any{
+		"x_subscription_tier":   normalizeXSubscriptionTypeFromAPI(profile.Data.SubscriptionType),
+		"x_subscription_source": "x_api",
+	}); err != nil {
+		return nil, err
+	}
+	return s.accountItem(userID, accountID)
+}
+
+func (s *AccountService) accountItem(userID, accountID uint) (*dto.AccountItem, error) {
+	acc, err := s.repo.GetConnectedByUserAndAccountID(userID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	missingScopes := missingRequiredPublishScopes(acc.OAuthScopes)
+	status := strings.TrimSpace(acc.Status)
+	if status == "" {
+		status = "connected"
+	}
+	hasAccessToken := strings.TrimSpace(acc.AccessToken) != ""
+	publishIssue := ""
+	if !strings.EqualFold(status, "connected") {
+		publishIssue = "needs_reauth"
+	} else if !hasAccessToken {
+		publishIssue = "missing_access_token"
+	} else if len(missingScopes) > 0 {
+		publishIssue = "missing_tweet_write"
+	}
+	item := &dto.AccountItem{
+		ID:                    acc.ID,
+		AvatarURL:             acc.AvatarURL,
+		Username:              acc.Username,
+		DisplayName:           acc.DisplayName,
+		Status:                status,
+		Followers:             acc.Followers,
+		XSubscriptionTier:     normalizeXSubscriptionTier(acc.XSubscriptionTier),
+		XSubscriptionSource:   normalizeXSubscriptionSource(acc.XSubscriptionSource),
+		PublishReady:          publishIssue == "",
+		PublishReauthRequired: publishIssue != "",
+		PublishIssue:          publishIssue,
+		MissingScopes:         missingScopes,
+	}
+	if acc.LastSyncedAt != nil {
+		item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
+	}
+	return item, nil
 }
 
 func (s *AccountService) ensureCanBindXAccount(userID uint, twitterUserID, username string) error {
@@ -300,15 +375,16 @@ func (s *AccountService) exchangeXToken(ctx context.Context, code string, codeVe
 
 type xUserResponse struct {
 	Data struct {
-		ID              string `json:"id"`
-		Name            string `json:"name"`
-		Username        string `json:"username"`
-		ProfileImageURL string `json:"profile_image_url"`
+		ID               string `json:"id"`
+		Name             string `json:"name"`
+		Username         string `json:"username"`
+		ProfileImageURL  string `json:"profile_image_url"`
+		SubscriptionType string `json:"subscription_type"`
 	} `json:"data"`
 }
 
 func (s *AccountService) fetchXProfile(ctx context.Context, accessToken string) (*xUserResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.x.com/2/users/me?user.fields=profile_image_url", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.x.com/2/users/me?user.fields=profile_image_url,subscription_type", nil)
 	if err != nil {
 		zap.L().Warn("x oauth: users/me request build failed", xOAuthZapCtx(ctx, zap.Error(err))...)
 		return nil, err

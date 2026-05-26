@@ -94,14 +94,14 @@ func (s *AutoPostService) CreatePlan(userID uint, req dto.AutoPostPlanRequest) (
 	}
 	if plan == nil || plan.ID == 0 {
 		plan = &model.AutoPostPlan{UserID: userID, XAccountID: acc.ID}
-		applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID))
+		applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
 		if err := s.planRepo.Create(plan); err != nil {
 			return nil, err
 		}
 		item := s.toPlanItem(*plan)
 		return &item, nil
 	}
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID))
+	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (s *AutoPostService) UpdatePlan(userID, id uint, req dto.AutoPostPlanReques
 		return nil, err
 	}
 	plan.XAccountID = acc.ID
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID))
+	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -233,6 +233,8 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	input := autoPostInputFromBot(acc, bot, "")
 	input.ContentDirection = strings.TrimSpace(req.ContentDirection)
 	input.RecentPosts = recent
+	input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
+	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
 	if contentItem != nil {
 		input.ContentItemTitle = contentItem.Title
 		input.ContentItemType = contentItem.ItemType
@@ -261,7 +263,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 		ContentLibraryID: req.ContentLibraryItemID,
 		ContentDirection: truncateRunes(contentDirection, 512),
 		ContentHash:      contentHash,
-		GeneratedContent: truncateRunes(content, autoPostPreviewRunes),
+		GeneratedContent: fitXPostForAutoPost(content, acc.XSubscriptionTier, input.ContentLengthMode),
 		Status:           status,
 		RiskLevel:        risk.Level,
 		CapabilityStatus: capability,
@@ -441,7 +443,16 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be edited from status %s", draft.Status)
 	}
-	draft.GeneratedContent = truncateRunes(content, autoPostPreviewRunes)
+	plan, _ := s.planRepo.GetByUserAndID(userID, draft.PlanID)
+	accountTier := xSubscriptionTierUnknown
+	mode := autoPostLengthModeStandard
+	if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, draft.XAccountID); err == nil {
+		accountTier = acc.XSubscriptionTier
+	}
+	if plan != nil {
+		mode = plan.ContentLengthMode
+	}
+	draft.GeneratedContent = fitXPostForAutoPost(content, accountTier, mode)
 	if draft.Status == "approved" {
 		draft.Status = "pending_review"
 		draft.ApprovedAt = nil
@@ -721,9 +732,11 @@ func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPos
 
 func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanItem {
 	accountHandle := ""
+	accountTier := xSubscriptionTierUnknown
 	if s.accountRepo != nil && row.XAccountID != 0 {
 		if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(row.UserID, row.XAccountID); err == nil {
 			accountHandle = formatXAccountHandle(acc.Username)
+			accountTier = acc.XSubscriptionTier
 		}
 	}
 	botName := ""
@@ -745,6 +758,7 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		MinIntervalMinutes: row.MinIntervalMinutes,
 		PostingWindows:     row.PostingWindows,
 		Timezone:           row.Timezone,
+		ContentLengthMode:  normalizeAutoPostLengthMode(row.ContentLengthMode, accountTier),
 		LastRunAt:          formatOptionalTime(row.LastRunAt),
 		NextRunAt:          formatOptionalTime(row.NextRunAt),
 		ProcessingAt:       formatOptionalTime(row.ProcessingAt),
@@ -805,7 +819,7 @@ func (s *AutoPostService) contentTitle(userID, contentID uint) string {
 	return item.Title
 }
 
-func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, defaultDailyLimit int) {
+func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, defaultDailyLimit int, accountTier string) {
 	plan.BotID = botID
 	plan.Enabled = req.Enabled
 	plan.ExecutionMode = effectiveExecutionMode(req.ExecutionMode)
@@ -825,6 +839,7 @@ func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequ
 	if plan.Timezone == "" {
 		plan.Timezone = "UTC"
 	}
+	plan.ContentLengthMode = normalizeAutoPostLengthMode(req.ContentLengthMode, accountTier)
 	if plan.Enabled && plan.NextRunAt == nil {
 		now := time.Now().UTC()
 		next := computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)

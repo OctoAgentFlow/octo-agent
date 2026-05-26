@@ -57,6 +57,12 @@ func (r *TwitterAccountRepository) UpsertByUser(userID uint, account *model.Twit
 		existed.AvatarURL = account.AvatarURL
 		existed.Status = "connected"
 		existed.Followers = account.Followers
+		if account.XSubscriptionTier != "" {
+			existed.XSubscriptionTier = account.XSubscriptionTier
+		}
+		if account.XSubscriptionSource != "" {
+			existed.XSubscriptionSource = account.XSubscriptionSource
+		}
 		existed.LastSyncedAt = &now
 		existed.AccessToken = account.AccessToken
 		existed.RefreshToken = account.RefreshToken
@@ -123,4 +129,14 @@ func (r *TwitterAccountRepository) UpdateOAuthTokens(account *model.TwitterAccou
 			"status":         account.Status,
 			"updated_at":     time.Now(),
 		}).Error
+}
+
+func (r *TwitterAccountRepository) UpdateSettings(userID, id uint, values map[string]any) error {
+	if len(values) == 0 {
+		return nil
+	}
+	values["updated_at"] = time.Now()
+	return r.DB.Model(&model.TwitterAccount{}).
+		Where("id = ? AND user_id = ? AND status <> ?", id, userID, "disconnected").
+		Updates(values).Error
 }

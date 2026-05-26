@@ -241,13 +241,19 @@ func (s *PublishingService) EnsurePostJob(draft *model.AutoPostDraft, now time.T
 	if draft == nil || (draft.Status != "ready_to_publish" && draft.Status != "approved") {
 		return nil, false, nil
 	}
+	content := strings.TrimSpace(draft.GeneratedContent)
+	if s.accountRepo != nil {
+		if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(draft.UserID, draft.XAccountID); err == nil {
+			content = fitXPostForAccount(content, acc.XSubscriptionTier)
+		}
+	}
 	job := &model.PublishJob{
 		UserID:           draft.UserID,
 		TwitterAccountID: draft.XAccountID,
 		BotID:            draft.BotID,
 		SourceType:       repository.PublishSourcePost,
 		SourceID:         draft.ID,
-		Content:          fitGeneratedTweet(draft.GeneratedContent, 240),
+		Content:          content,
 		Status:           repository.PublishStatusPending,
 		ExecutionMode:    inferReviewQueueExecutionMode(draft.CapabilityStatus),
 		PublishMode:      repository.PublishModeSimulated,
@@ -570,6 +576,9 @@ func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now 
 	}
 	if !hasOAuthScope(account.OAuthScopes, "tweet.write") {
 		return nil, &PublishingError{Code: "missing_tweet_write_scope", Message: "missing_tweet_write_scope"}
+	}
+	if err := validateXPostContentForAccount(job.Content, account.XSubscriptionTier); err != nil {
+		return nil, &PublishingError{Code: "x_content_length_exceeded", Message: err.Error()}
 	}
 	switch job.SourceType {
 	case repository.PublishSourceComment, repository.PublishSourceReply, repository.PublishSourcePost:

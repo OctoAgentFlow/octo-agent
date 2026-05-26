@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/pkg/requestid"
 	"octo-agent/backend/internal/pkg/response"
 	"octo-agent/backend/internal/service"
@@ -118,6 +119,49 @@ func (ctl *AccountController) Delete(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{})
+}
+
+func (ctl *AccountController) UpdateSettings(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	accountID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || accountID == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid account id")
+		return
+	}
+	var req dto.AccountSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.accountService.UpdateSettings(userID, uint(accountID), req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AccountController) SyncXSubscription(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	accountID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || accountID == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid account id")
+		return
+	}
+	data, err := ctl.accountService.SyncXSubscription(c.Request.Context(), userID, uint(accountID))
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
 }
 
 func (ctl *AccountController) oauthResultRedirect(status string) string {

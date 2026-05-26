@@ -12,6 +12,8 @@ func RegisterAccount(rg *gin.RouterGroup, c *controller.AccountController) {
 	group.Use(middleware.Auth())
 	group.GET("", c.List)
 	group.POST("/oauth/x/start", c.StartXOAuth)
+	group.PUT("/:id/settings", c.UpdateSettings)
+	group.POST("/:id/sync-x-subscription", c.SyncXSubscription)
 	group.DELETE("/:id", c.Delete)
 
 	rg.GET("/accounts/oauth/x/callback", c.XOAuthCallback)

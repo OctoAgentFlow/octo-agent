@@ -13,6 +13,7 @@ type AutoPostPlan struct {
 	MinIntervalMinutes int        `gorm:"not null;default:120;comment:最小生成间隔分钟" json:"min_interval_minutes"`
 	PostingWindows     string     `gorm:"size:512;comment:发布时间窗描述" json:"posting_windows"`
 	Timezone           string     `gorm:"size:64;not null;default:UTC;comment:时区" json:"timezone"`
+	ContentLengthMode  string     `gorm:"size:32;not null;default:standard;comment:内容长度模式（standard/long）" json:"content_length_mode"`
 	LastRunAt          *time.Time `gorm:"comment:最近生成时间" json:"last_run_at,omitempty"`
 	NextRunAt          *time.Time `gorm:"index;comment:下一次生成时间" json:"next_run_at,omitempty"`
 	ProcessingAt       *time.Time `gorm:"index;comment:Scheduler处理中时间，用于并发保护" json:"processing_at,omitempty"`

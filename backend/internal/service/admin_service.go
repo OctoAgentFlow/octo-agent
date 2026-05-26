@@ -228,12 +228,44 @@ func (s *AdminService) UpdateGrossMarginAlertConfig(operatorID uint, req dto.Adm
 	return &out, nil
 }
 
-func (s *AdminService) ListGrossMarginAlertEvents(operatorID uint) (*dto.AdminGrossMarginAlertEventListResponse, error) {
+func (s *AdminService) ListGrossMarginAlertEvents(operatorID uint, query dto.AdminGrossMarginAlertEventQuery) (*dto.AdminGrossMarginAlertEventListResponse, error) {
 	if _, err := s.requireOperator(operatorID); err != nil {
 		return nil, err
 	}
+	limit := query.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	q := s.db.Model(&model.GrossMarginAlertEvent{})
+	if status := strings.ToLower(strings.TrimSpace(query.Status)); status != "" && status != "all" {
+		if status != "open" && status != "acknowledged" {
+			return nil, ErrAdminInvalidStatus
+		}
+		q = q.Where("status = ?", status)
+	}
+	if reason := strings.TrimSpace(query.Reason); reason != "" && reason != "all" {
+		q = q.Where("reasons LIKE ?", "%"+reason+"%")
+	}
+	if strings.TrimSpace(query.DateFrom) != "" {
+		from, err := parseOptionalAdminDate(query.DateFrom)
+		if err != nil {
+			return nil, ErrAdminInvalidStatus
+		}
+		if from != nil {
+			q = q.Where("created_at >= ?", *from)
+		}
+	}
+	if strings.TrimSpace(query.DateTo) != "" {
+		to, err := parseOptionalAdminDate(query.DateTo)
+		if err != nil {
+			return nil, ErrAdminInvalidStatus
+		}
+		if to != nil {
+			q = q.Where("created_at < ?", to.AddDate(0, 0, 1))
+		}
+	}
 	var rows []model.GrossMarginAlertEvent
-	if err := s.db.Order("id DESC").Limit(50).Find(&rows).Error; err != nil {
+	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	items := make([]dto.AdminGrossMarginAlertEventItem, 0, len(rows))
@@ -1134,6 +1166,7 @@ func adminGrossMarginAlertEventDTO(row model.GrossMarginAlertEvent) dto.AdminGro
 		PointDiscountCost: adminCentsAmountString(row.PointDiscountCents),
 		LarkStatus:        row.LarkStatus,
 		LarkError:         row.LarkError,
+		ConfigSnapshot:    row.ConfigSnapshot,
 		AcknowledgedBy:    row.AcknowledgedBy,
 		AcknowledgeNote:   row.AcknowledgeNote,
 		CreatedAt:         row.CreatedAt.UTC().Format(time.RFC3339),
@@ -1225,6 +1258,19 @@ func parseOptionalAdminTime(value string) (*time.Time, error) {
 		return nil, nil
 	}
 	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, err
+	}
+	t = t.UTC()
+	return &t, nil
+}
+
+func parseOptionalAdminDate(value string) (*time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	t, err := time.Parse("2006-01-02", value)
 	if err != nil {
 		return nil, err
 	}

@@ -234,6 +234,7 @@ export type AdminGrossMarginAlertEventApi = {
   point_discount_cost: string;
   lark_status: string;
   lark_error?: string;
+  config_snapshot?: string;
   acknowledged_by?: number;
   acknowledged_at?: string;
   acknowledge_note?: string;
@@ -242,6 +243,14 @@ export type AdminGrossMarginAlertEventApi = {
 
 export type AdminGrossMarginAlertEventListApi = {
   items: AdminGrossMarginAlertEventApi[];
+};
+
+export type AdminGrossMarginAlertEventQueryApi = {
+  status?: string;
+  reason?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
 };
 
 export type AdminPointCostSourceApi = {
@@ -294,8 +303,8 @@ export const adminService = {
     const res = await request.patch<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config", body);
     return res.data.data;
   },
-  async grossMarginAlertEvents() {
-    const res = await request.get<ApiResponse<AdminGrossMarginAlertEventListApi>>("/admin/billing/gross-margin/alerts");
+  async grossMarginAlertEvents(params?: AdminGrossMarginAlertEventQueryApi) {
+    const res = await request.get<ApiResponse<AdminGrossMarginAlertEventListApi>>("/admin/billing/gross-margin/alerts", { params });
     return res.data.data;
   },
   async acknowledgeGrossMarginAlert(id: number, body: { note: string }) {

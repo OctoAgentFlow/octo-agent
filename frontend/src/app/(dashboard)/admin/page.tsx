@@ -174,6 +174,13 @@ const autoScanSkipReasonOptions = [
   "order_expired",
   "invalid_tx_hash_from_chain",
 ];
+const grossMarginAlertReasonOptions = [
+  "all",
+  "gross_margin_below_50_percent",
+  "openai_cost_share_at_or_above_20_percent",
+  "x_cost_share_at_or_above_20_percent",
+  "point_discount_share_at_or_above_20_percent",
+];
 
 function normalizedAutoScanStatus(status?: string) {
   const value = status || "pending";
@@ -773,6 +780,11 @@ function BillingSection({
   const [savingGrossMarginConfig, setSavingGrossMarginConfig] = useState("");
   const [acknowledgingAlert, setAcknowledgingAlert] = useState<number | null>(null);
   const [alertNotes, setAlertNotes] = useState<Record<number, string>>({});
+  const [alertStatusFilter, setAlertStatusFilter] = useState("all");
+  const [alertReasonFilter, setAlertReasonFilter] = useState("all");
+  const [alertDateFrom, setAlertDateFrom] = useState("");
+  const [alertDateTo, setAlertDateTo] = useState("");
+  const [expandedAlertId, setExpandedAlertId] = useState<number | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
@@ -808,7 +820,17 @@ function BillingSection({
     let cancelled = false;
     const loadGrossMargin = async () => {
       try {
-        const [data, config, alerts] = await Promise.all([adminService.grossMarginSummary(), adminService.grossMarginAlertConfig(), adminService.grossMarginAlertEvents()]);
+        const [data, config, alerts] = await Promise.all([
+          adminService.grossMarginSummary(),
+          adminService.grossMarginAlertConfig(),
+          adminService.grossMarginAlertEvents({
+            status: alertStatusFilter === "all" ? undefined : alertStatusFilter,
+            reason: alertReasonFilter === "all" ? undefined : alertReasonFilter,
+            date_from: alertDateFrom || undefined,
+            date_to: alertDateTo || undefined,
+            limit: 100,
+          }),
+        ]);
         if (!cancelled) {
           setGrossMargin(data);
           setGrossMarginAlertConfig(config);
@@ -826,7 +848,7 @@ function BillingSection({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [alertDateFrom, alertDateTo, alertReasonFilter, alertStatusFilter]);
 
   const updateGrossMarginAlertConfig = async (patch: Partial<AdminGrossMarginAlertConfigApi>) => {
     const key = Object.keys(patch)[0] || "gross-margin-alert";
@@ -923,7 +945,38 @@ function BillingSection({
             </div>
           ) : null}
           <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
-            <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertHistory")}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertHistory")}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAlertStatusFilter("all");
+                  setAlertReasonFilter("all");
+                  setAlertDateFrom("");
+                  setAlertDateTo("");
+                }}
+              >
+                {t("admin.billing.filters.reset")}
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <select className="form-input h-10 py-0" value={alertStatusFilter} onChange={(event) => setAlertStatusFilter(event.target.value)}>
+                <option value="all">{t("admin.billing.margin.alertStatus.all")}</option>
+                <option value="open">{t("admin.billing.margin.alertStatus.open")}</option>
+                <option value="acknowledged">{t("admin.billing.margin.alertStatus.acknowledged")}</option>
+              </select>
+              <select className="form-input h-10 py-0" value={alertReasonFilter} onChange={(event) => setAlertReasonFilter(event.target.value)}>
+                {grossMarginAlertReasonOptions.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {reason === "all" ? t("admin.billing.margin.reason.all") : t(`admin.billing.margin.reason.${reason}`)}
+                  </option>
+                ))}
+              </select>
+              <Input type="date" value={alertDateFrom} onChange={(event) => setAlertDateFrom(event.target.value)} />
+              <Input type="date" value={alertDateTo} onChange={(event) => setAlertDateTo(event.target.value)} />
+            </div>
             <div className="mt-3 space-y-3">
               {grossMarginAlerts.length === 0 ? (
                 <p className="text-sm text-[#71767b]">{t("admin.billing.margin.noAlerts")}</p>
@@ -963,6 +1016,25 @@ function BillingSection({
                         </Button>
                       </div>
                     )}
+                    <button type="button" className="mt-3 text-xs font-semibold text-[#1d9bf0]" onClick={() => setExpandedAlertId(expandedAlertId === item.id ? null : item.id)}>
+                      {expandedAlertId === item.id ? t("admin.billing.margin.hideDetail") : t("admin.billing.margin.viewDetail")}
+                    </button>
+                    {expandedAlertId === item.id ? (
+                      <div className="mt-3 grid gap-3 rounded-2xl border border-[#2f3336] bg-black p-3 text-xs text-[#71767b] md:grid-cols-2">
+                        <div>
+                          <p>{t("admin.billing.margin.openaiCost")}: {item.openai_cost} USDT</p>
+                          <p>{t("admin.billing.margin.xCost")}: {item.x_cost} USDT</p>
+                          <p>{t("admin.billing.margin.pointCost")}: {item.point_discount_cost} USDT</p>
+                          <p>{t("admin.billing.margin.target")}: {formatBps(item.target_margin_bps)}</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p>{t("admin.billing.margin.period")}: {formatDate(item.period_start)} - {formatDate(item.period_end)}</p>
+                          <p>{t("admin.billing.margin.ackBy")}: {item.acknowledged_by || "-"}</p>
+                          <p className="break-all">{t("admin.billing.margin.larkError")}: {item.lark_error || "-"}</p>
+                          <p className="break-all">{t("admin.billing.margin.configSnapshot")}: {item.config_snapshot || "-"}</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}

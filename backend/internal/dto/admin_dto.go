@@ -259,10 +259,19 @@ type AdminGrossMarginAlertEventItem struct {
 	PointDiscountCost string   `json:"point_discount_cost"`
 	LarkStatus        string   `json:"lark_status"`
 	LarkError         string   `json:"lark_error,omitempty"`
+	ConfigSnapshot    string   `json:"config_snapshot,omitempty"`
 	AcknowledgedBy    uint     `json:"acknowledged_by,omitempty"`
 	AcknowledgedAt    string   `json:"acknowledged_at,omitempty"`
 	AcknowledgeNote   string   `json:"acknowledge_note,omitempty"`
 	CreatedAt         string   `json:"created_at"`
+}
+
+type AdminGrossMarginAlertEventQuery struct {
+	Status   string `form:"status"`
+	Reason   string `form:"reason"`
+	DateFrom string `form:"date_from"`
+	DateTo   string `form:"date_to"`
+	Limit    int    `form:"limit"`
 }
 
 type AdminGrossMarginAlertEventListResponse struct {

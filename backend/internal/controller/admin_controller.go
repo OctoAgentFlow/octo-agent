@@ -150,7 +150,12 @@ func (ctl *AdminController) ListGrossMarginAlertEvents(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.adminService.ListGrossMarginAlertEvents(userID)
+	var query dto.AdminGrossMarginAlertEventQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.ListGrossMarginAlertEvents(userID, query)
 	if err != nil {
 		adminError(c, err)
 		return

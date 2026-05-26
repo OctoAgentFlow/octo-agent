@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
   ArrowRight,
@@ -147,6 +147,7 @@ export default function AutoPostPage() {
   const [generating, setGenerating] = useState(false);
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
+  const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -218,6 +219,13 @@ export default function AutoPostPage() {
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
   const latestRun = accountRuns[0];
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
+
+  const openPanel = useCallback((panel: WorkbenchPanel) => {
+    setActivePanel(panel);
+    window.setTimeout(() => {
+      workbenchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, []);
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
@@ -556,7 +564,7 @@ export default function AutoPostPage() {
             hasActiveContent={activeContentCount > 0}
             plannerEnabled={Boolean(selectedPlan?.enabled || form.enabled)}
             autopilotEnabled={canAutopilotPublish}
-            onOpenPanel={setActivePanel}
+            onOpenPanel={openPanel}
           />
 
           <AutoPostPipelineSummary
@@ -566,12 +574,12 @@ export default function AutoPostPage() {
             queuedDraftCount={queuedDraftCount}
             publishReadyCount={publishReadyCount}
             latestRun={latestRun}
-            onOpenPanel={setActivePanel}
+            onOpenPanel={openPanel}
           />
 
-          <WorkbenchTabs activePanel={activePanel} onChange={setActivePanel} />
+          <WorkbenchTabs activePanel={activePanel} onChange={openPanel} />
 
-          <div className="space-y-5">
+          <div ref={workbenchPanelRef} className="scroll-mt-4 space-y-5">
             {activePanel === "planner" ? (
               <Card>
                 <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
@@ -579,7 +587,7 @@ export default function AutoPostPage() {
                 {form.enabled && activeContentCount === 0 ? (
                   <div className="flex flex-col gap-3 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85 sm:flex-row sm:items-center sm:justify-between">
                     <span>{t("autoPost.scheduler.noActiveContentHint")}</span>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setActivePanel("content")}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => openPanel("content")}>
                       {t("autoPost.setup.actions.addContent")}
                     </Button>
                   </div>

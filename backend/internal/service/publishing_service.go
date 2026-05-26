@@ -247,7 +247,7 @@ func (s *PublishingService) EnsurePostJob(draft *model.AutoPostDraft, now time.T
 		BotID:            draft.BotID,
 		SourceType:       repository.PublishSourcePost,
 		SourceID:         draft.ID,
-		Content:          draft.GeneratedContent,
+		Content:          fitGeneratedTweet(draft.GeneratedContent, 240),
 		Status:           repository.PublishStatusPending,
 		ExecutionMode:    inferReviewQueueExecutionMode(draft.CapabilityStatus),
 		PublishMode:      repository.PublishModeSimulated,

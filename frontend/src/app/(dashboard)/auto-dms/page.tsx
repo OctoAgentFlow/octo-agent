@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import {
   automationService,
   type AutoDMRecipientImportApi,
@@ -74,7 +75,7 @@ export default function AutoDMsPage() {
       setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoDm.toast.approved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.approve") : t("autoDm.errors.approve"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoDm.errors.approve"));
     }
   };
 
@@ -94,7 +95,7 @@ export default function AutoDMsPage() {
       setDMTasks((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoDm.toast.retry"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.retry") : t("autoDm.errors.retry"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoDm.errors.retry"));
     }
   };
 

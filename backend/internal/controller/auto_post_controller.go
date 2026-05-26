@@ -174,6 +174,9 @@ func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.RunPlanNow(c.Request.Context(), userID, planID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "auto post plan not found")
 			return
@@ -221,6 +224,9 @@ func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.ApproveDraft(userID, draftID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -240,6 +246,9 @@ func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.PreparePublish(userID, draftID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

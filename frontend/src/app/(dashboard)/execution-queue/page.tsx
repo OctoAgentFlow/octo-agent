@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { automationService } from "@/services/automation.service";
 import { autoPostService } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
@@ -107,6 +108,10 @@ function publishTone(status?: string) {
   if (status === "failed" || status === "cancelled") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
   if (status === "pending") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
   return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
+}
+
+function automationPausedToast(t: (key: string, values?: Record<string, string | number>) => string, error: unknown, fallback: string) {
+  return apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || fallback;
 }
 
 function moduleNameKey(type: string) {
@@ -249,7 +254,7 @@ export default function ExecutionQueuePage() {
       pushToast(t(item.type === "post" ? "executionQueue.toast.postPublishJobCreated" : "executionQueue.toast.approved"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.approve") : t("executionQueue.errors.approve"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.approve")));
     } finally {
       setBusyID(null);
     }
@@ -282,7 +287,7 @@ export default function ExecutionQueuePage() {
       pushToast(t("executionQueue.toast.retryQueued"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.retry") : t("executionQueue.errors.retry"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.retry")));
     } finally {
       setBusyID(null);
     }
@@ -296,7 +301,7 @@ export default function ExecutionQueuePage() {
       pushToast(t("executionQueue.toast.postPublishJobCreated"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.preparePublish") : t("executionQueue.errors.preparePublish"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.preparePublish")));
     } finally {
       setBusyID(null);
     }
@@ -312,7 +317,7 @@ export default function ExecutionQueuePage() {
       pushToast(updated.publish_mode === "dry_run" ? t("executionQueue.toast.dryRunPublish") : t("executionQueue.toast.realPublish"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.realPublish") : t("executionQueue.errors.realPublish"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.realPublish")));
     } finally {
       setBusyID(null);
     }

@@ -25,6 +25,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
   autoPostService,
@@ -500,7 +501,7 @@ export default function AutoPostPage() {
       setActivePanel("history");
       void load();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runNow.errors.failed") : t("autoPost.runNow.errors.failed"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoPost.runNow.errors.failed"));
     } finally {
       setRunningPlanner(false);
     }

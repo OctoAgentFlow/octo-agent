@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { billingService } from "@/services/billing.service";
 import {
@@ -155,7 +156,7 @@ export default function AutoRepliesPage() {
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoReply.toast.approved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoReply.errors.approve") : t("autoReply.errors.approve"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoReply.errors.approve"));
     }
   };
 

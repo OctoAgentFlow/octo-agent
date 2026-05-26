@@ -2,6 +2,7 @@ export type ActivityType = "post" | "reply" | "dm" | "comment" | "system";
 export type ActivitySourceModule = Exclude<ActivityType, "system">;
 export type ActivityStatus = "success" | "review" | "failed";
 export type ActivityRange = "24h" | "7d" | "30d";
+export type ActivityEventScope = "all" | "execution" | "system";
 
 export type ActivityRecord = {
   id: string;

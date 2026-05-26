@@ -4,6 +4,7 @@ type ActivityQuery struct {
 	Page        int    `form:"page"`
 	PageSize    int    `form:"page_size"`
 	Type        string `form:"type"`
+	EventScope  string `form:"event_scope"`
 	Status      string `form:"status"`
 	Range       string `form:"range"`
 	AccountID   uint   `form:"account_id"`

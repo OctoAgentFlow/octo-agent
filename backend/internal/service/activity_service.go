@@ -39,6 +39,13 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	if typ != "" && typ != "post" && typ != "reply" && typ != "dm" && typ != "comment" && typ != "system" {
 		return nil, errors.New("invalid activity type")
 	}
+	eventScope := strings.TrimSpace(strings.ToLower(query.EventScope))
+	if eventScope != "" && eventScope != "all" && eventScope != "execution" && eventScope != "system" {
+		return nil, errors.New("invalid activity event scope")
+	}
+	if eventScope == "all" {
+		eventScope = ""
+	}
 	status := strings.TrimSpace(strings.ToLower(query.Status))
 	if status != "" && status != "success" && status != "review" && status != "failed" {
 		return nil, errors.New("invalid activity status")
@@ -66,7 +73,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 		return nil, errors.New("invalid error reason")
 	}
 
-	items, total, err := s.repo.List(userID, page, pageSize, typ, status, from, to, accountID, accountHandle, errorReason)
+	items, total, err := s.repo.List(userID, page, pageSize, typ, eventScope, status, from, to, accountID, accountHandle, errorReason)
 	if err != nil {
 		return nil, err
 	}

@@ -99,10 +99,14 @@ func (r *ActivityRepository) LatestReplyExecutedAt(userID uint) (*time.Time, err
 	return &t, nil
 }
 
-func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string) ([]model.ActivityLog, int64, error) {
+func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, eventScope string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string) ([]model.ActivityLog, int64, error) {
 	q := r.DB.Model(&model.ActivityLog{}).Where("user_id = ?", userID)
-	if typ != "" {
+	if eventScope == "system" {
+		q = q.Where("type = ?", "system")
+	} else if typ != "" {
 		q = q.Where("type = ?", typ)
+	} else if eventScope == "execution" {
+		q = q.Where("type <> ?", "system")
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)

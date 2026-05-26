@@ -35,6 +35,7 @@ export type ActivityListQuery = {
   page?: number;
   page_size?: number;
   type?: "post" | "reply" | "dm" | "comment" | "system";
+  event_scope?: "all" | "execution" | "system";
   status?: "success" | "review" | "failed";
   range?: "24h" | "7d" | "30d";
   account_id?: number;

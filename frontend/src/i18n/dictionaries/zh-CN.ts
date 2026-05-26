@@ -382,7 +382,7 @@ export const dict: I18nDict = {
   "sidebar.nav.autoComments": "自动评论",
   "sidebar.nav.analytics": "分析",
   "sidebar.nav.billing": "计费",
-  "sidebar.nav.points": "积分",
+  "sidebar.nav.points": "积分中心",
   "sidebar.nav.admin": "后台",
   "sidebar.nav.accounts": "X 账号",
   "sidebar.nav.posts": "帖子",

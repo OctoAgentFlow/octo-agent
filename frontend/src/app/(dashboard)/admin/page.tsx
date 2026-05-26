@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -768,6 +768,8 @@ function BillingSection({
   const [skipReasonFilter, setSkipReasonFilter] = useState("all");
   const [orders, setOrders] = useState(overview.recent_orders);
   const [grossMargin, setGrossMargin] = useState<AdminGrossMarginSummaryApi | null>(null);
+  const [grossMarginAlertConfig, setGrossMarginAlertConfig] = useState<AdminGrossMarginAlertConfigApi | null>(null);
+  const [savingGrossMarginConfig, setSavingGrossMarginConfig] = useState("");
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
@@ -803,10 +805,16 @@ function BillingSection({
     let cancelled = false;
     const loadGrossMargin = async () => {
       try {
-        const data = await adminService.grossMarginSummary();
-        if (!cancelled) setGrossMargin(data);
+        const [data, config] = await Promise.all([adminService.grossMarginSummary(), adminService.grossMarginAlertConfig()]);
+        if (!cancelled) {
+          setGrossMargin(data);
+          setGrossMarginAlertConfig(config);
+        }
       } catch {
-        if (!cancelled) setGrossMargin(null);
+        if (!cancelled) {
+          setGrossMargin(null);
+          setGrossMarginAlertConfig(null);
+        }
       }
     };
     void loadGrossMargin();
@@ -814,6 +822,19 @@ function BillingSection({
       cancelled = true;
     };
   }, []);
+
+  const updateGrossMarginAlertConfig = async (patch: Partial<AdminGrossMarginAlertConfigApi>) => {
+    const key = Object.keys(patch)[0] || "gross-margin-alert";
+    setSavingGrossMarginConfig(key);
+    try {
+      const next = await adminService.updateGrossMarginAlertConfig(patch);
+      setGrossMarginAlertConfig(next);
+      const data = await adminService.grossMarginSummary();
+      setGrossMargin(data);
+    } finally {
+      setSavingGrossMarginConfig("");
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -861,6 +882,31 @@ function BillingSection({
               </div>
             </div>
           </div>
+          {grossMarginAlertConfig ? (
+            <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertConfig")}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{t("admin.billing.margin.alertConfigDesc")}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant={grossMarginAlertConfig.enabled ? "default" : "outline"}
+                  disabled={savingGrossMarginConfig === "enabled"}
+                  onClick={() => void updateGrossMarginAlertConfig({ enabled: !grossMarginAlertConfig.enabled })}
+                >
+                  {grossMarginAlertConfig.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <RiskInput label={t("admin.billing.margin.targetBps")} value={grossMarginAlertConfig.target_margin_bps} disabled={savingGrossMarginConfig === "target_margin_bps"} onSave={(value) => updateGrossMarginAlertConfig({ target_margin_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.openaiBps")} value={grossMarginAlertConfig.openai_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "openai_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ openai_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.xBps")} value={grossMarginAlertConfig.x_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "x_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ x_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.pointBps")} value={grossMarginAlertConfig.point_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "point_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ point_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.checkHours")} value={grossMarginAlertConfig.check_interval_hours} disabled={savingGrossMarginConfig === "check_interval_hours"} onSave={(value) => updateGrossMarginAlertConfig({ check_interval_hours: value })} />
+              </div>
+            </div>
+          ) : null}
         </Card>
       ) : null}
       <Card className="bg-[#0f1419]">

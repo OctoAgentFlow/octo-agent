@@ -207,6 +207,16 @@ export type AdminGrossMarginSummaryApi = {
   revenue_by_plan: AdminGrossMarginRevenueApi[];
 };
 
+export type AdminGrossMarginAlertConfigApi = {
+  enabled: boolean;
+  target_margin_bps: number;
+  openai_cost_share_threshold_bps: number;
+  x_cost_share_threshold_bps: number;
+  point_cost_share_threshold_bps: number;
+  check_interval_hours: number;
+  updated_at: string;
+};
+
 export type AdminPointCostSourceApi = {
   source: string;
   points: number;
@@ -247,6 +257,14 @@ export const adminService = {
   },
   async grossMarginSummary() {
     const res = await request.get<ApiResponse<AdminGrossMarginSummaryApi>>("/admin/billing/gross-margin");
+    return res.data.data;
+  },
+  async grossMarginAlertConfig() {
+    const res = await request.get<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config");
+    return res.data.data;
+  },
+  async updateGrossMarginAlertConfig(body: Partial<AdminGrossMarginAlertConfigApi>) {
+    const res = await request.patch<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config", body);
     return res.data.data;
   },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {

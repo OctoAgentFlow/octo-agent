@@ -60,6 +60,17 @@ type GrossMarginHealth struct {
 	OpenAIQuantity      int64
 	XQuantity           int64
 	PointDiscountPoints int64
+	Config              GrossMarginAlertSettings
+	Reasons             []string
+}
+
+type GrossMarginAlertSettings struct {
+	Enabled                     bool
+	TargetMarginBps             int64
+	OpenAICostShareThresholdBps int64
+	XCostShareThresholdBps      int64
+	PointCostShareThresholdBps  int64
+	CheckIntervalHours          int
 }
 
 const (
@@ -223,6 +234,10 @@ func (s *BillingService) GrossMarginHealth(now time.Time) (GrossMarginHealth, er
 	now = now.UTC()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	periodEnd := periodStart.AddDate(0, 1, 0)
+	settings, err := s.GrossMarginAlertSettings()
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
 	revenueCents, err := s.monthlyPaidRevenueCents(periodStart, periodEnd)
 	if err != nil {
 		return GrossMarginHealth{}, err
@@ -247,19 +262,19 @@ func (s *BillingService) GrossMarginHealth(now time.Time) (GrossMarginHealth, er
 		grossMarginBps = grossProfitCents * 10000 / revenueCents
 	}
 	status := "no_revenue"
-	if revenueCents > 0 && grossMarginBps >= 5000 {
+	if revenueCents > 0 && grossMarginBps >= settings.TargetMarginBps {
 		status = "healthy"
 	} else if revenueCents > 0 {
 		status = "below_target"
 	}
-	return GrossMarginHealth{
+	health := GrossMarginHealth{
 		PeriodStart:         periodStart,
 		PeriodEnd:           periodEnd,
 		RevenueCents:        revenueCents,
 		TotalCostCents:      totalCostCents,
 		GrossProfitCents:    grossProfitCents,
 		GrossMarginBps:      grossMarginBps,
-		TargetBps:           5000,
+		TargetBps:           settings.TargetMarginBps,
 		Status:              status,
 		OpenAICostCents:     openAICents,
 		XCostCents:          xCents,
@@ -267,7 +282,65 @@ func (s *BillingService) GrossMarginHealth(now time.Time) (GrossMarginHealth, er
 		OpenAIQuantity:      openAIQuantity,
 		XQuantity:           xQuantity,
 		PointDiscountPoints: pointDiscountPoints,
-	}, nil
+		Config:              settings,
+	}
+	health.Reasons = grossMarginAlertReasons(health)
+	return health, nil
+}
+
+func (s *BillingService) GrossMarginAlertSettings() (GrossMarginAlertSettings, error) {
+	defaults := defaultGrossMarginAlertSettings()
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil {
+		return defaults, nil
+	}
+	var cfg model.GrossMarginAlertConfig
+	err := s.orderRepo.DB.Where("code = ?", "default").First(&cfg).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return defaults, nil
+	}
+	if err != nil {
+		return GrossMarginAlertSettings{}, err
+	}
+	out := GrossMarginAlertSettings{
+		Enabled:                     cfg.Enabled,
+		TargetMarginBps:             cfg.TargetMarginBps,
+		OpenAICostShareThresholdBps: cfg.OpenAICostShareThresholdBps,
+		XCostShareThresholdBps:      cfg.XCostShareThresholdBps,
+		PointCostShareThresholdBps:  cfg.PointCostShareThresholdBps,
+		CheckIntervalHours:          cfg.CheckIntervalHours,
+	}
+	return normalizeGrossMarginAlertSettings(out), nil
+}
+
+func defaultGrossMarginAlertSettings() GrossMarginAlertSettings {
+	return GrossMarginAlertSettings{
+		Enabled:                     true,
+		TargetMarginBps:             5000,
+		OpenAICostShareThresholdBps: 2000,
+		XCostShareThresholdBps:      2000,
+		PointCostShareThresholdBps:  2000,
+		CheckIntervalHours:          24,
+	}
+}
+
+func normalizeGrossMarginAlertSettings(settings GrossMarginAlertSettings) GrossMarginAlertSettings {
+	defaults := defaultGrossMarginAlertSettings()
+	if settings.TargetMarginBps <= 0 {
+		settings.TargetMarginBps = defaults.TargetMarginBps
+	}
+	if settings.OpenAICostShareThresholdBps <= 0 {
+		settings.OpenAICostShareThresholdBps = defaults.OpenAICostShareThresholdBps
+	}
+	if settings.XCostShareThresholdBps <= 0 {
+		settings.XCostShareThresholdBps = defaults.XCostShareThresholdBps
+	}
+	if settings.PointCostShareThresholdBps <= 0 {
+		settings.PointCostShareThresholdBps = defaults.PointCostShareThresholdBps
+	}
+	if settings.CheckIntervalHours <= 0 {
+		settings.CheckIntervalHours = defaults.CheckIntervalHours
+	}
+	return settings
 }
 
 func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.Time) error {
@@ -278,7 +351,10 @@ func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.
 	if health.RevenueCents <= 0 {
 		return nil
 	}
-	reasons := grossMarginAlertReasons(health)
+	if !health.Config.Enabled {
+		return nil
+	}
+	reasons := health.Reasons
 	if len(reasons) == 0 {
 		return nil
 	}
@@ -613,20 +689,25 @@ func formatBps(bps int64) string {
 }
 
 func grossMarginAlertReasons(health GrossMarginHealth) []string {
+	settings := normalizeGrossMarginAlertSettings(health.Config)
 	reasons := make([]string, 0, 4)
 	if health.RevenueCents <= 0 {
 		return reasons
 	}
-	if health.GrossMarginBps < health.TargetBps {
+	targetBps := health.TargetBps
+	if targetBps <= 0 {
+		targetBps = settings.TargetMarginBps
+	}
+	if health.GrossMarginBps < targetBps {
 		reasons = append(reasons, "gross_margin_below_50_percent")
 	}
-	if health.OpenAICostCents*10000/health.RevenueCents >= 2000 {
+	if health.OpenAICostCents*10000/health.RevenueCents >= settings.OpenAICostShareThresholdBps {
 		reasons = append(reasons, "openai_cost_share_at_or_above_20_percent")
 	}
-	if health.XCostCents*10000/health.RevenueCents >= 2000 {
+	if health.XCostCents*10000/health.RevenueCents >= settings.XCostShareThresholdBps {
 		reasons = append(reasons, "x_cost_share_at_or_above_20_percent")
 	}
-	if health.PointDiscountCents*10000/health.RevenueCents >= 2000 {
+	if health.PointDiscountCents*10000/health.RevenueCents >= settings.PointCostShareThresholdBps {
 		reasons = append(reasons, "point_discount_share_at_or_above_20_percent")
 	}
 	return reasons

@@ -87,7 +87,16 @@ func Start(
 			if billing == nil {
 				return
 			}
-			if !lastGrossMarginCheck.IsZero() && time.Since(lastGrossMarginCheck) < 24*time.Hour {
+			settings, err := billing.GrossMarginAlertSettings()
+			if err != nil {
+				zap.L().Error("load gross margin alert settings failed", zap.Error(err))
+				settings.CheckIntervalHours = 24
+			}
+			interval := time.Duration(settings.CheckIntervalHours) * time.Hour
+			if interval <= 0 {
+				interval = 24 * time.Hour
+			}
+			if !lastGrossMarginCheck.IsZero() && time.Since(lastGrossMarginCheck) < interval {
 				return
 			}
 			lastGrossMarginCheck = time.Now()

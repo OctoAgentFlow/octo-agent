@@ -20,6 +20,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.UserPointAccount{},
 		&model.PointActivity{},
 		&model.PointRiskConfig{},
+		&model.GrossMarginAlertConfig{},
 		&model.PointGrant{},
 		&model.PointRedemptionCode{},
 		&model.PointRedemptionClaim{},
@@ -69,6 +70,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := SeedDefaultPointRiskConfig(db); err != nil {
+		return err
+	}
+	if err := SeedDefaultGrossMarginAlertConfig(db); err != nil {
 		return err
 	}
 	return BackfillUserOwnerRole(db)
@@ -139,6 +143,26 @@ func SeedDefaultPointRiskConfig(db *gorm.DB) error {
 	}).Error
 }
 
+func SeedDefaultGrossMarginAlertConfig(db *gorm.DB) error {
+	var existing model.GrossMarginAlertConfig
+	err := db.Where("code = ?", "default").First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&model.GrossMarginAlertConfig{
+		Code:                        "default",
+		Enabled:                     true,
+		TargetMarginBps:             5000,
+		OpenAICostShareThresholdBps: 2000,
+		XCostShareThresholdBps:      2000,
+		PointCostShareThresholdBps:  2000,
+		CheckIntervalHours:          24,
+	}).Error
+}
+
 // ApplyTableComments keeps table comments readable in MySQL.
 func ApplyTableComments(db *gorm.DB) error {
 	modelComments := []struct {
@@ -153,6 +177,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.UserPointAccount{}, "用户积分账户"},
 		{&model.PointActivity{}, "积分活动配置"},
 		{&model.PointRiskConfig{}, "积分风控配置"},
+		{&model.GrossMarginAlertConfig{}, "毛利告警配置"},
 		{&model.PointGrant{}, "积分批次与有效期"},
 		{&model.PointRedemptionCode{}, "积分兑换码"},
 		{&model.PointRedemptionClaim{}, "积分兑换记录"},

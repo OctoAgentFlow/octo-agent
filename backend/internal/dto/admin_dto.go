@@ -223,6 +223,25 @@ type AdminGrossMarginSummaryResponse struct {
 	RevenueByPlan    []AdminGrossMarginRevenueItem `json:"revenue_by_plan"`
 }
 
+type AdminGrossMarginAlertConfigData struct {
+	Enabled                     bool   `json:"enabled"`
+	TargetMarginBps             int64  `json:"target_margin_bps"`
+	OpenAICostShareThresholdBps int64  `json:"openai_cost_share_threshold_bps"`
+	XCostShareThresholdBps      int64  `json:"x_cost_share_threshold_bps"`
+	PointCostShareThresholdBps  int64  `json:"point_cost_share_threshold_bps"`
+	CheckIntervalHours          int    `json:"check_interval_hours"`
+	UpdatedAt                   string `json:"updated_at"`
+}
+
+type AdminUpdateGrossMarginAlertConfigRequest struct {
+	Enabled                     *bool  `json:"enabled"`
+	TargetMarginBps             *int64 `json:"target_margin_bps"`
+	OpenAICostShareThresholdBps *int64 `json:"openai_cost_share_threshold_bps"`
+	XCostShareThresholdBps      *int64 `json:"x_cost_share_threshold_bps"`
+	PointCostShareThresholdBps  *int64 `json:"point_cost_share_threshold_bps"`
+	CheckIntervalHours          *int   `json:"check_interval_hours"`
+}
+
 type AdminReferralSummaryResponse struct {
 	InviteCodes          int64 `json:"invite_codes"`
 	ReferralSignups      int64 `json:"referral_signups"`

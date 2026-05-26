@@ -111,6 +111,39 @@ func (ctl *AdminController) GrossMarginSummary(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) GrossMarginAlertConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.GrossMarginAlertConfig(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdateGrossMarginAlertConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminUpdateGrossMarginAlertConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdateGrossMarginAlertConfig(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

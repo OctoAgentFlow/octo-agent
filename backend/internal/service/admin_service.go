@@ -168,6 +168,66 @@ func (s *AdminService) GrossMarginSummary(operatorID uint) (*dto.AdminGrossMargi
 	}, nil
 }
 
+func (s *AdminService) GrossMarginAlertConfig(operatorID uint) (*dto.AdminGrossMarginAlertConfigData, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.getOrCreateGrossMarginAlertConfig()
+	if err != nil {
+		return nil, err
+	}
+	out := adminGrossMarginAlertConfigDTO(*cfg)
+	return &out, nil
+}
+
+func (s *AdminService) UpdateGrossMarginAlertConfig(operatorID uint, req dto.AdminUpdateGrossMarginAlertConfigRequest) (*dto.AdminGrossMarginAlertConfigData, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.getOrCreateGrossMarginAlertConfig()
+	if err != nil {
+		return nil, err
+	}
+	if req.Enabled != nil {
+		cfg.Enabled = *req.Enabled
+	}
+	if req.TargetMarginBps != nil {
+		if !validBps(*req.TargetMarginBps) {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.TargetMarginBps = *req.TargetMarginBps
+	}
+	if req.OpenAICostShareThresholdBps != nil {
+		if !validBps(*req.OpenAICostShareThresholdBps) {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.OpenAICostShareThresholdBps = *req.OpenAICostShareThresholdBps
+	}
+	if req.XCostShareThresholdBps != nil {
+		if !validBps(*req.XCostShareThresholdBps) {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.XCostShareThresholdBps = *req.XCostShareThresholdBps
+	}
+	if req.PointCostShareThresholdBps != nil {
+		if !validBps(*req.PointCostShareThresholdBps) {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.PointCostShareThresholdBps = *req.PointCostShareThresholdBps
+	}
+	if req.CheckIntervalHours != nil {
+		if *req.CheckIntervalHours <= 0 || *req.CheckIntervalHours > 168 {
+			return nil, ErrAdminInvalidStatus
+		}
+		cfg.CheckIntervalHours = *req.CheckIntervalHours
+	}
+	if err := s.db.Save(cfg).Error; err != nil {
+		return nil, err
+	}
+	out := adminGrossMarginAlertConfigDTO(*cfg)
+	return &out, nil
+}
+
 func serviceBillingForAdmin(s *AdminService) *BillingService {
 	return NewBillingService(s.userRepo, s.billingOrderRepo, s.pointRepo, nil, nil, nil, nil, s.cfg)
 }
@@ -231,6 +291,10 @@ func adminGrossMarginCostItem(key string, cents, revenueCents, quantity int64, u
 		Quantity:  quantity,
 		UnitLabel: unitLabel,
 	}
+}
+
+func validBps(value int64) bool {
+	return value >= 0 && value <= 10000
 }
 
 func (s *AdminService) UpdateBillingOrderOpsAction(operatorID, orderID uint, req dto.BillingOrderOpsActionRequest) (*dto.BillingOrderDetailResponse, error) {
@@ -998,6 +1062,18 @@ func adminPointRiskConfigDTO(cfg model.PointRiskConfig) dto.AdminPointRiskConfig
 	}
 }
 
+func adminGrossMarginAlertConfigDTO(cfg model.GrossMarginAlertConfig) dto.AdminGrossMarginAlertConfigData {
+	return dto.AdminGrossMarginAlertConfigData{
+		Enabled:                     cfg.Enabled,
+		TargetMarginBps:             cfg.TargetMarginBps,
+		OpenAICostShareThresholdBps: cfg.OpenAICostShareThresholdBps,
+		XCostShareThresholdBps:      cfg.XCostShareThresholdBps,
+		PointCostShareThresholdBps:  cfg.PointCostShareThresholdBps,
+		CheckIntervalHours:          cfg.CheckIntervalHours,
+		UpdatedAt:                   cfg.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
 func adminPointRedemptionCodeDTO(row model.PointRedemptionCode) dto.AdminPointRedemptionCodeItem {
 	item := dto.AdminPointRedemptionCodeItem{
 		ID:          row.ID,
@@ -1035,6 +1111,30 @@ func (s *AdminService) getOrCreatePointRiskConfig() (*model.PointRiskConfig, err
 		LargeAdjustmentAlertThreshold: 200,
 		PointExpiryDays:               365,
 		Enabled:                       true,
+	}
+	if err := s.db.Create(&cfg).Error; err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (s *AdminService) getOrCreateGrossMarginAlertConfig() (*model.GrossMarginAlertConfig, error) {
+	var cfg model.GrossMarginAlertConfig
+	err := s.db.Where("code = ?", "default").First(&cfg).Error
+	if err == nil {
+		return &cfg, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	cfg = model.GrossMarginAlertConfig{
+		Code:                        "default",
+		Enabled:                     true,
+		TargetMarginBps:             5000,
+		OpenAICostShareThresholdBps: 2000,
+		XCostShareThresholdBps:      2000,
+		PointCostShareThresholdBps:  2000,
+		CheckIntervalHours:          24,
 	}
 	if err := s.db.Create(&cfg).Error; err != nil {
 		return nil, err

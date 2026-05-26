@@ -40,6 +40,17 @@ function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
   return "";
 }
 
+function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureCategory.x_auth";
+  if (category === "rate_limit") return "activity.failureCategory.rate_limit";
+  if (category === "safety") return "activity.failureCategory.safety";
+  if (category === "configuration") return "activity.failureCategory.configuration";
+  if (category === "network") return "activity.failureCategory.network";
+  if (category === "system") return "activity.failureCategory.system";
+  if (category === "unknown") return "activity.failureCategory.unknown";
+  return "";
+}
+
 function formatClock(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -86,6 +97,11 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
                     {activity.sourceModule ? (
                       <span className="rounded-full border border-blue-300/25 bg-blue-500/10 px-2 py-0.5 text-[11px] text-blue-200">
                         {t(sourceModuleLabelKey(activity.sourceModule))}
+                      </span>
+                    ) : null}
+                    {activity.failureCategory ? (
+                      <span className="rounded-full border border-rose-300/25 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200">
+                        {t(failureCategoryLabelKey(activity.failureCategory))}
                       </span>
                     ) : null}
                   </div>

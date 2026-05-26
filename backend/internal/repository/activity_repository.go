@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -99,7 +100,7 @@ func (r *ActivityRepository) LatestReplyExecutedAt(userID uint) (*time.Time, err
 	return &t, nil
 }
 
-func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, eventScope string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string) ([]model.ActivityLog, int64, error) {
+func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, eventScope string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string, failureCategory string) ([]model.ActivityLog, int64, error) {
 	q := r.DB.Model(&model.ActivityLog{}).Where("user_id = ?", userID)
 	if eventScope == "system" {
 		q = q.Where("type = ?", "system")
@@ -120,6 +121,7 @@ func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ strin
 	if errorReason != "" {
 		q = q.Where("COALESCE(NULLIF(TRIM(error_message), ''), 'Unknown error') = ?", errorReason)
 	}
+	q = applyActivityFailureCategoryFilter(q, failureCategory)
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -133,6 +135,63 @@ func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ strin
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+func applyActivityFailureCategoryFilter(q *gorm.DB, category string) *gorm.DB {
+	switch category {
+	case "x_auth":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(8)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%",
+		)...)...)
+	case "rate_limit":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(4)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%rate limit%", "%too many requests%", "%429%", "%retry after%",
+		)...)...)
+	case "safety":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(7)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%",
+		)...)...)
+	case "configuration":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(8)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%",
+		)...)...)
+	case "network":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(6)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%",
+		)...)...)
+	case "system":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(7)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%",
+		)...)...)
+	case "unknown":
+		known := append([]any{"failed"}, activityErrorLikeArgs(
+			"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%",
+			"%rate limit%", "%too many requests%", "%429%", "%retry after%",
+			"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%",
+			"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%",
+			"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%",
+			"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%",
+		)...)
+		return q.Where("status = ? AND (TRIM(COALESCE(error_message, '')) = '' OR NOT ("+activityErrorLikeClause(len(known)-1)+"))", known...)
+	default:
+		return q
+	}
+}
+
+func activityErrorLikeClause(count int) string {
+	parts := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		parts = append(parts, "LOWER(COALESCE(error_message, '')) LIKE ?")
+	}
+	return strings.Join(parts, " OR ")
+}
+
+func activityErrorLikeArgs(patterns ...string) []any {
+	args := make([]any, 0, len(patterns))
+	for _, pattern := range patterns {
+		args = append(args, pattern)
+	}
+	return args
 }
 
 // CountExecutedBetween counts rows with executed_at in [from, to). Pass zero to from or to to leave that bound open.

@@ -33,6 +33,28 @@ function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
   return "";
 }
 
+function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureCategory.x_auth";
+  if (category === "rate_limit") return "activity.failureCategory.rate_limit";
+  if (category === "safety") return "activity.failureCategory.safety";
+  if (category === "configuration") return "activity.failureCategory.configuration";
+  if (category === "network") return "activity.failureCategory.network";
+  if (category === "system") return "activity.failureCategory.system";
+  if (category === "unknown") return "activity.failureCategory.unknown";
+  return "";
+}
+
+function failureCategoryAdviceKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureAdvice.x_auth";
+  if (category === "rate_limit") return "activity.failureAdvice.rate_limit";
+  if (category === "safety") return "activity.failureAdvice.safety";
+  if (category === "configuration") return "activity.failureAdvice.configuration";
+  if (category === "network") return "activity.failureAdvice.network";
+  if (category === "system") return "activity.failureAdvice.system";
+  if (category === "unknown") return "activity.failureAdvice.unknown";
+  return "";
+}
+
 function relativeTime(iso: string, t: (key: string, params?: Record<string, string | number>) => string) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -78,6 +100,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
               {record.sourceModule ? <Badge variant="info">{t(sourceModuleLabelKey(record.sourceModule))}</Badge> : null}
+              {record.failureCategory ? <Badge variant="danger">{t(failureCategoryLabelKey(record.failureCategory))}</Badge> : null}
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
               <span className="text-xs text-[#71767b]">{relativeTime(record.executedAt, t)}</span>
             </div>
@@ -127,6 +150,9 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             {record.sourceModule ? (
               <DetailField label={t("activity.detail.fields.sourceModule")} value={t(sourceModuleLabelKey(record.sourceModule))} />
             ) : null}
+            {record.failureCategory ? (
+              <DetailField label={t("activity.detail.fields.failureCategory")} value={t(failureCategoryLabelKey(record.failureCategory))} />
+            ) : null}
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
             <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
             <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />
@@ -148,6 +174,11 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
                 </Button>
               </div>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#ffdadd]">{record.errorMessage}</p>
+              {record.failureCategory ? (
+                <p className="mt-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs leading-5 text-[#ffdadd]">
+                  {t(failureCategoryAdviceKey(record.failureCategory))}
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-[#71767b]">

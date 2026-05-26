@@ -72,8 +72,12 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	if len([]rune(errorReason)) > 512 {
 		return nil, errors.New("invalid error reason")
 	}
+	failureCategory := strings.TrimSpace(strings.ToLower(query.FailureCategory))
+	if failureCategory != "" && !isValidActivityFailureCategory(failureCategory) {
+		return nil, errors.New("invalid activity failure category")
+	}
 
-	items, total, err := s.repo.List(userID, page, pageSize, typ, eventScope, status, from, to, accountID, accountHandle, errorReason)
+	items, total, err := s.repo.List(userID, page, pageSize, typ, eventScope, status, from, to, accountID, accountHandle, errorReason, failureCategory)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +95,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 			SourceModule:        sourceModule,
 			ExecutedAt:          item.ExecutedAt.UTC().Format(time.RFC3339),
 			ErrorMessage:        item.ErrorMessage,
+			FailureCategory:     classifyActivityFailure(item.Status, item.ErrorMessage),
 			ReplyCommentTweetID: item.ReplyCommentTweetID,
 			ReplyToUsername:     item.ReplyToUsername,
 			ReplyToTextPreview:  item.ReplyToTextPreview,

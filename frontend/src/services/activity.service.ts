@@ -16,6 +16,7 @@ export type ActivityItemApi = {
   source_module?: "post" | "reply" | "dm" | "comment";
   executed_at: string;
   error_message?: string;
+  failure_category?: "x_auth" | "rate_limit" | "safety" | "configuration" | "network" | "system" | "unknown";
   reply_comment_tweet_id?: string;
   reply_to_username?: string;
   reply_to_text_preview?: string;
@@ -40,6 +41,7 @@ export type ActivityListQuery = {
   range?: "24h" | "7d" | "30d";
   account_id?: number;
   error_reason?: string;
+  failure_category?: "x_auth" | "rate_limit" | "safety" | "configuration" | "network" | "system" | "unknown";
 };
 
 export const activityService = {

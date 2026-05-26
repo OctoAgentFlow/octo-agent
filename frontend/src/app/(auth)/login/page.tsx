@@ -11,12 +11,13 @@ import { isAdminFrontend } from "@/lib/frontend-role";
 function LoginPageContent() {
   const searchParams = useSearchParams();
   const next = resolveNextPath(searchParams.get("next"), isAdminFrontend() ? "/admin" : "/dashboard");
+  const inviteCode = (searchParams.get("ref") || "").trim().toUpperCase();
 
   return (
     <AuthGate mode="guest" redirectTo={next}>
       <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 px-6 py-10 md:grid-cols-2 md:px-8">
         <BrandPanel />
-        <AuthCard nextPath={next} adminMode={isAdminFrontend()} />
+        <AuthCard nextPath={next} adminMode={isAdminFrontend()} inviteCode={inviteCode} />
       </div>
     </AuthGate>
   );

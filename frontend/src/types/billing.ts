@@ -118,6 +118,8 @@ export type PaymentRecord = {
   amount: string;
   originalAmount: string;
   creditAmount: string;
+  pointDiscountAmount: string;
+  pointsUsed: number;
   payableAmount: string;
   orderType: string;
   currency: string;

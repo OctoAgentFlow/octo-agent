@@ -6,6 +6,7 @@ import {
   BadgeDollarSign,
   BarChart3,
   Bot,
+  Coins,
   FileText,
   LayoutDashboard,
   ListChecks,
@@ -22,6 +23,7 @@ import { isAdminFrontend } from "@/lib/frontend-role";
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+  { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
   { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
   { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },

@@ -189,6 +189,7 @@ export default function AutoCommentsPage() {
   };
 
   const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
+  const hasTargetInput = Boolean(tweetURL.trim() && authorHandle.trim() && targetText.trim());
 
   const selectExecutionMode = async (mode: ExecutionMode) => {
     if (mode === "autopilot" && !autopilotAvailable) return;
@@ -237,14 +238,24 @@ export default function AutoCommentsPage() {
       ) : null}
 
       {loadState === "ready" ? (
-        <AutomationPipelineSummary
-          baseKey="autoComment"
-          inputValue={targetText.trim() ? formatHandle(authorHandle) : t("autoComment.pipeline.inputValue", { count: targets.length })}
-          queueCount={queuedDraftCount}
-          publishReadyCount={publishReadyCount}
-          executionMode={executionMode}
-          queueHref="/execution-queue?type=comment"
-        />
+        <>
+          <AutomationSetupGuide
+            baseKey="autoComment"
+            hasAccount={Boolean(selectedAccount)}
+            hasTargetInput={hasTargetInput}
+            autopilotAvailable={autopilotAvailable}
+            executionMode={executionMode}
+            queueHref="/execution-queue?type=comment"
+          />
+          <AutomationPipelineSummary
+            baseKey="autoComment"
+            inputValue={targetText.trim() ? formatHandle(authorHandle) : t("autoComment.pipeline.inputValue", { count: targets.length })}
+            queueCount={queuedDraftCount}
+            publishReadyCount={publishReadyCount}
+            executionMode={executionMode}
+            queueHref="/execution-queue?type=comment"
+          />
+        </>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
@@ -500,6 +511,77 @@ export default function AutoCommentsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+function AutomationSetupGuide({
+  baseKey,
+  hasAccount,
+  hasTargetInput,
+  autopilotAvailable,
+  executionMode,
+  queueHref,
+}: {
+  baseKey: "autoComment";
+  hasAccount: boolean;
+  hasTargetInput: boolean;
+  autopilotAvailable: boolean;
+  executionMode: ExecutionMode;
+  queueHref: string;
+}) {
+  const { t } = useT();
+  const autopilotReady = executionMode === "autopilot" && autopilotAvailable;
+  const checks = [
+    {
+      done: hasAccount,
+      title: t(`${baseKey}.setup.account.title`),
+      description: t(`${baseKey}.setup.account.description`),
+    },
+    {
+      done: hasTargetInput,
+      title: t(`${baseKey}.setup.target.title`),
+      description: t(`${baseKey}.setup.target.description`),
+    },
+    {
+      done: autopilotReady,
+      title: t(`${baseKey}.setup.mode.title`),
+      description: t(`${baseKey}.setup.mode.description`),
+    },
+    {
+      done: true,
+      title: t(`${baseKey}.setup.queue.title`),
+      description: t(`${baseKey}.setup.queue.description`),
+    },
+  ];
+  const missingCount = checks.filter((item) => !item.done).length;
+
+  return (
+    <Card className={missingCount === 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{missingCount === 0 ? t(`${baseKey}.setup.readyTitle`) : t(`${baseKey}.setup.title`)}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{missingCount === 0 ? t(`${baseKey}.setup.readyDescription`) : t(`${baseKey}.setup.description`)}</p>
+        </div>
+        <Link href={queueHref} className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-white hover:bg-[#16181c]">
+          {t(`${baseKey}.pipeline.openQueue`)}
+        </Link>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {checks.map((item) => (
+          <div key={item.title} className="rounded-xl border border-[#2f3336] bg-black p-3">
+            <div className="flex items-start gap-3">
+              <span className={`mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border ${item.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
+                {item.done ? <CheckCircle2 className="size-4" /> : <span className="size-2 rounded-full bg-current" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

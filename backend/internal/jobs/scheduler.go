@@ -23,6 +23,7 @@ func Start(
 	autoPost *service.AutoPostService,
 	publishing *service.PublishingService,
 	billing *service.BillingService,
+	pointRepo *repository.PointRepository,
 ) {
 	go func() {
 		defer func() {
@@ -42,6 +43,8 @@ func Start(
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		var lastBillingScan time.Time
+		var lastPointExpiry time.Time
+		var lastGrossMarginCheck time.Time
 		runEmail := func() {
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
@@ -70,6 +73,35 @@ func Start(
 			lastBillingScan = time.Now()
 			RunBillingScannerOnce(context.Background(), billing)
 		}
+		runPointExpiry := func() {
+			if pointRepo == nil {
+				return
+			}
+			if !lastPointExpiry.IsZero() && time.Since(lastPointExpiry) < time.Hour {
+				return
+			}
+			lastPointExpiry = time.Now()
+			RunPointExpiryOnce(context.Background(), pointRepo)
+		}
+		runGrossMarginCheck := func() {
+			if billing == nil {
+				return
+			}
+			settings, err := billing.GrossMarginAlertSettings()
+			if err != nil {
+				zap.L().Error("load gross margin alert settings failed", zap.Error(err))
+				settings.CheckIntervalHours = 24
+			}
+			interval := time.Duration(settings.CheckIntervalHours) * time.Hour
+			if interval <= 0 {
+				interval = 24 * time.Hour
+			}
+			if !lastGrossMarginCheck.IsZero() && time.Since(lastGrossMarginCheck) < interval {
+				return
+			}
+			lastGrossMarginCheck = time.Now()
+			RunGrossMarginAlertOnce(context.Background(), billing)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
@@ -78,6 +110,8 @@ func Start(
 		RunAutoPostOnce(context.Background(), autoPost)
 		RunPublishingOnce(context.Background(), publishing)
 		runBillingScanner()
+		runPointExpiry()
+		runGrossMarginCheck()
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
@@ -87,6 +121,8 @@ func Start(
 			RunAutoPostOnce(context.Background(), autoPost)
 			RunPublishingOnce(context.Background(), publishing)
 			runBillingScanner()
+			runPointExpiry()
+			runGrossMarginCheck()
 		}
 	}()
 }

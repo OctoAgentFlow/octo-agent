@@ -629,7 +629,8 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		}
 	}
 	user.WriteString("Hard rules:\n")
-	user.WriteString("- Maximum 260 characters.\n")
+	user.WriteString("- Target 180-220 characters; never write close to the X 280-character limit.\n")
+	user.WriteString("- Use at most 2 hashtags, and only when they fit naturally.\n")
 	user.WriteString("- Make it useful and specific, not hype.\n")
 	user.WriteString("- Do not mention that you are AI.\n")
 	user.WriteString("- Do not mention the bot name in generated content unless the user explicitly instructed it in identity_summary, voice_tone, or growth_goal.\n")
@@ -644,7 +645,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	if err != nil {
 		return AIGeneratedText{}, err
 	}
-	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 260), Usage: result.Usage}, nil
+	return AIGeneratedText{Text: fitGeneratedTweet(strings.TrimSpace(result.Text), 240), Usage: result.Usage}, nil
 }
 
 type oafBotStrategyContext struct {
@@ -906,4 +907,27 @@ func truncateRunes(s string, max int) string {
 		return strings.TrimSpace(s)
 	}
 	return string(r[:max])
+}
+
+func fitGeneratedTweet(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	text := strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	cut := string(runes[:max])
+	if idx := strings.LastIndexAny(cut, " \n\t"); idx > max/2 {
+		cut = cut[:idx]
+	}
+	cut = strings.TrimSpace(cut)
+	parts := strings.Fields(cut)
+	if len(parts) > 0 && strings.HasPrefix(parts[len(parts)-1], "#") {
+		parts = parts[:len(parts)-1]
+		cut = strings.Join(parts, " ")
+	}
+	cut = strings.TrimRight(cut, "#,;:，；：.!?。！？-— ")
+	return cut
 }

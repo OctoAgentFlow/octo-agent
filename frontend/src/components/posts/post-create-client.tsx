@@ -9,7 +9,7 @@ import { AlertCircle, Bot, CalendarClock, FileText, Send, ShieldCheck, Sparkles,
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
-import { ScheduledDateTimePicker } from "@/components/posts/scheduled-date-time-picker";
+import { defaultScheduledPostTimezone, ScheduledDateTimePicker, zonedDateTimeValueToISO } from "@/components/posts/scheduled-date-time-picker";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
@@ -20,11 +20,9 @@ import { postService } from "@/services/post.service";
 import type { OAFBot } from "@/types/oaf-bot";
 import type { PostStatus } from "@/types/post";
 
-function localDatetimeToISO(local: string): string | undefined {
+function scheduledDatetimeToISO(local: string, timeZone: string): string | undefined {
   if (!local.trim()) return undefined;
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d.toISOString();
+  return zonedDateTimeValueToISO(local, timeZone);
 }
 
 type PostCreateClientProps = {
@@ -52,6 +50,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
   const [content, setContent] = useState("");
   const [status, setStatus] = useState<PostStatus>("draft");
   const [scheduledLocal, setScheduledLocal] = useState("");
+  const [scheduledTimeZone, setScheduledTimeZone] = useState(defaultScheduledPostTimezone());
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
   const [generating, setGenerating] = useState(false);
   const selectedBot = bots.find((bot) => bot.twitter_account_id === xAccountId) ?? null;
@@ -103,7 +102,7 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
       status,
     };
     if (status === "scheduled") {
-      const iso = localDatetimeToISO(scheduledLocal);
+      const iso = scheduledDatetimeToISO(scheduledLocal, scheduledTimeZone);
       if (!iso) {
         pushToast(t("posts.create.scheduledRequired"));
         return;
@@ -324,6 +323,8 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
                     className="mt-1"
                     value={scheduledLocal}
                     onChange={setScheduledLocal}
+                    timeZone={scheduledTimeZone}
+                    onTimeZoneChange={setScheduledTimeZone}
                   />
                   {!autoPostEnabled ? (
                     <span className="mt-2 flex items-center gap-1 text-xs text-[#f6d96b]">

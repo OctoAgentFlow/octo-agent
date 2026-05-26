@@ -164,6 +164,13 @@ export default function AutoDMsPage() {
         </Card>
       ) : (
         <>
+          <AutoDMSetupGuide
+            hasRecipients={dmRecipients.length > 0}
+            hasReviewTasks={dmTasks.length > 0}
+            allowlistedCount={allowlistedCount}
+            riskCount={riskCount}
+          />
+
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { icon: Inbox, label: t("autoDm.stats.review"), value: reviewCount, tone: "text-[#f6d96b]" },
@@ -341,5 +348,71 @@ export default function AutoDMsPage() {
         </>
       )}
     </div>
+  );
+}
+
+function AutoDMSetupGuide({
+  hasRecipients,
+  hasReviewTasks,
+  allowlistedCount,
+  riskCount,
+}: {
+  hasRecipients: boolean;
+  hasReviewTasks: boolean;
+  allowlistedCount: number;
+  riskCount: number;
+}) {
+  const { t } = useT();
+  const checks = [
+    {
+      done: hasRecipients,
+      title: t("autoDm.setup.recipients.title"),
+      description: t("autoDm.setup.recipients.description"),
+      icon: Upload,
+    },
+    {
+      done: hasReviewTasks,
+      title: t("autoDm.setup.review.title"),
+      description: t("autoDm.setup.review.description"),
+      icon: Inbox,
+    },
+    {
+      done: allowlistedCount > 0,
+      title: t("autoDm.setup.rules.title"),
+      description: t("autoDm.setup.rules.description", { count: allowlistedCount }),
+      icon: UserCheck,
+    },
+    {
+      done: riskCount === 0,
+      title: t("autoDm.setup.risk.title"),
+      description: t("autoDm.setup.risk.description", { count: riskCount }),
+      icon: ShieldCheck,
+    },
+  ];
+  const missingCount = checks.filter((item) => !item.done).length;
+
+  return (
+    <Card className={missingCount === 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
+      <p className="text-sm font-semibold text-[#e7e9ea]">{missingCount === 0 ? t("autoDm.setup.readyTitle") : t("autoDm.setup.title")}</p>
+      <p className="mt-1 text-sm leading-6 text-[#71767b]">{missingCount === 0 ? t("autoDm.setup.readyDescription") : t("autoDm.setup.description")}</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {checks.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.title} className="rounded-xl border border-[#2f3336] bg-black p-3">
+              <div className="flex items-start gap-3">
+                <span className={`mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border ${item.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
+                  {item.done ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

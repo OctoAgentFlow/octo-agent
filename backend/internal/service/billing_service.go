@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"octo-agent/backend/internal/alert"
 	"octo-agent/backend/internal/billingevm"
 	"octo-agent/backend/internal/billingtron"
 	"octo-agent/backend/internal/config"
@@ -26,12 +27,14 @@ import (
 )
 
 type BillingService struct {
-	userRepo    *repository.UserRepository
-	orderRepo   *repository.BillingOrderRepository
-	accountRepo *repository.TwitterAccountRepository
-	oafBotRepo  *repository.OAFBotRepository
-	usageRepo   *repository.AIGenerationUsageRepository
-	cfg         *config.Config
+	userRepo        *repository.UserRepository
+	orderRepo       *repository.BillingOrderRepository
+	pointRepo       *repository.PointRepository
+	referralService *ReferralService
+	accountRepo     *repository.TwitterAccountRepository
+	oafBotRepo      *repository.OAFBotRepository
+	usageRepo       *repository.AIGenerationUsageRepository
+	cfg             *config.Config
 }
 
 type BillingAutoConfirmStats struct {
@@ -40,6 +43,34 @@ type BillingAutoConfirmStats struct {
 	Confirmed     int
 	Skipped       int
 	Failed        int
+}
+
+type GrossMarginHealth struct {
+	PeriodStart         time.Time
+	PeriodEnd           time.Time
+	RevenueCents        int64
+	TotalCostCents      int64
+	GrossProfitCents    int64
+	GrossMarginBps      int64
+	TargetBps           int64
+	Status              string
+	OpenAICostCents     int64
+	XCostCents          int64
+	PointDiscountCents  int64
+	OpenAIQuantity      int64
+	XQuantity           int64
+	PointDiscountPoints int64
+	Config              GrossMarginAlertSettings
+	Reasons             []string
+}
+
+type GrossMarginAlertSettings struct {
+	Enabled                     bool
+	TargetMarginBps             int64
+	OpenAICostShareThresholdBps int64
+	XCostShareThresholdBps      int64
+	PointCostShareThresholdBps  int64
+	CheckIntervalHours          int
 }
 
 const (
@@ -92,10 +123,12 @@ type billingQuoteCalc struct {
 	currentCycle       string
 	currentPeriodStart time.Time
 	currentPeriodEnd   time.Time
+	pointsUsed         int64
+	pointDiscountCents int64
 }
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -194,6 +227,249 @@ func (s *BillingService) AutoConfirmInterval() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func (s *BillingService) GrossMarginHealth(now time.Time) (GrossMarginHealth, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+	settings, err := s.GrossMarginAlertSettings()
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	revenueCents, err := s.monthlyPaidRevenueCents(periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	openAICents, openAIQuantity, err := s.monthlyProviderCost("openai", periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	xCents, xQuantity, err := s.monthlyProviderCost("x", periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	pointDiscountPoints, err := s.monthlyPointDiscountPoints(periodStart, periodEnd)
+	if err != nil {
+		return GrossMarginHealth{}, err
+	}
+	pointDiscountCents := pointDiscountPoints * 10
+	totalCostCents := openAICents + xCents + pointDiscountCents
+	grossProfitCents := revenueCents - totalCostCents
+	grossMarginBps := int64(0)
+	if revenueCents > 0 {
+		grossMarginBps = grossProfitCents * 10000 / revenueCents
+	}
+	status := "no_revenue"
+	if revenueCents > 0 && grossMarginBps >= settings.TargetMarginBps {
+		status = "healthy"
+	} else if revenueCents > 0 {
+		status = "below_target"
+	}
+	health := GrossMarginHealth{
+		PeriodStart:         periodStart,
+		PeriodEnd:           periodEnd,
+		RevenueCents:        revenueCents,
+		TotalCostCents:      totalCostCents,
+		GrossProfitCents:    grossProfitCents,
+		GrossMarginBps:      grossMarginBps,
+		TargetBps:           settings.TargetMarginBps,
+		Status:              status,
+		OpenAICostCents:     openAICents,
+		XCostCents:          xCents,
+		PointDiscountCents:  pointDiscountCents,
+		OpenAIQuantity:      openAIQuantity,
+		XQuantity:           xQuantity,
+		PointDiscountPoints: pointDiscountPoints,
+		Config:              settings,
+	}
+	health.Reasons = grossMarginAlertReasons(health)
+	return health, nil
+}
+
+func (s *BillingService) GrossMarginAlertSettings() (GrossMarginAlertSettings, error) {
+	defaults := defaultGrossMarginAlertSettings()
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil {
+		return defaults, nil
+	}
+	var cfg model.GrossMarginAlertConfig
+	err := s.orderRepo.DB.Where("code = ?", "default").First(&cfg).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return defaults, nil
+	}
+	if err != nil {
+		return GrossMarginAlertSettings{}, err
+	}
+	out := GrossMarginAlertSettings{
+		Enabled:                     cfg.Enabled,
+		TargetMarginBps:             cfg.TargetMarginBps,
+		OpenAICostShareThresholdBps: cfg.OpenAICostShareThresholdBps,
+		XCostShareThresholdBps:      cfg.XCostShareThresholdBps,
+		PointCostShareThresholdBps:  cfg.PointCostShareThresholdBps,
+		CheckIntervalHours:          cfg.CheckIntervalHours,
+	}
+	return normalizeGrossMarginAlertSettings(out), nil
+}
+
+func defaultGrossMarginAlertSettings() GrossMarginAlertSettings {
+	return GrossMarginAlertSettings{
+		Enabled:                     true,
+		TargetMarginBps:             5000,
+		OpenAICostShareThresholdBps: 2000,
+		XCostShareThresholdBps:      2000,
+		PointCostShareThresholdBps:  2000,
+		CheckIntervalHours:          24,
+	}
+}
+
+func normalizeGrossMarginAlertSettings(settings GrossMarginAlertSettings) GrossMarginAlertSettings {
+	defaults := defaultGrossMarginAlertSettings()
+	if settings.TargetMarginBps <= 0 {
+		settings.TargetMarginBps = defaults.TargetMarginBps
+	}
+	if settings.OpenAICostShareThresholdBps <= 0 {
+		settings.OpenAICostShareThresholdBps = defaults.OpenAICostShareThresholdBps
+	}
+	if settings.XCostShareThresholdBps <= 0 {
+		settings.XCostShareThresholdBps = defaults.XCostShareThresholdBps
+	}
+	if settings.PointCostShareThresholdBps <= 0 {
+		settings.PointCostShareThresholdBps = defaults.PointCostShareThresholdBps
+	}
+	if settings.CheckIntervalHours <= 0 {
+		settings.CheckIntervalHours = defaults.CheckIntervalHours
+	}
+	return settings
+}
+
+func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.Time) error {
+	health, err := s.GrossMarginHealth(now)
+	if err != nil {
+		return err
+	}
+	if health.RevenueCents <= 0 {
+		return nil
+	}
+	if !health.Config.Enabled {
+		return nil
+	}
+	reasons := health.Reasons
+	if len(reasons) == 0 {
+		return nil
+	}
+	event, err := s.createGrossMarginAlertEvent(health, reasons)
+	if err != nil {
+		return err
+	}
+	notifyErr := alert.NotifySync(ctx, alert.Event{
+		Level:    alert.LevelWarning,
+		Category: alert.CategoryBilling,
+		Title:    "Gross margin risk detected",
+		Message:  "Monthly gross margin or cost share breached the configured billing threshold.",
+		Fields: map[string]any{
+			"period":                health.PeriodStart.Format("2006-01"),
+			"status":                health.Status,
+			"reasons":               strings.Join(reasons, ", "),
+			"revenue_usdt":          centsToAmountString(health.RevenueCents),
+			"total_cost_usdt":       centsToAmountString(health.TotalCostCents),
+			"gross_profit_usdt":     signedCentsToAmountString(health.GrossProfitCents),
+			"gross_margin":          formatBps(health.GrossMarginBps),
+			"target_margin":         formatBps(health.TargetBps),
+			"openai_cost_usdt":      centsToAmountString(health.OpenAICostCents),
+			"x_cost_usdt":           centsToAmountString(health.XCostCents),
+			"point_discount_usdt":   centsToAmountString(health.PointDiscountCents),
+			"openai_usage":          health.OpenAIQuantity,
+			"x_writes":              health.XQuantity,
+			"point_discount_points": health.PointDiscountPoints,
+		},
+	})
+	if event != nil {
+		status := "sent"
+		errMsg := ""
+		if notifyErr != nil {
+			status = "failed"
+			errMsg = truncateErrMsg(notifyErr.Error())
+		}
+		if err := s.orderRepo.DB.Model(&model.GrossMarginAlertEvent{}).Where("id = ?", event.ID).Updates(map[string]any{
+			"lark_status": status,
+			"lark_error":  errMsg,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return notifyErr
+}
+
+func (s *BillingService) createGrossMarginAlertEvent(health GrossMarginHealth, reasons []string) (*model.GrossMarginAlertEvent, error) {
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil {
+		return nil, nil
+	}
+	reasonJSON, _ := json.Marshal(reasons)
+	cfgJSON, _ := json.Marshal(health.Config)
+	row := &model.GrossMarginAlertEvent{
+		PeriodStart:        health.PeriodStart,
+		PeriodEnd:          health.PeriodEnd,
+		Level:              alert.LevelWarning,
+		Status:             "open",
+		Reasons:            string(reasonJSON),
+		RevenueCents:       health.RevenueCents,
+		TotalCostCents:     health.TotalCostCents,
+		GrossProfitCents:   health.GrossProfitCents,
+		GrossMarginBps:     health.GrossMarginBps,
+		TargetMarginBps:    health.TargetBps,
+		OpenAICostCents:    health.OpenAICostCents,
+		XCostCents:         health.XCostCents,
+		PointDiscountCents: health.PointDiscountCents,
+		LarkStatus:         "pending",
+		ConfigSnapshot:     string(cfgJSON),
+	}
+	if err := s.orderRepo.DB.Create(row).Error; err != nil {
+		return nil, err
+	}
+	return row, nil
+}
+
+func (s *BillingService) monthlyPaidRevenueCents(periodStart, periodEnd time.Time) (int64, error) {
+	var orders []model.BillingOrder
+	if err := s.orderRepo.DB.
+		Where("status = ? AND paid_at IS NOT NULL AND paid_at >= ? AND paid_at < ?", "paid", periodStart, periodEnd).
+		Find(&orders).Error; err != nil {
+		return 0, err
+	}
+	total := int64(0)
+	for _, order := range orders {
+		cents, err := referralAmountToCents(firstNonEmpty(order.PayableAmount, order.Amount))
+		if err != nil {
+			return 0, err
+		}
+		total += cents
+	}
+	return total, nil
+}
+
+func (s *BillingService) monthlyProviderCost(provider string, periodStart, periodEnd time.Time) (int64, int64, error) {
+	type rowData struct {
+		Cents    int64
+		Quantity int64
+	}
+	var row rowData
+	err := s.orderRepo.DB.Model(&model.CostUsageLedger{}).
+		Select("COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE estimated_cost_cents END), 0) AS cents, COALESCE(SUM(quantity), 0) AS quantity").
+		Where("provider = ? AND occurred_at >= ? AND occurred_at < ?", provider, periodStart, periodEnd).
+		Scan(&row).Error
+	return row.Cents, row.Quantity, err
+}
+
+func (s *BillingService) monthlyPointDiscountPoints(periodStart, periodEnd time.Time) (int64, error) {
+	var points int64
+	err := s.orderRepo.DB.Model(&model.PointLedgerEntry{}).
+		Select("COALESCE(SUM(points), 0)").
+		Where("created_at >= ? AND created_at < ? AND event_type = ?", periodStart, periodEnd, "consume").
+		Scan(&points).Error
+	return points, err
+}
+
 func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.BillingUpgradeQuote, error) {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
@@ -203,7 +479,84 @@ func (s *BillingService) Quote(userID uint, req dto.BillingQuoteRequest) (*dto.B
 	if err != nil {
 		return nil, err
 	}
+	if err := s.applyPointDiscount(userID, &quote, req.PointsToUse); err != nil {
+		return nil, err
+	}
 	return &quote.dto, nil
+}
+
+func (s *BillingService) applyPointDiscount(userID uint, quote *billingQuoteCalc, requestedPoints int64) error {
+	if quote == nil {
+		return nil
+	}
+	var balance int64
+	if s.pointRepo != nil {
+		account, err := s.pointRepo.Account(userID)
+		if err != nil {
+			return err
+		}
+		balance = account.Balance
+	}
+	maxByAmount := (quote.payableCents / 2) / 10
+	monthlyRemaining := balance
+	if s.pointRepo != nil {
+		limits, err := s.pointRepo.RiskLimits()
+		if err != nil {
+			return err
+		}
+		monthlyRemaining = 0
+		if !limits.Enabled || limits.MonthlyDiscountLimit <= 0 {
+			monthlyRemaining = balance
+		} else {
+			monthlyRemaining = limits.MonthlyDiscountLimit
+		}
+		now := time.Now().UTC()
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		usedThisMonth, err := s.pointRepo.DiscountPointsInPeriod(userID, monthStart, monthStart.AddDate(0, 1, 0))
+		if err != nil {
+			return err
+		}
+		monthlyRemaining -= usedThisMonth
+		if monthlyRemaining < 0 {
+			monthlyRemaining = 0
+		}
+		if limits.Enabled && requestedPoints > monthlyRemaining && limits.MonthlyDiscountLimit > 0 {
+			alert.Notify(context.Background(), alert.Event{
+				Level:    alert.LevelWarning,
+				Category: alert.CategoryBilling,
+				Title:    "Point discount risk limit hit",
+				Message:  "A user attempted to use points beyond the configured monthly discount limit.",
+				UserID:   userID,
+				Fields: map[string]any{
+					"requested_points": requestedPoints,
+					"used_this_month":  usedThisMonth,
+					"monthly_limit":    limits.MonthlyDiscountLimit,
+					"remaining":        monthlyRemaining,
+				},
+			})
+		}
+	}
+	maxPoints := minInt64(balance, minInt64(maxByAmount, monthlyRemaining))
+	if requestedPoints < 0 {
+		requestedPoints = 0
+	}
+	pointsUsed := minInt64(requestedPoints, maxPoints)
+	discountCents := pointsUsed * 10
+	if discountCents > quote.payableCents {
+		discountCents = quote.payableCents
+	}
+	quote.pointsUsed = pointsUsed
+	quote.pointDiscountCents = discountCents
+	quote.payableCents -= discountCents
+	if quote.payableCents < 0 {
+		quote.payableCents = 0
+	}
+	quote.dto.PointBalance = balance
+	quote.dto.MaxPointsUsable = maxPoints
+	quote.dto.PointsUsed = pointsUsed
+	quote.dto.PointDiscountAmount = centsToAmountString(discountCents)
+	quote.dto.PayableAmount = centsToAmountString(quote.payableCents)
+	return nil
 }
 
 func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
@@ -243,6 +596,7 @@ func calculateBillingQuote(user *model.User, targetPlanCode, targetBillingCycle 
 		TargetBillingCycle:  targetCycle,
 		OriginalAmount:      centsToAmountString(originalCents),
 		CreditAmount:        "0",
+		PointDiscountAmount: "0",
 		PayableAmount:       centsToAmountString(originalCents),
 		Currency:            targetPlan.Currency,
 		OrderType:           "new",
@@ -370,6 +724,49 @@ func centsToAmountString(cents int64) string {
 	return fmt.Sprintf("%d.%02d", whole, frac)
 }
 
+func signedCentsToAmountString(cents int64) string {
+	if cents < 0 {
+		return "-" + centsToAmountString(-cents)
+	}
+	return centsToAmountString(cents)
+}
+
+func formatBps(bps int64) string {
+	return fmt.Sprintf("%.2f%%", float64(bps)/100)
+}
+
+func grossMarginAlertReasons(health GrossMarginHealth) []string {
+	settings := normalizeGrossMarginAlertSettings(health.Config)
+	reasons := make([]string, 0, 4)
+	if health.RevenueCents <= 0 {
+		return reasons
+	}
+	targetBps := health.TargetBps
+	if targetBps <= 0 {
+		targetBps = settings.TargetMarginBps
+	}
+	if health.GrossMarginBps < targetBps {
+		reasons = append(reasons, "gross_margin_below_50_percent")
+	}
+	if health.OpenAICostCents*10000/health.RevenueCents >= settings.OpenAICostShareThresholdBps {
+		reasons = append(reasons, "openai_cost_share_at_or_above_20_percent")
+	}
+	if health.XCostCents*10000/health.RevenueCents >= settings.XCostShareThresholdBps {
+		reasons = append(reasons, "x_cost_share_at_or_above_20_percent")
+	}
+	if health.PointDiscountCents*10000/health.RevenueCents >= settings.PointCostShareThresholdBps {
+		reasons = append(reasons, "point_discount_share_at_or_above_20_percent")
+	}
+	return reasons
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func amountStringFromMinUnits(units *big.Int, decimals int) string {
 	if units == nil || units.Sign() <= 0 {
 		return "0"
@@ -453,6 +850,8 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 		"target_billing_cycle":  q.dto.TargetBillingCycle,
 		"original_amount":       q.dto.OriginalAmount,
 		"credit_amount":         q.dto.CreditAmount,
+		"point_discount_amount": q.dto.PointDiscountAmount,
+		"points_used":           q.dto.PointsUsed,
 		"payable_amount":        q.dto.PayableAmount,
 		"order_type":            q.dto.OrderType,
 		"is_upgrade":            q.dto.IsUpgrade,
@@ -471,13 +870,14 @@ func billingProrationSnapshot(q billingQuoteCalc) string {
 	return string(b)
 }
 
-func billingOrderFingerprint(planCode, cycle, method, network, amount string) string {
+func billingOrderFingerprint(planCode, cycle, method, network, amount string, pointsUsed int64) string {
 	parts := []string{
 		subscription.NormalizePlanCode(planCode),
 		subscription.NormalizeBillingCycle(cycle),
 		strings.ToUpper(strings.TrimSpace(method)),
 		strings.ToUpper(strings.TrimSpace(network)),
 		strings.TrimSpace(amount),
+		strconv.FormatInt(pointsUsed, 10),
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return fmt.Sprintf("%x", sum[:])
@@ -510,6 +910,9 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if err != nil {
 		return nil, err
 	}
+	if err := s.applyPointDiscount(userID, &quote, req.PointsToUse); err != nil {
+		return nil, err
+	}
 	plan := quote.targetPlan
 	cycle := quote.targetCycle
 	if !strings.EqualFold(strings.TrimSpace(req.Method), "USDT") {
@@ -529,7 +932,7 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if idempotencyScope != "" {
 		idempotencyScopePtr = &idempotencyScope
 	}
-	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount)
+	baseFingerprint := billingOrderFingerprint(plan.Code, cycle, req.Method, pm.Network, basePayableAmount, quote.pointsUsed)
 	if idempotencyKey != "" {
 		if existing, err := s.orderRepo.GetReusableIdempotentOrder(userID, idempotencyKey, now); err == nil {
 			if existing.RequestFingerprint != "" && existing.RequestFingerprint != baseFingerprint {
@@ -559,6 +962,8 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 		Amount:               exactPayableAmount,
 		OriginalAmount:       centsToAmountString(quote.originalCents),
 		CreditAmount:         centsToAmountString(quote.creditCents),
+		PointDiscountAmount:  centsToAmountString(quote.pointDiscountCents),
+		PointsUsed:           quote.pointsUsed,
 		PayableAmount:        exactPayableAmount,
 		OrderType:            quote.dto.OrderType,
 		IdempotencyKey:       idempotencyKey,
@@ -585,6 +990,11 @@ func (s *BillingService) CreateOrder(userID uint, req dto.BillingCreateOrderRequ
 	if err := s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
 		if err := s.orderRepo.CreateInTx(tx, o); err != nil {
 			return err
+		}
+		if s.pointRepo != nil && o.PointsUsed > 0 {
+			if err := s.pointRepo.FreezeForOrder(tx, userID, o.ID, o.PointsUsed, billingLedgerDetails(o)); err != nil {
+				return err
+			}
 		}
 		return s.orderRepo.CreateLedgerEntry(tx, &model.BillingLedgerEntry{
 			UserID:         userID,
@@ -630,18 +1040,20 @@ func billingLedgerDetails(o *model.BillingOrder) string {
 		return ""
 	}
 	payload := map[string]any{
-		"plan_code":           o.PlanCode,
-		"billing_cycle":       o.BillingCycle,
-		"order_type":          o.OrderType,
-		"method":              o.Method,
-		"network":             o.Network,
-		"chain_id":            o.ChainID,
-		"token_address":       o.TokenAddress,
-		"receiver_address":    o.ReceiverAddress,
-		"original_amount":     o.OriginalAmount,
-		"credit_amount":       o.CreditAmount,
-		"payable_amount":      o.PayableAmount,
-		"request_fingerprint": o.RequestFingerprint,
+		"plan_code":             o.PlanCode,
+		"billing_cycle":         o.BillingCycle,
+		"order_type":            o.OrderType,
+		"method":                o.Method,
+		"network":               o.Network,
+		"chain_id":              o.ChainID,
+		"token_address":         o.TokenAddress,
+		"receiver_address":      o.ReceiverAddress,
+		"original_amount":       o.OriginalAmount,
+		"credit_amount":         o.CreditAmount,
+		"point_discount_amount": o.PointDiscountAmount,
+		"points_used":           o.PointsUsed,
+		"payable_amount":        o.PayableAmount,
+		"request_fingerprint":   o.RequestFingerprint,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -655,6 +1067,11 @@ func (s *BillingService) GetOrder(userID, orderID uint) (*dto.BillingOrderDetail
 	now := time.Now().UTC()
 	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, now); err != nil {
 		return nil, err
+	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(userID, orderID); err != nil {
+			return nil, err
+		}
 	}
 	o, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
@@ -687,6 +1104,15 @@ func (s *BillingService) ListOrders(userID uint, req dto.BillingOrderListQuery) 
 		}
 	} else if err := s.orderRepo.ExpireStaleByUser(userID, now); err != nil {
 		return nil, err
+	}
+	if s.pointRepo != nil {
+		if allUsers {
+			if err := s.pointRepo.ReleaseExpiredOrderPoints(0); err != nil {
+				return nil, err
+			}
+		} else if err := s.pointRepo.ReleaseExpiredOrderPoints(userID); err != nil {
+			return nil, err
+		}
 	}
 	orders, total, err := s.orderRepo.List(userID, repository.BillingOrderListQuery{
 		Status:               req.Status,
@@ -732,6 +1158,8 @@ func orderToDetailDTO(o *model.BillingOrder) *dto.BillingOrderDetailResponse {
 		Amount:               o.Amount,
 		OriginalAmount:       o.OriginalAmount,
 		CreditAmount:         o.CreditAmount,
+		PointDiscountAmount:  o.PointDiscountAmount,
+		PointsUsed:           o.PointsUsed,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		IdempotencyKey:       o.IdempotencyKey,
@@ -777,6 +1205,8 @@ func orderToListItemDTO(o *model.BillingOrder) dto.BillingOrderListItem {
 		Amount:               o.Amount,
 		OriginalAmount:       o.OriginalAmount,
 		CreditAmount:         o.CreditAmount,
+		PointDiscountAmount:  o.PointDiscountAmount,
+		PointsUsed:           o.PointsUsed,
 		PayableAmount:        firstNonEmpty(o.PayableAmount, o.Amount),
 		OrderType:            firstNonEmpty(o.OrderType, "new"),
 		IdempotencyKey:       o.IdempotencyKey,
@@ -894,6 +1324,11 @@ func (s *BillingService) ConfirmOrderTx(userID, orderID uint, req dto.BillingCon
 	if err := s.orderRepo.ExpireStaleByUserAndID(userID, orderID, time.Now().UTC()); err != nil {
 		return nil, err
 	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(userID, orderID); err != nil {
+			return nil, err
+		}
+	}
 	order, err := s.orderRepo.GetByUserAndID(userID, orderID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1006,6 +1441,11 @@ func (s *BillingService) WebhookOnchain(webhookSecretHeader string, req dto.Bill
 
 	if err := s.orderRepo.ExpireStaleByID(uint(orderID), time.Now().UTC()); err != nil {
 		return err
+	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPointsByID(0, uint(orderID)); err != nil {
+			return err
+		}
 	}
 	order, err := s.orderRepo.GetByID(uint(orderID))
 	if err != nil {
@@ -1149,6 +1589,11 @@ func (s *BillingService) AutoConfirmPendingOrders(ctx context.Context) (BillingA
 	if err := s.orderRepo.ExpireStale(now); err != nil {
 		return stats, err
 	}
+	if s.pointRepo != nil {
+		if err := s.pointRepo.ReleaseExpiredOrderPoints(0); err != nil {
+			return stats, err
+		}
+	}
 	return stats, nil
 }
 
@@ -1248,6 +1693,9 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 	}
 	if now.After(order.ExpiredAt) && !opts.AllowExpired {
 		_ = s.orderRepo.ExpireStaleByID(order.ID, now)
+		if s.pointRepo != nil {
+			_ = s.pointRepo.ReleaseExpiredOrderPointsByID(0, order.ID)
+		}
 		return ErrBillingOrderExpired
 	}
 	if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, *order) {
@@ -1302,7 +1750,7 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 		return fmt.Errorf("transfer verification failed: %w", verifyErr)
 	}
 
-	return s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
+	err = s.orderRepo.DB.Transaction(func(tx *gorm.DB) error {
 		var ord model.BillingOrder
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&ord, order.ID).Error; err != nil {
 			return err
@@ -1323,6 +1771,9 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 				"review_status":         billingReviewNeeded,
 				"ops_note":              "Order expired before payment confirmation.",
 			})
+			if s.pointRepo != nil && ord.PointsUsed > 0 {
+				_ = s.pointRepo.ReleaseFrozenForOrder(tx, ord.UserID, ord.ID, ord.PointsUsed, billingLedgerDetails(&ord))
+			}
 			return ErrBillingOrderExpired
 		}
 		if opts.AllowExpired && !opts.PaidAt.IsZero() && !billingTransferWithinOrderWindow(opts.PaidAt, ord) {
@@ -1403,6 +1854,11 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 		}); err != nil {
 			return err
 		}
+		if s.pointRepo != nil && ord.PointsUsed > 0 {
+			if err := s.pointRepo.ConsumeFrozenForOrder(tx, ord.UserID, ord.ID, ord.PointsUsed, billingLedgerDetails(&ord)); err != nil {
+				return err
+			}
+		}
 		if err := s.orderRepo.CreateSubscriptionChange(tx, &model.SubscriptionChangeEvent{
 			UserID:           ord.UserID,
 			OrderID:          ord.ID,
@@ -1440,6 +1896,15 @@ func (s *BillingService) confirmOnchainOrderWithOptions(order *model.BillingOrde
 			"subscription_expires_at":    expires,
 		}).Error
 	})
+	if err != nil {
+		return err
+	}
+	if s.referralService != nil {
+		if err := s.referralService.RewardFirstPurchase(order.UserID, order.ID, firstNonEmpty(order.PayableAmount, order.Amount)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func billingNextSubscriptionExpiry(tx *gorm.DB, ord model.BillingOrder, paidAt time.Time, cycle string) time.Time {

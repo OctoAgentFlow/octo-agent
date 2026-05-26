@@ -9,7 +9,7 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
-import { ScheduledDateTimePicker, isoToLocalDateTimeValue } from "@/components/posts/scheduled-date-time-picker";
+import { defaultScheduledPostTimezone, isoToZonedDateTimeValue, ScheduledDateTimePicker, zonedDateTimeValueToISO } from "@/components/posts/scheduled-date-time-picker";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { postService } from "@/services/post.service";
@@ -17,11 +17,9 @@ import type { PostItem, PostStatus } from "@/types/post";
 
 type LoadState = "loading" | "ready" | "error";
 
-function localDatetimeToISO(local: string): string | null {
+function scheduledDatetimeToISO(local: string, timeZone: string): string | null {
   if (!local.trim()) return null;
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+  return zonedDateTimeValueToISO(local, timeZone) || null;
 }
 
 export function PostDetailClient({ postId }: { postId: number }) {
@@ -34,6 +32,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
   const [content, setContent] = useState("");
   const [status, setStatus] = useState<PostStatus>("draft");
   const [scheduledLocal, setScheduledLocal] = useState("");
+  const [scheduledTimeZone, setScheduledTimeZone] = useState(defaultScheduledPostTimezone());
   const [saving, setSaving] = useState(false);
   const [executing, setExecuting] = useState(false);
 
@@ -45,7 +44,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setPost(p);
       setContent(p.content);
       setStatus(p.status);
-      setScheduledLocal(isoToLocalDateTimeValue(p.scheduled_at));
+      setScheduledLocal(isoToZonedDateTimeValue(p.scheduled_at, scheduledTimeZone));
       setLoadState("ready");
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -75,7 +74,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
         status,
       };
       if (status === "scheduled") {
-        const iso = localDatetimeToISO(scheduledLocal);
+        const iso = scheduledDatetimeToISO(scheduledLocal, scheduledTimeZone);
         if (!iso) {
           pushToast(t("posts.create.scheduledRequired"));
           setSaving(false);
@@ -112,7 +111,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setPost(result.post);
       setStatus(result.post.status);
       setContent(result.post.content);
-      setScheduledLocal(isoToLocalDateTimeValue(result.post.scheduled_at));
+      setScheduledLocal(isoToZonedDateTimeValue(result.post.scheduled_at, scheduledTimeZone));
       pushToast(t("posts.detail.executeSuccess"));
     } catch (error) {
       const msg = axios.isAxiosError(error)
@@ -236,6 +235,13 @@ export function PostDetailClient({ postId }: { postId: number }) {
                     className="mt-1"
                     value={scheduledLocal}
                     onChange={setScheduledLocal}
+                    timeZone={scheduledTimeZone}
+                    onTimeZoneChange={(nextZone) => {
+                      setScheduledTimeZone(nextZone);
+                      if (post.scheduled_at) {
+                        setScheduledLocal(isoToZonedDateTimeValue(post.scheduled_at, nextZone));
+                      }
+                    }}
                     disabled={post.status === "processing"}
                   />
               </label>

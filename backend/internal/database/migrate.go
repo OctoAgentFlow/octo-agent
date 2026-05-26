@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,19 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.EmailVerificationCode{},
 		&model.WalletChallenge{},
 		&model.UserWallet{},
+		&model.UserPointAccount{},
+		&model.PointActivity{},
+		&model.PointRiskConfig{},
+		&model.GrossMarginAlertConfig{},
+		&model.GrossMarginAlertEvent{},
+		&model.PointGrant{},
+		&model.PointRedemptionCode{},
+		&model.PointRedemptionClaim{},
+		&model.PointLedgerEntry{},
+		&model.PointActivityClaim{},
 		&model.TwitterAccount{},
+		&model.ReferralInvite{},
+		&model.ReferralRecord{},
 		&model.AutomationConfig{},
 		&model.ActivityLog{},
 		&model.ReplyReservation{},
@@ -54,7 +67,124 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
 		return err
 	}
+	if err := SeedDefaultPointActivities(db); err != nil {
+		return err
+	}
+	if err := BackfillDefaultPointActivityRewards(db); err != nil {
+		return err
+	}
+	if err := SeedDefaultPointRiskConfig(db); err != nil {
+		return err
+	}
+	if err := SeedDefaultGrossMarginAlertConfig(db); err != nil {
+		return err
+	}
 	return BackfillUserOwnerRole(db)
+}
+
+func SeedDefaultPointActivities(db *gorm.DB) error {
+	defaults := []model.PointActivity{
+		{
+			Code:        "daily_check_in",
+			Title:       "Daily check-in",
+			Description: "Claim once per day after signing in.",
+			Points:      1,
+			ClaimPeriod: "daily",
+			Enabled:     true,
+			SortOrder:   10,
+		},
+		{
+			Code:        "bind_x_account",
+			Title:       "Bind an X account",
+			Description: "Claim after connecting at least one X account.",
+			Points:      10,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   20,
+		},
+		{
+			Code:        "create_oaf_bot",
+			Title:       "Create an OAF Bot",
+			Description: "Claim after creating at least one OAF Bot.",
+			Points:      15,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   30,
+		},
+	}
+	for _, activity := range defaults {
+		var existing model.PointActivity
+		err := db.Where("code = ?", activity.Code).First(&existing).Error
+		if err == nil {
+			continue
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err := db.Create(&activity).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func BackfillDefaultPointActivityRewards(db *gorm.DB) error {
+	updates := []struct {
+		code      string
+		oldPoints int64
+		newPoints int64
+	}{
+		{code: "daily_check_in", oldPoints: 5, newPoints: 1},
+		{code: "bind_x_account", oldPoints: 30, newPoints: 10},
+		{code: "create_oaf_bot", oldPoints: 50, newPoints: 15},
+	}
+	for _, item := range updates {
+		if err := db.Model(&model.PointActivity{}).
+			Where("code = ? AND points = ?", item.code, item.oldPoints).
+			Update("points", item.newPoints).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func SeedDefaultPointRiskConfig(db *gorm.DB) error {
+	var existing model.PointRiskConfig
+	err := db.Where("code = ?", "default").First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&model.PointRiskConfig{
+		Code:                          "default",
+		DailyEarnLimit:                100,
+		MonthlyDiscountLimit:          1000,
+		LargeAdjustmentAlertThreshold: 200,
+		PointExpiryDays:               365,
+		Enabled:                       true,
+	}).Error
+}
+
+func SeedDefaultGrossMarginAlertConfig(db *gorm.DB) error {
+	var existing model.GrossMarginAlertConfig
+	err := db.Where("code = ?", "default").First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&model.GrossMarginAlertConfig{
+		Code:                        "default",
+		Enabled:                     true,
+		TargetMarginBps:             5000,
+		OpenAICostShareThresholdBps: 2000,
+		XCostShareThresholdBps:      2000,
+		PointCostShareThresholdBps:  2000,
+		CheckIntervalHours:          24,
+	}).Error
 }
 
 // ApplyTableComments keeps table comments readable in MySQL.
@@ -68,7 +198,19 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.EmailVerificationCode{}, "邮箱验证码记录"},
 		{&model.WalletChallenge{}, "钱包签名挑战记录"},
 		{&model.UserWallet{}, "用户钱包绑定记录"},
+		{&model.UserPointAccount{}, "用户积分账户"},
+		{&model.PointActivity{}, "积分活动配置"},
+		{&model.PointRiskConfig{}, "积分风控配置"},
+		{&model.GrossMarginAlertConfig{}, "毛利告警配置"},
+		{&model.GrossMarginAlertEvent{}, "毛利告警事件"},
+		{&model.PointGrant{}, "积分批次与有效期"},
+		{&model.PointRedemptionCode{}, "积分兑换码"},
+		{&model.PointRedemptionClaim{}, "积分兑换记录"},
+		{&model.PointLedgerEntry{}, "积分账本事件"},
+		{&model.PointActivityClaim{}, "积分活动领取记录"},
 		{&model.TwitterAccount{}, "用户绑定的X账号信息"},
+		{&model.ReferralInvite{}, "用户邀请邀请码"},
+		{&model.ReferralRecord{}, "邀请归因与奖励记录"},
 		{&model.AutomationConfig{}, "自动化模块配置"},
 		{&model.ActivityLog{}, "自动化执行活动日志"},
 		{&model.ReplyReservation{}, "自动回复并发占位锁"},

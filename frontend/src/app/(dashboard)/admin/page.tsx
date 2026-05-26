@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Coins,
   UserCog,
   Users,
 } from "lucide-react";
@@ -28,17 +29,18 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminOverviewApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
 type LoadState = "loading" | "ready" | "error" | "forbidden";
-type AdminSection = "overview" | "users" | "billing" | "activity" | "system";
+type AdminSection = "overview" | "users" | "billing" | "points" | "activity" | "system";
 
 const sections: Array<{ id: AdminSection; labelKey: string; descriptionKey: string; icon: LucideIcon }> = [
   { id: "overview", labelKey: "admin.sections.overview", descriptionKey: "admin.sections.overviewDesc", icon: LayoutDashboard },
   { id: "users", labelKey: "admin.sections.users", descriptionKey: "admin.sections.usersDesc", icon: Users },
   { id: "billing", labelKey: "admin.sections.billing", descriptionKey: "admin.sections.billingDesc", icon: ReceiptText },
+  { id: "points", labelKey: "admin.sections.points", descriptionKey: "admin.sections.pointsDesc", icon: Coins },
   { id: "activity", labelKey: "admin.sections.activity", descriptionKey: "admin.sections.activityDesc", icon: Activity },
   { id: "system", labelKey: "admin.sections.system", descriptionKey: "admin.sections.systemDesc", icon: Settings },
 ];
@@ -134,6 +136,10 @@ function formatDate(value?: string) {
   });
 }
 
+function formatBps(value: number) {
+  return `${(value / 100).toFixed(1)}%`;
+}
+
 function statusVariant(status: string): BadgeVariant {
   const s = status.toLowerCase();
   if (s === "active" || s === "paid" || s === "success" || s === "matched" || s === "reviewed" || s === "confirmed") {
@@ -167,6 +173,13 @@ const autoScanSkipReasonOptions = [
   "tx_already_used",
   "order_expired",
   "invalid_tx_hash_from_chain",
+];
+const grossMarginAlertReasonOptions = [
+  "all",
+  "gross_margin_below_50_percent",
+  "openai_cost_share_at_or_above_20_percent",
+  "x_cost_share_at_or_above_20_percent",
+  "point_discount_share_at_or_above_20_percent",
 ];
 
 function normalizedAutoScanStatus(status?: string) {
@@ -213,6 +226,14 @@ export default function AdminPage() {
   const [status, setStatus] = useState("all");
   const [submittingUser, setSubmittingUser] = useState<number | null>(null);
   const [submittingOrder, setSubmittingOrder] = useState<string | null>(null);
+  const [pointActivities, setPointActivities] = useState<AdminPointActivityApi[]>([]);
+  const [pointUsers, setPointUsers] = useState<AdminPointUserApi[]>([]);
+  const [pointRiskConfig, setPointRiskConfig] = useState<AdminPointRiskConfigApi | null>(null);
+  const [redemptionCodes, setRedemptionCodes] = useState<AdminPointRedemptionCodeApi[]>([]);
+  const [referralSummary, setReferralSummary] = useState<AdminReferralSummaryApi | null>(null);
+  const [pointCostSummary, setPointCostSummary] = useState<AdminPointCostSummaryApi | null>(null);
+  const [pointQuery, setPointQuery] = useState("");
+  const [submittingPointKey, setSubmittingPointKey] = useState("");
 
   const userParams = useMemo(
     () => ({
@@ -231,10 +252,25 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData] = await Promise.all([adminService.overview(), adminService.users(userParams)]);
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData] = await Promise.all([
+          adminService.overview(),
+          adminService.users(userParams),
+          adminService.pointActivities(),
+          adminService.pointUsers({ page: 1, page_size: 20, query: pointQuery.trim() || undefined }),
+          adminService.pointRiskConfig(),
+          adminService.pointRedemptionCodes(),
+          adminService.referralSummary(),
+          adminService.pointCostSummary(),
+        ]);
         setOverview(overviewData);
         setUsers(usersData.items);
         setTotalUsers(usersData.pagination.total);
+        setPointActivities(activitiesData);
+        setPointUsers(pointUsersData.items);
+        setPointRiskConfig(pointRiskConfigData);
+        setRedemptionCodes(redemptionData);
+        setReferralSummary(referralData);
+        setPointCostSummary(costData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -245,7 +281,7 @@ export default function AdminPage() {
         if (quiet) pushToast(msg);
       }
     },
-    [pushToast, t, userParams]
+    [pointQuery, pushToast, t, userParams]
   );
 
   useEffect(() => {
@@ -298,6 +334,58 @@ export default function AdminPage() {
     }
   };
 
+  const updatePointActivity = async (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => {
+    setSubmittingPointKey(`activity:${activity.id}`);
+    try {
+      const next = await adminService.updatePointActivity(activity.id, patch);
+      setPointActivities((items) => items.map((item) => (item.id === next.id ? next : item)));
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
+  const adjustPoints = async (userId: number, points: number, reason: string) => {
+    setSubmittingPointKey(`user:${userId}`);
+    try {
+      const next = await adminService.adjustUserPoints(userId, { points, reason });
+      setPointUsers((items) => items.map((item) => (item.user_id === userId ? next : item)));
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
+  const updatePointRiskConfig = async (patch: Partial<AdminPointRiskConfigApi>) => {
+    setSubmittingPointKey("risk");
+    try {
+      const next = await adminService.updatePointRiskConfig(patch);
+      setPointRiskConfig(next);
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
+  const createRedemptionCode = async (payload: { code: string; title: string; points: number; max_uses: number }) => {
+    setSubmittingPointKey("redemption");
+    try {
+      const next = await adminService.createPointRedemptionCode({ ...payload, per_user_uses: 1, enabled: true });
+      setRedemptionCodes((items) => [next, ...items]);
+      pushToast(t("admin.toast.pointsUpdated"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.errors.pointsUpdateFailed")));
+    } finally {
+      setSubmittingPointKey("");
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -346,6 +434,24 @@ export default function AdminPage() {
         />
       ) : null}
       {activeSection === "billing" ? <BillingSection overview={overview} submittingOrder={submittingOrder} onUpdateOrder={updateOrder} /> : null}
+      {activeSection === "points" ? (
+        <PointsAdminSection
+          activities={pointActivities}
+          users={pointUsers}
+          riskConfig={pointRiskConfig}
+          redemptionCodes={redemptionCodes}
+          referralSummary={referralSummary}
+          pointCostSummary={pointCostSummary}
+          query={pointQuery}
+          submittingKey={submittingPointKey}
+          onQueryChange={setPointQuery}
+          onRefresh={() => void fetchAdmin({ quiet: true })}
+          onUpdateActivity={updatePointActivity}
+          onAdjustPoints={adjustPoints}
+          onUpdateRiskConfig={updatePointRiskConfig}
+          onCreateRedemptionCode={createRedemptionCode}
+        />
+      ) : null}
       {activeSection === "activity" ? <ActivitySection overview={overview} /> : null}
       {activeSection === "system" ? <SystemSection overview={overview} /> : null}
     </div>
@@ -407,7 +513,7 @@ function AdminHero({
 function SectionTabs({ activeSection, onChange }: { activeSection: AdminSection; onChange: (section: AdminSection) => void }) {
   const { t } = useT();
   return (
-    <nav className="grid gap-2 md:grid-cols-5">
+    <nav className="grid gap-2 md:grid-cols-6">
       {sections.map((section) => {
         const Icon = section.icon;
         const active = section.id === activeSection;
@@ -668,6 +774,17 @@ function BillingSection({
   const [scanStatusFilter, setScanStatusFilter] = useState("all");
   const [skipReasonFilter, setSkipReasonFilter] = useState("all");
   const [orders, setOrders] = useState(overview.recent_orders);
+  const [grossMargin, setGrossMargin] = useState<AdminGrossMarginSummaryApi | null>(null);
+  const [grossMarginAlertConfig, setGrossMarginAlertConfig] = useState<AdminGrossMarginAlertConfigApi | null>(null);
+  const [grossMarginAlerts, setGrossMarginAlerts] = useState<AdminGrossMarginAlertEventApi[]>([]);
+  const [savingGrossMarginConfig, setSavingGrossMarginConfig] = useState("");
+  const [acknowledgingAlert, setAcknowledgingAlert] = useState<number | null>(null);
+  const [alertNotes, setAlertNotes] = useState<Record<number, string>>({});
+  const [alertStatusFilter, setAlertStatusFilter] = useState("all");
+  const [alertReasonFilter, setAlertReasonFilter] = useState("all");
+  const [alertDateFrom, setAlertDateFrom] = useState("");
+  const [alertDateTo, setAlertDateTo] = useState("");
+  const [expandedAlertId, setExpandedAlertId] = useState<number | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
@@ -699,6 +816,63 @@ function BillingSection({
     };
   }, [overview.recent_orders, scanStatusFilter, skipReasonFilter, t]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadGrossMargin = async () => {
+      try {
+        const [data, config, alerts] = await Promise.all([
+          adminService.grossMarginSummary(),
+          adminService.grossMarginAlertConfig(),
+          adminService.grossMarginAlertEvents({
+            status: alertStatusFilter === "all" ? undefined : alertStatusFilter,
+            reason: alertReasonFilter === "all" ? undefined : alertReasonFilter,
+            date_from: alertDateFrom || undefined,
+            date_to: alertDateTo || undefined,
+            limit: 100,
+          }),
+        ]);
+        if (!cancelled) {
+          setGrossMargin(data);
+          setGrossMarginAlertConfig(config);
+          setGrossMarginAlerts(alerts.items);
+        }
+      } catch {
+        if (!cancelled) {
+          setGrossMargin(null);
+          setGrossMarginAlertConfig(null);
+          setGrossMarginAlerts([]);
+        }
+      }
+    };
+    void loadGrossMargin();
+    return () => {
+      cancelled = true;
+    };
+  }, [alertDateFrom, alertDateTo, alertReasonFilter, alertStatusFilter]);
+
+  const updateGrossMarginAlertConfig = async (patch: Partial<AdminGrossMarginAlertConfigApi>) => {
+    const key = Object.keys(patch)[0] || "gross-margin-alert";
+    setSavingGrossMarginConfig(key);
+    try {
+      const next = await adminService.updateGrossMarginAlertConfig(patch);
+      setGrossMarginAlertConfig(next);
+      const data = await adminService.grossMarginSummary();
+      setGrossMargin(data);
+    } finally {
+      setSavingGrossMarginConfig("");
+    }
+  };
+
+  const acknowledgeGrossMarginAlert = async (alertId: number) => {
+    setAcknowledgingAlert(alertId);
+    try {
+      const next = await adminService.acknowledgeGrossMarginAlert(alertId, { note: alertNotes[alertId] || "" });
+      setGrossMarginAlerts((items) => items.map((item) => (item.id === alertId ? next : item)));
+    } finally {
+      setAcknowledgingAlert(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -708,6 +882,166 @@ function BillingSection({
         <Metric label={t("admin.billing.review")} value={reviewCount} icon={AlertTriangle} tone={reviewCount > 0 ? "warn" : "good"} />
         <Metric label={t("admin.billing.mismatch")} value={overview.billing.mismatch} icon={AlertTriangle} tone={overview.billing.mismatch > 0 ? "danger" : "default"} />
       </section>
+      {grossMargin ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.billing.margin.title")} description={t("admin.billing.margin.description", { target: formatBps(grossMargin.target_bps) })} />
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label={t("admin.billing.margin.revenue")} value={`${grossMargin.revenue_amount} USDT`} icon={ReceiptText} tone="good" />
+            <Metric label={t("admin.billing.margin.cost")} value={`${grossMargin.total_cost} USDT`} icon={AlertTriangle} tone={grossMargin.status === "below_target" ? "danger" : "warn"} />
+            <Metric label={t("admin.billing.margin.profit")} value={`${grossMargin.gross_profit} USDT`} icon={Coins} tone={grossMargin.gross_profit_cents >= 0 ? "good" : "danger"} />
+            <Metric label={t("admin.billing.margin.rate")} value={formatBps(grossMargin.gross_margin_bps)} icon={ShieldCheck} tone={grossMargin.status === "healthy" ? "good" : "danger"} />
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.costBreakdown")}</p>
+              <div className="mt-3 space-y-2">
+                {grossMargin.costs.map((item) => (
+                  <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <span className="text-[#71767b]">{t(`admin.billing.margin.cost.${item.key}`)}</span>
+                    <span className="font-semibold text-white">{item.amount} USDT · {formatBps(item.share_bps)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.revenueByPlan")}</p>
+              <div className="mt-3 space-y-2">
+                {grossMargin.revenue_by_plan.length === 0 ? (
+                  <p className="text-sm text-[#71767b]">{t("admin.billing.margin.noRevenue")}</p>
+                ) : (
+                  grossMargin.revenue_by_plan.map((item) => (
+                    <div key={item.plan_code} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                      <span className="text-[#71767b]">{planLabel(item.plan_code, t)} · {item.orders}</span>
+                      <span className="font-semibold text-white">{item.amount} USDT</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          {grossMarginAlertConfig ? (
+            <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertConfig")}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{t("admin.billing.margin.alertConfigDesc")}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant={grossMarginAlertConfig.enabled ? "default" : "outline"}
+                  disabled={savingGrossMarginConfig === "enabled"}
+                  onClick={() => void updateGrossMarginAlertConfig({ enabled: !grossMarginAlertConfig.enabled })}
+                >
+                  {grossMarginAlertConfig.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <RiskInput label={t("admin.billing.margin.targetBps")} value={grossMarginAlertConfig.target_margin_bps} disabled={savingGrossMarginConfig === "target_margin_bps"} onSave={(value) => updateGrossMarginAlertConfig({ target_margin_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.openaiBps")} value={grossMarginAlertConfig.openai_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "openai_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ openai_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.xBps")} value={grossMarginAlertConfig.x_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "x_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ x_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.pointBps")} value={grossMarginAlertConfig.point_cost_share_threshold_bps} disabled={savingGrossMarginConfig === "point_cost_share_threshold_bps"} onSave={(value) => updateGrossMarginAlertConfig({ point_cost_share_threshold_bps: value })} />
+                <RiskInput label={t("admin.billing.margin.checkHours")} value={grossMarginAlertConfig.check_interval_hours} disabled={savingGrossMarginConfig === "check_interval_hours"} onSave={(value) => updateGrossMarginAlertConfig({ check_interval_hours: value })} />
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertHistory")}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAlertStatusFilter("all");
+                  setAlertReasonFilter("all");
+                  setAlertDateFrom("");
+                  setAlertDateTo("");
+                }}
+              >
+                {t("admin.billing.filters.reset")}
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <select className="form-input h-10 py-0" value={alertStatusFilter} onChange={(event) => setAlertStatusFilter(event.target.value)}>
+                <option value="all">{t("admin.billing.margin.alertStatus.all")}</option>
+                <option value="open">{t("admin.billing.margin.alertStatus.open")}</option>
+                <option value="acknowledged">{t("admin.billing.margin.alertStatus.acknowledged")}</option>
+              </select>
+              <select className="form-input h-10 py-0" value={alertReasonFilter} onChange={(event) => setAlertReasonFilter(event.target.value)}>
+                {grossMarginAlertReasonOptions.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {reason === "all" ? t("admin.billing.margin.reason.all") : t(`admin.billing.margin.reason.${reason}`)}
+                  </option>
+                ))}
+              </select>
+              <Input type="date" value={alertDateFrom} onChange={(event) => setAlertDateFrom(event.target.value)} />
+              <Input type="date" value={alertDateTo} onChange={(event) => setAlertDateTo(event.target.value)} />
+            </div>
+            <div className="mt-3 space-y-3">
+              {grossMarginAlerts.length === 0 ? (
+                <p className="text-sm text-[#71767b]">{t("admin.billing.margin.noAlerts")}</p>
+              ) : (
+                grossMarginAlerts.slice(0, 6).map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={item.status === "acknowledged" ? "success" : "warning"}>{t(`admin.billing.margin.alertStatus.${item.status}`)}</Badge>
+                          <Badge variant={item.lark_status === "sent" ? "success" : item.lark_status === "failed" ? "danger" : "default"}>{t(`admin.billing.margin.larkStatus.${item.lark_status}`)}</Badge>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-white">
+                          {formatBps(item.gross_margin_bps)} · {item.gross_profit} USDT
+                        </p>
+                        <p className="mt-1 text-xs text-[#71767b]">{formatDate(item.created_at)}</p>
+                      </div>
+                      <div className="text-right text-xs text-[#71767b]">
+                        <p>{t("admin.billing.margin.revenue")}: {item.revenue_amount} USDT</p>
+                        <p>{t("admin.billing.margin.cost")}: {item.total_cost} USDT</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.reasons.map((reason) => (
+                        <span key={reason} className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2.5 py-1 text-xs text-[#f6d96b]">
+                          {t(`admin.billing.margin.reason.${reason}`)}
+                        </span>
+                      ))}
+                    </div>
+                    {item.status === "acknowledged" ? (
+                      <p className="mt-3 text-xs text-[#71767b]">{item.acknowledge_note || t("admin.billing.margin.acknowledged")}</p>
+                    ) : (
+                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+                        <Input placeholder={t("admin.billing.margin.ackNote")} value={alertNotes[item.id] || ""} onChange={(event) => setAlertNotes((prev) => ({ ...prev, [item.id]: event.target.value }))} />
+                        <Button type="button" disabled={acknowledgingAlert === item.id} onClick={() => void acknowledgeGrossMarginAlert(item.id)}>
+                          {t("admin.billing.margin.ack")}
+                        </Button>
+                      </div>
+                    )}
+                    <button type="button" className="mt-3 text-xs font-semibold text-[#1d9bf0]" onClick={() => setExpandedAlertId(expandedAlertId === item.id ? null : item.id)}>
+                      {expandedAlertId === item.id ? t("admin.billing.margin.hideDetail") : t("admin.billing.margin.viewDetail")}
+                    </button>
+                    {expandedAlertId === item.id ? (
+                      <div className="mt-3 grid gap-3 rounded-2xl border border-[#2f3336] bg-black p-3 text-xs text-[#71767b] md:grid-cols-2">
+                        <div>
+                          <p>{t("admin.billing.margin.openaiCost")}: {item.openai_cost} USDT</p>
+                          <p>{t("admin.billing.margin.xCost")}: {item.x_cost} USDT</p>
+                          <p>{t("admin.billing.margin.pointCost")}: {item.point_discount_cost} USDT</p>
+                          <p>{t("admin.billing.margin.target")}: {formatBps(item.target_margin_bps)}</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p>{t("admin.billing.margin.period")}: {formatDate(item.period_start)} - {formatDate(item.period_end)}</p>
+                          <p>{t("admin.billing.margin.ackBy")}: {item.acknowledged_by || "-"}</p>
+                          <p className="break-all">{t("admin.billing.margin.larkError")}: {item.lark_error || "-"}</p>
+                          <p className="break-all">{t("admin.billing.margin.configSnapshot")}: {item.config_snapshot || "-"}</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </Card>
+      ) : null}
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.billing.recentTitle")} description={t("admin.billing.recentDesc")} />
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
@@ -850,6 +1184,297 @@ function AdminAmountLine({ label, value, valueClassName = "text-[#e7e9ea]" }: { 
     </div>
   );
 }
+
+function PointsAdminSection({
+  activities,
+  users,
+  riskConfig,
+  redemptionCodes,
+  referralSummary,
+  pointCostSummary,
+  query,
+  submittingKey,
+  onQueryChange,
+  onRefresh,
+  onUpdateActivity,
+  onAdjustPoints,
+  onUpdateRiskConfig,
+  onCreateRedemptionCode,
+}: {
+  activities: AdminPointActivityApi[];
+  users: AdminPointUserApi[];
+  riskConfig: AdminPointRiskConfigApi | null;
+  redemptionCodes: AdminPointRedemptionCodeApi[];
+  referralSummary: AdminReferralSummaryApi | null;
+  pointCostSummary: AdminPointCostSummaryApi | null;
+  query: string;
+  submittingKey: string;
+  onQueryChange: (value: string) => void;
+  onRefresh: () => void;
+  onUpdateActivity: (activity: AdminPointActivityApi, patch: Partial<AdminPointActivityApi>) => void;
+  onAdjustPoints: (userId: number, points: number, reason: string) => void;
+  onUpdateRiskConfig: (patch: Partial<AdminPointRiskConfigApi>) => void;
+  onCreateRedemptionCode: (payload: { code: string; title: string; points: number; max_uses: number }) => void;
+}) {
+  const { t } = useT();
+  const [adjustValues, setAdjustValues] = useState<Record<number, { points: string; reason: string }>>({});
+  const [codeForm, setCodeForm] = useState({ code: "", title: "", points: "10", maxUses: "100" });
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <Metric label={t("admin.points.metrics.activities")} value={activities.length} icon={GiftIcon} />
+        <Metric label={t("admin.points.metrics.users")} value={users.length} icon={Users} tone="good" />
+        <Metric label={t("admin.points.metrics.balance")} value={users.reduce((sum, user) => sum + user.balance, 0)} icon={Coins} />
+      </div>
+
+      {pointCostSummary ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.cost.title")} description={t("admin.points.cost.description", { points: pointCostSummary.points_per_usdt })} />
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label={t("admin.points.cost.earned")} value={`${pointCostSummary.earned_points} / ${pointCostSummary.earned_usdt} USDT`} icon={Coins} />
+            <Metric label={t("admin.points.cost.discounted")} value={`${pointCostSummary.discounted_points} / ${pointCostSummary.discounted_usdt} USDT`} icon={ReceiptText} tone="warn" />
+            <Metric label={t("admin.points.cost.expired")} value={`${pointCostSummary.expired_points} / ${pointCostSummary.expired_usdt} USDT`} icon={AlertTriangle} />
+            <Metric label={t("admin.points.cost.outstanding")} value={`${pointCostSummary.outstanding_points} / ${pointCostSummary.outstanding_usdt} USDT`} icon={ShieldCheck} tone="good" />
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {pointCostSummary.monthly_earned_by_source.map((item) => (
+              <div key={item.source} className="rounded-2xl border border-[#2f3336] bg-black p-3">
+                <p className="text-xs text-[#71767b]">{t(`admin.points.cost.source.${item.source}`)}</p>
+                <p className="mt-2 font-semibold text-white">{item.points}</p>
+                <p className="mt-1 text-xs text-[#71767b]">{item.usdt_amount} USDT</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      {riskConfig ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.risk.title")} description={t("admin.points.risk.description")} />
+          <div className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1fr_1fr]">
+            <button
+              type="button"
+              className={`rounded-2xl border p-4 text-left ${riskConfig.enabled ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}
+              disabled={submittingKey === "risk"}
+              onClick={() => onUpdateRiskConfig({ enabled: !riskConfig.enabled })}
+            >
+              <p className="text-xs text-[#71767b]">{t("admin.points.risk.enabled")}</p>
+              <p className="mt-2 font-semibold text-white">{riskConfig.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</p>
+            </button>
+            <RiskInput
+              label={t("admin.points.risk.dailyEarn")}
+              value={riskConfig.daily_earn_limit}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ daily_earn_limit: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.monthlyDiscount")}
+              value={riskConfig.monthly_discount_limit}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ monthly_discount_limit: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.largeAdjust")}
+              value={riskConfig.large_adjustment_alert_threshold}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ large_adjustment_alert_threshold: value })}
+            />
+            <RiskInput
+              label={t("admin.points.risk.expiryDays")}
+              value={riskConfig.point_expiry_days}
+              disabled={submittingKey === "risk"}
+              onSave={(value) => onUpdateRiskConfig({ point_expiry_days: value })}
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {referralSummary ? (
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.points.referral.title")} description={t("admin.points.referral.description")} />
+          <div className="grid gap-3 md:grid-cols-5">
+            <Metric label={t("admin.points.referral.inviteCodes")} value={referralSummary.invite_codes} icon={Users} />
+            <Metric label={t("admin.points.referral.signups")} value={referralSummary.referral_signups} icon={Users} tone="good" />
+            <Metric label={t("admin.points.referral.purchases")} value={referralSummary.first_purchase_rewards} icon={CheckCircle2} tone="good" />
+            <Metric label={t("admin.points.referral.signupPoints")} value={referralSummary.signup_reward_points} icon={Coins} />
+            <Metric label={t("admin.points.referral.purchasePoints")} value={referralSummary.purchase_reward_points} icon={Coins} />
+          </div>
+        </Card>
+      ) : null}
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("admin.points.redemption.title")} description={t("admin.points.redemption.description")} />
+        <div className="grid gap-2 lg:grid-cols-[1fr_1fr_120px_120px_auto]">
+          <Input placeholder={t("admin.points.redemption.code")} value={codeForm.code} onChange={(event) => setCodeForm((v) => ({ ...v, code: event.target.value.toUpperCase() }))} />
+          <Input placeholder={t("admin.points.redemption.name")} value={codeForm.title} onChange={(event) => setCodeForm((v) => ({ ...v, title: event.target.value }))} />
+          <Input type="number" min={1} placeholder={t("admin.points.points")} value={codeForm.points} onChange={(event) => setCodeForm((v) => ({ ...v, points: event.target.value }))} />
+          <Input type="number" min={0} placeholder={t("admin.points.redemption.maxUses")} value={codeForm.maxUses} onChange={(event) => setCodeForm((v) => ({ ...v, maxUses: event.target.value }))} />
+          <Button
+            type="button"
+            disabled={submittingKey === "redemption" || !codeForm.code.trim() || !codeForm.title.trim()}
+            onClick={() => onCreateRedemptionCode({ code: codeForm.code, title: codeForm.title, points: Number(codeForm.points) || 1, max_uses: Number(codeForm.maxUses) || 0 })}
+          >
+            {t("admin.points.redemption.create")}
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {redemptionCodes.slice(0, 8).map((code) => (
+            <div key={code.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black p-3 text-sm">
+              <div>
+                <p className="font-mono font-semibold text-white">{code.code}</p>
+                <p className="text-xs text-[#71767b]">{code.title}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+                <Badge variant={code.enabled ? "success" : "default"}>{code.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</Badge>
+                <span>+{code.points}</span>
+                <span>{code.used_count}/{code.max_uses || "∞"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("admin.points.activities.title")} description={t("admin.points.activities.description")} />
+        <div className="grid gap-3 lg:grid-cols-3">
+          {activities.map((activity) => (
+            <div key={activity.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-white">{activity.title}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{activity.code}</p>
+                </div>
+                <Badge variant={activity.enabled ? "success" : "default"}>{activity.enabled ? t("admin.points.enabled") : t("admin.points.disabled")}</Badge>
+              </div>
+              <p className="mt-3 min-h-10 text-sm leading-relaxed text-[#71767b]">{activity.description}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="text-xs text-[#71767b]">
+                  {t("admin.points.points")}
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min={1}
+                    value={activity.points}
+                    disabled={submittingKey === `activity:${activity.id}`}
+                    onChange={(event) => onUpdateActivity(activity, { points: Number(event.target.value) || 1 })}
+                  />
+                </label>
+                <label className="text-xs text-[#71767b]">
+                  {t("admin.points.period")}
+                  <select
+                    className="form-input mt-1 h-10 w-full"
+                    value={activity.claim_period}
+                    disabled={submittingKey === `activity:${activity.id}`}
+                    onChange={(event) => onUpdateActivity(activity, { claim_period: event.target.value })}
+                  >
+                    <option value="once">once</option>
+                    <option value="daily">daily</option>
+                    <option value="monthly">monthly</option>
+                  </select>
+                </label>
+              </div>
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                variant={activity.enabled ? "outline" : "default"}
+                disabled={submittingKey === `activity:${activity.id}`}
+                onClick={() => onUpdateActivity(activity, { enabled: !activity.enabled })}
+              >
+                {activity.enabled ? t("admin.points.disable") : t("admin.points.enable")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("admin.points.users.title")}
+          description={t("admin.points.users.description")}
+          right={
+            <Button type="button" size="sm" variant="outline" onClick={onRefresh}>
+              <RefreshCcw className="size-4" />
+              {t("admin.actions.refresh")}
+            </Button>
+          }
+        />
+        <div className="mb-3 max-w-md">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#71767b]" />
+            <Input className="pl-9" placeholder={t("admin.points.users.search")} value={query} onChange={(event) => onQueryChange(event.target.value)} />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="text-xs uppercase text-[#71767b]">
+              <tr>
+                <th className="px-3 py-2 font-medium">{t("admin.users.table.user")}</th>
+                <th className="px-3 py-2 font-medium">{t("points.metrics.balance")}</th>
+                <th className="px-3 py-2 font-medium">{t("points.metrics.frozen")}</th>
+                <th className="px-3 py-2 font-medium">{t("admin.points.adjust")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2f3336]">
+              {users.map((user) => {
+                const form = adjustValues[user.user_id] || { points: "", reason: "" };
+                return (
+                  <tr key={user.user_id}>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-white">{user.name || user.email || `#${user.user_id}`}</p>
+                      <p className="text-xs text-[#71767b]">{user.email || `ID ${user.user_id}`}</p>
+                    </td>
+                    <td className="px-3 py-3 text-white">{user.balance}</td>
+                    <td className="px-3 py-3 text-white">{user.frozen}</td>
+                    <td className="px-3 py-3">
+                      <div className="grid min-w-[360px] gap-2 md:grid-cols-[96px_1fr_auto]">
+                        <Input
+                          type="number"
+                          placeholder="+/-"
+                          value={form.points}
+                          onChange={(event) => setAdjustValues((prev) => ({ ...prev, [user.user_id]: { ...form, points: event.target.value } }))}
+                        />
+                        <Input
+                          placeholder={t("admin.points.reason")}
+                          value={form.reason}
+                          onChange={(event) => setAdjustValues((prev) => ({ ...prev, [user.user_id]: { ...form, reason: event.target.value } }))}
+                        />
+                        <Button
+                          type="button"
+                          disabled={submittingKey === `user:${user.user_id}` || !form.points || !form.reason.trim()}
+                          onClick={() => onAdjustPoints(user.user_id, Number(form.points), form.reason)}
+                        >
+                          {t("admin.points.apply")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function RiskInput({ label, value, disabled, onSave }: { label: string; value: number; disabled?: boolean; onSave: (value: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  return (
+    <label className="rounded-2xl border border-[#2f3336] bg-black p-4 text-xs text-[#71767b]">
+      {label}
+      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Input type="number" min={0} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} />
+        <Button type="button" disabled={disabled || Number(draft) === value || Number(draft) < 0} onClick={() => onSave(Number(draft) || 0)}>
+          OK
+        </Button>
+      </div>
+    </label>
+  );
+}
+
+const GiftIcon = Coins;
 
 function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
   const { t } = useT();

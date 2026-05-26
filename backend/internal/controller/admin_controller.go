@@ -97,6 +97,96 @@ func (ctl *AdminController) ListBillingOrders(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) GrossMarginSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.GrossMarginSummary(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) GrossMarginAlertConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.GrossMarginAlertConfig(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdateGrossMarginAlertConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminUpdateGrossMarginAlertConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdateGrossMarginAlertConfig(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ListGrossMarginAlertEvents(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var query dto.AdminGrossMarginAlertEventQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.ListGrossMarginAlertEvents(userID, query)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) AcknowledgeGrossMarginAlertEvent(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	alertIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || alertIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid alert id")
+		return
+	}
+	var req dto.AdminAcknowledgeGrossMarginAlertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.AcknowledgeGrossMarginAlertEvent(userID, uint(alertIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -114,6 +204,181 @@ func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 		return
 	}
 	data, err := ctl.adminService.UpdateBillingOrderOpsAction(userID, uint(orderIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ListPointActivities(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ListPointActivities(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdatePointActivity(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	activityIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || activityIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid activity id")
+		return
+	}
+	var req dto.AdminUpdatePointActivityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdatePointActivity(userID, uint(activityIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ListPointUsers(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var query dto.AdminPointUserQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.ListPointUsers(userID, query)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) AdjustUserPoints(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	targetIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || targetIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	var req dto.AdminAdjustUserPointsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.AdjustUserPoints(userID, uint(targetIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) PointRiskConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.PointRiskConfig(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdatePointRiskConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminUpdatePointRiskConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdatePointRiskConfig(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ListPointRedemptionCodes(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ListPointRedemptionCodes(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) CreatePointRedemptionCode(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminCreatePointRedemptionCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.CreatePointRedemptionCode(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ReferralSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ReferralSummary(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) PointCostSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.PointCostSummary(userID)
 	if err != nil {
 		adminError(c, err)
 		return

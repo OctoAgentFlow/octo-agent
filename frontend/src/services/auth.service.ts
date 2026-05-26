@@ -62,7 +62,7 @@ export const authService = {
     const res = await request.post<ApiResponse<AuthResponse>>("/auth/login", payload);
     return res.data.data;
   },
-  async register(payload: { email: string; password: string; name: string; verification_code: string }) {
+  async register(payload: { email: string; password: string; name: string; verification_code: string; invite_code?: string }) {
     const res = await request.post<ApiResponse<AuthResponse>>("/auth/register", payload);
     return res.data.data;
   },

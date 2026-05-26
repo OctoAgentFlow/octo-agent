@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -17,10 +18,77 @@ export function formatLocalDateTime(date: Date) {
 }
 
 export function isoToLocalDateTimeValue(iso?: string | null): string {
+ if (!iso) return "";
+ const date = new Date(iso);
+ if (Number.isNaN(date.getTime())) return "";
+ return formatLocalDateTime(date);
+}
+
+export const scheduledPostTimezones = [
+  "UTC",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Asia/Singapore",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Los_Angeles",
+] as const;
+
+export function defaultScheduledPostTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+function zonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value || 0);
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function timeZoneOffsetMs(date: Date, timeZone: string) {
+  const parts = zonedParts(date, timeZone);
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return asUTC - date.getTime();
+}
+
+export function formatDateTimeInTimeZone(date: Date, timeZone: string) {
+  const parts = zonedParts(date, timeZone);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}`;
+}
+
+export function isoToZonedDateTimeValue(iso?: string | null, timeZone = defaultScheduledPostTimezone()): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return formatLocalDateTime(date);
+  return formatDateTimeInTimeZone(date, timeZone);
+}
+
+export function zonedDateTimeValueToISO(value: string, timeZone: string): string | undefined {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return undefined;
+  const [, year, month, day, hour, minute, second = "00"] = match;
+  const wallClockUTC = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  const firstPass = wallClockUTC - timeZoneOffsetMs(new Date(wallClockUTC), timeZone);
+  const secondPass = wallClockUTC - timeZoneOffsetMs(new Date(firstPass), timeZone);
+  const date = new Date(secondPass);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
 }
 
 function parseLocalDateTime(value: string): Date | null {
@@ -39,10 +107,10 @@ function parseLocalDateTime(value: string): Date | null {
   return date;
 }
 
-function createSeedDate() {
-  const date = new Date(Date.now() + 5 * 60 * 1000);
-  date.setSeconds(0, 0);
-  return date;
+function createSeedDate(timeZone = defaultScheduledPostTimezone()) {
+  const seed = new Date(Date.now() + 5 * 60 * 1000);
+  seed.setSeconds(0, 0);
+  return parseLocalDateTime(formatDateTimeInTimeZone(seed, timeZone)) ?? seed;
 }
 
 function getDaysInMonth(year: number, month: number) {
@@ -52,6 +120,8 @@ function getDaysInMonth(year: number, month: number) {
 type ScheduledDateTimePickerProps = {
   value: string;
   onChange: (value: string) => void;
+  timeZone?: string;
+  onTimeZoneChange?: (value: string) => void;
   disabled?: boolean;
   className?: string;
 };
@@ -59,14 +129,17 @@ type ScheduledDateTimePickerProps = {
 export function ScheduledDateTimePicker({
   value,
   onChange,
+  timeZone = defaultScheduledPostTimezone(),
+  onTimeZoneChange,
   disabled,
   className,
 }: ScheduledDateTimePickerProps) {
+  const { t } = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedDate = useMemo(() => parseLocalDateTime(value), [value]);
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => {
-    const seed = selectedDate ?? createSeedDate();
+    const seed = selectedDate ?? createSeedDate(timeZone);
     return new Date(seed.getFullYear(), seed.getMonth(), 1);
   });
 
@@ -86,13 +159,14 @@ export function ScheduledDateTimePicker({
   const month = visibleMonth.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOffset = new Date(year, month, 1).getDay();
-  const currentTime = selectedDate ?? createSeedDate();
+  const currentTime = selectedDate ?? createSeedDate(timeZone);
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 8 }, (_, index) => currentYear - 1 + index);
   const monthOptions = Array.from({ length: 12 }, (_, index) => ({
     value: index,
     label: new Intl.DateTimeFormat(undefined, { month: "short" }).format(new Date(year, index, 1)),
   }));
+  const timezoneOptions = useMemo(() => Array.from(new Set([timeZone, ...scheduledPostTimezones])), [timeZone]);
 
   const setDatePart = (day: number) => {
     const next = new Date(
@@ -128,7 +202,7 @@ export function ScheduledDateTimePicker({
         aria-haspopup="dialog"
         onClick={() => {
           if (!open) {
-            const seed = selectedDate ?? createSeedDate();
+            const seed = selectedDate ?? createSeedDate(timeZone);
             setVisibleMonth(new Date(seed.getFullYear(), seed.getMonth(), 1));
           }
           setOpen((next) => !next);
@@ -226,6 +300,25 @@ export function ScheduledDateTimePicker({
             <TimeSelect label="MM" value={currentTime.getMinutes()} values={minutes} onChange={(next) => setTimePart("minute", next)} />
             <TimeSelect label="SS" value={currentTime.getSeconds()} values={seconds} onChange={(next) => setTimePart("second", next)} />
           </div>
+          <label className="mt-3 block text-[11px] font-medium text-[#71767b]">
+            {t("posts.create.scheduledTimezone")}
+            <select
+              className="form-input mt-1 rounded-xl px-2 py-2 text-sm"
+              value={timeZone}
+              onChange={(event) => {
+                const nextZone = event.target.value;
+                if (onTimeZoneChange) {
+                  onTimeZoneChange(nextZone);
+                }
+              }}
+            >
+              {timezoneOptions.map((zone) => (
+                <option key={zone} value={zone}>
+                  {scheduledPostTimezones.includes(zone as typeof scheduledPostTimezones[number]) ? t(`posts.timezone.${zone.replaceAll("/", "_")}`) : zone}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       ) : null}
     </div>

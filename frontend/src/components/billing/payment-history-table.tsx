@@ -75,6 +75,10 @@ function hasUpgradeCredit(record: PaymentRecord) {
   return record.orderType === "upgrade" && Number.parseFloat(record.creditAmount || "0") > 0;
 }
 
+function hasAmountAdjustments(record: PaymentRecord) {
+  return hasUpgradeCredit(record) || Number.parseFloat(record.pointDiscountAmount || "0") > 0;
+}
+
 type OpsInputState = {
   opsNote: string;
 };
@@ -292,7 +296,7 @@ export function PaymentHistoryTable({
                       <td className="px-3 py-3" colSpan={colSpan}>
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
                           <div className="space-y-2">
-                            {hasUpgradeCredit(record) ? <ProrationBreakdown record={record} /> : null}
+                            {hasAmountAdjustments(record) ? <ProrationBreakdown record={record} /> : null}
                             {canOperateBilling && record.failureReason ? (
                               <p className="text-xs text-[#f6d96b]">
                                 {t("billing.history.failureReason")}: {record.failureReason}
@@ -421,14 +425,25 @@ function AutoScanInfo({ record }: { record: PaymentRecord }) {
 
 function ProrationBreakdown({ record }: { record: PaymentRecord }) {
   const { t } = useT();
+  const hasCredit = hasUpgradeCredit(record);
+  const hasPointDiscount = Number.parseFloat(record.pointDiscountAmount || "0") > 0;
   return (
-    <div className="grid gap-2 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/5 p-3 text-xs sm:grid-cols-3">
+    <div className="grid gap-2 rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/5 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
       <AmountLine label={t("billing.history.proration.original")} value={`${record.originalAmount} ${record.currency}`} />
-      <AmountLine
-        label={t("billing.history.proration.credit")}
-        value={`-${record.creditAmount} ${record.currency}`}
-        valueClassName="text-[#7ee0b5]"
-      />
+      {hasCredit ? (
+        <AmountLine
+          label={t("billing.history.proration.credit")}
+          value={`-${record.creditAmount} ${record.currency}`}
+          valueClassName="text-[#7ee0b5]"
+        />
+      ) : null}
+      {hasPointDiscount ? (
+        <AmountLine
+          label={t("billing.history.proration.pointDiscount")}
+          value={`-${record.pointDiscountAmount} ${record.currency}`}
+          valueClassName="text-[#7ee0b5]"
+        />
+      ) : null}
       <AmountLine
         label={t("billing.history.proration.payable")}
         value={`${record.payableAmount} ${record.currency}`}

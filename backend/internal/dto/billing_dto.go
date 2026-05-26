@@ -96,12 +96,14 @@ type BillingCreateOrderRequest struct {
 	BillingCycle   string `json:"billing_cycle"`
 	Method         string `json:"method" binding:"required"`
 	Network        string `json:"network" binding:"required"`
+	PointsToUse    int64  `json:"points_to_use,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type BillingQuoteRequest struct {
 	PlanCode     string `json:"plan_code" binding:"required"`
 	BillingCycle string `json:"billing_cycle"`
+	PointsToUse  int64  `json:"points_to_use,omitempty"`
 }
 
 type BillingUpgradeQuote struct {
@@ -111,6 +113,10 @@ type BillingUpgradeQuote struct {
 	TargetBillingCycle  string `json:"target_billing_cycle"`
 	OriginalAmount      string `json:"original_amount"`
 	CreditAmount        string `json:"credit_amount"`
+	PointDiscountAmount string `json:"point_discount_amount"`
+	PointsUsed          int64  `json:"points_used"`
+	MaxPointsUsable     int64  `json:"max_points_usable"`
+	PointBalance        int64  `json:"point_balance"`
 	PayableAmount       string `json:"payable_amount"`
 	Currency            string `json:"currency"`
 	OrderType           string `json:"order_type"`
@@ -138,6 +144,8 @@ type BillingOrderDetailResponse struct {
 	Amount               string                  `json:"amount"`
 	OriginalAmount       string                  `json:"original_amount,omitempty"`
 	CreditAmount         string                  `json:"credit_amount,omitempty"`
+	PointDiscountAmount  string                  `json:"point_discount_amount,omitempty"`
+	PointsUsed           int64                   `json:"points_used,omitempty"`
 	PayableAmount        string                  `json:"payable_amount,omitempty"`
 	OrderType            string                  `json:"order_type,omitempty"`
 	IdempotencyKey       string                  `json:"idempotency_key,omitempty"`
@@ -172,6 +180,8 @@ type BillingOrderListItem struct {
 	Amount               string `json:"amount"`
 	OriginalAmount       string `json:"original_amount,omitempty"`
 	CreditAmount         string `json:"credit_amount,omitempty"`
+	PointDiscountAmount  string `json:"point_discount_amount,omitempty"`
+	PointsUsed           int64  `json:"points_used,omitempty"`
 	PayableAmount        string `json:"payable_amount,omitempty"`
 	OrderType            string `json:"order_type,omitempty"`
 	IdempotencyKey       string `json:"idempotency_key,omitempty"`

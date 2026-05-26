@@ -10,6 +10,7 @@ import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, broadcastPageRefreshRequest } from "@/lib/app-page-refresh";
 import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
 import { billingService, type BillingCreateOrderResponse, type BillingUpgradeQuoteApi } from "@/services/billing.service";
+import { pointService, type PointAccountApi } from "@/services/point.service";
 import type { BillingCycle, PaymentMethodOption } from "@/types/billing";
 
 const POLL_MS = 3000;
@@ -54,6 +55,8 @@ export function BillingCheckoutDialog({
   const [confirmingTx, setConfirmingTx] = useState(false);
   const [confirmTxError, setConfirmTxError] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [pointAccount, setPointAccount] = useState<PointAccountApi | null>(null);
+  const [pointsToUse, setPointsToUse] = useState(0);
 
   const options = paymentMethods;
   const selectedNetworkValue = selectedNetwork || defaultNetwork;
@@ -77,6 +80,7 @@ export function BillingCheckoutDialog({
     setConfirmTxError("");
     setConfirmingTx(false);
     setIdempotencyKey("");
+    setPointsToUse(0);
   }, []);
 
   const handleOpenChange = useCallback(
@@ -99,6 +103,7 @@ export function BillingCheckoutDialog({
         const nextQuote = await billingService.quote({
           plan_code: planCode,
           billing_cycle: billingCycle,
+          points_to_use: pointsToUse,
         });
         if (!cancelled) {
           setQuote(nextQuote);
@@ -118,7 +123,28 @@ export function BillingCheckoutDialog({
     return () => {
       cancelled = true;
     };
-  }, [billingCycle, open, phase, planCode, t]);
+  }, [billingCycle, open, phase, planCode, pointsToUse, t]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const loadPoints = async () => {
+      try {
+        const data = await pointService.center();
+        if (!cancelled) {
+          setPointAccount(data.account);
+        }
+      } catch {
+        if (!cancelled) {
+          setPointAccount(null);
+        }
+      }
+    };
+    void loadPoints();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const handlePaid = useCallback(() => {
     pushToast(t("billing.payment.successToast"));
@@ -162,6 +188,7 @@ export function BillingCheckoutDialog({
         billing_cycle: billingCycle,
         method: "USDT",
         network: selectedNetworkValue,
+        points_to_use: pointsToUse,
         idempotency_key: nextIdempotencyKey,
       });
       setCreated(order);
@@ -250,6 +277,13 @@ export function BillingCheckoutDialog({
               </div>
             </div>
           ) : null}
+          <PointDiscountPicker
+            account={pointAccount}
+            quote={quote}
+            value={pointsToUse}
+            onChange={setPointsToUse}
+            disabled={quoteLoading}
+          />
           <PriceSummary quote={quote} loading={quoteLoading} error={quoteError} />
           <Button
             type="button"
@@ -394,6 +428,7 @@ function PriceSummary({
   if (!quote) return null;
 
   const hasCredit = quote.is_upgrade && Number.parseFloat(quote.credit_amount || "0") > 0;
+  const hasPointDiscount = Number.parseFloat(quote.point_discount_amount || "0") > 0;
   return (
     <div className={`rounded-2xl border border-white/10 bg-white/[0.03] ${compact ? "p-3" : "p-4"}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -416,6 +451,13 @@ function PriceSummary({
             valueClassName="text-[#7ee0b5]"
           />
         ) : null}
+        {hasPointDiscount ? (
+          <PriceRow
+            label={t("billing.points.discount")}
+            value={`-${quote.point_discount_amount} ${quote.currency}`}
+            valueClassName="text-[#7ee0b5]"
+          />
+        ) : null}
         <div className="border-t border-white/10 pt-2">
           <PriceRow
             label={t("billing.checkout.priceSummary.payable")}
@@ -424,6 +466,66 @@ function PriceSummary({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function PointDiscountPicker({
+  account,
+  quote,
+  value,
+  onChange,
+  disabled,
+}: {
+  account: PointAccountApi | null;
+  quote: BillingUpgradeQuoteApi | null;
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useT();
+  const balance = account?.balance ?? quote?.point_balance ?? 0;
+  const max = Math.max(quote?.max_points_usable ?? 0, 0);
+  const normalized = Math.min(Math.max(value, 0), max);
+  const discount = ((quote?.points_used ?? normalized) / 10).toFixed(1).replace(/\.0$/, "");
+
+  useEffect(() => {
+    if (value > max) {
+      onChange(max);
+    }
+  }, [max, onChange, value]);
+
+  return (
+    <div className="rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-white">{t("billing.points.title")}</p>
+          <p className="mt-1 text-xs text-white/55">
+            {t("billing.points.balance", { balance, frozen: account?.frozen ?? 0 })}
+          </p>
+        </div>
+        <span className="rounded-full border border-[#00ba7c]/25 bg-black/25 px-3 py-1 text-xs text-[#7ee0b5]">
+          {t("billing.points.rate")}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <input
+          type="number"
+          min={0}
+          max={max}
+          step={1}
+          className="form-input h-10 w-full"
+          value={normalized}
+          disabled={disabled || max <= 0}
+          onChange={(event) => onChange(Math.min(Math.max(Number(event.target.value) || 0, 0), max))}
+        />
+        <Button type="button" variant="outline" disabled={disabled || max <= 0} onClick={() => onChange(max)}>
+          {t("billing.points.useMax")}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-white/55">
+        {t("billing.points.maxHint", { max, discount })}
+      </p>
     </div>
   );
 }

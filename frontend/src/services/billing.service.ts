@@ -93,12 +93,14 @@ export type BillingCreateOrderRequest = {
   billing_cycle?: "monthly" | "yearly";
   method: string;
   network: string;
+  points_to_use?: number;
   idempotency_key?: string;
 };
 
 export type BillingQuoteRequest = {
   plan_code: string;
   billing_cycle?: "monthly" | "yearly";
+  points_to_use?: number;
 };
 
 export type BillingUpgradeQuoteApi = {
@@ -108,6 +110,10 @@ export type BillingUpgradeQuoteApi = {
   target_billing_cycle: "monthly" | "yearly";
   original_amount: string;
   credit_amount: string;
+  point_discount_amount: string;
+  points_used: number;
+  max_points_usable: number;
+  point_balance: number;
   payable_amount: string;
   currency: string;
   order_type: "new" | "renew" | "upgrade";
@@ -134,6 +140,8 @@ export type BillingOrderDetailApi = {
   amount: string;
   original_amount?: string;
   credit_amount?: string;
+  point_discount_amount?: string;
+  points_used?: number;
   payable_amount?: string;
   order_type?: string;
   idempotency_key?: string;
@@ -168,6 +176,8 @@ export type BillingOrderListItemApi = {
   amount: string;
   original_amount?: string;
   credit_amount?: string;
+  point_discount_amount?: string;
+  points_used?: number;
   payable_amount?: string;
   order_type?: string;
   idempotency_key?: string;

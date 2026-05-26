@@ -108,3 +108,19 @@ func (r *TwitterAccountRepository) MarkNeedsReauth(userID, id uint) error {
 			"updated_at": time.Now(),
 		}).Error
 }
+
+func (r *TwitterAccountRepository) UpdateOAuthTokens(account *model.TwitterAccount) error {
+	if account == nil {
+		return nil
+	}
+	return r.DB.Model(&model.TwitterAccount{}).
+		Where("id = ? AND user_id = ?", account.ID, account.UserID).
+		Updates(map[string]any{
+			"access_token":   account.AccessToken,
+			"refresh_token":  account.RefreshToken,
+			"oauth_scopes":   account.OAuthScopes,
+			"last_synced_at": account.LastSyncedAt,
+			"status":         account.Status,
+			"updated_at":     time.Now(),
+		}).Error
+}

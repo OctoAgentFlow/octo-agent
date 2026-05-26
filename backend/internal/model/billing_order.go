@@ -11,6 +11,8 @@ type BillingOrder struct {
 	Amount               string     `gorm:"size:32;not null;comment:支付金额" json:"amount"`
 	OriginalAmount       string     `gorm:"size:32;comment:目标套餐原价" json:"original_amount,omitempty"`
 	CreditAmount         string     `gorm:"size:32;comment:当前套餐剩余抵扣金额" json:"credit_amount,omitempty"`
+	PointDiscountAmount  string     `gorm:"size:32;comment:积分抵扣金额" json:"point_discount_amount,omitempty"`
+	PointsUsed           int64      `gorm:"not null;default:0;comment:使用积分数量" json:"points_used,omitempty"`
 	PayableAmount        string     `gorm:"size:32;comment:本次实际应付金额" json:"payable_amount,omitempty"`
 	OrderType            string     `gorm:"size:32;index;not null;default:new;comment:订单类型（new/renew/upgrade）" json:"order_type,omitempty"`
 	IdempotencyKey       string     `gorm:"size:128;index;comment:创建订单幂等键" json:"idempotency_key,omitempty"`

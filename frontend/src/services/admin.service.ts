@@ -110,6 +110,170 @@ export type AdminUsersApi = {
   };
 };
 
+export type AdminPointActivityApi = {
+  id: number;
+  code: string;
+  title: string;
+  description: string;
+  points: number;
+  claim_period: string;
+  enabled: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  sort_order: number;
+  updated_at: string;
+};
+
+export type AdminPointUserApi = {
+  user_id: number;
+  email: string;
+  name: string;
+  balance: number;
+  frozen: number;
+  lifetime_earned: number;
+  lifetime_spent: number;
+  updated_at: string;
+};
+
+export type AdminPointUsersApi = {
+  items: AdminPointUserApi[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+  };
+};
+
+export type AdminPointRiskConfigApi = {
+  enabled: boolean;
+  daily_earn_limit: number;
+  monthly_discount_limit: number;
+  large_adjustment_alert_threshold: number;
+  point_expiry_days: number;
+  updated_at: string;
+};
+
+export type AdminPointRedemptionCodeApi = {
+  id: number;
+  code: string;
+  title: string;
+  points: number;
+  max_uses: number;
+  used_count: number;
+  per_user_uses: number;
+  enabled: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  updated_at: string;
+};
+
+export type AdminReferralSummaryApi = {
+  invite_codes: number;
+  referral_signups: number;
+  first_purchase_rewards: number;
+  signup_reward_points: number;
+  purchase_reward_points: number;
+};
+
+export type AdminGrossMarginCostApi = {
+  key: string;
+  amount: string;
+  cents: number;
+  share_bps: number;
+  quantity?: number;
+  unit_label?: string;
+};
+
+export type AdminGrossMarginRevenueApi = {
+  plan_code: string;
+  orders: number;
+  amount: string;
+  cents: number;
+};
+
+export type AdminGrossMarginSummaryApi = {
+  period_start: string;
+  period_end: string;
+  revenue_amount: string;
+  revenue_cents: number;
+  total_cost: string;
+  total_cost_cents: number;
+  gross_profit: string;
+  gross_profit_cents: number;
+  gross_margin_bps: number;
+  target_bps: number;
+  status: string;
+  costs: AdminGrossMarginCostApi[];
+  revenue_by_plan: AdminGrossMarginRevenueApi[];
+};
+
+export type AdminGrossMarginAlertConfigApi = {
+  enabled: boolean;
+  target_margin_bps: number;
+  openai_cost_share_threshold_bps: number;
+  x_cost_share_threshold_bps: number;
+  point_cost_share_threshold_bps: number;
+  check_interval_hours: number;
+  updated_at: string;
+};
+
+export type AdminGrossMarginAlertEventApi = {
+  id: number;
+  period_start: string;
+  period_end: string;
+  level: string;
+  status: string;
+  reasons: string[];
+  revenue_amount: string;
+  total_cost: string;
+  gross_profit: string;
+  gross_margin_bps: number;
+  target_margin_bps: number;
+  openai_cost: string;
+  x_cost: string;
+  point_discount_cost: string;
+  lark_status: string;
+  lark_error?: string;
+  config_snapshot?: string;
+  acknowledged_by?: number;
+  acknowledged_at?: string;
+  acknowledge_note?: string;
+  created_at: string;
+};
+
+export type AdminGrossMarginAlertEventListApi = {
+  items: AdminGrossMarginAlertEventApi[];
+};
+
+export type AdminGrossMarginAlertEventQueryApi = {
+  status?: string;
+  reason?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+};
+
+export type AdminPointCostSourceApi = {
+  source: string;
+  points: number;
+  usdt_amount: string;
+};
+
+export type AdminPointCostSummaryApi = {
+  period_start: string;
+  period_end: string;
+  points_per_usdt: number;
+  earned_points: number;
+  earned_usdt: string;
+  discounted_points: number;
+  discounted_usdt: string;
+  expired_points: number;
+  expired_usdt: string;
+  outstanding_points: number;
+  outstanding_usdt: string;
+  monthly_earned_by_source: AdminPointCostSourceApi[];
+};
+
 export const adminService = {
   async overview() {
     const res = await request.get<ApiResponse<AdminOverviewApi>>("/admin/overview");
@@ -127,8 +291,68 @@ export const adminService = {
     const res = await request.get<ApiResponse<BillingOrdersData>>("/admin/billing/orders", { params });
     return res.data.data;
   },
+  async grossMarginSummary() {
+    const res = await request.get<ApiResponse<AdminGrossMarginSummaryApi>>("/admin/billing/gross-margin");
+    return res.data.data;
+  },
+  async grossMarginAlertConfig() {
+    const res = await request.get<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config");
+    return res.data.data;
+  },
+  async updateGrossMarginAlertConfig(body: Partial<AdminGrossMarginAlertConfigApi>) {
+    const res = await request.patch<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config", body);
+    return res.data.data;
+  },
+  async grossMarginAlertEvents(params?: AdminGrossMarginAlertEventQueryApi) {
+    const res = await request.get<ApiResponse<AdminGrossMarginAlertEventListApi>>("/admin/billing/gross-margin/alerts", { params });
+    return res.data.data;
+  },
+  async acknowledgeGrossMarginAlert(id: number, body: { note: string }) {
+    const res = await request.post<ApiResponse<AdminGrossMarginAlertEventApi>>(`/admin/billing/gross-margin/alerts/${id}/acknowledge`, body);
+    return res.data.data;
+  },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {
     const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/admin/billing/orders/${orderId}/ops-action`, body);
+    return res.data.data;
+  },
+  async pointActivities() {
+    const res = await request.get<ApiResponse<AdminPointActivityApi[]>>("/admin/points/activities");
+    return res.data.data;
+  },
+  async updatePointActivity(activityId: number, body: Partial<Pick<AdminPointActivityApi, "title" | "description" | "points" | "claim_period" | "enabled" | "sort_order">>) {
+    const res = await request.patch<ApiResponse<AdminPointActivityApi>>(`/admin/points/activities/${activityId}`, body);
+    return res.data.data;
+  },
+  async pointUsers(params?: { page?: number; page_size?: number; query?: string }) {
+    const res = await request.get<ApiResponse<AdminPointUsersApi>>("/admin/points/users", { params });
+    return res.data.data;
+  },
+  async adjustUserPoints(userId: number, body: { points: number; reason: string }) {
+    const res = await request.post<ApiResponse<AdminPointUserApi>>(`/admin/points/users/${userId}/adjust`, body);
+    return res.data.data;
+  },
+  async pointRiskConfig() {
+    const res = await request.get<ApiResponse<AdminPointRiskConfigApi>>("/admin/points/risk-config");
+    return res.data.data;
+  },
+  async updatePointRiskConfig(body: Partial<AdminPointRiskConfigApi>) {
+    const res = await request.patch<ApiResponse<AdminPointRiskConfigApi>>("/admin/points/risk-config", body);
+    return res.data.data;
+  },
+  async pointRedemptionCodes() {
+    const res = await request.get<ApiResponse<AdminPointRedemptionCodeApi[]>>("/admin/points/redemption-codes");
+    return res.data.data;
+  },
+  async createPointRedemptionCode(body: { code: string; title: string; points: number; max_uses: number; per_user_uses?: number; enabled?: boolean }) {
+    const res = await request.post<ApiResponse<AdminPointRedemptionCodeApi>>("/admin/points/redemption-codes", body);
+    return res.data.data;
+  },
+  async referralSummary() {
+    const res = await request.get<ApiResponse<AdminReferralSummaryApi>>("/admin/points/referral-summary");
+    return res.data.data;
+  },
+  async pointCostSummary() {
+    const res = await request.get<ApiResponse<AdminPointCostSummaryApi>>("/admin/points/cost-summary");
     return res.data.data;
   },
 };

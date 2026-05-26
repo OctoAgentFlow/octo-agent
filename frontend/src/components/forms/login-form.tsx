@@ -19,6 +19,7 @@ type AuthMode = "login" | "register";
 type LoginFormProps = {
   mode: AuthMode;
   adminMode?: boolean;
+  inviteCode?: string;
   onSuccess?: (mode: AuthMode, tokens: { accessToken: string; refreshToken: string }) => void;
 };
 
@@ -30,7 +31,7 @@ type LoginValues = {
 type RegisterValues = z.infer<typeof registerSchema>;
 const CODE_COOLDOWN_SECONDS = 60;
 
-export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps) {
+export function LoginForm({ mode, adminMode = false, inviteCode = "", onSuccess }: LoginFormProps) {
   const { t } = useT();
   const { pushToast } = useToast();
   const [codeCooldown, setCodeCooldown] = useState(0);
@@ -44,8 +45,14 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
 
   const registerForm = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", verificationCode: "", password: "", confirmPassword: "" },
+    defaultValues: { name: "", email: "", verificationCode: "", inviteCode, password: "", confirmPassword: "" },
   });
+
+  useEffect(() => {
+    if (inviteCode) {
+      registerForm.setValue("inviteCode", inviteCode);
+    }
+  }, [inviteCode, registerForm]);
 
   const currentForm = mode === "login" ? loginForm : registerForm;
   const emailRegister = mode === "login" ? loginForm.register("email") : registerForm.register("email");
@@ -88,6 +95,7 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
         password: registerValues.password,
         name: registerValues.name,
         verification_code: registerValues.verificationCode,
+        invite_code: registerValues.inviteCode,
       });
       pushToast(t("auth.toast.accountCreated"));
       onSuccess?.(mode, {
@@ -223,6 +231,14 @@ export function LoginForm({ mode, adminMode = false, onSuccess }: LoginFormProps
             </label>
             <Input id="name" type="text" placeholder={t("auth.form.name.placeholder")} error={registerForm.formState.errors.name?.message} {...registerForm.register("name")} />
           </div>
+          {inviteCode ? (
+            <div className="space-y-1.5">
+              <label htmlFor="inviteCode" className="text-xs text-white/70">
+                {t("auth.form.inviteCode.label")}
+              </label>
+              <Input id="inviteCode" type="text" placeholder={t("auth.form.inviteCode.placeholder")} error={registerForm.formState.errors.inviteCode?.message} {...registerForm.register("inviteCode")} />
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <label htmlFor="verificationCode" className="text-xs text-white/70">
               {t("auth.form.verificationCode.label")}

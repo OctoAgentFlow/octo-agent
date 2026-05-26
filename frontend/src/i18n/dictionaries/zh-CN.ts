@@ -1048,7 +1048,7 @@ export const dict: I18nDict = {
   "executionQueue.publisherMode.simulated": "测试发布模式",
   "executionQueue.publisherMode.dryRun": "Dry Run",
   "executionQueue.publisherMode.real": "Real Publish Enabled",
-  "executionQueue.publisherMode.limits": "每日 {daily} 次，冷却 {cooldown} 秒",
+  "executionQueue.publisherMode.limits": "X 账号发布风控：单账号 24 小时最多 {daily} 次，冷却 {cooldown} 秒",
   "executionQueue.publisherMode.missingScope": "{count} 个账号缺少 tweet.write",
   "executionQueue.publishStatus.pending": "待发布",
   "executionQueue.publishStatus.processing": "发布中",

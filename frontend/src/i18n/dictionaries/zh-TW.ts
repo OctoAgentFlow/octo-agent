@@ -568,7 +568,7 @@ export const dict: I18nDict = {
   "executionQueue.publisherMode.simulated": "測試發布模式",
   "executionQueue.publisherMode.dryRun": "Dry Run",
   "executionQueue.publisherMode.real": "Real Publish Enabled",
-  "executionQueue.publisherMode.limits": "每日 {daily} 次，冷卻 {cooldown} 秒",
+  "executionQueue.publisherMode.limits": "X 帳號發布風控：單帳號 24 小時最多 {daily} 次，冷卻 {cooldown} 秒",
   "executionQueue.publisherMode.missingScope": "{count} 個帳號缺少 tweet.write",
   "executionQueue.publishStatus.pending": "待發布",
   "executionQueue.publishStatus.processing": "發布中",

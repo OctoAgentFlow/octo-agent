@@ -568,7 +568,7 @@ export const dict: I18nDict = {
   "executionQueue.publisherMode.simulated": "Simulated publish mode",
   "executionQueue.publisherMode.dryRun": "Dry Run",
   "executionQueue.publisherMode.real": "Real Publish Enabled",
-  "executionQueue.publisherMode.limits": "{daily}/day, {cooldown}s cooldown",
+  "executionQueue.publisherMode.limits": "X account guardrail: max {daily} publishes per account / 24h, {cooldown}s cooldown",
   "executionQueue.publisherMode.missingScope": "{count} account(s) missing tweet.write",
   "executionQueue.publishStatus.pending": "Pending",
   "executionQueue.publishStatus.processing": "Processing",

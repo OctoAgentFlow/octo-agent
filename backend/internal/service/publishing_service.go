@@ -726,7 +726,7 @@ func (s *PublishingService) enforceManualPublishLimits(userID uint, accountID ui
 		return err
 	}
 	if count >= int64(s.cfg.PerAccountDailyLimit) {
-		return &PublishingError{Code: "publisher_daily_limit_exceeded", Message: "daily x publish limit exceeded for this account"}
+		return &PublishingError{Code: "publisher_account_24h_guardrail_exceeded", Message: "X account publish guardrail exceeded for the last 24 hours"}
 	}
 	last, err := s.jobRepo.LastManualPublishedByAccount(accountID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

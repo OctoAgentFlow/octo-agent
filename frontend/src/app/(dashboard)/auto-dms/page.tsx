@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useT } from "@/i18n/use-t";
 import {
   automationService,
@@ -164,6 +165,8 @@ export default function AutoDMsPage() {
         </Card>
       ) : (
         <>
+          <AutomationModulePausedNotice type="dm" />
+
           <AutoDMSetupGuide
             hasRecipients={dmRecipients.length > 0}
             hasReviewTasks={dmTasks.length > 0}

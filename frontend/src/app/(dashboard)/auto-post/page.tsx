@@ -22,6 +22,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
@@ -531,6 +532,8 @@ export default function AutoPostPage() {
           </Button>
         </Card>
       ) : null}
+
+      <AutomationModulePausedNotice type="post" />
 
       {loadState === "ready" ? (
         <>

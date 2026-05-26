@@ -7,6 +7,7 @@ import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
@@ -233,6 +234,8 @@ export default function AutoRepliesPage() {
           <Button onClick={() => void loadAll()}>{t("autoReply.retry")}</Button>
         </Card>
       ) : null}
+
+      <AutomationModulePausedNotice type="reply" />
 
       {loadState === "ready" ? (
         <>

@@ -69,6 +69,7 @@ export default function AutoCommentsPage() {
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -191,6 +192,10 @@ export default function AutoCommentsPage() {
 
   const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
   const hasTargetInput = Boolean(tweetURL.trim() && authorHandle.trim() && targetText.trim());
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.comment.name") })
+    : undefined;
 
   const selectExecutionMode = async (mode: ExecutionMode) => {
     if (mode === "autopilot" && !autopilotAvailable) return;
@@ -238,7 +243,7 @@ export default function AutoCommentsPage() {
         </Card>
       ) : null}
 
-      <AutomationModulePausedNotice type="comment" />
+      <AutomationModulePausedNotice type="comment" onEnabledChange={setModuleEnabled} />
 
       {loadState === "ready" ? (
         <>
@@ -413,7 +418,12 @@ export default function AutoCommentsPage() {
 
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
-          <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+            <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+            {modulePaused ? (
+              <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                {modulePausedActionTip}
+              </p>
+            ) : null}
           </div>
           <div className="divide-y divide-[#2f3336]">
             {drafts.length === 0 ? (
@@ -472,7 +482,7 @@ export default function AutoCommentsPage() {
                               {t("autoComment.review.edit")}
                             </Button>
                             {canReview ? (
-                              <Button size="sm" onClick={() => void approveDraft(draft.id)}>
+                              <Button size="sm" onClick={() => void approveDraft(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
                                 <CheckCircle2 className="size-4" />
                                 {t("autoComment.review.approve")}
                               </Button>

@@ -1761,6 +1761,7 @@ export const dict: I18nDict = {
   "automation.pausedNotice.openControl": "Open control center",
   "automation.pausedNotice.enabledToast": "{module} enabled.",
   "automation.pausedNotice.enableFailed": "Failed to enable module.",
+  "automation.pausedNotice.actionDisabled": "{module} is disabled in the control center. Enable it before continuing the automated execution flow.",
   "automation.overallState.Running": "Running",
   "automation.overallState.Paused": "Paused",
   "automation.overallState.Needs Attention": "Needs Attention",

@@ -1730,6 +1730,7 @@ export const dict: I18nDict = {
   "automation.pausedNotice.openControl": "回到总控台",
   "automation.pausedNotice.enabledToast": "{module} 已启用。",
   "automation.pausedNotice.enableFailed": "启用模块失败。",
+  "automation.pausedNotice.actionDisabled": "{module} 已在总控台停用，启用后才会继续进入自动执行流程。",
   "automation.overallState.Running": "运行中",
   "automation.overallState.Paused": "已暂停",
   "automation.overallState.Needs Attention": "需要关注",

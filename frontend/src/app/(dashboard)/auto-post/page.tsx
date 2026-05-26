@@ -155,6 +155,7 @@ export default function AutoPostPage() {
   const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -230,6 +231,10 @@ export default function AutoPostPage() {
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
+    : undefined;
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -533,7 +538,7 @@ export default function AutoPostPage() {
         </Card>
       ) : null}
 
-      <AutomationModulePausedNotice type="post" />
+      <AutomationModulePausedNotice type="post" onEnabledChange={setModuleEnabled} />
 
       {loadState === "ready" ? (
         <>
@@ -623,13 +628,24 @@ export default function AutoPostPage() {
                 title={t("autoPost.status.title")}
                 description={t("autoPost.status.description")}
                 right={
-                  <Button size="sm" type="button" onClick={() => void runPlannerNow()} disabled={runningPlanner || !selectedAccountID}>
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => void runPlannerNow()}
+                    disabled={runningPlanner || !selectedAccountID || modulePaused}
+                    title={modulePausedActionTip}
+                  >
                     {runningPlanner ? <Loader2 className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
                     {t("autoPost.runNow.button")}
                   </Button>
                 }
               />
               <div className="space-y-3 text-sm">
+                {modulePaused ? (
+                  <p className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                    {modulePausedActionTip}
+                  </p>
+                ) : null}
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
                 <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />

@@ -13,7 +13,13 @@ import { automationService, type AutomationModuleApi } from "@/services/automati
 
 type AutomationModuleType = AutomationModuleApi["type"];
 
-export function AutomationModulePausedNotice({ type }: { type: AutomationModuleType }) {
+export function AutomationModulePausedNotice({
+  type,
+  onEnabledChange,
+}: {
+  type: AutomationModuleType;
+  onEnabledChange?: (enabled: boolean) => void;
+}) {
   const { t } = useT();
   const { pushToast } = useToast();
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -24,11 +30,14 @@ export function AutomationModulePausedNotice({ type }: { type: AutomationModuleT
     try {
       const data = await automationService.list();
       const module = data.modules.find((item) => item.type === type);
-      setEnabled(module?.config.enabled ?? true);
+      const nextEnabled = module?.config.enabled ?? true;
+      setEnabled(nextEnabled);
+      onEnabledChange?.(nextEnabled);
     } catch {
       setEnabled(true);
+      onEnabledChange?.(true);
     }
-  }, [type]);
+  }, [onEnabledChange, type]);
 
   useEffect(() => {
     void loadStatus();
@@ -39,6 +48,7 @@ export function AutomationModulePausedNotice({ type }: { type: AutomationModuleT
     try {
       const updated = await automationService.toggle(type, true);
       setEnabled(updated.config.enabled);
+      onEnabledChange?.(updated.config.enabled);
       pushToast(t("automation.pausedNotice.enabledToast", { module: moduleName }));
     } catch (error) {
       const message = axios.isAxiosError(error)

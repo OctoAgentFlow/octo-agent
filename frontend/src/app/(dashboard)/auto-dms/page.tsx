@@ -35,11 +35,16 @@ export default function AutoDMsPage() {
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
 
   const reviewCount = dmTasks.filter((task) => task.status === "review").length;
   const approvedCount = dmTasks.filter((task) => task.status === "approved" || task.status === "sent").length;
   const riskCount = dmTasks.filter((task) => task.status === "failed" || task.status === "blocked").length;
   const allowlistedCount = dmRecipients.filter((rule) => rule.status === "allowlisted").length;
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.dm.name") })
+    : undefined;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,7 +170,7 @@ export default function AutoDMsPage() {
         </Card>
       ) : (
         <>
-          <AutomationModulePausedNotice type="dm" />
+          <AutomationModulePausedNotice type="dm" onEnabledChange={setModuleEnabled} />
 
           <AutoDMSetupGuide
             hasRecipients={dmRecipients.length > 0}
@@ -210,6 +215,11 @@ export default function AutoDMsPage() {
                   </Button>
                 }
               />
+              {modulePaused ? (
+                <p className="mx-5 mb-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80 md:mx-6">
+                  {modulePausedActionTip}
+                </p>
+              ) : null}
               <div className="space-y-3">
                 {dmTasks.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center">
@@ -254,8 +264,8 @@ export default function AutoDMsPage() {
                             ) : null}
                           </div>
                           <div className="flex min-w-0 flex-wrap justify-start gap-2 lg:max-w-[260px] lg:justify-end">
-                            {canAct ? <Button size="sm" onClick={() => approveDMTask(task.id)}>{t("automation.dmReview.approve")}</Button> : null}
-                            {canRetry ? <Button size="sm" onClick={() => retryDMTask(task.id)}>{t("automation.dmReview.retry")}</Button> : null}
+                            {canAct ? <Button size="sm" onClick={() => approveDMTask(task.id)} disabled={modulePaused} title={modulePausedActionTip}>{t("automation.dmReview.approve")}</Button> : null}
+                            {canRetry ? <Button size="sm" onClick={() => retryDMTask(task.id)} disabled={modulePaused} title={modulePausedActionTip}>{t("automation.dmReview.retry")}</Button> : null}
                             {canAct || canRetry ? <Button size="sm" variant="outline" onClick={() => blockDMTask(task.id)}>{t("automation.dmReview.block")}</Button> : null}
                             {task.recipient_user_id ? (
                               <>

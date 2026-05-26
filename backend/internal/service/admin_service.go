@@ -74,6 +74,7 @@ func (s *AdminService) Overview(operatorID uint) (*dto.AdminOverviewResponse, er
 		Billing:      billingOpsSummaryDTO(billingSummary),
 		Activity:     s.activitySummary(),
 		Content:      s.contentSummary(),
+		Execution:    s.executionSummary(),
 		Config:       s.configSummary(),
 		RecentUsers:  recentUsers,
 		RecentOrders: adminBillingOrdersDTO(recentOrders),
@@ -973,6 +974,31 @@ func (s *AdminService) contentSummary() dto.AdminContentSummary {
 	}
 }
 
+func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
+	now := time.Now().UTC()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+	since24h := now.Add(-24 * time.Hour)
+	monthlyCostCents, monthlyAIGenerations := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "openai", monthStart, monthEnd)
+	xCostCents, monthlyXPublishes := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "x", monthStart, monthEnd)
+	monthlyCostCents += xCostCents
+	return dto.AdminExecutionSummary{
+		PublishPending:       s.mustCount(&model.PublishJob{}, "status = ?", "pending"),
+		PublishProcessing:    s.mustCount(&model.PublishJob{}, "status = ?", "processing"),
+		PublishFailed:        s.mustCount(&model.PublishJob{}, "status = ?", "failed"),
+		PublishedThisMonth:   s.mustCount(&model.PublishJob{}, "status = ? AND published_at IS NOT NULL AND published_at >= ? AND published_at < ?", "published", monthStart, monthEnd),
+		AutoPostEnabledPlans: s.mustCount(&model.AutoPostPlan{}, "enabled = ?", true),
+		AutoPostDueNow:       s.mustCount(&model.AutoPostPlan{}, "enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, now),
+		AutoPostSkipped24h:   s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "skipped", since24h),
+		AutoPostFailed24h:    s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "failed", since24h),
+		NeedsReauthAccounts:  s.mustCount(&model.TwitterAccount{}, "status = ?", "needs_reauth"),
+		MonthlyAIGenerations: monthlyAIGenerations,
+		MonthlyXPublishes:    monthlyXPublishes,
+		MonthlyCostCents:     monthlyCostCents,
+		MonthlyCostAmount:    adminCentsAmountString(monthlyCostCents),
+	}
+}
+
 func (s *AdminService) configSummary() dto.AdminConfigSummary {
 	return dto.AdminConfigSummary{
 		EmailProvider:      strings.ToLower(strings.TrimSpace(s.cfg.Email.Provider)),
@@ -1028,6 +1054,22 @@ func (s *AdminService) mustCount(modelValue any, where ...any) int64 {
 		return 0
 	}
 	return n
+}
+
+func (s *AdminService) mustCostUsage(where string, args ...any) (int64, int64) {
+	type rowData struct {
+		Cents    int64
+		Quantity int64
+	}
+	var row rowData
+	err := s.db.Model(&model.CostUsageLedger{}).
+		Select("COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE estimated_cost_cents END), 0) AS cents, COALESCE(SUM(quantity), 0) AS quantity").
+		Where(where, args...).
+		Scan(&row).Error
+	if err != nil {
+		return 0, 0
+	}
+	return row.Cents, row.Quantity
 }
 
 func adminPagination(page, pageSize int) (int, int) {

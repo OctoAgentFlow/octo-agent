@@ -6,6 +6,7 @@ type AdminOverviewResponse struct {
 	Billing      BillingOrderOpsSummary  `json:"billing"`
 	Activity     AdminActivitySummary    `json:"activity"`
 	Content      AdminContentSummary     `json:"content"`
+	Execution    AdminExecutionSummary   `json:"execution"`
 	Config       AdminConfigSummary      `json:"config"`
 	RecentUsers  []AdminUserListItem     `json:"recent_users"`
 	RecentOrders []BillingOrderListItem  `json:"recent_orders"`
@@ -44,6 +45,22 @@ type AdminContentSummary struct {
 	FailedPosts        int64 `json:"failed_posts"`
 	EnabledAutomations int64 `json:"enabled_automations"`
 	PausedAutomations  int64 `json:"paused_automations"`
+}
+
+type AdminExecutionSummary struct {
+	PublishPending       int64  `json:"publish_pending"`
+	PublishProcessing    int64  `json:"publish_processing"`
+	PublishFailed        int64  `json:"publish_failed"`
+	PublishedThisMonth   int64  `json:"published_this_month"`
+	AutoPostEnabledPlans int64  `json:"auto_post_enabled_plans"`
+	AutoPostDueNow       int64  `json:"auto_post_due_now"`
+	AutoPostSkipped24h   int64  `json:"auto_post_skipped_24h"`
+	AutoPostFailed24h    int64  `json:"auto_post_failed_24h"`
+	NeedsReauthAccounts  int64  `json:"needs_reauth_accounts"`
+	MonthlyAIGenerations int64  `json:"monthly_ai_generations"`
+	MonthlyXPublishes    int64  `json:"monthly_x_publishes"`
+	MonthlyCostCents     int64  `json:"monthly_cost_cents"`
+	MonthlyCostAmount    string `json:"monthly_cost_amount"`
 }
 
 type AdminConfigSummary struct {

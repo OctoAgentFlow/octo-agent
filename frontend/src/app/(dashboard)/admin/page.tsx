@@ -481,7 +481,14 @@ function AdminHero({
   onRefresh: () => void;
 }) {
   const { t } = useT();
-  const riskCount = overview.billing.review_needed + overview.billing.needs_review + overview.activity.failed + configIssueCount(overview);
+  const riskCount =
+    overview.billing.review_needed +
+    overview.billing.needs_review +
+    overview.activity.failed +
+    overview.execution.publish_failed +
+    overview.execution.auto_post_failed_24h +
+    overview.execution.needs_reauth_accounts +
+    configIssueCount(overview);
   return (
     <section className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-5 md:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -571,6 +578,7 @@ function Metric({
 function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi; onNavigate: (section: AdminSection) => void }) {
   const { t } = useT();
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
+  const publishBacklog = overview.execution.publish_pending + overview.execution.publish_processing;
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -615,6 +623,29 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
             <Metric label={t("admin.metrics.suspendedUsers")} value={overview.users.suspended} icon={Users} tone={overview.users.suspended > 0 ? "warn" : "default"} />
             <Metric label={t("admin.metrics.publishedPosts")} value={overview.content.published_posts} icon={Activity} />
             <Metric label={t("admin.metrics.enabledAutomations")} value={overview.content.enabled_automations} icon={Settings} />
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.execution.title")} description={t("admin.execution.description")} />
+          <div className="grid gap-3 md:grid-cols-3">
+            <Metric label={t("admin.execution.publishBacklog")} value={publishBacklog} icon={ReceiptText} tone={publishBacklog > 0 ? "warn" : "good"} />
+            <Metric label={t("admin.execution.publishFailed")} value={overview.execution.publish_failed} icon={AlertTriangle} tone={overview.execution.publish_failed > 0 ? "danger" : "good"} />
+            <Metric label={t("admin.execution.publishedThisMonth")} value={overview.execution.published_this_month} icon={CheckCircle2} tone="good" />
+            <Metric label={t("admin.execution.autoPostDueNow")} value={overview.execution.auto_post_due_now} icon={Activity} tone={overview.execution.auto_post_due_now > 0 ? "warn" : "default"} />
+            <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
+            <Metric label={t("admin.execution.needsReauth")} value={overview.execution.needs_reauth_accounts} icon={ShieldCheck} tone={overview.execution.needs_reauth_accounts > 0 ? "warn" : "good"} />
+          </div>
+        </Card>
+        <Card className="bg-[#0f1419]">
+          <CardHeader title={t("admin.execution.monthlyUsageTitle")} description={t("admin.execution.monthlyUsageDesc")} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Metric label={t("admin.execution.monthlyAI")} value={overview.execution.monthly_ai_generations} icon={Activity} />
+            <Metric label={t("admin.execution.monthlyX")} value={overview.execution.monthly_x_publishes} icon={CheckCircle2} />
+            <Metric label={t("admin.execution.monthlyCost")} value={`${overview.execution.monthly_cost_amount} USDT`} icon={Coins} tone={overview.execution.monthly_cost_cents > 0 ? "warn" : "default"} />
+            <Metric label={t("admin.execution.autoPostEnabled")} value={overview.execution.auto_post_enabled_plans} icon={Settings} />
           </div>
         </Card>
       </section>
@@ -1504,6 +1535,15 @@ function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
             </div>
           ))}
           {overview.recent_events.length === 0 ? <p className="py-8 text-center text-sm text-[#71767b]">{t("admin.activity.empty")}</p> : null}
+        </div>
+      </Card>
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("admin.execution.activityTitle")} description={t("admin.execution.activityDesc")} />
+        <div className="grid gap-3 md:grid-cols-4">
+          <Metric label={t("admin.execution.publishPending")} value={overview.execution.publish_pending} icon={ReceiptText} tone={overview.execution.publish_pending > 0 ? "warn" : "good"} />
+          <Metric label={t("admin.execution.publishProcessing")} value={overview.execution.publish_processing} icon={Activity} />
+          <Metric label={t("admin.execution.autoPostSkipped24h")} value={overview.execution.auto_post_skipped_24h} icon={AlertTriangle} tone={overview.execution.auto_post_skipped_24h > 0 ? "warn" : "good"} />
+          <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
         </div>
       </Card>
     </div>

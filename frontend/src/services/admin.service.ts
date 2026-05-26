@@ -48,6 +48,22 @@ export type AdminContentSummaryApi = {
   paused_automations: number;
 };
 
+export type AdminExecutionSummaryApi = {
+  publish_pending: number;
+  publish_processing: number;
+  publish_failed: number;
+  published_this_month: number;
+  auto_post_enabled_plans: number;
+  auto_post_due_now: number;
+  auto_post_skipped_24h: number;
+  auto_post_failed_24h: number;
+  needs_reauth_accounts: number;
+  monthly_ai_generations: number;
+  monthly_x_publishes: number;
+  monthly_cost_cents: number;
+  monthly_cost_amount: string;
+};
+
 export type AdminConfigSummaryApi = {
   email_provider: string;
   resend_configured: boolean;
@@ -87,6 +103,7 @@ export type AdminOverviewApi = {
   billing: BillingOpsSummaryApi;
   activity: AdminActivitySummaryApi;
   content: AdminContentSummaryApi;
+  execution: AdminExecutionSummaryApi;
   config: AdminConfigSummaryApi;
   recent_users: AdminUserListItemApi[];
   recent_orders: BillingOrderListItemApi[];

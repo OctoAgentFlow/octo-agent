@@ -29,32 +29,34 @@ type autoPostPlannerRunOptions struct {
 }
 
 type AutoPostService struct {
-	accountRepo  *repository.TwitterAccountRepository
-	planRepo     *repository.AutoPostPlanRepository
-	draftRepo    *repository.AutoPostDraftRepository
-	runRepo      *repository.AutoPostGenerationRunRepository
-	contentRepo  *repository.ContentLibraryRepository
-	activityRepo *repository.ActivityRepository
-	userRepo     *repository.UserRepository
-	oafBotRepo   *repository.OAFBotRepository
-	usageRepo    *repository.AIGenerationUsageRepository
-	ai           *AIService
-	publishing   *PublishingService
+	accountRepo    *repository.TwitterAccountRepository
+	automationRepo *repository.AutomationRepository
+	planRepo       *repository.AutoPostPlanRepository
+	draftRepo      *repository.AutoPostDraftRepository
+	runRepo        *repository.AutoPostGenerationRunRepository
+	contentRepo    *repository.ContentLibraryRepository
+	activityRepo   *repository.ActivityRepository
+	userRepo       *repository.UserRepository
+	oafBotRepo     *repository.OAFBotRepository
+	usageRepo      *repository.AIGenerationUsageRepository
+	ai             *AIService
+	publishing     *PublishingService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
 	return &AutoPostService{
-		accountRepo:  accountRepo,
-		planRepo:     planRepo,
-		draftRepo:    draftRepo,
-		runRepo:      runRepo,
-		contentRepo:  contentRepo,
-		activityRepo: activityRepo,
-		userRepo:     userRepo,
-		oafBotRepo:   oafBotRepo,
-		usageRepo:    usageRepo,
-		ai:           ai,
-		publishing:   publishing,
+		accountRepo:    accountRepo,
+		automationRepo: automationRepo,
+		planRepo:       planRepo,
+		draftRepo:      draftRepo,
+		runRepo:        runRepo,
+		contentRepo:    contentRepo,
+		activityRepo:   activityRepo,
+		userRepo:       userRepo,
+		oafBotRepo:     oafBotRepo,
+		usageRepo:      usageRepo,
+		ai:             ai,
+		publishing:     publishing,
 	}
 }
 
@@ -161,6 +163,9 @@ func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResp
 func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (*dto.AutoPostGenerationRunItem, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+		return nil, err
 	}
 	if _, err := s.planRepo.GetByUserAndID(userID, planID); err != nil {
 		return nil, err
@@ -465,6 +470,9 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 }
 
 func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem, error) {
+	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+		return nil, err
+	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -489,6 +497,9 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 }
 
 func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftItem, error) {
+	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+		return nil, err
+	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err

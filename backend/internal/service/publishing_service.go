@@ -101,17 +101,18 @@ func (e *PublishingError) Error() string {
 }
 
 type PublishingService struct {
-	jobRepo     *repository.PublishJobRepository
-	commentRepo *repository.AutoCommentTaskRepository
-	replyRepo   *repository.AutoReplyDraftRepository
-	postRepo    *repository.AutoPostDraftRepository
-	accountRepo *repository.TwitterAccountRepository
-	userRepo    *repository.UserRepository
-	activity    *repository.ActivityRepository
-	cfg         config.XPublisherConfig
-	oauth       config.XOAuthConfig
-	httpClient  *http.Client
-	publisher   XPublisher
+	jobRepo        *repository.PublishJobRepository
+	commentRepo    *repository.AutoCommentTaskRepository
+	replyRepo      *repository.AutoReplyDraftRepository
+	postRepo       *repository.AutoPostDraftRepository
+	accountRepo    *repository.TwitterAccountRepository
+	automationRepo *repository.AutomationRepository
+	userRepo       *repository.UserRepository
+	activity       *repository.ActivityRepository
+	cfg            config.XPublisherConfig
+	oauth          config.XOAuthConfig
+	httpClient     *http.Client
+	publisher      XPublisher
 }
 
 func NewPublishingService(
@@ -120,6 +121,7 @@ func NewPublishingService(
 	replyRepo *repository.AutoReplyDraftRepository,
 	postRepo *repository.AutoPostDraftRepository,
 	accountRepo *repository.TwitterAccountRepository,
+	automationRepo *repository.AutomationRepository,
 	userRepo *repository.UserRepository,
 	activity *repository.ActivityRepository,
 	cfg config.XPublisherConfig,
@@ -130,17 +132,18 @@ func NewPublishingService(
 		publisher = RealXPublisher{}
 	}
 	return &PublishingService{
-		jobRepo:     jobRepo,
-		commentRepo: commentRepo,
-		replyRepo:   replyRepo,
-		postRepo:    postRepo,
-		accountRepo: accountRepo,
-		userRepo:    userRepo,
-		activity:    activity,
-		cfg:         normalizeXPublisherConfig(cfg),
-		oauth:       oauth,
-		httpClient:  &http.Client{Timeout: 20 * time.Second},
-		publisher:   publisher,
+		jobRepo:        jobRepo,
+		commentRepo:    commentRepo,
+		replyRepo:      replyRepo,
+		postRepo:       postRepo,
+		accountRepo:    accountRepo,
+		automationRepo: automationRepo,
+		userRepo:       userRepo,
+		activity:       activity,
+		cfg:            normalizeXPublisherConfig(cfg),
+		oauth:          oauth,
+		httpClient:     &http.Client{Timeout: 20 * time.Second},
+		publisher:      publisher,
 	}
 }
 
@@ -314,6 +317,9 @@ func (s *PublishingService) RunOnce(ctx context.Context) {
 func (s *PublishingService) RetryJob(userID, id uint) (*dto.PublishJobItem, error) {
 	job, err := s.jobRepo.GetByUserAndID(userID, id)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.assertPublishSourceAutomationEnabled(job); err != nil {
 		return nil, err
 	}
 	if job.Status != repository.PublishStatusFailed {
@@ -511,9 +517,44 @@ func shouldAutoPublishRealPost(job *model.PublishJob, cfg config.XPublisherConfi
 	return cfg.DryRun || cfg.RealPublishEnabled
 }
 
+func automationTypeForPublishSource(sourceType string) string {
+	switch sourceType {
+	case repository.PublishSourcePost:
+		return repository.AutomationTypePost
+	case repository.PublishSourceComment:
+		return repository.AutomationTypeComment
+	case repository.PublishSourceReply:
+		return repository.AutomationTypeReply
+	case repository.PublishSourceDM:
+		return repository.AutomationTypeDM
+	default:
+		return ""
+	}
+}
+
+func (s *PublishingService) assertPublishSourceAutomationEnabled(job *model.PublishJob) error {
+	if job == nil {
+		return nil
+	}
+	typ := automationTypeForPublishSource(job.SourceType)
+	if typ == "" {
+		return nil
+	}
+	if err := assertAutomationModuleEnabled(s.automationRepo, job.UserID, typ); err != nil {
+		if errors.Is(err, ErrAutomationModulePaused) {
+			return &PublishingError{Code: "automation_module_paused", Message: err.Error()}
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) error {
 	if strings.TrimSpace(job.Content) == "" {
 		return fmt.Errorf("publish content is empty")
+	}
+	if err := s.assertPublishSourceAutomationEnabled(job); err != nil {
+		return err
 	}
 	u, err := s.userRepo.GetByID(job.UserID)
 	if err != nil {
@@ -559,6 +600,9 @@ func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) er
 func (s *PublishingService) validateManualPublishJob(job *model.PublishJob, now time.Time) (*model.TwitterAccount, error) {
 	if strings.TrimSpace(job.Content) == "" {
 		return nil, fmt.Errorf("publish content is empty")
+	}
+	if err := s.assertPublishSourceAutomationEnabled(job); err != nil {
+		return nil, err
 	}
 	u, err := s.userRepo.GetByID(job.UserID)
 	if err != nil {

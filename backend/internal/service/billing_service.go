@@ -358,7 +358,11 @@ func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.
 	if len(reasons) == 0 {
 		return nil
 	}
-	alert.Notify(ctx, alert.Event{
+	event, err := s.createGrossMarginAlertEvent(health, reasons)
+	if err != nil {
+		return err
+	}
+	notifyErr := alert.NotifySync(ctx, alert.Event{
 		Level:    alert.LevelWarning,
 		Category: alert.CategoryBilling,
 		Title:    "Gross margin risk detected",
@@ -380,7 +384,50 @@ func (s *BillingService) CheckGrossMarginAndAlert(ctx context.Context, now time.
 			"point_discount_points": health.PointDiscountPoints,
 		},
 	})
-	return nil
+	if event != nil {
+		status := "sent"
+		errMsg := ""
+		if notifyErr != nil {
+			status = "failed"
+			errMsg = truncateErrMsg(notifyErr.Error())
+		}
+		if err := s.orderRepo.DB.Model(&model.GrossMarginAlertEvent{}).Where("id = ?", event.ID).Updates(map[string]any{
+			"lark_status": status,
+			"lark_error":  errMsg,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return notifyErr
+}
+
+func (s *BillingService) createGrossMarginAlertEvent(health GrossMarginHealth, reasons []string) (*model.GrossMarginAlertEvent, error) {
+	if s == nil || s.orderRepo == nil || s.orderRepo.DB == nil {
+		return nil, nil
+	}
+	reasonJSON, _ := json.Marshal(reasons)
+	cfgJSON, _ := json.Marshal(health.Config)
+	row := &model.GrossMarginAlertEvent{
+		PeriodStart:        health.PeriodStart,
+		PeriodEnd:          health.PeriodEnd,
+		Level:              alert.LevelWarning,
+		Status:             "open",
+		Reasons:            string(reasonJSON),
+		RevenueCents:       health.RevenueCents,
+		TotalCostCents:     health.TotalCostCents,
+		GrossProfitCents:   health.GrossProfitCents,
+		GrossMarginBps:     health.GrossMarginBps,
+		TargetMarginBps:    health.TargetBps,
+		OpenAICostCents:    health.OpenAICostCents,
+		XCostCents:         health.XCostCents,
+		PointDiscountCents: health.PointDiscountCents,
+		LarkStatus:         "pending",
+		ConfigSnapshot:     string(cfgJSON),
+	}
+	if err := s.orderRepo.DB.Create(row).Error; err != nil {
+		return nil, err
+	}
+	return row, nil
 }
 
 func (s *BillingService) monthlyPaidRevenueCents(periodStart, periodEnd time.Time) (int64, error) {

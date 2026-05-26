@@ -29,7 +29,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -769,7 +769,10 @@ function BillingSection({
   const [orders, setOrders] = useState(overview.recent_orders);
   const [grossMargin, setGrossMargin] = useState<AdminGrossMarginSummaryApi | null>(null);
   const [grossMarginAlertConfig, setGrossMarginAlertConfig] = useState<AdminGrossMarginAlertConfigApi | null>(null);
+  const [grossMarginAlerts, setGrossMarginAlerts] = useState<AdminGrossMarginAlertEventApi[]>([]);
   const [savingGrossMarginConfig, setSavingGrossMarginConfig] = useState("");
+  const [acknowledgingAlert, setAcknowledgingAlert] = useState<number | null>(null);
+  const [alertNotes, setAlertNotes] = useState<Record<number, string>>({});
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
@@ -805,15 +808,17 @@ function BillingSection({
     let cancelled = false;
     const loadGrossMargin = async () => {
       try {
-        const [data, config] = await Promise.all([adminService.grossMarginSummary(), adminService.grossMarginAlertConfig()]);
+        const [data, config, alerts] = await Promise.all([adminService.grossMarginSummary(), adminService.grossMarginAlertConfig(), adminService.grossMarginAlertEvents()]);
         if (!cancelled) {
           setGrossMargin(data);
           setGrossMarginAlertConfig(config);
+          setGrossMarginAlerts(alerts.items);
         }
       } catch {
         if (!cancelled) {
           setGrossMargin(null);
           setGrossMarginAlertConfig(null);
+          setGrossMarginAlerts([]);
         }
       }
     };
@@ -833,6 +838,16 @@ function BillingSection({
       setGrossMargin(data);
     } finally {
       setSavingGrossMarginConfig("");
+    }
+  };
+
+  const acknowledgeGrossMarginAlert = async (alertId: number) => {
+    setAcknowledgingAlert(alertId);
+    try {
+      const next = await adminService.acknowledgeGrossMarginAlert(alertId, { note: alertNotes[alertId] || "" });
+      setGrossMarginAlerts((items) => items.map((item) => (item.id === alertId ? next : item)));
+    } finally {
+      setAcknowledgingAlert(null);
     }
   };
 
@@ -907,6 +922,52 @@ function BillingSection({
               </div>
             </div>
           ) : null}
+          <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+            <p className="text-sm font-semibold text-white">{t("admin.billing.margin.alertHistory")}</p>
+            <div className="mt-3 space-y-3">
+              {grossMarginAlerts.length === 0 ? (
+                <p className="text-sm text-[#71767b]">{t("admin.billing.margin.noAlerts")}</p>
+              ) : (
+                grossMarginAlerts.slice(0, 6).map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={item.status === "acknowledged" ? "success" : "warning"}>{t(`admin.billing.margin.alertStatus.${item.status}`)}</Badge>
+                          <Badge variant={item.lark_status === "sent" ? "success" : item.lark_status === "failed" ? "danger" : "default"}>{t(`admin.billing.margin.larkStatus.${item.lark_status}`)}</Badge>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-white">
+                          {formatBps(item.gross_margin_bps)} · {item.gross_profit} USDT
+                        </p>
+                        <p className="mt-1 text-xs text-[#71767b]">{formatDate(item.created_at)}</p>
+                      </div>
+                      <div className="text-right text-xs text-[#71767b]">
+                        <p>{t("admin.billing.margin.revenue")}: {item.revenue_amount} USDT</p>
+                        <p>{t("admin.billing.margin.cost")}: {item.total_cost} USDT</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.reasons.map((reason) => (
+                        <span key={reason} className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2.5 py-1 text-xs text-[#f6d96b]">
+                          {t(`admin.billing.margin.reason.${reason}`)}
+                        </span>
+                      ))}
+                    </div>
+                    {item.status === "acknowledged" ? (
+                      <p className="mt-3 text-xs text-[#71767b]">{item.acknowledge_note || t("admin.billing.margin.acknowledged")}</p>
+                    ) : (
+                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+                        <Input placeholder={t("admin.billing.margin.ackNote")} value={alertNotes[item.id] || ""} onChange={(event) => setAlertNotes((prev) => ({ ...prev, [item.id]: event.target.value }))} />
+                        <Button type="button" disabled={acknowledgingAlert === item.id} onClick={() => void acknowledgeGrossMarginAlert(item.id)}>
+                          {t("admin.billing.margin.ack")}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </Card>
       ) : null}
       <Card className="bg-[#0f1419]">

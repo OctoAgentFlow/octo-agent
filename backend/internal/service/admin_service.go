@@ -228,6 +228,44 @@ func (s *AdminService) UpdateGrossMarginAlertConfig(operatorID uint, req dto.Adm
 	return &out, nil
 }
 
+func (s *AdminService) ListGrossMarginAlertEvents(operatorID uint) (*dto.AdminGrossMarginAlertEventListResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	var rows []model.GrossMarginAlertEvent
+	if err := s.db.Order("id DESC").Limit(50).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	items := make([]dto.AdminGrossMarginAlertEventItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, adminGrossMarginAlertEventDTO(row))
+	}
+	return &dto.AdminGrossMarginAlertEventListResponse{Items: items}, nil
+}
+
+func (s *AdminService) AcknowledgeGrossMarginAlertEvent(operatorID, alertID uint, req dto.AdminAcknowledgeGrossMarginAlertRequest) (*dto.AdminGrossMarginAlertEventItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	var row model.GrossMarginAlertEvent
+	if err := s.db.First(&row, alertID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAdminUserNotFound
+		}
+		return nil, err
+	}
+	now := time.Now().UTC()
+	row.Status = "acknowledged"
+	row.AcknowledgedBy = operatorID
+	row.AcknowledgedAt = &now
+	row.AcknowledgeNote = limitString(strings.TrimSpace(req.Note), 1024)
+	if err := s.db.Save(&row).Error; err != nil {
+		return nil, err
+	}
+	out := adminGrossMarginAlertEventDTO(row)
+	return &out, nil
+}
+
 func serviceBillingForAdmin(s *AdminService) *BillingService {
 	return NewBillingService(s.userRepo, s.billingOrderRepo, s.pointRepo, nil, nil, nil, nil, s.cfg)
 }
@@ -1072,6 +1110,38 @@ func adminGrossMarginAlertConfigDTO(cfg model.GrossMarginAlertConfig) dto.AdminG
 		CheckIntervalHours:          cfg.CheckIntervalHours,
 		UpdatedAt:                   cfg.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func adminGrossMarginAlertEventDTO(row model.GrossMarginAlertEvent) dto.AdminGrossMarginAlertEventItem {
+	reasons := []string{}
+	if strings.TrimSpace(row.Reasons) != "" {
+		_ = json.Unmarshal([]byte(row.Reasons), &reasons)
+	}
+	item := dto.AdminGrossMarginAlertEventItem{
+		ID:                row.ID,
+		PeriodStart:       row.PeriodStart.UTC().Format(time.RFC3339),
+		PeriodEnd:         row.PeriodEnd.UTC().Format(time.RFC3339),
+		Level:             row.Level,
+		Status:            row.Status,
+		Reasons:           reasons,
+		RevenueAmount:     adminCentsAmountString(row.RevenueCents),
+		TotalCost:         adminCentsAmountString(row.TotalCostCents),
+		GrossProfit:       adminCentsAmountString(row.GrossProfitCents),
+		GrossMarginBps:    row.GrossMarginBps,
+		TargetMarginBps:   row.TargetMarginBps,
+		OpenAICost:        adminCentsAmountString(row.OpenAICostCents),
+		XCost:             adminCentsAmountString(row.XCostCents),
+		PointDiscountCost: adminCentsAmountString(row.PointDiscountCents),
+		LarkStatus:        row.LarkStatus,
+		LarkError:         row.LarkError,
+		AcknowledgedBy:    row.AcknowledgedBy,
+		AcknowledgeNote:   row.AcknowledgeNote,
+		CreatedAt:         row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.AcknowledgedAt != nil {
+		item.AcknowledgedAt = row.AcknowledgedAt.UTC().Format(time.RFC3339)
+	}
+	return item
 }
 
 func adminPointRedemptionCodeDTO(row model.PointRedemptionCode) dto.AdminPointRedemptionCodeItem {

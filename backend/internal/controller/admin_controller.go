@@ -144,6 +144,44 @@ func (ctl *AdminController) UpdateGrossMarginAlertConfig(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) ListGrossMarginAlertEvents(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ListGrossMarginAlertEvents(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) AcknowledgeGrossMarginAlertEvent(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	alertIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || alertIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid alert id")
+		return
+	}
+	var req dto.AdminAcknowledgeGrossMarginAlertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.AcknowledgeGrossMarginAlertEvent(userID, uint(alertIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

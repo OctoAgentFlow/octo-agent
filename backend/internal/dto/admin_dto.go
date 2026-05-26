@@ -242,6 +242,37 @@ type AdminUpdateGrossMarginAlertConfigRequest struct {
 	CheckIntervalHours          *int   `json:"check_interval_hours"`
 }
 
+type AdminGrossMarginAlertEventItem struct {
+	ID                uint     `json:"id"`
+	PeriodStart       string   `json:"period_start"`
+	PeriodEnd         string   `json:"period_end"`
+	Level             string   `json:"level"`
+	Status            string   `json:"status"`
+	Reasons           []string `json:"reasons"`
+	RevenueAmount     string   `json:"revenue_amount"`
+	TotalCost         string   `json:"total_cost"`
+	GrossProfit       string   `json:"gross_profit"`
+	GrossMarginBps    int64    `json:"gross_margin_bps"`
+	TargetMarginBps   int64    `json:"target_margin_bps"`
+	OpenAICost        string   `json:"openai_cost"`
+	XCost             string   `json:"x_cost"`
+	PointDiscountCost string   `json:"point_discount_cost"`
+	LarkStatus        string   `json:"lark_status"`
+	LarkError         string   `json:"lark_error,omitempty"`
+	AcknowledgedBy    uint     `json:"acknowledged_by,omitempty"`
+	AcknowledgedAt    string   `json:"acknowledged_at,omitempty"`
+	AcknowledgeNote   string   `json:"acknowledge_note,omitempty"`
+	CreatedAt         string   `json:"created_at"`
+}
+
+type AdminGrossMarginAlertEventListResponse struct {
+	Items []AdminGrossMarginAlertEventItem `json:"items"`
+}
+
+type AdminAcknowledgeGrossMarginAlertRequest struct {
+	Note string `json:"note"`
+}
+
 type AdminReferralSummaryResponse struct {
 	InviteCodes          int64 `json:"invite_codes"`
 	ReferralSignups      int64 `json:"referral_signups"`

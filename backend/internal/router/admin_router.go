@@ -17,6 +17,8 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.GET("/billing/gross-margin", c.GrossMarginSummary)
 	g.GET("/billing/gross-margin/alert-config", c.GrossMarginAlertConfig)
 	g.PATCH("/billing/gross-margin/alert-config", c.UpdateGrossMarginAlertConfig)
+	g.GET("/billing/gross-margin/alerts", c.ListGrossMarginAlertEvents)
+	g.POST("/billing/gross-margin/alerts/:id/acknowledge", c.AcknowledgeGrossMarginAlertEvent)
 	g.POST("/billing/orders/:id/ops-action", c.UpdateBillingOrderOpsAction)
 	g.GET("/points/activities", c.ListPointActivities)
 	g.PATCH("/points/activities/:id", c.UpdatePointActivity)

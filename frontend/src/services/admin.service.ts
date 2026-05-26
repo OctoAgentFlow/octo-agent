@@ -217,6 +217,33 @@ export type AdminGrossMarginAlertConfigApi = {
   updated_at: string;
 };
 
+export type AdminGrossMarginAlertEventApi = {
+  id: number;
+  period_start: string;
+  period_end: string;
+  level: string;
+  status: string;
+  reasons: string[];
+  revenue_amount: string;
+  total_cost: string;
+  gross_profit: string;
+  gross_margin_bps: number;
+  target_margin_bps: number;
+  openai_cost: string;
+  x_cost: string;
+  point_discount_cost: string;
+  lark_status: string;
+  lark_error?: string;
+  acknowledged_by?: number;
+  acknowledged_at?: string;
+  acknowledge_note?: string;
+  created_at: string;
+};
+
+export type AdminGrossMarginAlertEventListApi = {
+  items: AdminGrossMarginAlertEventApi[];
+};
+
 export type AdminPointCostSourceApi = {
   source: string;
   points: number;
@@ -265,6 +292,14 @@ export const adminService = {
   },
   async updateGrossMarginAlertConfig(body: Partial<AdminGrossMarginAlertConfigApi>) {
     const res = await request.patch<ApiResponse<AdminGrossMarginAlertConfigApi>>("/admin/billing/gross-margin/alert-config", body);
+    return res.data.data;
+  },
+  async grossMarginAlertEvents() {
+    const res = await request.get<ApiResponse<AdminGrossMarginAlertEventListApi>>("/admin/billing/gross-margin/alerts");
+    return res.data.data;
+  },
+  async acknowledgeGrossMarginAlert(id: number, body: { note: string }) {
+    const res = await request.post<ApiResponse<AdminGrossMarginAlertEventApi>>(`/admin/billing/gross-margin/alerts/${id}/acknowledge`, body);
     return res.data.data;
   },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {

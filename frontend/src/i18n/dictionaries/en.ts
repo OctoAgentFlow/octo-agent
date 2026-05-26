@@ -1294,6 +1294,9 @@ export const dict: I18nDict = {
   "activity.preview.dmSendFailed": "Auto DM real send failed on X.",
   "activity.preview.dmRecipientRuleUpdated": "Auto DM recipient rule was updated.",
   "activity.preview.dmRecipientImport": "Auto DM allowlist import completed.",
+  "activity.preview.automationModuleEnabled": "Automation module was enabled.",
+  "activity.preview.automationModuleDisabled": "Automation module was paused.",
+  "activity.preview.automationModulePausedBlocked": "Automation execution was blocked because the module is paused.",
   "activity.reply.story": "{account} replied to {them}: \"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} published a post successfully.",
 

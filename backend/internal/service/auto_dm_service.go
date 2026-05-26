@@ -359,7 +359,7 @@ func (s *AutoDMService) ListRecipientImports(userID uint) (*dto.AutoDMRecipientI
 }
 
 func (s *AutoDMService) ApproveTask(userID, taskID uint) (*dto.AutoDMTaskItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypeDM); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeDM, "approve dm task"); err != nil {
 		return nil, err
 	}
 	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
@@ -400,7 +400,7 @@ func (s *AutoDMService) BlockTask(userID, taskID uint, reason string) (*dto.Auto
 }
 
 func (s *AutoDMService) RetryTask(userID, taskID uint) (*dto.AutoDMTaskItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypeDM); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeDM, "retry dm task"); err != nil {
 		return nil, err
 	}
 	task, err := s.taskRepo.GetByUserAndID(userID, taskID)

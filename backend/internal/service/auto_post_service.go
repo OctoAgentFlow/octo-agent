@@ -164,7 +164,7 @@ func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "run auto post planner now"); err != nil {
 		return nil, err
 	}
 	if _, err := s.planRepo.GetByUserAndID(userID, planID); err != nil {
@@ -470,7 +470,7 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 }
 
 func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "approve auto post draft"); err != nil {
 		return nil, err
 	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
@@ -497,7 +497,7 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 }
 
 func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypePost); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "prepare auto post publish job"); err != nil {
 		return nil, err
 	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)

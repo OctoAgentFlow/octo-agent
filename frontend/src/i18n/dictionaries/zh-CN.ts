@@ -1267,6 +1267,9 @@ export const dict: I18nDict = {
   "activity.preview.dmSendFailed": "自动私信真实发送到 X 失败。",
   "activity.preview.dmRecipientRuleUpdated": "自动私信收件人规则已更新。",
   "activity.preview.dmRecipientImport": "自动私信白名单导入已完成。",
+  "activity.preview.automationModuleEnabled": "自动化模块已启用。",
+  "activity.preview.automationModuleDisabled": "自动化模块已暂停。",
+  "activity.preview.automationModulePausedBlocked": "自动化执行被拦截：对应模块当前已暂停。",
   "activity.reply.story": "{account} 回复了 {them}：\"{incoming}\" → \"{outgoing}\"",
   "activity.post.story": "{account} 已成功发布一条内容。",
 

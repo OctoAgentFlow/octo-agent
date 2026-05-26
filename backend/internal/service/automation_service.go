@@ -110,6 +110,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		return nil, err
 	}
 	keywords, _ := json.Marshal(req.Safety.BlockedKeywords)
+	wasEnabled := cfg.Enabled
 
 	if req.Enabled {
 		if err := s.assertSubscriptionForAutomation(userID); err != nil {
@@ -150,6 +151,15 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	}
 	if err := s.repo.Save(cfg); err != nil {
 		return nil, err
+	}
+	if wasEnabled != cfg.Enabled {
+		previewKey := "activity.preview.automationModuleDisabled"
+		status := "review"
+		if cfg.Enabled {
+			previewKey = "activity.preview.automationModuleEnabled"
+			status = "success"
+		}
+		_ = recordAutomationActivity(s.activityRepo, userID, typ, status, previewKey, "")
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {
@@ -199,6 +209,7 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	wasEnabled := cfg.Enabled
 	if enabled {
 		if err := s.assertSubscriptionForAutomation(userID); err != nil {
 			return nil, err
@@ -221,6 +232,15 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 	}
 	if err := s.repo.Save(cfg); err != nil {
 		return nil, err
+	}
+	if wasEnabled != cfg.Enabled {
+		previewKey := "activity.preview.automationModuleDisabled"
+		status := "review"
+		if cfg.Enabled {
+			previewKey = "activity.preview.automationModuleEnabled"
+			status = "success"
+		}
+		_ = recordAutomationActivity(s.activityRepo, userID, typ, status, previewKey, "")
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {

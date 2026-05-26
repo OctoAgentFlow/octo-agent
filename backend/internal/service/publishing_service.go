@@ -540,7 +540,7 @@ func (s *PublishingService) assertPublishSourceAutomationEnabled(job *model.Publ
 	if typ == "" {
 		return nil
 	}
-	if err := assertAutomationModuleEnabled(s.automationRepo, job.UserID, typ); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activity, job.UserID, typ, "publish pipeline action"); err != nil {
 		if errors.Is(err, ErrAutomationModulePaused) {
 			return &PublishingError{Code: "automation_module_paused", Message: err.Error()}
 		}

@@ -198,7 +198,7 @@ func (s *AutoReplyService) UpdateDraft(userID, id uint, content string) (*dto.Au
 }
 
 func (s *AutoReplyService) ApproveDraft(userID, id uint) (*dto.AutoReplyDraftItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypeReply); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeReply, "approve reply draft"); err != nil {
 		return nil, err
 	}
 	draft, err := s.replyDraftRepo.GetByUserAndID(userID, id)

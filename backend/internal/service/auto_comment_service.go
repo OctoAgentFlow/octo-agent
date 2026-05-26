@@ -257,7 +257,7 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 }
 
 func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypeComment); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "approve comment draft"); err != nil {
 		return nil, err
 	}
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
@@ -338,7 +338,7 @@ func (s *AutoCommentService) BlockTask(userID, id uint, reason string) (*dto.Aut
 }
 
 func (s *AutoCommentService) RetryTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
-	if err := assertAutomationModuleEnabled(s.automationRepo, userID, repository.AutomationTypeComment); err != nil {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "retry comment task"); err != nil {
 		return nil, err
 	}
 	task, err := s.taskRepo.GetByUserAndID(userID, id)

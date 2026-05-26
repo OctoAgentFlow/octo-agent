@@ -129,11 +129,13 @@ type XOAuthConfig struct {
 
 // XPublisherConfig controls manual real publishing through the unified publishing pipeline.
 type XPublisherConfig struct {
-	RealPublishEnabled        bool `yaml:"real_publish_enabled"`
-	ManualPublishEnabled      bool `yaml:"manual_publish_enabled"`
-	PerAccountDailyLimit      int  `yaml:"per_account_daily_limit"`
-	PerAccountMinIntervalSecs int  `yaml:"per_account_min_interval_seconds"`
-	DryRun                    bool `yaml:"dry_run"`
+	RealPublishEnabled        bool     `yaml:"real_publish_enabled"`
+	ManualPublishEnabled      bool     `yaml:"manual_publish_enabled"`
+	PerAccountDailyLimit      int      `yaml:"per_account_daily_limit"`
+	PerAccountMinIntervalSecs int      `yaml:"per_account_min_interval_seconds"`
+	UnlimitedUserEmails       []string `yaml:"unlimited_user_emails"`
+	UnlimitedAccountUsernames []string `yaml:"unlimited_account_usernames"`
+	DryRun                    bool     `yaml:"dry_run"`
 }
 
 // LLMConfig is the shared LLM provider configuration for current and future AI features.

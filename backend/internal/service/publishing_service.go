@@ -580,6 +580,13 @@ func (s *PublishingService) enforceManualPublishLimits(userID uint, accountID ui
 		if err != nil {
 			return err
 		}
+		account, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, accountID)
+		if err != nil {
+			return fmt.Errorf("x account is not connected")
+		}
+		if isUnlimitedXPublisherAccount(s.cfg, user, account) {
+			return nil
+		}
 		limits := subscription.LimitsForUser(user)
 		if limits.MonthlyXWrites <= 0 {
 			return &PublishingError{Code: "publisher_monthly_x_quota_exceeded", Message: "monthly real X publish quota is not available for this plan"}
@@ -940,6 +947,30 @@ func normalizeXPublisherConfig(cfg config.XPublisherConfig) config.XPublisherCon
 		cfg.DryRun = true
 	}
 	return cfg
+}
+
+func isUnlimitedXPublisherAccount(cfg config.XPublisherConfig, user *model.User, account *model.TwitterAccount) bool {
+	if user != nil {
+		email := strings.ToLower(strings.TrimSpace(user.Email))
+		for _, candidate := range cfg.UnlimitedUserEmails {
+			if email != "" && email == strings.ToLower(strings.TrimSpace(candidate)) {
+				return true
+			}
+		}
+	}
+	if account != nil {
+		username := normalizePublisherUsername(account.Username)
+		for _, candidate := range cfg.UnlimitedAccountUsernames {
+			if username != "" && username == normalizePublisherUsername(candidate) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func normalizePublisherUsername(value string) string {
+	return strings.ToLower(strings.TrimPrefix(strings.TrimSpace(value), "@"))
 }
 
 func hasOAuthScope(scopes string, expected string) bool {

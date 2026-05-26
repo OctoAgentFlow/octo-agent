@@ -75,6 +75,10 @@ x_publisher:
   manual_publish_enabled: true
   per_account_daily_limit: 1
   per_account_min_interval_seconds: 300
+  unlimited_user_emails:
+    - "owner@example.com"
+  unlimited_account_usernames:
+    - "octo_agent_flow"
   dry_run: false
 
 llm:

@@ -43,11 +43,26 @@ func recordAutomationActivity(repo *repository.ActivityRepository, userID uint, 
 	now := time.Now().UTC()
 	return repo.DB.Create(&model.ActivityLog{
 		UserID:        userID,
-		Type:          typ,
+		Type:          "system",
 		Status:        status,
 		PreviewKey:    previewKey,
-		AccountHandle: "System",
+		AccountHandle: automationActivityHandle(typ),
 		ExecutedAt:    now,
 		ErrorMessage:  truncateErrMsg(message),
 	}).Error
+}
+
+func automationActivityHandle(typ string) string {
+	switch typ {
+	case repository.AutomationTypePost:
+		return "System / Auto Post"
+	case repository.AutomationTypeReply:
+		return "System / Auto Reply"
+	case repository.AutomationTypeComment:
+		return "System / Auto Comment"
+	case repository.AutomationTypeDM:
+		return "System / Auto DM"
+	default:
+		return "System"
+	}
 }

@@ -691,6 +691,7 @@ export const dict: I18nDict = {
   "activity.type.post": "自動發文",
   "activity.type.reply": "自動回覆",
   "activity.type.dm": "自動私訊",
+  "activity.type.system": "系統事件",
   "activity.status.success": "成功",
   "activity.status.review": "待審核",
   "activity.status.failed": "失敗",

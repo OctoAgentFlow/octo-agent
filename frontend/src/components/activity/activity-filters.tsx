@@ -46,6 +46,7 @@ export function ActivityFilters({ value, onChange, accounts }: Props) {
             <option value="reply">{t("activity.type.reply")}</option>
             <option value="comment">{t("activity.type.comment")}</option>
             <option value="dm">{t("activity.type.dm")}</option>
+            <option value="system">{t("activity.type.system")}</option>
           </select>
           </label>
           <label className="space-y-1">

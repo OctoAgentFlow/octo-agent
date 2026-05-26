@@ -9,7 +9,7 @@ type ApiResponse<T> = {
 export type ActivityItemApi = {
   id: number;
   x_account_id?: number;
-  type: "post" | "reply" | "dm" | "comment";
+  type: "post" | "reply" | "dm" | "comment" | "system";
   status: "success" | "review" | "failed";
   preview_key: string;
   account_handle: string;
@@ -33,7 +33,7 @@ export type ActivityListData = {
 export type ActivityListQuery = {
   page?: number;
   page_size?: number;
-  type?: "post" | "reply" | "dm" | "comment";
+  type?: "post" | "reply" | "dm" | "comment" | "system";
   status?: "success" | "review" | "failed";
   range?: "24h" | "7d" | "30d";
   account_id?: number;

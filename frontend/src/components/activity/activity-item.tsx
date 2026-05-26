@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import type { ActivityRecord } from "@/types/activity";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ function typeMeta(type: ActivityRecord["type"]) {
   if (type === "post") return { labelKey: "activity.type.post", icon: Bot };
   if (type === "reply") return { labelKey: "activity.type.reply", icon: MessageCircleReply };
   if (type === "comment") return { labelKey: "activity.type.comment", icon: MessageCircle };
+  if (type === "system") return { labelKey: "activity.type.system", icon: Settings };
   return { labelKey: "activity.type.dm", icon: Send };
 }
 

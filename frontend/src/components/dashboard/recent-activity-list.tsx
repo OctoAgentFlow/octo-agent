@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, MessageCircleReply, Send } from "lucide-react";
+import { Bot, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
@@ -19,12 +19,16 @@ type RecentActivityListProps = {
 function typeIcon(type: ActivityRecord["type"]) {
   if (type === "post") return Bot;
   if (type === "reply") return MessageCircleReply;
+  if (type === "comment") return MessageCircle;
+  if (type === "system") return Settings;
   return Send;
 }
 
 function typeLabelKey(type: ActivityRecord["type"]) {
   if (type === "post") return "activity.type.post";
   if (type === "reply") return "activity.type.reply";
+  if (type === "comment") return "activity.type.comment";
+  if (type === "system") return "activity.type.system";
   return "activity.type.dm";
 }
 

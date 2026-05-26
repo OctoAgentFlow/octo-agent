@@ -1225,6 +1225,7 @@ export const dict: I18nDict = {
   "activity.type.reply": "Auto Reply",
   "activity.type.comment": "Auto Comment",
   "activity.type.dm": "Auto DM",
+  "activity.type.system": "System Event",
   "activity.status.success": "Success",
   "activity.status.review": "Review",
   "activity.status.failed": "Failed",

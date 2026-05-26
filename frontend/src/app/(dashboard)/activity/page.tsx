@@ -33,7 +33,7 @@ type Filters = {
 };
 
 function readType(value: string | null): Filters["type"] {
-  return value === "post" || value === "reply" || value === "comment" || value === "dm" ? value : "all";
+  return value === "post" || value === "reply" || value === "comment" || value === "dm" || value === "system" ? value : "all";
 }
 
 function readStatus(value: string | null): Filters["status"] {

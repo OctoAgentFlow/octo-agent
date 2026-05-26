@@ -1198,6 +1198,7 @@ export const dict: I18nDict = {
   "activity.type.reply": "自动回复",
   "activity.type.comment": "自动评论",
   "activity.type.dm": "自动私信",
+  "activity.type.system": "系统事件",
   "activity.status.success": "成功",
   "activity.status.review": "待审核",
   "activity.status.failed": "失败",

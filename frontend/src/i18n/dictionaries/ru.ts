@@ -691,6 +691,7 @@ export const dict: I18nDict = {
   "activity.type.post": "Auto Post",
   "activity.type.reply": "Auto Reply",
   "activity.type.dm": "Auto DM",
+  "activity.type.system": "System Event",
   "activity.status.success": "Успех",
   "activity.status.review": "Проверка",
   "activity.status.failed": "Ошибка",

@@ -28,9 +28,8 @@ import {
   type AutomationRuntimeStatusApi,
 } from "@/services/automation.service";
 import { postService } from "@/services/post.service";
-import type { AutomationModule, AutomationModuleConfig, AutomationRuntimeStatus } from "@/types/automation";
+import type { AutomationModule, AutomationRuntimeStatus } from "@/types/automation";
 
-import { AutomationEditDialog } from "@/components/automation/automation-edit-dialog";
 import { AutomationModuleCard } from "@/components/automation/automation-module-card";
 import { AutomationPageHeader } from "@/components/automation/automation-page-header";
 import { AutomationStatusPanel } from "@/components/automation/automation-status-panel";
@@ -127,15 +126,8 @@ export default function AgentsPage() {
     retriesLast24h: 0,
     needsReview: 0,
   });
-  const [editType, setEditType] = useState<AutomationModule["type"] | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
   const [modulesHighlighted, setModulesHighlighted] = useState(false);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const editing = useMemo(
-    () => (editType ? modules.find((m) => m.type === editType) ?? null : null),
-    [editType, modules]
-  );
 
   const overallState = useMemo(() => {
     if (modules.some((m) => m.state === "Needs Review")) return "Needs Attention" as const;
@@ -281,41 +273,6 @@ export default function AgentsPage() {
     }
   };
 
-  const onEdit = (type: AutomationModule["type"]) => {
-    setEditType(type);
-    setEditOpen(true);
-  };
-
-  const onSave = async (type: AutomationModule["type"], config: AutomationModuleConfig) => {
-    try {
-      const updated = await automationService.update(type, {
-        enabled: config.enabled,
-        frequency: {
-          interval_minutes: config.frequency.intervalMinutes,
-          daily_limit: config.frequency.dailyLimit,
-        },
-        tone: config.tone,
-        execution_mode: config.executionMode,
-        safety: {
-          require_approval: config.safety.requireApproval,
-          max_per_hour: config.safety.maxPerHour,
-          blocked_keywords: config.safety.blockedKeywords,
-        },
-      });
-      setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
-      const runtime = await automationService.runtimeStatus();
-      setRuntimeStatus(mapRuntime(runtime));
-      pushToast(t("automation.toast.configSaved", { module: t(`automation.module.${type}.name`) }));
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        pushToast(error.response?.data?.message || t("automation.toast.configFailed"));
-      } else {
-        pushToast(t("automation.toast.configFailed"));
-      }
-      throw error;
-    }
-  };
-
   return (
     <div className="space-y-4 md:space-y-5">
       <AutomationPageHeader overallState={overallState} />
@@ -359,18 +316,11 @@ export default function AgentsPage() {
         }`}
       >
         {modules.map((module) => (
-          <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} onEdit={onEdit} />
+          <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} />
         ))}
       </div>
 
       <AutomationStatusPanel status={runtimeStatus} />
-
-      <AutomationEditDialog
-        module={editing}
-        open={editOpen}
-        onOpenChange={(open) => setEditOpen(open)}
-        onSave={onSave}
-      />
     </div>
   );
 }

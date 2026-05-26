@@ -60,6 +60,9 @@ func (r *TwitterAccountRepository) UpsertByUser(userID uint, account *model.Twit
 		if account.XSubscriptionTier != "" {
 			existed.XSubscriptionTier = account.XSubscriptionTier
 		}
+		if account.XSubscriptionSource != "" {
+			existed.XSubscriptionSource = account.XSubscriptionSource
+		}
 		existed.LastSyncedAt = &now
 		existed.AccessToken = account.AccessToken
 		existed.RefreshToken = account.RefreshToken

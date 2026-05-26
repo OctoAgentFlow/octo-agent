@@ -145,6 +145,25 @@ func (ctl *AccountController) UpdateSettings(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AccountController) SyncXSubscription(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	accountID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || accountID == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid account id")
+		return
+	}
+	data, err := ctl.accountService.SyncXSubscription(c.Request.Context(), userID, uint(accountID))
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AccountController) oauthResultRedirect(status string) string {
 	base := strings.TrimRight(ctl.frontendBaseURL, "/")
 	if base == "" {

@@ -15,6 +15,7 @@ export type AccountListItem = {
   last_synced_at?: string;
   followers?: string;
   x_subscription_tier: XSubscriptionTier;
+  x_subscription_source: "manual" | "x_api";
   publish_ready?: boolean;
   publish_reauth_required?: boolean;
   publish_issue?: "needs_reauth" | "missing_access_token" | "missing_tweet_write" | string;
@@ -46,6 +47,10 @@ export const accountService = {
   },
   async updateSettings(id: number, payload: { x_subscription_tier: XSubscriptionTier }) {
     const res = await request.put<ApiResponse<AccountListItem>>(`/accounts/${id}/settings`, payload);
+    return res.data.data;
+  },
+  async syncXSubscription(id: number) {
+    const res = await request.post<ApiResponse<AccountListItem>>(`/accounts/${id}/sync-x-subscription`);
     return res.data.data;
   },
 };

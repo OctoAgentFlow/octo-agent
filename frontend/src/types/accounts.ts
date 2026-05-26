@@ -13,6 +13,7 @@ export type ConnectedXAccount = {
   lastSyncedParams?: TranslateParams;
   followers?: string;
   xSubscriptionTier: XSubscriptionTier;
+  xSubscriptionSource: "manual" | "x_api";
   publishReady?: boolean;
   publishReauthRequired?: boolean;
   publishIssue?: string;

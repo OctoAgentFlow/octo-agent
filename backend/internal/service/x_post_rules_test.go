@@ -43,3 +43,18 @@ func TestNormalizeAutoPostLengthModeRequiresPremiumTier(t *testing.T) {
 		t.Fatalf("expected Premium+ account long mode, got %q", got)
 	}
 }
+
+func TestNormalizeXSubscriptionTypeFromAPI(t *testing.T) {
+	cases := map[string]string{
+		"None":        xSubscriptionTierFree,
+		"Basic":       xSubscriptionTierFree,
+		"Premium":     xSubscriptionTierPremium,
+		"PremiumPlus": xSubscriptionTierPremiumPlus,
+		"":            xSubscriptionTierFree,
+	}
+	for input, want := range cases {
+		if got := normalizeXSubscriptionTypeFromAPI(input); got != want {
+			t.Fatalf("normalizeXSubscriptionTypeFromAPI(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

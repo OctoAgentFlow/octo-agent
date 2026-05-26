@@ -14,6 +14,9 @@ const (
 	xSubscriptionTierPremium     = "premium"
 	xSubscriptionTierPremiumPlus = "premium_plus"
 
+	xSubscriptionSourceManual = "manual"
+	xSubscriptionSourceXAPI   = "x_api"
+
 	autoPostLengthModeStandard = "standard"
 	autoPostLengthModeLong     = "long"
 
@@ -37,6 +40,28 @@ func normalizeXSubscriptionTier(value string) string {
 	default:
 		return xSubscriptionTierUnknown
 	}
+}
+
+func normalizeXSubscriptionTypeFromAPI(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "none":
+		return xSubscriptionTierFree
+	case "basic":
+		return xSubscriptionTierFree
+	case "premium":
+		return xSubscriptionTierPremium
+	case "premiumplus", "premium_plus", "premium+", "premium plus":
+		return xSubscriptionTierPremiumPlus
+	default:
+		return xSubscriptionTierUnknown
+	}
+}
+
+func normalizeXSubscriptionSource(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), xSubscriptionSourceXAPI) {
+		return xSubscriptionSourceXAPI
+	}
+	return xSubscriptionSourceManual
 }
 
 func isPremiumXTier(value string) bool {

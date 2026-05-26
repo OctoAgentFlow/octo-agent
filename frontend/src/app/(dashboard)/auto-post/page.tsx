@@ -152,6 +152,7 @@ export default function AutoPostPage() {
   const [generating, setGenerating] = useState(false);
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [savingAccountTier, setSavingAccountTier] = useState(false);
+  const [syncingAccountTier, setSyncingAccountTier] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -293,7 +294,13 @@ export default function AutoPostPage() {
     setSavingAccountTier(true);
     try {
       const saved = await accountService.updateSettings(selectedAccountID, { x_subscription_tier: tier });
-      setAccounts((current) => current.map((account) => (account.id === selectedAccountID ? { ...account, x_subscription_tier: saved.x_subscription_tier } : account)));
+      setAccounts((current) =>
+        current.map((account) =>
+          account.id === selectedAccountID
+            ? { ...account, x_subscription_tier: saved.x_subscription_tier, x_subscription_source: saved.x_subscription_source }
+            : account
+        )
+      );
       if (tier !== "premium" && tier !== "premium_plus") {
         setForm((current) => ({ ...current, contentLengthMode: "standard" }));
       }
@@ -302,6 +309,30 @@ export default function AutoPostPage() {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.account.tierSaveFailed") : t("autoPost.account.tierSaveFailed"));
     } finally {
       setSavingAccountTier(false);
+    }
+  };
+
+  const syncAccountTier = async () => {
+    if (!selectedAccountID) return;
+    setSyncingAccountTier(true);
+    try {
+      const saved = await accountService.syncXSubscription(selectedAccountID);
+      setAccounts((current) =>
+        current.map((account) =>
+          account.id === selectedAccountID
+            ? { ...account, x_subscription_tier: saved.x_subscription_tier, x_subscription_source: saved.x_subscription_source }
+            : account
+        )
+      );
+      setForm((current) => ({
+        ...current,
+        contentLengthMode: saved.x_subscription_tier === "premium" || saved.x_subscription_tier === "premium_plus" ? current.contentLengthMode : "standard",
+      }));
+      pushToast(t("autoPost.account.tierSynced"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.account.tierSyncFailed") : t("autoPost.account.tierSyncFailed"));
+    } finally {
+      setSyncingAccountTier(false);
     }
   };
 
@@ -527,8 +558,14 @@ export default function AutoPostPage() {
                 </div>
               )}
               {selectedAccount ? (
-                <label className="mt-4 block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.tierLabel")}</span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.tierLabel")}</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void syncAccountTier()} disabled={syncingAccountTier}>
+                      {syncingAccountTier ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                      {t("autoPost.account.syncTier")}
+                    </Button>
+                  </div>
                   <select
                     value={selectedAccountTier}
                     onChange={(event) => void updateAccountTier(event.target.value as XSubscriptionTier)}
@@ -541,8 +578,10 @@ export default function AutoPostPage() {
                       </option>
                     ))}
                   </select>
-                  <span className="text-xs leading-5 text-[#71767b]">{t("autoPost.account.tierHelper")}</span>
-                </label>
+                  <span className="block text-xs leading-5 text-[#71767b]">
+                    {t("autoPost.account.tierHelper")} {t(`autoPost.account.tierSource.${selectedAccount.x_subscription_source || "manual"}`)}
+                  </span>
+                </div>
               ) : null}
               <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                 <div className="flex items-start gap-3">

@@ -9,6 +9,7 @@ type AccountItem struct {
 	LastSyncedAt          string   `json:"last_synced_at,omitempty"`
 	Followers             string   `json:"followers,omitempty"`
 	XSubscriptionTier     string   `json:"x_subscription_tier"`
+	XSubscriptionSource   string   `json:"x_subscription_source"`
 	PublishReady          bool     `json:"publish_ready"`
 	PublishReauthRequired bool     `json:"publish_reauth_required"`
 	PublishIssue          string   `json:"publish_issue,omitempty"`

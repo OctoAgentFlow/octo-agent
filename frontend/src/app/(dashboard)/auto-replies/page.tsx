@@ -141,7 +141,7 @@ export default function AutoRepliesPage() {
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
       const message =
-        body?.error_code === "ai_generation_quota_exceeded"
+        body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_reply_monthly_limit_exceeded"
           ? t("autoReply.errors.quota")
           : body?.message || t("autoReply.errors.generate");
       pushToast(message);

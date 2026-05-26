@@ -52,7 +52,6 @@ type WorkbenchPanel = "generate" | "planner" | "content" | "history";
 type PlannerForm = {
   enabled: boolean;
   executionMode: AutoPostExecutionMode;
-  dailyLimit: number;
   minIntervalMinutes: number;
   postingWindows: string;
   timezone: string;
@@ -83,11 +82,10 @@ type LibraryForm = {
   status: ContentLibraryStatus;
 };
 
-function defaultForm(limit?: number): PlannerForm {
+function defaultForm(): PlannerForm {
   return {
     enabled: false,
     executionMode: "review",
-    dailyLimit: limit && limit > 0 ? limit : 3,
     minIntervalMinutes: 120,
     postingWindows: "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -182,7 +180,7 @@ export default function AutoPostPage() {
       const firstAccountID = selectedAccountID || connected[0]?.id || 0;
       setSelectedAccountID(firstAccountID);
       const currentPlan = planData.items.find((item) => item.x_account_id === firstAccountID);
-      setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm(subscriptionData.limits.daily_auto_posts));
+      setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm());
       setLoadState("ready");
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.load") : t("autoPost.errors.load"));
@@ -258,7 +256,7 @@ export default function AutoPostPage() {
     setSelectedAccountID(accountID);
     setSelectedContentItemID(0);
     const plan = plans.find((item) => item.x_account_id === accountID);
-    setForm(plan ? formFromPlan(plan) : defaultForm(subscription?.limits.daily_auto_posts));
+    setForm(plan ? formFromPlan(plan) : defaultForm());
   };
 
   const savePlan = async () => {
@@ -276,7 +274,7 @@ export default function AutoPostPage() {
         x_account_id: selectedAccountID,
         enabled: form.enabled,
         execution_mode: form.executionMode,
-        daily_limit: Number(form.dailyLimit) || 1,
+        daily_limit: 0,
         min_interval_minutes: Number(form.minIntervalMinutes) || 1,
         posting_windows: form.postingWindows.trim(),
         timezone: form.timezone.trim() || "UTC",
@@ -450,7 +448,7 @@ export default function AutoPostPage() {
           x_account_id: selectedAccountID,
           enabled: form.enabled,
           execution_mode: form.executionMode,
-          daily_limit: Number(form.dailyLimit) || 1,
+          daily_limit: 0,
           min_interval_minutes: Number(form.minIntervalMinutes) || 1,
           posting_windows: form.postingWindows.trim(),
           timezone: form.timezone.trim() || "UTC",
@@ -469,7 +467,7 @@ export default function AutoPostPage() {
       const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
       if (code === "ai_generation_quota_exceeded") {
         pushToast(t("autoPost.errors.aiQuotaExceeded"));
-      } else if (code === "auto_post_daily_limit_exceeded") {
+      } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
         pushToast(t("autoPost.errors.dailyLimitExceeded"));
       } else if (code === "auto_post_duplicate_content") {
         pushToast(t("autoPost.errors.duplicateContent"));
@@ -657,7 +655,6 @@ export default function AutoPostPage() {
                   label={t("autoPost.status.lastRunResult")}
                   value={latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.common.emptyValue")}
                 />
-                <StatusRow label={t("autoPost.status.dailyLimit")} value={String(selectedPlan?.daily_limit || form.dailyLimit)} />
                 <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
                 <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
                 <StatusRow label={t("autoPost.status.lengthMode")} value={t(`autoPost.lengthMode.${selectedPlan?.content_length_mode || form.contentLengthMode}`)} />
@@ -742,14 +739,7 @@ export default function AutoPostPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <TextInput
-                    type="number"
-                    label={t("autoPost.fields.dailyLimit")}
-                    value={String(form.dailyLimit)}
-                    onChange={(value) => setForm((current) => ({ ...current, dailyLimit: Number(value) }))}
-                    helper={t("autoPost.fields.dailyLimitHelper")}
-                  />
+                <div className="grid gap-4">
                   <TextInput
                     type="number"
                     label={t("autoPost.fields.minInterval")}
@@ -1433,7 +1423,6 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
   return {
     enabled: plan.enabled,
     executionMode: plan.execution_mode,
-    dailyLimit: plan.daily_limit,
     minIntervalMinutes: plan.min_interval_minutes,
     postingWindows: plan.posting_windows || "",
     timezone: plan.timezone || "UTC",

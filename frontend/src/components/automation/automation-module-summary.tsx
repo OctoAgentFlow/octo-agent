@@ -14,15 +14,6 @@ export function AutomationModuleSummary({ module }: { module: AutomationModule }
   const { t } = useT();
   const nextRun = t(module.nextRunKey, module.nextRunParams);
   const lastRun = t(module.lastRunKey, module.lastRunParams);
-  const usageLabel = module.type === "reply" && module.replyUsage
-    ? t("automation.summary.reply.remaining")
-    : t("automation.summary.executedToday");
-  const usageValue = module.type === "reply" && module.replyUsage
-    ? t("automation.summary.reply.remainingValue", {
-        remaining: module.replyUsage.remainingToday,
-        limit: module.replyUsage.dailyLimit,
-      })
-    : t("automation.summary.executedTodayValue", { count: module.executedToday });
 
   return (
     <div className="min-w-0 flex-1 space-y-3">
@@ -39,7 +30,7 @@ export function AutomationModuleSummary({ module }: { module: AutomationModule }
           label={t("automation.summary.status")}
           value={t(module.config.enabled ? "automation.summary.enabled" : "automation.summary.disabled")}
         />
-        <SummaryMetric label={usageLabel} value={usageValue} />
+        <SummaryMetric label={t("automation.summary.executionMode")} value={t(`automation.executionMode.${module.config.executionMode}`)} />
         <SummaryMetric label={t("automation.summary.nextRunShort")} value={nextRun} />
       </div>
 

@@ -67,6 +67,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
 		return err
 	}
+	if err := BackfillAutomationPackageQuotaOnly(db); err != nil {
+		return err
+	}
 	if err := SeedDefaultPointActivities(db); err != nil {
 		return err
 	}
@@ -289,6 +292,17 @@ SET ac.enabled = false,
     ac.next_run_at = NULL
 WHERE ta.id IS NULL
   AND ac.enabled = true
+`).Error
+}
+
+// BackfillAutomationPackageQuotaOnly removes legacy per-day and per-hour automation throttles.
+func BackfillAutomationPackageQuotaOnly(db *gorm.DB) error {
+	return db.Exec(`
+UPDATE automation_configs
+SET frequency_daily_limit = 0,
+    safety_max_per_hour = 0
+WHERE frequency_daily_limit <> 0
+   OR safety_max_per_hour <> 0
 `).Error
 }
 

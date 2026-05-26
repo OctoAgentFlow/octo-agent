@@ -177,6 +177,10 @@ func (ctl *AutomationController) GenerateReplyDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
 			return
 		}
+		if strings.Contains(err.Error(), "monthly auto reply quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_reply_monthly_limit_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -575,6 +579,10 @@ func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		if strings.Contains(err.Error(), "monthly auto comment quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_comment_monthly_limit_exceeded")
 			return
 		}
 		response.Fail(c, http.StatusBadRequest, err.Error())

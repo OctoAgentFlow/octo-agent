@@ -87,6 +87,10 @@ const emptyLimits: PlanLimits = {
   monthlyXWrites: 10,
   monthlyXUrlPosts: 0,
   monthlyCostCapCents: 0,
+  monthlyAutoPosts: 30,
+  monthlyAutoReplies: 150,
+  monthlyAutoComments: 90,
+  monthlyAutoDMs: 150,
   dailyAutoPosts: 1,
   dailyAutoReplies: 5,
   dailyAutoComments: 3,
@@ -110,6 +114,10 @@ const emptyUsage: PlanUsage = {
   oafBots: 0,
   twitterAccounts: 0,
   aiGenerationsMonth: 0,
+  autoPostsMonth: 0,
+  autoRepliesMonth: 0,
+  autoCommentsMonth: 0,
+  autoDMsMonth: 0,
   autoPostsToday: 0,
   autoRepliesToday: 0,
   autoCommentsToday: 0,
@@ -748,7 +756,7 @@ export default function OAFBotsPage() {
         <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
         <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
         <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
-        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
+        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsMonth} limit={limits.monthlyAutoComments} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">

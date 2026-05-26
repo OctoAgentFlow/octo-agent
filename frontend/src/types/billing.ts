@@ -18,6 +18,10 @@ export type PlanLimits = {
   monthlyXWrites: number;
   monthlyXUrlPosts: number;
   monthlyCostCapCents: number;
+  monthlyAutoPosts: number;
+  monthlyAutoReplies: number;
+  monthlyAutoComments: number;
+  monthlyAutoDMs: number;
   dailyAutoPosts: number;
   dailyAutoReplies: number;
   dailyAutoComments: number;
@@ -41,6 +45,10 @@ export type PlanUsage = {
   oafBots: number;
   twitterAccounts: number;
   aiGenerationsMonth: number;
+  autoPostsMonth: number;
+  autoRepliesMonth: number;
+  autoCommentsMonth: number;
+  autoDMsMonth: number;
   autoPostsToday: number;
   autoRepliesToday: number;
   autoCommentsToday: number;

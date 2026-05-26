@@ -1010,22 +1010,19 @@ func newAutoDMUnsubscribeToken() (string, error) {
 }
 
 func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	if cfg != nil && cfg.FrequencyDailyLimit > 0 {
-		n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", dayStart, now)
-		if err != nil {
-			zap.L().Warn("auto dm: count daily sends failed", zap.Uint("user_id", userID), zap.Error(err))
-		} else if int(n) >= cfg.FrequencyDailyLimit {
-			return true, "daily_limit"
-		}
-	}
-	hourStart := now.Add(-time.Hour)
-	if cfg != nil && cfg.SafetyMaxPerHour > 0 {
-		n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", hourStart, now)
-		if err != nil {
-			zap.L().Warn("auto dm: count hourly sends failed", zap.Uint("user_id", userID), zap.Error(err))
-		} else if int(n) >= cfg.SafetyMaxPerHour {
-			return true, "hourly_limit"
+	if s.userRepo != nil {
+		if u, err := s.userRepo.GetByID(userID); err == nil {
+			limit := subscription.LimitsForUser(u).MonthlyAutoDMs
+			if limit <= 0 {
+				return true, "monthly_quota"
+			}
+			monthStart := startOfUTCMonth(now)
+			n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", monthStart, now)
+			if err != nil {
+				zap.L().Warn("auto dm: count monthly sends failed", zap.Uint("user_id", userID), zap.Error(err))
+			} else if n >= limit {
+				return true, "monthly_quota"
+			}
 		}
 	}
 	return false, ""

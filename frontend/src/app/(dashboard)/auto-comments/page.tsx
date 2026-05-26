@@ -144,7 +144,7 @@ export default function AutoCommentsPage() {
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
       const message =
-        body?.error_code === "ai_generation_quota_exceeded"
+        body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_comment_monthly_limit_exceeded"
           ? t("autoComment.errors.quota")
           : body?.message || t("autoComment.errors.generate");
       pushToast(message);

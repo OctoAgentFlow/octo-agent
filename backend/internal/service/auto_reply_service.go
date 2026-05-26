@@ -122,7 +122,7 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 	}
 	mode := s.effectiveReplyExecutionMode(userID, cfg)
 	if mode == ExecutionModeAutopilot {
-		if err := s.assertAutoReplyDailyQuota(userID, now); err != nil {
+		if err := s.assertAutoReplyMonthlyQuota(userID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -431,28 +431,6 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 }
 
 func (s *AutoReplyService) replyLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {
-	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeReply)
-	if err != nil {
-		return false, ""
-	}
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	nDay, err := s.activityRepo.CountReplySuccessBetween(userID, dayStart, now)
-	if err != nil {
-		zap.L().Warn("auto reply: count daily successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.FrequencyDailyLimit > 0 && int(nDay) >= cfg.FrequencyDailyLimit {
-		return true, "daily_limit"
-	}
-	hourAgo := now.Add(-time.Hour)
-	nHour, err := s.activityRepo.CountReplySuccessBetween(userID, hourAgo, now)
-	if err != nil {
-		zap.L().Warn("auto reply: count hourly successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.SafetyMaxPerHour > 0 && int(nHour) >= cfg.SafetyMaxPerHour {
-		return true, "hourly_limit"
-	}
 	return false, ""
 }
 
@@ -475,7 +453,7 @@ func (s *AutoReplyService) effectiveReplyExecutionMode(userID uint, cfg *model.A
 	return ExecutionModeReview
 }
 
-func (s *AutoReplyService) assertAutoReplyDailyQuota(userID uint, now time.Time) error {
+func (s *AutoReplyService) assertAutoReplyMonthlyQuota(userID uint, now time.Time) error {
 	if s.replyDraftRepo == nil || s.userRepo == nil {
 		return nil
 	}
@@ -483,17 +461,17 @@ func (s *AutoReplyService) assertAutoReplyDailyQuota(userID uint, now time.Time)
 	if err != nil {
 		return err
 	}
-	limit := subscription.LimitsForUser(u).DailyAutoReplies
+	limit := subscription.LimitsForUser(u).MonthlyAutoReplies
 	if limit <= 0 {
-		return fmt.Errorf("daily auto reply quota exceeded")
+		return fmt.Errorf("monthly auto reply quota exceeded")
 	}
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	used, err := s.replyDraftRepo.CountCreatedBetween(userID, dayStart, now)
+	monthStart := startOfUTCMonth(now)
+	used, err := s.replyDraftRepo.CountCreatedBetween(userID, monthStart, now)
 	if err != nil {
 		return err
 	}
 	if used >= limit {
-		return fmt.Errorf("daily auto reply quota exceeded")
+		return fmt.Errorf("monthly auto reply quota exceeded")
 	}
 	return nil
 }

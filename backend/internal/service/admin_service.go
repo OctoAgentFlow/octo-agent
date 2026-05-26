@@ -299,7 +299,7 @@ func (s *AdminService) AcknowledgeGrossMarginAlertEvent(operatorID, alertID uint
 }
 
 func serviceBillingForAdmin(s *AdminService) *BillingService {
-	return NewBillingService(s.userRepo, s.billingOrderRepo, s.pointRepo, nil, nil, nil, nil, s.cfg)
+	return NewBillingService(s.userRepo, s.billingOrderRepo, s.pointRepo, nil, nil, nil, nil, nil, nil, nil, nil, s.cfg)
 }
 
 func (s *AdminService) monthlyPaidRevenue(periodStart, periodEnd time.Time) (int64, []dto.AdminGrossMarginRevenueItem, error) {

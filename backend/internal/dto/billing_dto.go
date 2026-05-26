@@ -39,6 +39,10 @@ type PlanLimitsData struct {
 	MonthlyXWrites       int64 `json:"monthly_x_writes"`
 	MonthlyXURLPosts     int64 `json:"monthly_x_url_posts"`
 	MonthlyCostCapCents  int64 `json:"monthly_cost_cap_cents"`
+	MonthlyAutoPosts     int64 `json:"monthly_auto_posts"`
+	MonthlyAutoReplies   int64 `json:"monthly_auto_replies"`
+	MonthlyAutoComments  int64 `json:"monthly_auto_comments"`
+	MonthlyAutoDMs       int64 `json:"monthly_auto_dms"`
 	DailyAutoPosts       int64 `json:"daily_auto_posts"`
 	DailyAutoReplies     int64 `json:"daily_auto_replies"`
 	DailyAutoComments    int64 `json:"daily_auto_comments"`
@@ -69,6 +73,10 @@ type PlanUsageData struct {
 	OAFBots            int64 `json:"oaf_bots"`
 	TwitterAccounts    int64 `json:"twitter_accounts"`
 	AIGenerationsMonth int64 `json:"ai_generations_month"`
+	AutoPostsMonth     int64 `json:"auto_posts_month"`
+	AutoRepliesMonth   int64 `json:"auto_replies_month"`
+	AutoCommentsMonth  int64 `json:"auto_comments_month"`
+	AutoDMsMonth       int64 `json:"auto_dms_month"`
 	AutoPostsToday     int64 `json:"auto_posts_today"`
 	AutoRepliesToday   int64 `json:"auto_replies_today"`
 	AutoCommentsToday  int64 `json:"auto_comments_today"`

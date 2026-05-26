@@ -13,6 +13,10 @@ type OAFBotListApi = {
     oaf_bots: number;
     twitter_accounts: number;
     ai_generations_month: number;
+    auto_posts_month: number;
+    auto_replies_month: number;
+    auto_comments_month: number;
+    auto_dms_month: number;
     auto_posts_today: number;
     auto_replies_today: number;
     auto_comments_today: number;
@@ -25,6 +29,10 @@ type OAFBotListApi = {
     monthly_x_writes: number;
     monthly_x_url_posts: number;
     monthly_cost_cap_cents: number;
+    monthly_auto_posts: number;
+    monthly_auto_replies: number;
+    monthly_auto_comments: number;
+    monthly_auto_dms: number;
     daily_auto_posts: number;
     daily_auto_replies: number;
     daily_auto_comments: number;
@@ -56,6 +64,10 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       oafBots: data.usage.oaf_bots,
       twitterAccounts: data.usage.twitter_accounts,
       aiGenerationsMonth: data.usage.ai_generations_month,
+      autoPostsMonth: data.usage.auto_posts_month,
+      autoRepliesMonth: data.usage.auto_replies_month,
+      autoCommentsMonth: data.usage.auto_comments_month,
+      autoDMsMonth: data.usage.auto_dms_month,
       autoPostsToday: data.usage.auto_posts_today,
       autoRepliesToday: data.usage.auto_replies_today,
       autoCommentsToday: data.usage.auto_comments_today,
@@ -68,6 +80,10 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       monthlyXWrites: data.limits.monthly_x_writes,
       monthlyXUrlPosts: data.limits.monthly_x_url_posts,
       monthlyCostCapCents: data.limits.monthly_cost_cap_cents,
+      monthlyAutoPosts: data.limits.monthly_auto_posts,
+      monthlyAutoReplies: data.limits.monthly_auto_replies,
+      monthlyAutoComments: data.limits.monthly_auto_comments,
+      monthlyAutoDMs: data.limits.monthly_auto_dms,
       dailyAutoPosts: data.limits.daily_auto_posts,
       dailyAutoReplies: data.limits.daily_auto_replies,
       dailyAutoComments: data.limits.daily_auto_comments,

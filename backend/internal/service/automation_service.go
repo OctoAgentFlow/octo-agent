@@ -71,11 +71,6 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 			if err != nil {
 				return nil, err
 			}
-			dl := items[i].Config.Frequency.DailyLimit
-			rem := dl - int(nDay)
-			if rem < 0 {
-				rem = 0
-			}
 			last, err := s.activityRepo.LatestReplyExecutedAt(userID)
 			if err != nil {
 				return nil, err
@@ -86,8 +81,8 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 			}
 			items[i].ReplyUsage = &dto.AutomationReplyUsage{
 				TodayCount:     int(nDay),
-				DailyLimit:     dl,
-				RemainingToday: rem,
+				DailyLimit:     0,
+				RemainingToday: 0,
 				LastExecutedAt: lastStr,
 			}
 		}
@@ -119,7 +114,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	}
 	cfg.Enabled = req.Enabled
 	cfg.FrequencyIntervalMinutes = req.Frequency.IntervalMinutes
-	cfg.FrequencyDailyLimit = req.Frequency.DailyLimit
+	cfg.FrequencyDailyLimit = 0
 	cfg.Tone = req.Tone
 	if mode := normalizeExecutionMode(req.ExecutionMode); mode != "" {
 		if mode == ExecutionModeAutopilot {
@@ -132,7 +127,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		cfg.ExecutionMode = ExecutionModeReview
 	}
 	cfg.SafetyRequireApproval = req.Safety.RequireApproval
-	cfg.SafetyMaxPerHour = req.Safety.MaxPerHour
+	cfg.SafetyMaxPerHour = 0
 	cfg.SafetyBlockedKeywords = string(keywords)
 	if err := s.syncAutoPostPlannerEnabled(userID, typ, req.Enabled, cfg.FrequencyIntervalMinutes); err != nil {
 		return nil, err

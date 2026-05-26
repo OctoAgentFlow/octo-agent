@@ -147,8 +147,8 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
 			return
 		}
-		if errors.Is(err, service.ErrAutoPostDailyLimitExceeded) {
-			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_post_daily_limit_exceeded")
+		if errors.Is(err, service.ErrAutoPostMonthlyLimitExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_post_monthly_limit_exceeded")
 			return
 		}
 		if errors.Is(err, service.ErrAutoPostDuplicateContent) {

@@ -433,10 +433,67 @@ func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 	if strings.TrimSpace(job.Content) == "" {
 		return s.failJob(job, "simulated_publish_failed", "publish content is empty", true)
 	}
+	if shouldAutoPublishRealPost(job, s.cfg) {
+		return s.processAutoPostPublishJob(ctx, job, now)
+	}
 	return s.completeJob(job, PublishResult{
 		RawResponse: "simulated publish succeeded",
 		PublishedAt: now,
 	}, repository.PublishModeSimulated, "activity.preview.simulatedPublishSuccess")
+}
+
+func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *model.PublishJob, now time.Time) error {
+	account, err := s.validateManualPublishJob(job, now)
+	if err != nil {
+		category := "auto_publish_validation_failed"
+		retryable := false
+		if pe := (&PublishingError{}); errors.As(err, &pe) {
+			category = pe.Code
+			retryable = !shouldMarkJobFailedForPublishingError(pe.Code)
+		}
+		return s.failJobWithPreview(job, category, err.Error(), retryable, "activity.preview.realPublishFailed")
+	}
+	if err := s.enforceManualPublishLimits(job.UserID, job.TwitterAccountID, now); err != nil {
+		category := "auto_publish_limit_blocked"
+		retryable := false
+		if pe := (&PublishingError{}); errors.As(err, &pe) {
+			category = pe.Code
+			retryable = pe.Code == "publisher_cooldown_active"
+		}
+		return s.failJobWithPreview(job, category, err.Error(), retryable, "activity.preview.realPublishFailed")
+	}
+	targetTweetID, err := s.sourceTargetTweetID(job)
+	if err != nil {
+		return s.failJobWithPreview(job, "auto_publish_target_missing", err.Error(), false, "activity.preview.realPublishFailed")
+	}
+	result, mode, previewKey, err := s.publishWithAdapter(ctx, job, *account, targetTweetID)
+	if err != nil {
+		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
+		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, true, "activity.preview.realPublishFailed")
+		alert.Notify(ctx, alert.Event{
+			Level:      alert.LevelError,
+			Category:   alert.CategoryPublishing,
+			Title:      "Auto Post X publish failed",
+			Message:    "Auto Post scheduler failed to publish to X.",
+			UserID:     job.UserID,
+			AccountID:  job.TwitterAccountID,
+			ResourceID: job.ID,
+			Error:      err,
+			Fields: map[string]any{
+				"source_type": job.SourceType,
+				"source_id":   job.SourceID,
+			},
+		})
+		return publishErr
+	}
+	return s.completeJob(job, result, mode, previewKey)
+}
+
+func shouldAutoPublishRealPost(job *model.PublishJob, cfg config.XPublisherConfig) bool {
+	if job == nil || job.SourceType != repository.PublishSourcePost {
+		return false
+	}
+	return cfg.DryRun || cfg.RealPublishEnabled
 }
 
 func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) error {

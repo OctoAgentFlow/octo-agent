@@ -70,6 +70,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := SeedDefaultPointActivities(db); err != nil {
 		return err
 	}
+	if err := BackfillDefaultPointActivityRewards(db); err != nil {
+		return err
+	}
 	if err := SeedDefaultPointRiskConfig(db); err != nil {
 		return err
 	}
@@ -85,7 +88,7 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 			Code:        "daily_check_in",
 			Title:       "Daily check-in",
 			Description: "Claim once per day after signing in.",
-			Points:      5,
+			Points:      1,
 			ClaimPeriod: "daily",
 			Enabled:     true,
 			SortOrder:   10,
@@ -94,7 +97,7 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 			Code:        "bind_x_account",
 			Title:       "Bind an X account",
 			Description: "Claim after connecting at least one X account.",
-			Points:      30,
+			Points:      10,
 			ClaimPeriod: "once",
 			Enabled:     true,
 			SortOrder:   20,
@@ -103,7 +106,7 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 			Code:        "create_oaf_bot",
 			Title:       "Create an OAF Bot",
 			Description: "Claim after creating at least one OAF Bot.",
-			Points:      50,
+			Points:      15,
 			ClaimPeriod: "once",
 			Enabled:     true,
 			SortOrder:   30,
@@ -119,6 +122,26 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 			return err
 		}
 		if err := db.Create(&activity).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func BackfillDefaultPointActivityRewards(db *gorm.DB) error {
+	updates := []struct {
+		code      string
+		oldPoints int64
+		newPoints int64
+	}{
+		{code: "daily_check_in", oldPoints: 5, newPoints: 1},
+		{code: "bind_x_account", oldPoints: 30, newPoints: 10},
+		{code: "create_oaf_bot", oldPoints: 50, newPoints: 15},
+	}
+	for _, item := range updates {
+		if err := db.Model(&model.PointActivity{}).
+			Where("code = ? AND points = ?", item.code, item.oldPoints).
+			Update("points", item.newPoints).Error; err != nil {
 			return err
 		}
 	}

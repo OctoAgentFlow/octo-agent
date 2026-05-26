@@ -22,6 +22,12 @@ func (r *AutoPostPlanRepository) ListByUser(userID uint) ([]model.AutoPostPlan, 
 	return rows, err
 }
 
+func (r *AutoPostPlanRepository) ListEnabledByUser(userID uint) ([]model.AutoPostPlan, error) {
+	var rows []model.AutoPostPlan
+	err := r.DB.Where("user_id = ? AND enabled = ?", userID, true).Order("next_run_at ASC, id ASC").Find(&rows).Error
+	return rows, err
+}
+
 func (r *AutoPostPlanRepository) GetByUserAndID(userID, id uint) (*model.AutoPostPlan, error) {
 	var row model.AutoPostPlan
 	err := r.DB.Where("user_id = ? AND id = ?", userID, id).First(&row).Error
@@ -55,6 +61,27 @@ func (r *AutoPostPlanRepository) Create(plan *model.AutoPostPlan) error {
 
 func (r *AutoPostPlanRepository) Save(plan *model.AutoPostPlan) error {
 	return r.DB.Save(plan).Error
+}
+
+func (r *AutoPostPlanRepository) SaveAll(plans []model.AutoPostPlan) error {
+	for i := range plans {
+		if err := r.DB.Save(&plans[i]).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *AutoPostPlanRepository) PauseAllByUser(userID uint) error {
+	now := time.Now().UTC()
+	return r.DB.Model(&model.AutoPostPlan{}).
+		Where("user_id = ?", userID).
+		Updates(map[string]any{
+			"enabled":       false,
+			"next_run_at":   nil,
+			"processing_at": nil,
+			"updated_at":    now,
+		}).Error
 }
 
 func (r *AutoPostPlanRepository) ListDueEnabled(limit int, now time.Time) ([]model.AutoPostPlan, error) {

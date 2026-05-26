@@ -217,6 +217,7 @@ export default function AutoPostPage() {
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
   const latestRun = accountRuns[0];
+  const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
@@ -550,6 +551,14 @@ export default function AutoPostPage() {
             </Card>
           </div>
 
+          <AutoPostSetupGuide
+            hasAccount={Boolean(selectedAccountID)}
+            hasActiveContent={activeContentCount > 0}
+            plannerEnabled={Boolean(selectedPlan?.enabled || form.enabled)}
+            autopilotEnabled={canAutopilotPublish}
+            onOpenPanel={setActivePanel}
+          />
+
           <AutoPostPipelineSummary
             activeContentCount={activeContentCount}
             selectedContentItem={selectedContentItem}
@@ -568,8 +577,11 @@ export default function AutoPostPage() {
                 <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
                 <div className="space-y-4">
                 {form.enabled && activeContentCount === 0 ? (
-                  <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85">
-                    {t("autoPost.scheduler.noActiveContentHint")}
+                  <div className="flex flex-col gap-3 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{t("autoPost.scheduler.noActiveContentHint")}</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setActivePanel("content")}>
+                      {t("autoPost.setup.actions.addContent")}
+                    </Button>
                   </div>
                 ) : null}
                 {form.enabled && selectedPlan && !selectedPlan.next_run_at ? (
@@ -789,7 +801,10 @@ export default function AutoPostPage() {
 
                 {availableContentItems.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
-                    {t("autoPost.contentLibrary.empty")}
+                    <p>{t("autoPost.contentLibrary.empty")}</p>
+                    <Button type="button" className="mt-4" size="sm" onClick={() => setLibraryOpen(true)}>
+                      {t("autoPost.contentLibrary.addFirst")}
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1034,6 +1049,90 @@ export default function AutoPostPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function AutoPostSetupGuide({
+  hasAccount,
+  hasActiveContent,
+  plannerEnabled,
+  autopilotEnabled,
+  onOpenPanel,
+}: {
+  hasAccount: boolean;
+  hasActiveContent: boolean;
+  plannerEnabled: boolean;
+  autopilotEnabled: boolean;
+  onOpenPanel: (panel: WorkbenchPanel) => void;
+}) {
+  const { t } = useT();
+  const checks = [
+    {
+      done: hasAccount,
+      title: t("autoPost.setup.account.title"),
+      description: t("autoPost.setup.account.description"),
+      action: null,
+    },
+    {
+      done: hasActiveContent,
+      title: t("autoPost.setup.content.title"),
+      description: t("autoPost.setup.content.description"),
+      action: { label: t("autoPost.setup.actions.addContent"), panel: "content" as WorkbenchPanel },
+    },
+    {
+      done: plannerEnabled,
+      title: t("autoPost.setup.planner.title"),
+      description: t("autoPost.setup.planner.description"),
+      action: { label: t("autoPost.setup.actions.openPlanner"), panel: "planner" as WorkbenchPanel },
+    },
+    {
+      done: autopilotEnabled,
+      title: t("autoPost.setup.autopilot.title"),
+      description: t("autoPost.setup.autopilot.description"),
+      action: { label: t("autoPost.setup.actions.setAutopilot"), panel: "planner" as WorkbenchPanel },
+    },
+  ];
+  const missing = checks.filter((item) => !item.done);
+  const primaryAction = missing.find((item) => item.action)?.action;
+
+  return (
+    <Card className={missing.length === 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#e7e9ea]">
+            {missing.length === 0 ? t("autoPost.setup.readyTitle") : t("autoPost.setup.title")}
+          </p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#71767b]">
+            {missing.length === 0 ? t("autoPost.setup.readyDescription") : t("autoPost.setup.description")}
+          </p>
+        </div>
+        {primaryAction ? (
+          <Button type="button" size="sm" onClick={() => onOpenPanel(primaryAction.panel)}>
+            {primaryAction.label}
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {checks.map((item) => (
+          <div key={item.title} className="rounded-xl border border-[#2f3336] bg-black p-3">
+            <div className="flex items-start gap-3">
+              <span className={`mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border ${item.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
+                {item.done ? <CheckCircle2 className="size-4" /> : <span className="size-2 rounded-full bg-current" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
+                {!item.done && item.action ? (
+                  <button type="button" className="mt-2 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]" onClick={() => onOpenPanel(item.action.panel)}>
+                    {item.action.label}
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

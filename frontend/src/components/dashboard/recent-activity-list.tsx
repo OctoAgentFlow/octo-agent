@@ -32,6 +32,14 @@ function typeLabelKey(type: ActivityRecord["type"]) {
   return "activity.type.dm";
 }
 
+function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
+  if (sourceModule === "post") return "activity.source.post";
+  if (sourceModule === "reply") return "activity.source.reply";
+  if (sourceModule === "comment") return "activity.source.comment";
+  if (sourceModule === "dm") return "activity.source.dm";
+  return "";
+}
+
 function formatClock(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -73,7 +81,14 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
                   {formatClock(activity.executedAt)}
                 </span>
                 <div>
-                  <p className="font-semibold text-[#e7e9ea]">{t(typeLabelKey(activity.type))}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-[#e7e9ea]">{t(typeLabelKey(activity.type))}</p>
+                    {activity.sourceModule ? (
+                      <span className="rounded-full border border-blue-300/25 bg-blue-500/10 px-2 py-0.5 text-[11px] text-blue-200">
+                        {t(sourceModuleLabelKey(activity.sourceModule))}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="line-clamp-3 text-xs leading-5 text-[#e7e9ea]/78">{activityNarrativeLine(activity, t)}</p>
                   {activity.errorMessage ? (
                     <p className="mt-1 line-clamp-2 text-xs text-rose-200/85">{activity.errorMessage}</p>

@@ -102,6 +102,7 @@ export default function ActivityPage() {
           status: item.status,
           previewKey: item.preview_key,
           accountHandle: item.account_handle,
+          sourceModule: item.source_module,
           executedAt: item.executed_at,
           errorMessage: item.error_message,
           replyCommentTweetId: item.reply_comment_tweet_id,

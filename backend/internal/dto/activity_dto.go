@@ -17,6 +17,7 @@ type ActivityItemData struct {
 	Status        string `json:"status"`
 	PreviewKey    string `json:"preview_key"`
 	AccountHandle string `json:"account_handle"`
+	SourceModule  string `json:"source_module,omitempty"`
 	ExecutedAt    string `json:"executed_at"`
 	ErrorMessage  string `json:"error_message,omitempty"`
 	// Reply-specific (type=reply)

@@ -13,6 +13,7 @@ export type ActivityItemApi = {
   status: "success" | "review" | "failed";
   preview_key: string;
   account_handle: string;
+  source_module?: "post" | "reply" | "dm" | "comment";
   executed_at: string;
   error_message?: string;
   reply_comment_tweet_id?: string;

@@ -25,6 +25,14 @@ function typeMeta(type: ActivityRecord["type"]) {
   return { labelKey: "activity.type.dm", icon: Send };
 }
 
+function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
+  if (sourceModule === "post") return "activity.source.post";
+  if (sourceModule === "reply") return "activity.source.reply";
+  if (sourceModule === "comment") return "activity.source.comment";
+  if (sourceModule === "dm") return "activity.source.dm";
+  return "";
+}
+
 function relativeTime(iso: string, t: (key: string, params?: Record<string, string | number>) => string) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -69,6 +77,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
+              {record.sourceModule ? <Badge variant="info">{t(sourceModuleLabelKey(record.sourceModule))}</Badge> : null}
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
               <span className="text-xs text-[#71767b]">{relativeTime(record.executedAt, t)}</span>
             </div>
@@ -115,6 +124,9 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DetailField label={t("activity.detail.fields.id")} value={`#${record.id}`} />
             <DetailField label={t("activity.detail.fields.account")} value={record.accountHandle || "—"} />
+            {record.sourceModule ? (
+              <DetailField label={t("activity.detail.fields.sourceModule")} value={t(sourceModuleLabelKey(record.sourceModule))} />
+            ) : null}
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
             <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
             <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />

@@ -20,6 +20,7 @@ import {
 } from "@/services/review-queue.service";
 
 type LoadState = "loading" | "ready" | "error";
+type ModuleType = "post" | "comment" | "reply" | "dm";
 
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
@@ -108,6 +109,13 @@ function publishTone(status?: string) {
   return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
 }
 
+function moduleNameKey(type: string) {
+  if (type === "post") return "automation.module.post.name";
+  if (type === "comment") return "automation.module.comment.name";
+  if (type === "reply") return "automation.module.reply.name";
+  return "automation.module.dm.name";
+}
+
 export default function ExecutionQueuePage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -121,6 +129,12 @@ export default function ExecutionQueuePage() {
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
   const [publisherStatus, setPublisherStatus] = useState<XPublisherStatusApi | null>(null);
+  const [moduleEnabled, setModuleEnabled] = useState<Record<ModuleType, boolean>>({
+    post: true,
+    comment: true,
+    reply: true,
+    dm: true,
+  });
 
   useEffect(() => {
     const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
@@ -132,7 +146,7 @@ export default function ExecutionQueuePage() {
   const loadQueue = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [data, publishingStatus] = await Promise.all([
+      const [data, publishingStatus, automationData] = await Promise.all([
         reviewQueueService.list({
           type: typeFilter,
           status: statusFilter,
@@ -141,10 +155,17 @@ export default function ExecutionQueuePage() {
           pageSize: 50,
         }),
         publishingService.status(),
+        automationService.list(),
       ]);
       setItems(data.items);
       setStats(data.stats);
       setPublisherStatus(publishingStatus);
+      setModuleEnabled({
+        post: automationData.modules.find((item) => item.type === "post")?.config.enabled ?? true,
+        comment: automationData.modules.find((item) => item.type === "comment")?.config.enabled ?? true,
+        reply: automationData.modules.find((item) => item.type === "reply")?.config.enabled ?? true,
+        dm: automationData.modules.find((item) => item.type === "dm")?.config.enabled ?? true,
+      });
       setLoadState("ready");
     } catch (error) {
       const message = axios.isAxiosError(error)
@@ -168,6 +189,14 @@ export default function ExecutionQueuePage() {
       { key: "failed", value: stats.failed, label: t("executionQueue.stats.failed"), icon: ShieldAlert },
     ],
     [stats, t]
+  );
+  const disabledModuleTypes = useMemo(
+    () =>
+      (Object.keys(moduleEnabled) as ModuleType[]).filter((type) => {
+        if (moduleEnabled[type]) return false;
+        return typeFilter === "all" || typeFilter === type;
+      }),
+    [moduleEnabled, typeFilter]
   );
 
   const updateLocalItem = (updated: ReviewQueueItemApi, patch: Partial<ReviewQueueItemApi>) => {
@@ -350,6 +379,17 @@ export default function ExecutionQueuePage() {
         </div>
       </Card>
 
+      {disabledModuleTypes.length > 0 ? (
+        <Card className="border-amber-300/25 bg-amber-500/10 p-4">
+          <p className="text-sm font-semibold text-amber-50">{t("executionQueue.pausedNotice.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-amber-50/75">
+            {t("executionQueue.pausedNotice.description", {
+              modules: disabledModuleTypes.map((type) => t(moduleNameKey(type))).join(" / "),
+            })}
+          </p>
+        </Card>
+      ) : null}
+
       <Card className="overflow-hidden bg-[#0f1419] p-0">
         <div className="border-b border-[#2f3336] p-5 md:p-6">
           <CardHeader title={t("executionQueue.list.title")} description={t("executionQueue.list.description")} />
@@ -378,6 +418,10 @@ export default function ExecutionQueuePage() {
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
               const publishStatusLabel = t(publishStatusKey(item.publish_status));
+              const modulePaused = moduleEnabled[item.type as ModuleType] === false;
+              const modulePausedTip = modulePaused
+                ? t("automation.pausedNotice.actionDisabled", { module: t(moduleNameKey(item.type)) })
+                : "";
               return (
                 <div key={`${item.type}-${item.id}`} className="bg-black p-4 transition-colors hover:bg-[#080808] md:p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -434,6 +478,12 @@ export default function ExecutionQueuePage() {
                           <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{item.content || "—"}</p>
                         )}
                       </div>
+
+                      {modulePaused ? (
+                        <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                          {modulePausedTip}
+                        </p>
+                      ) : null}
 
                       <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
                         <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
@@ -497,7 +547,13 @@ export default function ExecutionQueuePage() {
                             </Button>
                           ) : null}
                           {canReview ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void approve(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void approve(item)}
+                            >
                               <CheckCircle2 className="size-4" />
                               {t("executionQueue.actions.approve")}
                             </Button>
@@ -509,13 +565,25 @@ export default function ExecutionQueuePage() {
                             </Button>
                           ) : null}
                           {item.status === "failed" && item.publish_job_id ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void retryPublish(item)}
+                            >
                               <Send className="size-4" />
                               {t("executionQueue.actions.retryPublish")}
                             </Button>
                           ) : null}
                           {item.type === "post" && !item.publish_job_id && (item.status === "ready_to_publish" || item.status === "approved") ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void preparePostPublish(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void preparePostPublish(item)}
+                            >
                               <Send className="size-4" />
                               {t("executionQueue.actions.preparePublish")}
                             </Button>
@@ -525,8 +593,8 @@ export default function ExecutionQueuePage() {
                               size="sm"
                               variant="outline"
                               className="w-full sm:w-auto"
-                              disabled={busyID === item.id || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
-                              title={!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
+                              disabled={busyID === item.id || modulePaused || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
+                              title={modulePaused ? modulePausedTip : !publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
                               onClick={() => void realPublish(item)}
                             >
                               <Send className="size-4" />

@@ -1039,6 +1039,8 @@ export const dict: I18nDict = {
   "executionQueue.actions.realPublish": "真实发布",
   "executionQueue.actions.dryRunPublish": "发布演练",
   "executionQueue.actions.realPublishDisabledTip": "测试环境未开启真实 X 发布。",
+  "executionQueue.pausedNotice.title": "部分自动化模块已暂停",
+  "executionQueue.pausedNotice.description": "{modules} 已在总控台停用。对应队列项仍可编辑或拒绝，但不能继续批准、发布或重试。",
   "executionQueue.rejectReason": "已从执行队列拒绝。",
   "executionQueue.confirm.dryRunPublish": "将执行发布演练，不会真实发送到 X。",
   "executionQueue.confirm.realPublish": "将使用绑定的 X 账号真实发布到 X。此操作不可撤销。",

@@ -1066,6 +1066,8 @@ export const dict: I18nDict = {
   "executionQueue.actions.realPublish": "Real publish",
   "executionQueue.actions.dryRunPublish": "Dry run publish",
   "executionQueue.actions.realPublishDisabledTip": "Real X publishing is not enabled in the test environment.",
+  "executionQueue.pausedNotice.title": "Some automation modules are paused",
+  "executionQueue.pausedNotice.description": "{modules} is disabled in the control center. Matching queue items can still be edited or rejected, but cannot be approved, published, or retried.",
   "executionQueue.rejectReason": "Rejected from execution queue.",
   "executionQueue.confirm.dryRunPublish": "This will run a publish dry-run. Nothing will be sent to X.",
   "executionQueue.confirm.realPublish": "This will publish to X using the connected account. This action cannot be undone.",

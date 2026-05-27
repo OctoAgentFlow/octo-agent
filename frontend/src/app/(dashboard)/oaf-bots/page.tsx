@@ -46,6 +46,7 @@ import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-q
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type {
   OAFBot,
+  OAFBotFeedbackProfileSuggestionResult,
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackRating,
   OAFBotGenerationUsage,
@@ -82,6 +83,11 @@ type FeedbackDraft = {
   rating: OAFBotGenerationFeedbackRating | "";
   issueTags: string[];
   comment: string;
+};
+type ProfileDiffItem = {
+  key: keyof OAFBotPayload;
+  before: OAFBotPayload[keyof OAFBotPayload];
+  after: OAFBotPayload[keyof OAFBotPayload];
 };
 type MatrixFilterKey = "all" | "unbound" | "auto_post_not_ready" | "negative_feedback" | "review_backlog";
 type BotMatrixRow = {
@@ -120,6 +126,33 @@ type PersonaChecklistKey = typeof personaChecklistKeys[number];
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
+const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
+  "name",
+  "twitter_account_id",
+  "occupation",
+  "industry",
+  "personality_tags",
+  "identity_summary",
+  "voice_tone",
+  "topics",
+  "forbidden_topics",
+  "growth_goal",
+  "project_one_liner",
+  "target_audience",
+  "core_value_props",
+  "product_features",
+  "differentiators",
+  "content_pillars",
+  "content_objectives",
+  "preferred_cta",
+  "hashtags",
+  "keywords",
+  "compliance_notes",
+  "avoid_claims",
+  "safety_mode",
+  "primary_language",
+  "language_strategy",
+];
 const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
 const negativeFeedbackInspectionThreshold = 3;
 const reviewBacklogInspectionThreshold = 5;
@@ -361,6 +394,7 @@ export default function OAFBotsPage() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
+  const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -791,6 +825,7 @@ export default function OAFBotsPage() {
     setSamples(null);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setFeedbackSuggestionPreview(null);
   };
 
   const startCreate = () => {
@@ -802,6 +837,7 @@ export default function OAFBotsPage() {
     setGenerationFeedback([]);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setFeedbackSuggestionPreview(null);
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -953,7 +989,7 @@ export default function OAFBotsPage() {
     }
   };
 
-  const applyFeedbackProfileSuggestion = async () => {
+  const generateFeedbackProfileSuggestion = async () => {
     if (!selectedID) return;
     if (generationFeedback.filter((item) => item.rating === "negative").length === 0) {
       pushToast(t("oafBots.feedbackSuggestion.needNegative"));
@@ -962,16 +998,9 @@ export default function OAFBotsPage() {
     setFeedbackSuggestionLoading(true);
     try {
       const result = await oafBotService.suggestProfileFromFeedback(selectedID);
-      setForm((prev) => ({
-        ...prev,
-        ...result.profile,
-        name: prev.name || result.profile.name,
-        twitter_account_id: prev.twitter_account_id || result.profile.twitter_account_id,
-      }));
-      setActiveStep("goals");
-      setSamples(null);
+      setFeedbackSuggestionPreview(result);
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.feedbackSuggestion.applied", { count: result.feedback_count || 0 }));
+      pushToast(t("oafBots.feedbackSuggestion.previewReady", { count: result.feedback_count || 0 }));
     } catch (error) {
       const body = getErrorBody(error);
       if (body?.error_code === "ai_generation_quota_exceeded") {
@@ -982,6 +1011,15 @@ export default function OAFBotsPage() {
     } finally {
       setFeedbackSuggestionLoading(false);
     }
+  };
+
+  const applyFeedbackProfileSuggestion = () => {
+    if (!feedbackSuggestionPreview) return;
+    setForm((prev) => mergeFeedbackSuggestionProfile(prev, feedbackSuggestionPreview.profile));
+    setActiveStep("goals");
+    setSamples(null);
+    setFeedbackSuggestionPreview(null);
+    pushToast(t("oafBots.feedbackSuggestion.applied", { count: feedbackSuggestionPreview.feedback_count || 0 }));
   };
 
   const handleSampleSceneChange = (scene: SampleScene) => {
@@ -1458,10 +1496,13 @@ export default function OAFBotsPage() {
                   feedbackDraft={feedbackDraft}
                   feedbackSaving={feedbackSaving}
                   feedbackSuggestionLoading={feedbackSuggestionLoading}
+                  feedbackSuggestionPreview={feedbackSuggestionPreview}
                   feedbackIssueOptions={feedbackIssueOptions}
                   onFeedbackDraftChange={setFeedbackDraft}
                   onFeedbackSubmit={submitGenerationFeedback}
-                  onFeedbackProfileSuggestion={applyFeedbackProfileSuggestion}
+                  onFeedbackProfileSuggestion={generateFeedbackProfileSuggestion}
+                  onApplyFeedbackSuggestion={applyFeedbackProfileSuggestion}
+                  onDismissFeedbackSuggestion={() => setFeedbackSuggestionPreview(null)}
                 />
               </WizardPanel>
             ) : null}
@@ -1625,6 +1666,55 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     primary_language: bot.primary_language || defaultPrimaryLanguage,
     language_strategy: bot.language_strategy || "follow_context",
   };
+}
+
+function mergeFeedbackSuggestionProfile(current: OAFBotPayload, suggestion: OAFBotPayload): OAFBotPayload {
+  return {
+    ...current,
+    ...suggestion,
+    name: current.name || suggestion.name,
+    twitter_account_id: current.twitter_account_id || suggestion.twitter_account_id,
+  };
+}
+
+function getFeedbackSuggestionDiffs(current: OAFBotPayload, suggestion: OAFBotPayload): ProfileDiffItem[] {
+  const merged = mergeFeedbackSuggestionProfile(current, suggestion);
+  return feedbackSuggestionDiffKeys
+    .filter((key) => !profileValuesEqual(current[key], merged[key]))
+    .map((key) => ({
+      key,
+      before: current[key],
+      after: merged[key],
+    }));
+}
+
+function profileValuesEqual(left: OAFBotPayload[keyof OAFBotPayload], right: OAFBotPayload[keyof OAFBotPayload]) {
+  return normalizeProfileValue(left) === normalizeProfileValue(right);
+}
+
+function normalizeProfileValue(value: OAFBotPayload[keyof OAFBotPayload]) {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((item) => String(item).trim()).filter(Boolean));
+  }
+  if (typeof value === "number") return String(value || "");
+  return String(value || "").trim();
+}
+
+function formatProfileValue(value: OAFBotPayload[keyof OAFBotPayload], t: (key: string, params?: Record<string, string | number>) => string) {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : t("oafBots.feedbackSuggestion.emptyValue");
+  if (typeof value === "number") return value > 0 ? String(value) : t("oafBots.feedbackSuggestion.emptyValue");
+  return value?.trim() || t("oafBots.feedbackSuggestion.emptyValue");
+}
+
+function fieldLabel(key: keyof OAFBotPayload, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (key === "twitter_account_id") return t("oafBots.fields.twitterAccount");
+  const labelKey = `oafBots.fields.${snakeToCamel(String(key))}`;
+  const label = t(labelKey);
+  return label === labelKey ? String(key) : label;
+}
+
+function snakeToCamel(value: string) {
+  return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
 function isUnconfiguredDraft(form: OAFBotPayload) {
@@ -3161,10 +3251,13 @@ function SamplePanel({
   feedbackDraft,
   feedbackSaving,
   feedbackSuggestionLoading,
+  feedbackSuggestionPreview,
   feedbackIssueOptions,
   onFeedbackDraftChange,
   onFeedbackSubmit,
   onFeedbackProfileSuggestion,
+  onApplyFeedbackSuggestion,
+  onDismissFeedbackSuggestion,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
@@ -3189,10 +3282,13 @@ function SamplePanel({
   feedbackDraft: FeedbackDraft;
   feedbackSaving: boolean;
   feedbackSuggestionLoading: boolean;
+  feedbackSuggestionPreview: OAFBotFeedbackProfileSuggestionResult | null;
   feedbackIssueOptions: ChipOption[];
   onFeedbackDraftChange: (draft: FeedbackDraft) => void;
   onFeedbackSubmit: () => void;
   onFeedbackProfileSuggestion: () => void;
+  onApplyFeedbackSuggestion: () => void;
+  onDismissFeedbackSuggestion: () => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -3204,6 +3300,10 @@ function SamplePanel({
   const selectedSceneItem = sceneItems.find((item) => item.id === scene) ?? sceneItems[0];
   const selectedContent = useMemo(() => normalizeSampleContent(samples, scene), [samples, scene]);
   const providerLabel = samples?.provider ? providerSourceLabel(samples.provider, t) : "";
+  const suggestionDiffs = useMemo(
+    () => (feedbackSuggestionPreview ? getFeedbackSuggestionDiffs(form, feedbackSuggestionPreview.profile) : []),
+    [feedbackSuggestionPreview, form],
+  );
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 text-sm leading-relaxed text-[#e7e9ea]">
@@ -3296,6 +3396,13 @@ function SamplePanel({
             issueOptions={feedbackIssueOptions}
             suggestionLoading={feedbackSuggestionLoading}
             onSuggestProfile={onFeedbackProfileSuggestion}
+          />
+          <FeedbackSuggestionDiffPreview
+            t={t}
+            result={feedbackSuggestionPreview}
+            diffs={suggestionDiffs}
+            onApply={onApplyFeedbackSuggestion}
+            onDismiss={onDismissFeedbackSuggestion}
           />
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
@@ -3589,6 +3696,75 @@ function GenerationFeedbackHistory({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FeedbackSuggestionDiffPreview({
+  t,
+  result,
+  diffs,
+  onApply,
+  onDismiss,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  result: OAFBotFeedbackProfileSuggestionResult | null;
+  diffs: ProfileDiffItem[];
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  if (!result) return null;
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedbackSuggestion.previewTitle")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
+            {diffs.length > 0 ? t("oafBots.feedbackSuggestion.previewDescription", { count: diffs.length }) : t("oafBots.feedbackSuggestion.noDiffDescription")}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
+          {t("oafBots.feedbackSuggestion.feedbackCount", { count: result.feedback_count || 0 })}
+        </span>
+      </div>
+
+      {diffs.length > 0 ? (
+        <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {diffs.map((diff) => (
+            <div key={String(diff.key)} className="rounded-xl border border-[#2f3336] bg-black p-3">
+              <p className="text-xs font-semibold text-[#e7e9ea]">{fieldLabel(diff.key, t)}</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
+                <DiffValueBox label={t("oafBots.feedbackSuggestion.before")} value={formatProfileValue(diff.before, t)} tone="before" />
+                <div className="hidden items-center justify-center text-[#71767b] md:flex">
+                  <ArrowRight className="size-4" />
+                </div>
+                <DiffValueBox label={t("oafBots.feedbackSuggestion.after")} value={formatProfileValue(diff.after, t)} tone="after" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-[#2f3336] bg-black p-3 text-sm leading-6 text-[#71767b]">{t("oafBots.feedbackSuggestion.noDiff")}</p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+          {t("oafBots.feedbackSuggestion.dismiss")}
+        </Button>
+        <Button type="button" size="sm" onClick={onApply} disabled={diffs.length === 0}>
+          <CheckCircle2 className="size-4" />
+          {t("oafBots.feedbackSuggestion.apply")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DiffValueBox({ label, value, tone }: { label: string; value: string; tone: "before" | "after" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-3 ${tone === "after" ? "border-emerald-300/20 bg-emerald-400/8" : "border-rose-300/15 bg-rose-400/6"}`}>
+      <p className="text-[11px] font-semibold uppercase text-[#71767b]">{label}</p>
+      <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-[#e7e9ea] [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

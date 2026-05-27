@@ -120,7 +120,12 @@ func (ctl *AutoPostController) ListRuns(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoPostService.ListRuns(userID)
+	var query dto.AutoPostGenerationRunQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoPostService.ListRuns(userID, query)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return

@@ -197,8 +197,16 @@ type AutoPostGenerationRunItem struct {
 	CreatedAt        string `json:"created_at"`
 }
 
+type AutoPostGenerationRunQuery struct {
+	Status     string `form:"status"`
+	XAccountID uint   `form:"x_account_id"`
+	Page       int    `form:"page"`
+	PageSize   int    `form:"page_size"`
+}
+
 type AutoPostGenerationRunsResponse struct {
-	Items []AutoPostGenerationRunItem `json:"items"`
+	Items      []AutoPostGenerationRunItem `json:"items"`
+	Pagination ActivityPagination          `json:"pagination"`
 }
 
 type AutoDMTaskItem struct {

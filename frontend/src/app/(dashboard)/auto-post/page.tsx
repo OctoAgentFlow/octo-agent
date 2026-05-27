@@ -147,6 +147,11 @@ function readRunAccountScope(value: string | null): RunAccountScope {
   return value === "all" ? "all" : "selected";
 }
 
+function readRunPage(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const router = useRouter();
@@ -177,6 +182,10 @@ export default function AutoPostPage() {
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
   const [runAccountScope, setRunAccountScope] = useState<RunAccountScope>(() => readRunAccountScope(searchParams.get("account_scope")));
+  const [runPage, setRunPage] = useState(() => readRunPage(searchParams.get("run_page")));
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runPagination, setRunPagination] = useState({ page: 1, pageSize: 12, total: 0 });
+  const [latestRun, setLatestRun] = useState<AutoPostGenerationRunApi | null>(null);
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
@@ -184,12 +193,11 @@ export default function AutoPostPage() {
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [accountData, botData, planData, draftData, runData, libraryData, subscriptionData] = await Promise.all([
+      const [accountData, botData, planData, draftData, libraryData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
         autoPostService.plans(),
         autoPostService.drafts(),
-        autoPostService.runs(),
         contentLibraryService.list({ limit: 100 }),
         billingService.subscription(),
       ]);
@@ -198,7 +206,6 @@ export default function AutoPostPage() {
       setBots(botData.items);
       setPlans(planData.items);
       setDrafts(draftData.items);
-      setRuns(runData.items);
       setContentItems(libraryData.items);
       setSubscription(subscriptionData);
       setQuotaUpgradeVisible(false);
@@ -237,12 +244,7 @@ export default function AutoPostPage() {
   );
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
-  const accountRunsAll = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID), [runs, selectedAccountID]);
-  const visibleRunsSource = useMemo(() => (runAccountScope === "all" ? runs : accountRunsAll), [accountRunsAll, runAccountScope, runs]);
-  const accountRuns = useMemo(
-    () => visibleRunsSource.filter((run) => runStatusFilter === "all" || run.status === runStatusFilter).slice(0, 12),
-    [runStatusFilter, visibleRunsSource]
-  );
+  const accountRuns = runs;
   const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
   const queuedDraftCount = useMemo(
     () => accountDraftsAll.filter((draft) => ["draft", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
@@ -256,7 +258,7 @@ export default function AutoPostPage() {
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
-  const latestRun = accountRunsAll[0];
+  const runTotalPages = Math.max(1, Math.ceil(runPagination.total / runPagination.pageSize));
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
@@ -269,6 +271,7 @@ export default function AutoPostPage() {
     setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
     setRunStatusFilter(readRunStatus(searchParams.get("run_status")));
     setRunAccountScope(readRunAccountScope(searchParams.get("account_scope")));
+    setRunPage(readRunPage(searchParams.get("run_page")));
   }, [searchParams]);
 
   useEffect(() => {
@@ -276,12 +279,63 @@ export default function AutoPostPage() {
     if (activePanel !== "generate") next.set("panel", activePanel);
     if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
     if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
+    if (runPage > 1) next.set("run_page", String(runPage));
     const nextQuery = next.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [activePanel, pathname, router, runAccountScope, runStatusFilter, searchParams]);
+  }, [activePanel, pathname, router, runAccountScope, runPage, runStatusFilter, searchParams]);
+
+  const fetchRuns = useCallback(async () => {
+    if (runAccountScope === "selected" && !selectedAccountID) {
+      setRuns([]);
+      setRunPagination({ page: 1, pageSize: 12, total: 0 });
+      return;
+    }
+    setRunsLoading(true);
+    try {
+      const data = await autoPostService.runs({
+        status: runStatusFilter,
+        xAccountID: runAccountScope === "selected" ? selectedAccountID : undefined,
+        page: runPage,
+        pageSize: 12,
+      });
+      setRuns(data.items);
+      setRunPagination({
+        page: data.pagination?.page || runPage,
+        pageSize: data.pagination?.page_size || 12,
+        total: data.pagination?.total || data.items.length,
+      });
+    } catch (error) {
+      setRuns([]);
+      setRunPagination({ page: 1, pageSize: 12, total: 0 });
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runs.loadFailed") : t("autoPost.runs.loadFailed"));
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [pushToast, runAccountScope, runPage, runStatusFilter, selectedAccountID, t]);
+
+  useEffect(() => {
+    void fetchRuns();
+  }, [fetchRuns]);
+
+  const fetchLatestRun = useCallback(async () => {
+    if (!selectedAccountID) {
+      setLatestRun(null);
+      return;
+    }
+    try {
+      const data = await autoPostService.runs({ xAccountID: selectedAccountID, page: 1, pageSize: 1 });
+      setLatestRun(data.items[0] ?? null);
+    } catch {
+      setLatestRun(null);
+    }
+  }, [selectedAccountID]);
+
+  useEffect(() => {
+    void fetchLatestRun();
+  }, [fetchLatestRun]);
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -303,6 +357,7 @@ export default function AutoPostPage() {
   const onAccountChange = (accountID: number) => {
     setSelectedAccountID(accountID);
     setSelectedContentItemID(0);
+    setRunPage(1);
     const plan = plans.find((item) => item.x_account_id === accountID);
     setForm(plan ? formFromPlan(plan) : defaultForm());
   };
@@ -538,7 +593,6 @@ export default function AutoPostPage() {
     setRunningPlanner(true);
     try {
       const run = await autoPostService.runNow(selectedPlan.id);
-      setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
       if (run.status === "completed") {
         pushToast(t("autoPost.runNow.toast.completed"));
       } else if (run.status === "skipped") {
@@ -547,6 +601,9 @@ export default function AutoPostPage() {
         pushToast(t("autoPost.runNow.toast.failed"));
       }
       setActivePanel("history");
+      setRunPage(1);
+      void fetchRuns();
+      void fetchLatestRun();
       void load();
     } catch (error) {
       pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoPost.runNow.errors.failed"));
@@ -1193,7 +1250,10 @@ export default function AutoPostPage() {
                     <div className="grid gap-2 sm:flex">
                       <select
                         value={runAccountScope}
-                        onChange={(event) => setRunAccountScope(event.target.value as RunAccountScope)}
+                        onChange={(event) => {
+                          setRunAccountScope(event.target.value as RunAccountScope);
+                          setRunPage(1);
+                        }}
                         className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                         aria-label={t("autoPost.runs.scopeLabel")}
                       >
@@ -1205,7 +1265,10 @@ export default function AutoPostPage() {
                       </select>
                       <select
                         value={runStatusFilter}
-                        onChange={(event) => setRunStatusFilter(event.target.value as RunStatusFilter)}
+                        onChange={(event) => {
+                          setRunStatusFilter(event.target.value as RunStatusFilter);
+                          setRunPage(1);
+                        }}
                         className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                       >
                         {runStatusFilters.map((status) => (
@@ -1217,7 +1280,12 @@ export default function AutoPostPage() {
                     </div>
                   }
                 />
-                {accountRuns.length === 0 ? (
+                {runsLoading ? (
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t("autoPost.runs.loading")}
+                  </div>
+                ) : accountRuns.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
                     {runStatusFilter === "all" ? t("autoPost.runs.empty") : t("autoPost.runs.emptyFiltered")}
                   </div>
@@ -1261,6 +1329,25 @@ export default function AutoPostPage() {
                         </div>
                       </div>
                     ))}
+                    {runTotalPages > 1 ? (
+                      <div className="flex flex-col gap-2 rounded-2xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b] sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          {t("autoPost.runs.pagination", {
+                            page: runPagination.page,
+                            total: runTotalPages,
+                            count: runPagination.total,
+                          })}
+                        </span>
+                        <div className="grid gap-2 sm:flex">
+                          <Button type="button" size="sm" variant="outline" disabled={runPagination.page <= 1 || runsLoading} onClick={() => setRunPage((current) => Math.max(1, current - 1))}>
+                            {t("common.previous")}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" disabled={runPagination.page >= runTotalPages || runsLoading} onClick={() => setRunPage((current) => current + 1)}>
+                            {t("common.next")}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
                 </Card>
@@ -1371,7 +1458,7 @@ function AutoPostPipelineSummary({
   selectedPlan: AutoPostPlanApi | null;
   queuedDraftCount: number;
   publishReadyCount: number;
-  latestRun?: AutoPostGenerationRunApi;
+  latestRun?: AutoPostGenerationRunApi | null;
   onOpenPanel: (panel: WorkbenchPanel) => void;
 }) {
   const { t } = useT();

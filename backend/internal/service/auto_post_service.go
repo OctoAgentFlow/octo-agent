@@ -145,11 +145,37 @@ func (s *AutoPostService) ListDrafts(userID uint) (*dto.AutoPostDraftsResponse, 
 	return &dto.AutoPostDraftsResponse{Items: items}, nil
 }
 
-func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResponse, error) {
-	if s.runRepo == nil {
-		return &dto.AutoPostGenerationRunsResponse{Items: []dto.AutoPostGenerationRunItem{}}, nil
+func (s *AutoPostService) ListRuns(userID uint, query dto.AutoPostGenerationRunQuery) (*dto.AutoPostGenerationRunsResponse, error) {
+	page := query.Page
+	if page <= 0 {
+		page = 1
 	}
-	rows, err := s.runRepo.ListByUser(userID, 50)
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	if s.runRepo == nil {
+		return &dto.AutoPostGenerationRunsResponse{
+			Items: []dto.AutoPostGenerationRunItem{},
+			Pagination: dto.ActivityPagination{
+				Page:     page,
+				PageSize: pageSize,
+				Total:    0,
+			},
+		}, nil
+	}
+
+	status := normalizeAutoPostRunStatusForQuery(query.Status)
+	rows, total, err := s.runRepo.List(repository.AutoPostGenerationRunListQuery{
+		UserID:     userID,
+		Status:     status,
+		XAccountID: query.XAccountID,
+		Page:       page,
+		PageSize:   pageSize,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +183,14 @@ func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResp
 	for _, row := range rows {
 		items = append(items, s.toRunItem(row))
 	}
-	return &dto.AutoPostGenerationRunsResponse{Items: items}, nil
+	return &dto.AutoPostGenerationRunsResponse{
+		Items: items,
+		Pagination: dto.ActivityPagination{
+			Page:     page,
+			PageSize: pageSize,
+			Total:    total,
+		},
+	}, nil
 }
 
 func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (*dto.AutoPostGenerationRunItem, error) {
@@ -947,6 +980,15 @@ func parseAutoPostClock(value string) (int, bool) {
 		return 0, false
 	}
 	return hour*60 + minute, true
+}
+
+func normalizeAutoPostRunStatusForQuery(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "completed", "skipped", "failed":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
 }
 
 func windowContainsMinute(window autoPostTimeWindow, minute int) bool {

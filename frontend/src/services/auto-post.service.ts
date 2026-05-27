@@ -86,6 +86,18 @@ export type AutoPostGenerationRunApi = {
 
 export type AutoPostGenerationRunsData = {
   items: AutoPostGenerationRunApi[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+  };
+};
+
+export type AutoPostGenerationRunQuery = {
+  status?: AutoPostGenerationRunApi["status"] | "all";
+  xAccountID?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export type AutoPostPlanPayload = {
@@ -122,8 +134,15 @@ export const autoPostService = {
     const res = await request.get<ApiResponse<AutoPostDraftsData>>("/auto-post/drafts");
     return res.data.data;
   },
-  async runs() {
-    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs");
+  async runs(query?: AutoPostGenerationRunQuery) {
+    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs", {
+      params: {
+        status: query?.status && query.status !== "all" ? query.status : undefined,
+        x_account_id: query?.xAccountID || undefined,
+        page: query?.page || 1,
+        page_size: query?.pageSize || 20,
+      },
+    });
     return res.data.data;
   },
   async runNow(planID: number) {

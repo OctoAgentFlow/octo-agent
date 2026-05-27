@@ -10,6 +10,7 @@ import type {
   OAFBotMatrixSignal,
   OAFBotPayload,
   OAFBotProfileAssistMode,
+  OAFBotSafetyHit,
   OAFBotSampleScene,
   OAFBotTestGenerateResult,
 } from "@/types/oaf-bot";
@@ -149,6 +150,10 @@ export const oafBotService = {
   },
   async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {
     const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene, sample_context: sampleContext });
+    return res.data.data;
+  },
+  async rewriteSafety(id: number, body: { scene: OAFBotSampleScene; content: string; sample_context?: string; matched_hits?: OAFBotSafetyHit[] }) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/rewrite-safety`, body);
     return res.data.data;
   },
   async generationUsages(id: number) {

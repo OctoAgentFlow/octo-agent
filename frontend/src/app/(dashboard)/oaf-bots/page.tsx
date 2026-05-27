@@ -400,6 +400,7 @@ export default function OAFBotsPage() {
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [rewritingSafety, setRewritingSafety] = useState(false);
   const [completingProfile, setCompletingProfile] = useState(false);
   const [profileAssistMode, setProfileAssistMode] = useState<OAFBotProfileAssistMode>("fill_missing_only");
 
@@ -956,6 +957,38 @@ export default function OAFBotsPage() {
     }
   };
 
+  const rewriteSampleForSafety = async () => {
+    if (!selectedID || !samples) return;
+    const content = normalizeSampleContent(samples, sampleScene);
+    if (!content.trim()) {
+      pushToast(t("oafBots.safetyRewrite.needContent"));
+      return;
+    }
+    setRewritingSafety(true);
+    try {
+      const result = await oafBotService.rewriteSafety(selectedID, {
+        scene: sampleScene,
+        content,
+        sample_context: sampleContexts[sampleScene] || "",
+        matched_hits: samples.safety_evaluation?.matched_hits || [],
+      });
+      setSamples(result);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      await loadGenerationUsages(selectedID);
+      void loadMatrixSignals(bots);
+      pushToast(t("oafBots.safetyRewrite.applied"));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.safetyRewrite.failed"));
+      }
+    } finally {
+      setRewritingSafety(false);
+    }
+  };
+
   const handlePreviewTest = () => {
     if (!canTestBot) {
       pushToast(t("oafBots.test.disabledHint"));
@@ -1497,7 +1530,9 @@ export default function OAFBotsPage() {
                   sampleContext={sampleContexts[sampleScene] || ""}
                   onSampleContextChange={(value) => setSampleContexts((prev) => ({ ...prev, [sampleScene]: value }))}
                   generating={generating}
+                  rewritingSafety={rewritingSafety}
                   onGenerate={testGenerate}
+                  onRewriteSafety={rewriteSampleForSafety}
                   selectedID={selectedID}
                   formChanged={formChanged}
                   previewDisabled={!canTestBot}
@@ -3266,7 +3301,9 @@ function SamplePanel({
   sampleContext,
   onSampleContextChange,
   generating,
+  rewritingSafety,
   onGenerate,
+  onRewriteSafety,
   selectedID,
   formChanged,
   previewDisabled,
@@ -3297,7 +3334,9 @@ function SamplePanel({
   sampleContext: string;
   onSampleContextChange: (value: string) => void;
   generating: boolean;
+  rewritingSafety: boolean;
   onGenerate: () => void;
+  onRewriteSafety: () => void;
   selectedID: number | null;
   formChanged: boolean;
   previewDisabled: boolean;
@@ -3411,7 +3450,7 @@ function SamplePanel({
               t={t}
             />
           </div>
-          <SampleSafetyExplanation t={t} evaluation={samples.safety_evaluation} />
+          <SampleSafetyExplanation t={t} evaluation={samples.safety_evaluation} rewriting={rewritingSafety} onRewrite={onRewriteSafety} />
           <GenerationFeedbackPanel
             t={t}
             draft={feedbackDraft}
@@ -3524,11 +3563,16 @@ function SampleCard({
 function SampleSafetyExplanation({
   t,
   evaluation,
+  rewriting,
+  onRewrite,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   evaluation?: OAFBotTestGenerateResult["safety_evaluation"];
+  rewriting: boolean;
+  onRewrite: () => void;
 }) {
   if (!evaluation) return null;
+  const canRewrite = evaluation.action === "avoid" || evaluation.action === "review" || (evaluation.matched_hits?.length ?? 0) > 0;
   const tone =
     evaluation.action === "avoid"
       ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
@@ -3571,6 +3615,15 @@ function SampleSafetyExplanation({
       ) : (
         <p className="mt-3 text-xs leading-5 opacity-75">{t("oafBots.safetyExplanation.noHits")}</p>
       )}
+      {canRewrite ? (
+        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/15 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 opacity-85">{t("oafBots.safetyRewrite.hint")}</p>
+          <Button type="button" size="sm" variant="outline" onClick={onRewrite} disabled={rewriting} className="shrink-0 border-white/15 bg-black/20 text-current hover:bg-black/35">
+            {rewriting ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {rewriting ? t("oafBots.safetyRewrite.loading") : t("oafBots.safetyRewrite.action")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

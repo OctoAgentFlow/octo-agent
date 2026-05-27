@@ -184,38 +184,40 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
-		Scene:             scene,
-		SampleContext:     sampleContext,
-		Name:              bot.Name,
-		Occupation:        bot.Occupation,
-		Industry:          bot.Industry,
-		AgeRange:          bot.AgeRange,
-		Gender:            bot.Gender,
-		Education:         bot.Education,
-		MBTI:              bot.MBTI,
-		PersonalityTags:   decodeStringList(bot.PersonalityTags),
-		IdentitySummary:   bot.IdentitySummary,
-		VoiceTone:         bot.VoiceTone,
-		Topics:            decodeStringList(bot.Topics),
-		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
-		GrowthGoal:        bot.GrowthGoal,
-		ProjectOneLiner:   bot.ProjectOneLiner,
-		TargetAudience:    bot.TargetAudience,
-		CoreValueProps:    bot.CoreValueProps,
-		ProductFeatures:   bot.ProductFeatures,
-		Differentiators:   bot.Differentiators,
-		ContentPillars:    decodeStringList(bot.ContentPillars),
-		ContentObjectives: bot.ContentObjectives,
-		PreferredCTA:      bot.PreferredCTA,
-		Hashtags:          decodeStringList(bot.Hashtags),
-		Keywords:          decodeStringList(bot.Keywords),
-		ComplianceNotes:   bot.ComplianceNotes,
-		AvoidClaims:       decodeStringList(bot.AvoidClaims),
-		SafetyMode:        bot.SafetyMode,
-		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
-		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
-	})
+	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, oafBotSampleInput(bot, scene, sampleContext))
+	if err != nil {
+		return nil, err
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, usage); err != nil {
+		return nil, err
+	}
+	out.BotID = bot.ID
+	out.UsageConsumed = 1
+	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
+	return out, nil
+}
+
+func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id uint, req dto.OAFBotRewriteSafetyRequest) (*dto.OAFBotTestGenerateResponse, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	scene := normalizeOAFBotSampleScene(req.Scene)
+	if scene == "" {
+		return nil, fmt.Errorf("invalid sample scene")
+	}
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	input := oafBotSampleInput(bot, scene, req.SampleContext)
+	input.UnsafeContent = content
+	input.SafetyHits = req.MatchedHits
+	out, usage, err := s.ai.RewriteOAFBotSampleForSafety(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +386,44 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	}
 	bot.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(req.PrimaryLanguage)
 	bot.LanguageStrategy = normalizeOAFBotLanguageStrategy(req.LanguageStrategy)
+}
+
+func oafBotSampleInput(bot *model.OAFBot, scene string, sampleContext string) GenerateOAFBotSamplesInput {
+	if bot == nil {
+		return GenerateOAFBotSamplesInput{Scene: scene, SampleContext: sampleContext}
+	}
+	return GenerateOAFBotSamplesInput{
+		Scene:             scene,
+		SampleContext:     sampleContext,
+		Name:              bot.Name,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
+	}
 }
 
 func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest, mode string) CompleteOAFBotProfileInput {

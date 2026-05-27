@@ -98,6 +98,13 @@ type OAFBotTestGenerateRequest struct {
 	SampleContext string `json:"sample_context"`
 }
 
+type OAFBotRewriteSafetyRequest struct {
+	Scene         string            `json:"scene"`
+	Content       string            `json:"content"`
+	SampleContext string            `json:"sample_context"`
+	MatchedHits   []OAFBotSafetyHit `json:"matched_hits"`
+}
+
 type OAFBotTestGenerateResponse struct {
 	BotID            uint                         `json:"bot_id"`
 	Scene            string                       `json:"scene"`

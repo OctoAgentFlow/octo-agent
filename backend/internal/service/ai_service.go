@@ -95,6 +95,8 @@ type GenerateAutoReplyInput struct {
 type GenerateOAFBotSamplesInput struct {
 	Scene             string
 	SampleContext     string
+	UnsafeContent     string
+	SafetyHits        []dto.OAFBotSafetyHit
 	Name              string
 	Occupation        string
 	Industry          string
@@ -391,6 +393,79 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		return AIGeneratedText{}, err
 	}
 	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
+}
+
+func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {
+	scene := normalizeSampleScene(in.Scene)
+	if scene == "" {
+		scene = "tweet"
+	}
+	unsafeContent := strings.TrimSpace(in.UnsafeContent)
+	if unsafeContent == "" {
+		return nil, openaiint.TextUsage{}, fmt.Errorf("content is required")
+	}
+	sceneInstruction, maxChars := sampleSceneInstruction(scene)
+	system := strings.Join([]string{
+		"You rewrite X/Twitter content for Octo-Agent Flow OAF Bot safety review.",
+		"Preserve the user's persona, intent, language, and useful specifics.",
+		"Remove or soften risky wording that matched safety rules.",
+		"Return plain text only. Do not return JSON, markdown, labels, or surrounding quotes.",
+	}, " ")
+	var user strings.Builder
+	user.WriteString("Requested scene: " + scene + "\n")
+	user.WriteString(sceneInstruction + "\n")
+	user.WriteString("Original content to rewrite:\n")
+	user.WriteString(truncateRunes(unsafeContent, 1200))
+	user.WriteString("\n")
+	user.WriteString("Matched safety hits:\n")
+	if len(in.SafetyHits) == 0 {
+		user.WriteString("- No explicit hit list provided; rewrite conservatively.\n")
+	}
+	for _, hit := range in.SafetyHits {
+		term := strings.TrimSpace(hit.Term)
+		if term == "" {
+			continue
+		}
+		user.WriteString("- " + strings.TrimSpace(hit.Source) + ": " + term + "\n")
+	}
+	if context := strings.TrimSpace(in.SampleContext); context != "" {
+		user.WriteString("External sample context:\n")
+		user.WriteString(truncateRunes(context, 1200))
+		user.WriteString("\n")
+	}
+	user.WriteString("Persona and boundaries:\n")
+	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+	user.WriteString("Industry: " + strings.TrimSpace(in.Industry) + "\n")
+	user.WriteString("Identity summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+	user.WriteString("Voice tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+	user.WriteString("Topics: " + strings.Join(in.Topics, ", ") + "\n")
+	user.WriteString("Forbidden topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+	user.WriteString("Avoid claims: " + strings.Join(in.AvoidClaims, ", ") + "\n")
+	user.WriteString("Compliance notes: " + strings.TrimSpace(in.ComplianceNotes) + "\n")
+	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	user.WriteString("Rules:\n")
+	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
+	user.WriteString("- Do not include the matched risky terms unless they are necessary as neutral context; prefer safer alternatives.\n")
+	user.WriteString("- Avoid guarantees, urgency traps, wallet/private-key prompts, official-support impersonation, and unsupported financial claims.\n")
+	user.WriteString("- Keep it natural and usable as the requested scene.\n")
+
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return nil, openaiint.TextUsage{}, err
+	}
+	content := extractSceneContent(result.Text, scene)
+	content = truncateRunes(stripGeneratedJSONWrapper(content, scene), maxChars)
+	out := dto.OAFBotTestGenerateResponse{
+		Scene:     scene,
+		Content:   content,
+		Provider:  s.providerSource(),
+		RawResult: strings.TrimSpace(result.Text),
+	}
+	setSampleSceneContent(&out, scene, content)
+	return &out, result.Usage, nil
 }
 
 func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {

@@ -178,6 +178,32 @@ func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) RewriteSampleForSafety(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	var req dto.OAFBotRewriteSafetyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.oafBotService.RewriteSampleForSafety(c.Request.Context(), userID, id, req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) GenerationUsages(c *gin.Context) {
 	userID, id, ok := ctl.userAndBotID(c)
 	if !ok {

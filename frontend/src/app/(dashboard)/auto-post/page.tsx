@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import {
   ArrowRight,
@@ -49,6 +50,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type WorkbenchPanel = "generate" | "planner" | "content" | "history";
+type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
 
 type PlannerForm = {
   enabled: boolean;
@@ -70,6 +72,7 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
   { id: "content", labelKey: "autoPost.tabs.content", descriptionKey: "autoPost.tabs.contentDesc" },
   { id: "history", labelKey: "autoPost.tabs.history", descriptionKey: "autoPost.tabs.historyDesc" },
 ];
+const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 
 type LibraryForm = {
   title: string;
@@ -130,8 +133,19 @@ function runTone(status: string) {
   return "border-white/10 bg-white/[0.05] text-white/65";
 }
 
+function readWorkbenchPanel(value: string | null): WorkbenchPanel {
+  return value === "planner" || value === "content" || value === "history" || value === "generate" ? value : "generate";
+}
+
+function readRunStatus(value: string | null): RunStatusFilter {
+  return value === "completed" || value === "skipped" || value === "failed" ? value : "all";
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
@@ -154,7 +168,8 @@ export default function AutoPostPage() {
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
-  const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
+  const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
@@ -215,7 +230,11 @@ export default function AutoPostPage() {
   );
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
-  const accountRuns = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID).slice(0, 5), [runs, selectedAccountID]);
+  const accountRunsAll = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID), [runs, selectedAccountID]);
+  const accountRuns = useMemo(
+    () => accountRunsAll.filter((run) => runStatusFilter === "all" || run.status === runStatusFilter).slice(0, 8),
+    [accountRunsAll, runStatusFilter]
+  );
   const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
   const queuedDraftCount = useMemo(
     () => accountDraftsAll.filter((draft) => ["draft", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
@@ -237,6 +256,22 @@ export default function AutoPostPage() {
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
     : undefined;
+
+  useEffect(() => {
+    setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
+    setRunStatusFilter(readRunStatus(searchParams.get("run_status")));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (activePanel !== "generate") next.set("panel", activePanel);
+    if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
+    const nextQuery = next.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [activePanel, pathname, router, runStatusFilter, searchParams]);
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -1141,10 +1176,26 @@ export default function AutoPostPage() {
                 </Card>
 
                 <Card>
-                <CardHeader title={t("autoPost.runs.title")} description={t("autoPost.runs.description")} />
+                <CardHeader
+                  title={t("autoPost.runs.title")}
+                  description={t("autoPost.runs.description")}
+                  right={
+                    <select
+                      value={runStatusFilter}
+                      onChange={(event) => setRunStatusFilter(event.target.value as RunStatusFilter)}
+                      className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                    >
+                      {runStatusFilters.map((status) => (
+                        <option key={status} value={status}>
+                          {t(`autoPost.runs.filter.${status}`)}
+                        </option>
+                      ))}
+                    </select>
+                  }
+                />
                 {accountRuns.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
-                    {t("autoPost.runs.empty")}
+                    {runStatusFilter === "all" ? t("autoPost.runs.empty") : t("autoPost.runs.emptyFiltered")}
                   </div>
                 ) : (
                   <div className="space-y-3">

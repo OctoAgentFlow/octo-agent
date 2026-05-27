@@ -653,8 +653,8 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
             <Metric label={t("admin.execution.publishBacklog")} value={publishBacklog} icon={ReceiptText} tone={publishBacklog > 0 ? "warn" : "good"} href="/execution-queue?status=ready_to_publish" />
             <Metric label={t("admin.execution.publishFailed")} value={overview.execution.publish_failed} icon={AlertTriangle} tone={overview.execution.publish_failed > 0 ? "danger" : "good"} href="/execution-queue?status=failed" />
             <Metric label={t("admin.execution.publishedThisMonth")} value={overview.execution.published_this_month} icon={CheckCircle2} tone="good" />
-            <Metric label={t("admin.execution.autoPostDueNow")} value={overview.execution.auto_post_due_now} icon={Activity} tone={overview.execution.auto_post_due_now > 0 ? "warn" : "default"} />
-            <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
+            <Metric label={t("admin.execution.autoPostDueNow")} value={overview.execution.auto_post_due_now} icon={Activity} tone={overview.execution.auto_post_due_now > 0 ? "warn" : "default"} href="/auto-post?panel=planner" />
+            <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/auto-post?panel=history&run_status=failed" />
             <Metric label={t("admin.execution.needsReauth")} value={overview.execution.needs_reauth_accounts} icon={ShieldCheck} tone={overview.execution.needs_reauth_accounts > 0 ? "warn" : "good"} href="/accounts?filter=needs_reauth" />
           </div>
         </Card>
@@ -664,7 +664,7 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
             <Metric label={t("admin.execution.monthlyAI")} value={overview.execution.monthly_ai_generations} icon={Activity} />
             <Metric label={t("admin.execution.monthlyX")} value={overview.execution.monthly_x_publishes} icon={CheckCircle2} />
             <Metric label={t("admin.execution.monthlyCost")} value={`${overview.execution.monthly_cost_amount} USDT`} icon={Coins} tone={overview.execution.monthly_cost_cents > 0 ? "warn" : "default"} />
-            <Metric label={t("admin.execution.autoPostEnabled")} value={overview.execution.auto_post_enabled_plans} icon={Settings} />
+            <Metric label={t("admin.execution.autoPostEnabled")} value={overview.execution.auto_post_enabled_plans} icon={Settings} href="/auto-post?panel=planner" />
           </div>
         </Card>
       </section>
@@ -1561,8 +1561,8 @@ function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
         <div className="grid gap-3 md:grid-cols-4">
           <Metric label={t("admin.execution.publishPending")} value={overview.execution.publish_pending} icon={ReceiptText} tone={overview.execution.publish_pending > 0 ? "warn" : "good"} href="/execution-queue?status=ready_to_publish" />
           <Metric label={t("admin.execution.publishProcessing")} value={overview.execution.publish_processing} icon={Activity} href="/execution-queue?status=processing" />
-          <Metric label={t("admin.execution.autoPostSkipped24h")} value={overview.execution.auto_post_skipped_24h} icon={AlertTriangle} tone={overview.execution.auto_post_skipped_24h > 0 ? "warn" : "good"} />
-          <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
+          <Metric label={t("admin.execution.autoPostSkipped24h")} value={overview.execution.auto_post_skipped_24h} icon={AlertTriangle} tone={overview.execution.auto_post_skipped_24h > 0 ? "warn" : "good"} href="/auto-post?panel=history&run_status=skipped" />
+          <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/auto-post?panel=history&run_status=failed" />
         </div>
       </Card>
     </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, RotateCcw, Send, ShieldCheck, Sparkles, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -72,6 +72,7 @@ export default function AutoRepliesPage() {
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [retryingDraftID, setRetryingDraftID] = useState<number | null>(null);
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
 
@@ -176,6 +177,28 @@ export default function AutoRepliesPage() {
       pushToast(t("autoReply.toast.rejected"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoReply.errors.reject") : t("autoReply.errors.reject"));
+    }
+  };
+
+  const retryReplyDraft = async (draft: AutoReplyDraftApi) => {
+    if (!draft.comment_tweet_id) {
+      pushToast(t("autoReply.errors.retryMissingTarget"));
+      return;
+    }
+    if (!window.confirm(t("autoReply.review.retryConfirm"))) return;
+    setRetryingDraftID(draft.id);
+    try {
+      const updated = await automationService.retryReplyDraft(draft.id);
+      setDrafts((items) => items.map((item) => (item.id === draft.id ? updated : item)));
+      pushToast(updated.status === "sent" || updated.status === "published" ? t("autoReply.toast.retried") : t("autoReply.toast.retryQueued"));
+      void loadAll();
+    } catch (error) {
+      const body = axios.isAxiosError(error) ? error.response?.data : null;
+      const isQuotaError = body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_reply_monthly_limit_exceeded";
+      if (isQuotaError) setQuotaUpgradeVisible(true);
+      pushToast(isQuotaError ? t("autoReply.errors.quota") : body?.message || t("autoReply.errors.retry"));
+    } finally {
+      setRetryingDraftID(null);
     }
   };
 
@@ -453,6 +476,7 @@ export default function AutoRepliesPage() {
             ) : (
               drafts.slice(0, 12).map((draft) => {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
+                const canRetryReply = Boolean(draft.comment_tweet_id && (draft.status === "sent" || draft.status === "published" || draft.status === "failed"));
                 const editing = editingDraftID === draft.id;
                 return (
                   <div key={draft.id} className="bg-black p-5 transition-colors hover:bg-[#080808]">
@@ -511,6 +535,18 @@ export default function AutoRepliesPage() {
                               <Button size="sm" variant="outline" onClick={() => void rejectDraft(draft.id)}>
                                 <XCircle className="size-4" />
                                 {t("autoReply.review.reject")}
+                              </Button>
+                            ) : null}
+                            {canRetryReply ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={modulePaused || retryingDraftID === draft.id}
+                                title={modulePausedActionTip}
+                                onClick={() => void retryReplyDraft(draft)}
+                              >
+                                <RotateCcw className="size-4" />
+                                {retryingDraftID === draft.id ? t("autoReply.review.retrying") : t("autoReply.review.retryReply")}
                               </Button>
                             ) : null}
                           </>

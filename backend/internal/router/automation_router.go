@@ -27,6 +27,7 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	reply.PATCH("/drafts/:id", c.UpdateReplyDraft)
 	reply.POST("/drafts/:id/approve", c.ApproveReplyDraft)
 	reply.POST("/drafts/:id/reject", c.RejectReplyDraft)
+	reply.POST("/drafts/:id/retry", c.RetryReplyDraft)
 
 	dm := rg.Group("/auto-dm")
 	dm.Use(middleware.Auth())

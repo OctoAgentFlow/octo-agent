@@ -423,4 +423,8 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/reject`, { reason });
     return res.data.data;
   },
+  async retryReplyDraft(id: number) {
+    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/retry`);
+    return res.data.data;
+  },
 };

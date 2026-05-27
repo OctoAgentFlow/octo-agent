@@ -254,6 +254,36 @@ func (ctl *AutomationController) RejectReplyDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) RetryReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	data, err := ctl.autoReplyService.RetryDraft(c.Request.Context(), userID, draftID)
+	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
+		if strings.Contains(err.Error(), "monthly AI generation quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		if strings.Contains(err.Error(), "monthly auto reply quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_reply_monthly_limit_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ListDMTasks(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

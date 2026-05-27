@@ -244,6 +244,207 @@ func (s *AutoReplyService) RejectDraft(userID, id uint, reason string) (*dto.Aut
 	return &item, nil
 }
 
+func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dto.AutoReplyDraftItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeReply, "retry reply draft"); err != nil {
+		return nil, err
+	}
+	draft, err := s.replyDraftRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	commentTweetID := strings.TrimSpace(draft.CommentTweetID)
+	if commentTweetID == "" {
+		return nil, fmt.Errorf("comment tweet id is required to retry auto reply")
+	}
+	if strings.TrimSpace(draft.CommentText) == "" {
+		return nil, fmt.Errorf("comment text is required to retry auto reply")
+	}
+	if s.ai == nil {
+		return nil, fmt.Errorf("AI service is not configured")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	if err := s.assertAutoReplyMonthlyQuota(userID, now); err != nil {
+		return nil, err
+	}
+	if err := s.automationRepo.EnsureDefaults(userID); err != nil {
+		return nil, err
+	}
+	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeReply)
+	if err != nil {
+		return nil, err
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, draft.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
+	if s.replyResRepo != nil {
+		if err := s.replyResRepo.Release(userID, commentTweetID); err != nil {
+			return nil, err
+		}
+		acquired, err := s.replyResRepo.TryAcquire(userID, commentTweetID)
+		if err != nil {
+			return nil, err
+		}
+		if !acquired {
+			return nil, fmt.Errorf("auto reply retry is already queued for this comment")
+		}
+	}
+	if err := s.deleteSuccessfulReplyDedup(userID, commentTweetID); err != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		return nil, err
+	}
+
+	bot, err := s.botForAccount(userID, acc.ID)
+	if err != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		return nil, err
+	}
+	blocked := blockedWordsFromConfig(cfg)
+	generated, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(draft.CommentAuthorHandle, draft.RootTweetText, draft.CommentText, cfg.Tone, blocked, bot))
+	if err != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		return nil, err
+	}
+	reply := truncateRunes(generated.Text, autoReplyPreviewRunes)
+	risk := evaluateAutoCommentRisk(reply, bot, blocked)
+	draft.BotID = botIDForUsage(bot)
+	draft.GeneratedReply = reply
+	draft.RiskLevel = risk.Level
+	draft.CapabilityStatus = "ready"
+	draft.FailureCategory = risk.Category
+	draft.FailureReason = risk.Reason
+	draft.ApprovalRequired = false
+	draft.GeneratedAt = &now
+	draft.ApprovedAt = &now
+	draft.RejectedAt = nil
+	draft.SentAt = nil
+	if risk.Level == "high" {
+		draft.Status = "failed"
+		draft.FailureReason = firstNonEmpty(risk.Reason, "AI generated reply was blocked by safety rules.")
+		if err := s.replyDraftRepo.Save(draft); err != nil {
+			return nil, err
+		}
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		item := toAutoReplyDraftItem(*draft)
+		return &item, fmt.Errorf("AI generated reply was blocked by safety rules: %s", firstNonEmpty(risk.Reason, risk.Category, "high risk"))
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoReply, now, generated.Usage); err != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		return nil, err
+	}
+
+	tok := strings.TrimSpace(acc.AccessToken)
+	tweetID, apiErr := twitter.CreateReplyTweet(ctx, tok, reply, commentTweetID)
+	handle := formatXAccountHandle(acc.Username)
+	if isXUnauthorizedError(apiErr) {
+		if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, *acc,
+			zap.Uint("x_account_id", acc.ID),
+			zap.String("account_handle", handle),
+			zap.String("comment_tweet_id", commentTweetID),
+			zap.String("operation", "retry_reply_tweet")); ok {
+			acc = &refreshed
+			tok = strings.TrimSpace(acc.AccessToken)
+			tweetID, apiErr = twitter.CreateReplyTweet(ctx, tok, reply, commentTweetID)
+		}
+	}
+	toUser := replyAuthorDisplay(draft.CommentAuthorHandle)
+	toPrev := truncateReplyPreview(draft.CommentText, autoReplyPreviewRunes)
+	outPrev := truncateReplyPreview(reply, autoReplyPreviewRunes)
+	at := time.Now().UTC()
+	if apiErr != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		msg := truncateErrMsg(apiErr.Error())
+		var pub *twitter.PublishError
+		if errors.As(apiErr, &pub) {
+			msg = truncateErrMsg(pub.Error())
+		}
+		log := &model.ActivityLog{
+			UserID:              userID,
+			XAccountID:          acc.ID,
+			Type:                "reply",
+			Status:              "failed",
+			PreviewKey:          "activity.preview.replyFailed",
+			AccountHandle:       handle,
+			ExecutedAt:          at,
+			ErrorMessage:        msg,
+			ReplyCommentTweetID: commentTweetID,
+			ReplyToUsername:     toUser,
+			ReplyToTextPreview:  toPrev,
+			ReplyTextPreview:    outPrev,
+		}
+		if err := s.activityRepo.DB.Create(log).Error; err != nil {
+			return nil, err
+		}
+		draft.Status = "failed"
+		draft.FailureReason = msg
+		draft.ActivityLogID = log.ID
+		if err := s.replyDraftRepo.Save(draft); err != nil {
+			return nil, err
+		}
+		item := toAutoReplyDraftItem(*draft)
+		return &item, nil
+	}
+	ref := commentTweetID
+	log := &model.ActivityLog{
+		UserID:              userID,
+		XAccountID:          acc.ID,
+		Type:                "reply",
+		Status:              "success",
+		PreviewKey:          "activity.preview.replySuccess",
+		AccountHandle:       handle,
+		ExecutedAt:          at,
+		RefTweetID:          &ref,
+		ReplyCommentTweetID: commentTweetID,
+		ReplyToUsername:     toUser,
+		ReplyToTextPreview:  toPrev,
+		ReplyTextPreview:    outPrev,
+	}
+	if err := s.activityRepo.DB.Create(log).Error; err != nil {
+		if s.replyResRepo != nil {
+			_ = s.replyResRepo.Release(userID, commentTweetID)
+		}
+		return nil, err
+	}
+	draft.Status = "sent"
+	draft.SentAt = &at
+	draft.ActivityLogID = log.ID
+	draft.FailureReason = ""
+	if err := s.replyDraftRepo.Save(draft); err != nil {
+		return nil, err
+	}
+	zap.L().Info("auto reply: manually retried", zap.Uint("user_id", userID), zap.String("comment_tweet_id", commentTweetID), zap.String("reply_tweet_id", tweetID))
+	item := toAutoReplyDraftItem(*draft)
+	return &item, nil
+}
+
+func (s *AutoReplyService) deleteSuccessfulReplyDedup(userID uint, commentTweetID string) error {
+	if s == nil || s.activityRepo == nil {
+		return nil
+	}
+	return s.activityRepo.DB.
+		Where("user_id = ? AND type = ? AND status = ?", userID, "reply", "success").
+		Where("(reply_comment_tweet_id = ? OR ref_tweet_id = ?)", commentTweetID, commentTweetID).
+		Delete(&model.ActivityLog{}).Error
+}
+
 func truncateReplyPreview(s string, maxRunes int) string {
 	s = strings.TrimSpace(s)
 	if maxRunes <= 0 {

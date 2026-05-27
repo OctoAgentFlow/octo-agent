@@ -74,13 +74,13 @@ function mapModule(item: AutomationModuleApi): AutomationModule {
       enabled: item.config.enabled,
       frequency: {
         intervalMinutes: item.config.frequency.interval_minutes,
-        dailyLimit: item.config.frequency.daily_limit,
+        dailyLimit: item.config.frequency.daily_limit ?? 0,
       },
       tone: item.config.tone,
       executionMode: item.config.execution_mode || "review",
       safety: {
         requireApproval: item.config.safety.require_approval,
-        maxPerHour: item.config.safety.max_per_hour,
+        maxPerHour: item.config.safety.max_per_hour ?? 0,
         blockedKeywords: item.config.safety.blocked_keywords || [],
       },
     },

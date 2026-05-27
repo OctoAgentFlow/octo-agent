@@ -289,7 +289,7 @@ export const dict: I18nDict = {
   "auth.form.mock.registerSuccess": "帳號已建立（模擬）。",
 
   "auth.wallet.title": "連結錢包",
-  "auth.wallet.description": "請選擇錢包提供方（目前為模擬流程）。",
+  "auth.wallet.description": "請選擇錢包提供方，簽名後會將位址綁定到目前帳號。",
 
   // sidebar
   "sidebar.nav.dashboard": "儀表板",

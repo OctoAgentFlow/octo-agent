@@ -289,7 +289,7 @@ export const dict: I18nDict = {
   "auth.form.mock.registerSuccess": "Аккаунт создан (mock).",
 
   "auth.wallet.title": "Подключить кошелек",
-  "auth.wallet.description": "Выберите провайдера кошелька (пока это mock‑поток).",
+  "auth.wallet.description": "Выберите провайдера кошелька и подпишите сообщение, чтобы привязать адрес к аккаунту.",
 
   // sidebar
   "sidebar.nav.dashboard": "Панель",
@@ -1188,13 +1188,13 @@ export const dict: I18nDict = {
   "automation.edit.title": "Редактировать {name}",
   "automation.edit.description": "Configure interval, style, execution mode, and basic safety rules. Automation usage is controlled by monthly plan quotas.",
   "automation.edit.intervalMinutes": "Интервал (мин)",
-  "automation.edit.dailyLimit": "Monthly plan quota",
+  "automation.edit.dailyLimit": "Месячный лимит плана",
   "automation.edit.style": "Стиль",
   "automation.edit.executionMode": "Execution mode",
   "automation.edit.executionModeHint": "Autopilot requires Plus or higher; risky content is automatically downgraded into review.",
   "automation.edit.safety": "Безопасность",
   "automation.edit.requireApproval": "Требовать утверждения",
-  "automation.edit.maxPerHour": "Plan quota controlled",
+  "automation.edit.maxPerHour": "По лимиту плана",
   "automation.edit.blockedKeywords": "Запрещенные ключевые слова (через запятую)",
   "automation.edit.blockedKeywordsPlaceholder": "например: seed phrase, private key",
   "automation.edit.saved": "Сохранено.",

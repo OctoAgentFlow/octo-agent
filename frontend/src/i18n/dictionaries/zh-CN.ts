@@ -352,6 +352,7 @@ export const dict: I18nDict = {
   "auth.toast.codeSendFailed": "验证码发送失败。",
   "wallet.toast.loginRequired": "请先登录或注册，再绑定钱包。",
   "wallet.toast.bound": "钱包绑定成功。",
+  "wallet.toast.unbound": "钱包已解绑。",
   "unsubscribe.title": "Auto DM 偏好设置",
   "unsubscribe.description": "管理你的 Auto DM 接收偏好。",
   "unsubscribe.descriptionWithUser": "{username} 的接收偏好",
@@ -370,7 +371,7 @@ export const dict: I18nDict = {
   "stubs.postTable": "帖子表格",
 
   "auth.wallet.title": "连接钱包",
-  "auth.wallet.description": "请选择钱包提供方（当前为模拟流程）。",
+  "auth.wallet.description": "请选择钱包提供方，签名后会把地址绑定到当前账号。",
 
   // sidebar
   "sidebar.nav.dashboard": "仪表板",

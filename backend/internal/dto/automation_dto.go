@@ -2,12 +2,12 @@ package dto
 
 type AutomationFrequency struct {
 	IntervalMinutes int `json:"interval_minutes" binding:"required,min=1,max=1440"`
-	DailyLimit      int `json:"daily_limit" binding:"required,min=0,max=5000"`
+	DailyLimit      int `json:"daily_limit" binding:"omitempty,min=0,max=5000"` // Deprecated: accepted for API compatibility; monthly plan quota is enforced instead.
 }
 
 type AutomationSafety struct {
 	RequireApproval bool     `json:"require_approval"`
-	MaxPerHour      int      `json:"max_per_hour" binding:"required,min=0,max=500"`
+	MaxPerHour      int      `json:"max_per_hour" binding:"omitempty,min=0,max=500"` // Deprecated: accepted for API compatibility; monthly plan quota is enforced instead.
 	BlockedKeywords []string `json:"blocked_keywords"`
 }
 

@@ -377,6 +377,7 @@ export const dict: I18nDict = {
   "auth.toast.codeSendFailed": "Failed to send code.",
   "wallet.toast.loginRequired": "Please login or register first, then bind wallet.",
   "wallet.toast.bound": "Wallet bound successfully.",
+  "wallet.toast.unbound": "Wallet unbound.",
   "unsubscribe.title": "Auto DM Preferences",
   "unsubscribe.description": "Manage your Auto DM preference.",
   "unsubscribe.descriptionWithUser": "Preferences for {username}",
@@ -396,7 +397,7 @@ export const dict: I18nDict = {
 
   // auth wallet modal
   "auth.wallet.title": "Connect Wallet",
-  "auth.wallet.description": "Select a wallet provider. This is a mock flow for now.",
+  "auth.wallet.description": "Select a wallet provider and sign once to bind the address to your account.",
 
   // sidebar
   "sidebar.nav.dashboard": "Dashboard",

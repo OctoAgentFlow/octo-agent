@@ -289,7 +289,7 @@ export const dict: I18nDict = {
   "auth.form.mock.registerSuccess": "アカウント作成（モック）。",
 
   "auth.wallet.title": "ウォレット接続",
-  "auth.wallet.description": "プロバイダを選択してください（現在はモック）。",
+  "auth.wallet.description": "ウォレットプロバイダを選択し、署名するとこのアカウントにアドレスを紐付けます。",
 
   // sidebar
   "sidebar.nav.dashboard": "ダッシュボード",
@@ -1188,13 +1188,13 @@ export const dict: I18nDict = {
   "automation.edit.title": "{name} を編集",
   "automation.edit.description": "Configure interval, style, execution mode, and basic safety rules. Automation usage is controlled by monthly plan quotas.",
   "automation.edit.intervalMinutes": "間隔（分）",
-  "automation.edit.dailyLimit": "Monthly plan quota",
+  "automation.edit.dailyLimit": "月間プラン枠",
   "automation.edit.style": "スタイル",
   "automation.edit.executionMode": "Execution mode",
   "automation.edit.executionModeHint": "Autopilot requires Plus or higher; risky content is automatically downgraded into review.",
   "automation.edit.safety": "安全",
   "automation.edit.requireApproval": "承認が必要",
-  "automation.edit.maxPerHour": "Plan quota controlled",
+  "automation.edit.maxPerHour": "プラン枠で制御",
   "automation.edit.blockedKeywords": "ブロックキーワード（カンマ区切り）",
   "automation.edit.blockedKeywordsPlaceholder": "例：seed phrase, private key",
   "automation.edit.saved": "保存しました。",

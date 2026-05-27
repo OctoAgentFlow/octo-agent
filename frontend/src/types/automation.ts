@@ -5,13 +5,15 @@ export type AutomationRunState = "Running" | "Queued" | "Paused" | "Needs Review
 
 export type AutomationSafetyLimits = {
   requireApproval: boolean;
-  maxPerHour: number;
+  /** Deprecated: retained for old API responses; monthly plan quota is enforced instead. */
+  maxPerHour?: number;
   blockedKeywords: string[];
 };
 
 export type AutomationFrequency = {
   intervalMinutes: number;
-  dailyLimit: number;
+  /** Deprecated: retained for old API responses; monthly plan quota is enforced instead. */
+  dailyLimit?: number;
 };
 
 export type AutomationModuleConfig = {

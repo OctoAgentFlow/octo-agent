@@ -289,7 +289,7 @@ export const dict: I18nDict = {
   "auth.form.mock.registerSuccess": "계정 생성(모의).",
 
   "auth.wallet.title": "월렛 연결",
-  "auth.wallet.description": "월렛 제공자를 선택하세요(현재 모의 흐름).",
+  "auth.wallet.description": "지갑 제공자를 선택하고 서명하면 주소가 현재 계정에 바인딩됩니다.",
 
   // sidebar
   "sidebar.nav.dashboard": "대시보드",
@@ -1188,13 +1188,13 @@ export const dict: I18nDict = {
   "automation.edit.title": "{name} 편집",
   "automation.edit.description": "Configure interval, style, execution mode, and basic safety rules. Automation usage is controlled by monthly plan quotas.",
   "automation.edit.intervalMinutes": "간격(분)",
-  "automation.edit.dailyLimit": "Monthly plan quota",
+  "automation.edit.dailyLimit": "월간 플랜 한도",
   "automation.edit.style": "스타일",
   "automation.edit.executionMode": "Execution mode",
   "automation.edit.executionModeHint": "Autopilot requires Plus or higher; risky content is automatically downgraded into review.",
   "automation.edit.safety": "안전",
   "automation.edit.requireApproval": "승인 필요",
-  "automation.edit.maxPerHour": "Plan quota controlled",
+  "automation.edit.maxPerHour": "플랜 한도로 제어",
   "automation.edit.blockedKeywords": "차단 키워드(쉼표로 구분)",
   "automation.edit.blockedKeywordsPlaceholder": "예: seed phrase, private key",
   "automation.edit.saved": "저장되었습니다.",

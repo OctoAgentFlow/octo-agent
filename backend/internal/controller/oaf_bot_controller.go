@@ -129,6 +129,27 @@ func (ctl *OAFBotController) CompleteProfile(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) SuggestProfileFromFeedback(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	data, err := ctl.oafBotService.SuggestProfileFromFeedback(c.Request.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 	userID, id, ok := ctl.userAndBotID(c)
 	if !ok {

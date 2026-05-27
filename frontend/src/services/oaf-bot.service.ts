@@ -2,6 +2,7 @@ import { request } from "@/lib/request";
 import type {
   OAFBot,
   OAFBotCompleteProfileResult,
+  OAFBotFeedbackProfileSuggestionResult,
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackPayload,
   OAFBotGenerationUsage,
@@ -135,6 +136,10 @@ export const oafBotService = {
   },
   async completeProfile(draft: OAFBotPayload, mode: OAFBotProfileAssistMode = "fill_missing_only") {
     const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft, mode });
+    return res.data.data;
+  },
+  async suggestProfileFromFeedback(id: number) {
+    const res = await request.post<ApiResponse<OAFBotFeedbackProfileSuggestionResult>>(`/oaf-bots/${id}/feedback-profile-suggestion`, {});
     return res.data.data;
   },
   async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {

@@ -85,6 +85,14 @@ type OAFBotCompleteProfileResponse struct {
 	RawResult     string              `json:"raw_result,omitempty"`
 }
 
+type OAFBotFeedbackProfileSuggestionResponse struct {
+	Profile       OAFBotUpsertRequest `json:"profile"`
+	Provider      string              `json:"provider"`
+	UsageConsumed int                 `json:"usage_consumed"`
+	FeedbackCount int                 `json:"feedback_count"`
+	RawResult     string              `json:"raw_result,omitempty"`
+}
+
 type OAFBotTestGenerateRequest struct {
 	Scene         string `json:"scene"`
 	SampleContext string `json:"sample_context"`

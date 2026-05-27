@@ -350,6 +350,7 @@ export default function OAFBotsPage() {
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -920,6 +921,37 @@ export default function OAFBotsPage() {
     }
   };
 
+  const applyFeedbackProfileSuggestion = async () => {
+    if (!selectedID) return;
+    if (generationFeedback.filter((item) => item.rating === "negative").length === 0) {
+      pushToast(t("oafBots.feedbackSuggestion.needNegative"));
+      return;
+    }
+    setFeedbackSuggestionLoading(true);
+    try {
+      const result = await oafBotService.suggestProfileFromFeedback(selectedID);
+      setForm((prev) => ({
+        ...prev,
+        ...result.profile,
+        name: prev.name || result.profile.name,
+        twitter_account_id: prev.twitter_account_id || result.profile.twitter_account_id,
+      }));
+      setActiveStep("goals");
+      setSamples(null);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      pushToast(t("oafBots.feedbackSuggestion.applied", { count: result.feedback_count || 0 }));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.feedbackSuggestion.failed"));
+      }
+    } finally {
+      setFeedbackSuggestionLoading(false);
+    }
+  };
+
   const handleSampleSceneChange = (scene: SampleScene) => {
     setSampleScene(scene);
     setSamples(null);
@@ -1389,9 +1421,11 @@ export default function OAFBotsPage() {
                   feedbackLoading={feedbackLoading}
                   feedbackDraft={feedbackDraft}
                   feedbackSaving={feedbackSaving}
+                  feedbackSuggestionLoading={feedbackSuggestionLoading}
                   feedbackIssueOptions={feedbackIssueOptions}
                   onFeedbackDraftChange={setFeedbackDraft}
                   onFeedbackSubmit={submitGenerationFeedback}
+                  onFeedbackProfileSuggestion={applyFeedbackProfileSuggestion}
                 />
               </WizardPanel>
             ) : null}
@@ -3024,9 +3058,11 @@ function SamplePanel({
   feedbackLoading,
   feedbackDraft,
   feedbackSaving,
+  feedbackSuggestionLoading,
   feedbackIssueOptions,
   onFeedbackDraftChange,
   onFeedbackSubmit,
+  onFeedbackProfileSuggestion,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
@@ -3050,9 +3086,11 @@ function SamplePanel({
   feedbackLoading: boolean;
   feedbackDraft: FeedbackDraft;
   feedbackSaving: boolean;
+  feedbackSuggestionLoading: boolean;
   feedbackIssueOptions: ChipOption[];
   onFeedbackDraftChange: (draft: FeedbackDraft) => void;
   onFeedbackSubmit: () => void;
+  onFeedbackProfileSuggestion: () => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -3153,6 +3191,8 @@ function SamplePanel({
             items={feedbackItems}
             loading={feedbackLoading}
             issueOptions={feedbackIssueOptions}
+            suggestionLoading={feedbackSuggestionLoading}
+            onSuggestProfile={onFeedbackProfileSuggestion}
           />
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
@@ -3332,23 +3372,37 @@ function GenerationFeedbackHistory({
   items,
   loading,
   issueOptions,
+  suggestionLoading,
+  onSuggestProfile,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   items: OAFBotGenerationFeedback[];
   loading: boolean;
   issueOptions: ChipOption[];
+  suggestionLoading: boolean;
+  onSuggestProfile: () => void;
 }) {
+  const negativeCount = items.filter((item) => item.rating === "negative").length;
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedback.historyTitle")}</p>
           <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.feedback.historyDescription")}</p>
         </div>
-        <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
-          {t("oafBots.feedback.historyCount", { count: items.length })}
-        </span>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+            {t("oafBots.feedback.historyCount", { count: items.length })}
+          </span>
+          <Button type="button" size="sm" variant="outline" onClick={onSuggestProfile} disabled={suggestionLoading || negativeCount === 0}>
+            {suggestionLoading ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {suggestionLoading ? t("oafBots.feedbackSuggestion.loading") : t("oafBots.feedbackSuggestion.action")}
+          </Button>
+        </div>
       </div>
+      <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#71767b]">
+        {negativeCount > 0 ? t("oafBots.feedbackSuggestion.hint", { count: negativeCount }) : t("oafBots.feedbackSuggestion.emptyHint")}
+      </p>
       {loading ? (
         <p className="mt-4 text-sm text-[#71767b]">{t("oafBots.feedback.loading")}</p>
       ) : items.length === 0 ? (

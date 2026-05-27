@@ -15,6 +15,7 @@ func RegisterOAFBot(rg *gin.RouterGroup, c *controller.OAFBotController) {
 	group.POST("/complete-profile", c.CompleteProfile)
 	group.GET("/:id", c.Get)
 	group.PUT("/:id", c.Update)
+	group.POST("/:id/feedback-profile-suggestion", c.SuggestProfileFromFeedback)
 	group.POST("/:id/test-generate", c.TestGenerate)
 	group.GET("/:id/generation-usages", c.GenerationUsages)
 	group.GET("/:id/generation-feedback", c.GenerationFeedback)

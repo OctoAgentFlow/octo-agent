@@ -155,6 +155,7 @@ type CompleteOAFBotProfileInput struct {
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
+	FeedbackSignals   []string
 }
 
 type GenerateAutoPostInput struct {
@@ -512,6 +513,13 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 		user.WriteString("Assist mode: improve_all. You may refine existing fields when it clearly improves specificity, consistency, or safety.\n")
 	} else {
 		user.WriteString("Assist mode: fill_missing_only. Prioritize missing fields and avoid changing user-provided intent.\n")
+	}
+	if len(in.FeedbackSignals) > 0 {
+		user.WriteString("Recent negative generation feedback to fix. Treat these as concrete quality signals for the revised persona and strategy fields:\n")
+		for i, signal := range in.FeedbackSignals {
+			user.WriteString(fmt.Sprintf("%d. %s\n", i+1, strings.TrimSpace(signal)))
+		}
+		user.WriteString("When feedback mentions off-persona, generic output, unsafe claims, wrong language, length, CTA, or missing context, reflect the fix in identity_summary, voice_tone, topics, forbidden_topics, growth_goal, content_objectives, preferred_cta, keywords, compliance_notes, avoid_claims, primary_language, or language_strategy as appropriate.\n")
 	}
 	user.WriteString("name: " + name + "\n")
 	user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")

@@ -69,6 +69,14 @@ export type OAFBotCompleteProfileResult = {
   raw_result?: string;
 };
 
+export type OAFBotFeedbackProfileSuggestionResult = {
+  profile: OAFBotPayload;
+  provider: string;
+  usage_consumed: number;
+  feedback_count: number;
+  raw_result?: string;
+};
+
 export type OAFBotGenerationUsage = {
   bot_id: number;
   scene: string;

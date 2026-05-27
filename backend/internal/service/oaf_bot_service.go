@@ -135,6 +135,42 @@ func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dt
 	}, nil
 }
 
+func (s *OAFBotService) SuggestProfileFromFeedback(ctx context.Context, userID, id uint) (*dto.OAFBotFeedbackProfileSuggestionResponse, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	feedbackRows, err := s.feedbackRepo.ListRecentNegativeByUserBot(userID, id, 8)
+	if err != nil {
+		return nil, err
+	}
+	if len(feedbackRows) == 0 {
+		return nil, fmt.Errorf("no negative feedback available for this OAF Bot")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	draft := oafBotToUpsertRequest(*bot)
+	input := completeOAFBotProfileInput(draft, oafBotProfileAssistModeImproveAll)
+	input.FeedbackSignals = feedbackSignalsFromRows(feedbackRows)
+	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	profile = mergeCompletedOAFBotProfile(draft, profile, oafBotProfileAssistModeImproveAll)
+	if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneOAFBotProfileAssist, now, usage); err != nil {
+		return nil, err
+	}
+	return &dto.OAFBotFeedbackProfileSuggestionResponse{
+		Profile:       profile,
+		Provider:      s.ai.providerSource(),
+		UsageConsumed: 1,
+		FeedbackCount: len(feedbackRows),
+		RawResult:     raw,
+	}, nil
+}
+
 func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string, sampleContext string) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
@@ -350,6 +386,27 @@ func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest, mode string) Comple
 	}
 }
 
+func feedbackSignalsFromRows(rows []model.OAFBotGenerationFeedback) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		parts := []string{
+			"scene=" + row.Scene,
+			"issue_tags=" + strings.Join(decodeStringList(row.IssueTags), ", "),
+		}
+		if strings.TrimSpace(row.Comment) != "" {
+			parts = append(parts, "comment="+strings.TrimSpace(row.Comment))
+		}
+		if strings.TrimSpace(row.SampleContext) != "" {
+			parts = append(parts, "sample_context="+limitString(row.SampleContext, 280))
+		}
+		if strings.TrimSpace(row.GeneratedContent) != "" {
+			parts = append(parts, "generated_content="+limitString(row.GeneratedContent, 360))
+		}
+		out = append(out, strings.Join(parts, " | "))
+	}
+	return out
+}
+
 func normalizeSafetyMode(value string) string {
 	switch strings.TrimSpace(value) {
 	case "conservative", "balanced", "autopilot":
@@ -465,6 +522,40 @@ func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 		CreatedAt:         bot.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:         bot.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func oafBotToUpsertRequest(bot model.OAFBot) dto.OAFBotUpsertRequest {
+	return dto.OAFBotUpsertRequest{
+		Name:              bot.Name,
+		TwitterAccountID:  bot.TwitterAccountID,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 	}
 }
 

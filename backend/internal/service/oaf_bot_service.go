@@ -19,6 +19,11 @@ import (
 var ErrOAFBotLimitExceeded = errors.New("oaf bot limit exceeded for current plan")
 var ErrOAFBotTwitterAccountAlreadyBound = errors.New("twitter_account_id is already bound to another active OAF Bot; unbind it first or choose another X account")
 
+const (
+	oafBotProfileAssistModeFillMissing = "fill_missing_only"
+	oafBotProfileAssistModeImproveAll  = "improve_all"
+)
+
 type OAFBotService struct {
 	botRepo     *repository.OAFBotRepository
 	accountRepo *repository.TwitterAccountRepository
@@ -112,39 +117,12 @@ func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dt
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, completeOAFBotProfileInput(req.Draft))
+	mode := normalizeOAFBotProfileAssistMode(req.Mode)
+	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, completeOAFBotProfileInput(req.Draft, mode))
 	if err != nil {
 		return nil, err
 	}
-	profile.Name = limitString(firstNonEmpty(req.Draft.Name, profile.Name), 96)
-	profile.TwitterAccountID = req.Draft.TwitterAccountID
-	profile.AgeRange = limitString(firstNonEmpty(req.Draft.AgeRange, profile.AgeRange), 64)
-	profile.Gender = limitString(firstNonEmpty(req.Draft.Gender, profile.Gender), 64)
-	profile.Education = limitString(firstNonEmpty(req.Draft.Education, profile.Education), 128)
-	profile.MBTI = strings.ToUpper(limitString(firstNonEmpty(req.Draft.MBTI, profile.MBTI), 32))
-	profile.SafetyMode = normalizeSafetyMode(firstNonEmpty(profile.SafetyMode, req.Draft.SafetyMode))
-	profile.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(firstNonEmpty(profile.PrimaryLanguage, req.Draft.PrimaryLanguage))
-	profile.LanguageStrategy = normalizeOAFBotLanguageStrategy(firstNonEmpty(profile.LanguageStrategy, req.Draft.LanguageStrategy))
-	profile.Occupation = limitString(firstNonEmpty(profile.Occupation, req.Draft.Occupation), 128)
-	profile.Industry = limitString(firstNonEmpty(profile.Industry, req.Draft.Industry), 128)
-	profile.IdentitySummary = limitString(firstNonEmpty(profile.IdentitySummary, req.Draft.IdentitySummary), 2000)
-	profile.VoiceTone = limitString(firstNonEmpty(profile.VoiceTone, req.Draft.VoiceTone), 128)
-	profile.GrowthGoal = limitString(firstNonEmpty(profile.GrowthGoal, req.Draft.GrowthGoal), 2000)
-	profile.ProjectOneLiner = limitString(firstNonEmpty(profile.ProjectOneLiner, req.Draft.ProjectOneLiner), 1000)
-	profile.TargetAudience = limitString(firstNonEmpty(profile.TargetAudience, req.Draft.TargetAudience), 2000)
-	profile.CoreValueProps = limitString(firstNonEmpty(profile.CoreValueProps, req.Draft.CoreValueProps), 2000)
-	profile.ProductFeatures = limitString(firstNonEmpty(profile.ProductFeatures, req.Draft.ProductFeatures), 3000)
-	profile.Differentiators = limitString(firstNonEmpty(profile.Differentiators, req.Draft.Differentiators), 2000)
-	profile.ContentObjectives = limitString(firstNonEmpty(profile.ContentObjectives, req.Draft.ContentObjectives), 2000)
-	profile.PreferredCTA = limitString(firstNonEmpty(profile.PreferredCTA, req.Draft.PreferredCTA), 1000)
-	profile.ComplianceNotes = limitString(firstNonEmpty(profile.ComplianceNotes, req.Draft.ComplianceNotes), 2000)
-	profile.PersonalityTags = firstNonEmptyList(profile.PersonalityTags, req.Draft.PersonalityTags)
-	profile.Topics = firstNonEmptyList(profile.Topics, req.Draft.Topics)
-	profile.ForbiddenTopics = firstNonEmptyList(profile.ForbiddenTopics, req.Draft.ForbiddenTopics)
-	profile.ContentPillars = firstNonEmptyList(profile.ContentPillars, req.Draft.ContentPillars)
-	profile.Hashtags = firstNonEmptyList(profile.Hashtags, req.Draft.Hashtags)
-	profile.Keywords = firstNonEmptyList(profile.Keywords, req.Draft.Keywords)
-	profile.AvoidClaims = firstNonEmptyList(profile.AvoidClaims, req.Draft.AvoidClaims)
+	profile = mergeCompletedOAFBotProfile(req.Draft, profile, mode)
 	if err := recordAIGenerationUsage(s.usageRepo, userID, 0, repository.AIGenerationSceneOAFBotProfileAssist, now, usage); err != nil {
 		return nil, err
 	}
@@ -291,8 +269,9 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	bot.LanguageStrategy = normalizeOAFBotLanguageStrategy(req.LanguageStrategy)
 }
 
-func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest) CompleteOAFBotProfileInput {
+func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest, mode string) CompleteOAFBotProfileInput {
 	return CompleteOAFBotProfileInput{
+		Mode:              mode,
 		Name:              req.Name,
 		Occupation:        req.Occupation,
 		Industry:          req.Industry,
@@ -331,6 +310,62 @@ func normalizeSafetyMode(value string) string {
 	default:
 		return "balanced"
 	}
+}
+
+func normalizeOAFBotProfileAssistMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case oafBotProfileAssistModeImproveAll:
+		return oafBotProfileAssistModeImproveAll
+	default:
+		return oafBotProfileAssistModeFillMissing
+	}
+}
+
+func mergeCompletedOAFBotProfile(draft, generated dto.OAFBotUpsertRequest, mode string) dto.OAFBotUpsertRequest {
+	pickString := func(primary, fallback string) string {
+		return firstNonEmpty(primary, fallback)
+	}
+	pickList := firstNonEmptyList
+	if normalizeOAFBotProfileAssistMode(mode) == oafBotProfileAssistModeFillMissing {
+		pickString = func(primary, fallback string) string {
+			return firstNonEmpty(fallback, primary)
+		}
+		pickList = func(primary, fallback []string) []string {
+			return firstNonEmptyList(fallback, primary)
+		}
+	}
+
+	out := generated
+	out.Name = limitString(firstNonEmpty(draft.Name, generated.Name), 96)
+	out.TwitterAccountID = draft.TwitterAccountID
+	out.AgeRange = limitString(pickString(generated.AgeRange, draft.AgeRange), 64)
+	out.Gender = limitString(pickString(generated.Gender, draft.Gender), 64)
+	out.Education = limitString(pickString(generated.Education, draft.Education), 128)
+	out.MBTI = strings.ToUpper(limitString(pickString(generated.MBTI, draft.MBTI), 32))
+	out.SafetyMode = normalizeSafetyMode(pickString(generated.SafetyMode, draft.SafetyMode))
+	out.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(pickString(generated.PrimaryLanguage, draft.PrimaryLanguage))
+	out.LanguageStrategy = normalizeOAFBotLanguageStrategy(pickString(generated.LanguageStrategy, draft.LanguageStrategy))
+	out.Occupation = limitString(pickString(generated.Occupation, draft.Occupation), 128)
+	out.Industry = limitString(pickString(generated.Industry, draft.Industry), 128)
+	out.IdentitySummary = limitString(pickString(generated.IdentitySummary, draft.IdentitySummary), 2000)
+	out.VoiceTone = limitString(pickString(generated.VoiceTone, draft.VoiceTone), 128)
+	out.GrowthGoal = limitString(pickString(generated.GrowthGoal, draft.GrowthGoal), 2000)
+	out.ProjectOneLiner = limitString(pickString(generated.ProjectOneLiner, draft.ProjectOneLiner), 1000)
+	out.TargetAudience = limitString(pickString(generated.TargetAudience, draft.TargetAudience), 2000)
+	out.CoreValueProps = limitString(pickString(generated.CoreValueProps, draft.CoreValueProps), 2000)
+	out.ProductFeatures = limitString(pickString(generated.ProductFeatures, draft.ProductFeatures), 3000)
+	out.Differentiators = limitString(pickString(generated.Differentiators, draft.Differentiators), 2000)
+	out.ContentObjectives = limitString(pickString(generated.ContentObjectives, draft.ContentObjectives), 2000)
+	out.PreferredCTA = limitString(pickString(generated.PreferredCTA, draft.PreferredCTA), 1000)
+	out.ComplianceNotes = limitString(pickString(generated.ComplianceNotes, draft.ComplianceNotes), 2000)
+	out.PersonalityTags = pickList(generated.PersonalityTags, draft.PersonalityTags)
+	out.Topics = pickList(generated.Topics, draft.Topics)
+	out.ForbiddenTopics = pickList(generated.ForbiddenTopics, draft.ForbiddenTopics)
+	out.ContentPillars = pickList(generated.ContentPillars, draft.ContentPillars)
+	out.Hashtags = pickList(generated.Hashtags, draft.Hashtags)
+	out.Keywords = pickList(generated.Keywords, draft.Keywords)
+	out.AvoidClaims = pickList(generated.AvoidClaims, draft.AvoidClaims)
+	return out
 }
 
 func firstNonEmptyList(primary, fallback []string) []string {

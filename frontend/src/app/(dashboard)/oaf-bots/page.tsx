@@ -41,7 +41,7 @@ import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.serv
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleContext, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotProfileAssistMode, OAFBotSampleContext, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
@@ -79,6 +79,7 @@ type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
+const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -311,6 +312,7 @@ export default function OAFBotsPage() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [completingProfile, setCompletingProfile] = useState(false);
+  const [profileAssistMode, setProfileAssistMode] = useState<OAFBotProfileAssistMode>("fill_missing_only");
 
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
@@ -656,7 +658,7 @@ export default function OAFBotsPage() {
     }
     setCompletingProfile(true);
     try {
-      const result = await oafBotService.completeProfile(form);
+      const result = await oafBotService.completeProfile(form, profileAssistMode);
       setForm((prev) => ({
         ...prev,
         ...result.profile,
@@ -1240,35 +1242,51 @@ export default function OAFBotsPage() {
                 </Button>
               </div>
               <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={completeProfile}
-                disabled={completingProfile || saving || generating}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className="size-4" />
-                {completingProfile ? t("oafBots.completeProfile.loading") : t("oafBots.completeProfile.action")}
-              </Button>
-              <Button
-                type="button"
-                variant={activeStep === "test" ? "default" : "outline"}
-                onClick={activeStep === "test" ? testGenerate : goTestStep}
-                disabled={generating || !canTestBot}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className="size-4" />
-                {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
-              </Button>
-              <Button
-                type="button"
-                onClick={save}
-                disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
-                className="w-full sm:w-auto"
-              >
-                <Save className="size-4" />
-                {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
-              </Button>
+                <div className="grid grid-cols-2 gap-1 rounded-full border border-[#2f3336] bg-black p-1">
+                  {profileAssistModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={profileAssistMode === mode}
+                      onClick={() => setProfileAssistMode(mode)}
+                      className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                        profileAssistMode === mode ? "bg-[#1d9bf0] text-white" : "text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+                      }`}
+                      title={t(`oafBots.completeProfile.mode.${mode}.helper`)}
+                    >
+                      {t(`oafBots.completeProfile.mode.${mode}`)}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={completeProfile}
+                  disabled={completingProfile || saving || generating}
+                  className="w-full sm:w-auto"
+                >
+                  <Sparkles className="size-4" />
+                  {completingProfile ? t("oafBots.completeProfile.loading") : t("oafBots.completeProfile.action")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeStep === "test" ? "default" : "outline"}
+                  onClick={activeStep === "test" ? testGenerate : goTestStep}
+                  disabled={generating || !canTestBot}
+                  className="w-full sm:w-auto"
+                >
+                  <Sparkles className="size-4" />
+                  {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={save}
+                  disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
+                  className="w-full sm:w-auto"
+                >
+                  <Save className="size-4" />
+                  {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
+                </Button>
               </div>
             </div>
           </SectionCard>

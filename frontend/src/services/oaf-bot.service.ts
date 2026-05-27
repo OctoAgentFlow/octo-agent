@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { OAFBot, OAFBotCompleteProfileResult, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotCompleteProfileResult, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotProfileAssistMode, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type ApiResponse<T> = {
   code: number;
@@ -118,8 +118,8 @@ export const oafBotService = {
     const res = await request.put<ApiResponse<OAFBot>>(`/oaf-bots/${id}`, body);
     return res.data.data;
   },
-  async completeProfile(draft: OAFBotPayload) {
-    const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft });
+  async completeProfile(draft: OAFBotPayload, mode: OAFBotProfileAssistMode = "fill_missing_only") {
+    const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft, mode });
     return res.data.data;
   },
   async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {

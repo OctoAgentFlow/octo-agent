@@ -126,6 +126,7 @@ type GenerateOAFBotSamplesInput struct {
 }
 
 type CompleteOAFBotProfileInput struct {
+	Mode              string
 	Name              string
 	Occupation        string
 	Industry          string
@@ -507,6 +508,11 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 
 	var user strings.Builder
 	user.WriteString("Current draft fields. Empty fields need help; non-empty fields should be refined only when necessary.\n")
+	if strings.TrimSpace(in.Mode) == oafBotProfileAssistModeImproveAll {
+		user.WriteString("Assist mode: improve_all. You may refine existing fields when it clearly improves specificity, consistency, or safety.\n")
+	} else {
+		user.WriteString("Assist mode: fill_missing_only. Prioritize missing fields and avoid changing user-provided intent.\n")
+	}
 	user.WriteString("name: " + name + "\n")
 	user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
 	user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")

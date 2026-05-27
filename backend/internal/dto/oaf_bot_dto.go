@@ -75,6 +75,7 @@ type OAFBotUpsertRequest struct {
 
 type OAFBotCompleteProfileRequest struct {
 	Draft OAFBotUpsertRequest `json:"draft"`
+	Mode  string              `json:"mode"`
 }
 
 type OAFBotCompleteProfileResponse struct {

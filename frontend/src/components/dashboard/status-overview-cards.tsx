@@ -7,6 +7,7 @@ import type { DashboardOverview } from "@/services/dashboard.service";
 
 type StatusOverviewCardsProps = {
   overview?: DashboardOverview | null;
+  loading?: boolean;
 };
 
 function planKeyFromCode(plan: string) {
@@ -21,8 +22,24 @@ function formatDelta24h(cur: number, prev: number) {
   return String(d);
 }
 
-export function StatusOverviewCards({ overview }: StatusOverviewCardsProps) {
+export function StatusOverviewCards({ overview, loading = false }: StatusOverviewCardsProps) {
   const { t } = useT();
+  if (loading) {
+    return (
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <article key={index} className="surface-card rounded-2xl p-4">
+            <div className="flex items-start justify-between">
+              <span className="h-3 w-24 animate-pulse rounded-full bg-[#2f3336]" />
+              <span className="size-8 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+            </div>
+            <span className="mt-4 block h-7 w-28 animate-pulse rounded-full bg-[#2f3336]" />
+            <span className="mt-3 block h-3 w-36 animate-pulse rounded-full bg-[#2f3336]" />
+          </article>
+        ))}
+      </section>
+    );
+  }
   const act24 = overview?.activity_count_24h ?? 0;
   const actPrev = overview?.activity_count_prev_24h ?? 0;
   const ratePct = overview?.activity_success_rate_pct ?? 0;

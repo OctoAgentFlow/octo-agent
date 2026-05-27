@@ -63,7 +63,22 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
       description={t("dashboard.activity.section.description")}
     >
       {loading ? (
-        <p className="text-sm text-white/60">{t("dashboard.activity.loading")}</p>
+        <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article key={index} className="grid gap-2 px-5 py-4 md:grid-cols-[76px_1fr_96px] md:px-6">
+              <span className="h-4 w-14 animate-pulse rounded-full bg-[#2f3336]" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-4 w-20 animate-pulse rounded-full bg-[#2f3336]" />
+                  <span className="h-5 w-16 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+                </div>
+                <span className="mt-3 block h-3 w-full max-w-md animate-pulse rounded-full bg-[#2f3336]" />
+                <span className="mt-2 block h-3 w-40 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+              <span className="ml-auto h-4 w-16 animate-pulse rounded-full bg-[#2f3336]" />
+            </article>
+          ))}
+        </div>
       ) : errorMessage ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-red-200/90">{errorMessage}</p>

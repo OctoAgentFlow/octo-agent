@@ -29,7 +29,25 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
       title={t("dashboard.automation.section.title")}
       description={t("dashboard.automation.section.description")}
     >
-      {loading ? <p className="text-sm text-[#71767b]">{t("dashboard.automation.loading")}</p> : null}
+      {loading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <article key={index} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="size-8 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+                  <span className="h-4 w-24 animate-pulse rounded-full bg-[#2f3336]" />
+                </div>
+                <span className="h-6 w-16 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+              <div className="mt-5 space-y-2">
+                <span className="block h-4 w-32 animate-pulse rounded-full bg-[#2f3336]" />
+                <span className="block h-4 w-40 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
@@ -38,7 +56,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
           </button>
         </div>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {!loading && !errorMessage ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {modules.map((module) => {
           const ModuleIcon = iconByType[module.type];
           const quota = monthlyUsage[module.type];
@@ -66,7 +84,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
           </article>
           );
         })}
-      </div>
+      </div> : null}
     </SectionCard>
   );
 }

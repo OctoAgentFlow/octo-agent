@@ -150,6 +150,10 @@ function quotaExhausted(data: OAFBotDashboardData | null) {
   return pairs.some(([used, limit]) => limit > 0 && used >= limit);
 }
 
+function SkeletonLine({ className }: { className: string }) {
+  return <span className={`block animate-pulse rounded-full bg-[#2f3336] ${className}`} />;
+}
+
 export default function DashboardPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -542,12 +546,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      {loadState === "loading" ? (
-        <Card>
-          <CardHeader title={t("dashboard.loading.title")} description={t("dashboard.loading.description")} />
-        </Card>
-      ) : null}
-
       {loadState === "error" ? (
         <Card>
           <CardHeader title={t("dashboard.error.title")} description={errorMessage || t("common.retryHint")} />
@@ -557,7 +555,7 @@ export default function DashboardPage() {
         </Card>
       ) : null}
 
-      <StatusOverviewCards overview={overview} />
+      <StatusOverviewCards overview={overview} loading={loadState === "loading"} />
       <UserOnboardingCard
         accountConnected={xAccountConnected}
         oafBotCreated={botCount > 0}
@@ -745,7 +743,30 @@ function PointsEntryCard({
     <Card>
       <CardHeader title={t("dashboard.points.title")} description={t("dashboard.points.description")} />
       {loading ? (
-        <p className="text-sm text-[#71767b]">{t("dashboard.points.loading")}</p>
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-stretch">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div key={index} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <SkeletonLine className="h-3 w-20" />
+                  <SkeletonLine className="mt-4 h-8 w-24" />
+                </div>
+                <span className="size-10 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+              </div>
+              <SkeletonLine className="mt-4 h-4 w-36" />
+            </div>
+          ))}
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-64">
+            <div>
+              <SkeletonLine className="h-4 w-32" />
+              <SkeletonLine className="mt-3 h-3 w-44" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <SkeletonLine className="h-10 w-full" />
+              <SkeletonLine className="h-10 w-full" />
+            </div>
+          </div>
+        </div>
       ) : errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
@@ -826,7 +847,25 @@ function OAFBotReadinessCard({
     <Card>
       <CardHeader title={t("dashboard.oafBots.title")} description={t("dashboard.oafBots.description")} />
       {loading ? (
-        <p className="text-sm text-[#71767b]">{t("dashboard.oafBots.loading")}</p>
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <SkeletonLine className="h-8 w-20" />
+              <SkeletonLine className="mt-3 h-3 w-32" />
+            </div>
+            <span className="size-10 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+          </div>
+          <SkeletonLine className="h-2 w-full" />
+          <div className="grid gap-2 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
+                <SkeletonLine className="h-3 w-20" />
+                <SkeletonLine className="mt-3 h-6 w-8" />
+              </div>
+            ))}
+          </div>
+          <SkeletonLine className="h-4 w-32" />
+        </div>
       ) : errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
@@ -875,7 +914,17 @@ function AttentionCard({
     <Card>
       <CardHeader title={t("dashboard.attention.title")} description={t("dashboard.attention.description")} />
       {loading ? (
-        <p className="text-sm text-[#71767b]">{t("dashboard.attention.loading")}</p>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="size-8 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+                <SkeletonLine className="h-4 w-40" />
+              </span>
+              <SkeletonLine className="h-4 w-4" />
+            </div>
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
           <div className="flex gap-3">

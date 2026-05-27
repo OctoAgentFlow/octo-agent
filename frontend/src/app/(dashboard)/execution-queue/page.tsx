@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, Send, ShieldAlert, Sparkles, XCircle, type LucideIcon } from "lucide-react";
 
@@ -121,15 +122,30 @@ function moduleNameKey(type: string) {
   return "automation.module.dm.name";
 }
 
+function normalizedTypeFilter(value: string | null): ReviewQueueType {
+  return value && typeOptions.includes(value as ReviewQueueType) ? (value as ReviewQueueType) : "all";
+}
+
+function normalizedStatusFilter(value: string | null): ReviewQueueStatus {
+  return value && statusOptions.includes(value as ReviewQueueStatus) ? (value as ReviewQueueStatus) : "all";
+}
+
+function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
+  return value && modeOptions.includes(value as ReviewQueueExecutionMode) ? (value as ReviewQueueExecutionMode) : "all";
+}
+
 export default function ExecutionQueuePage() {
   const { t } = useT();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [items, setItems] = useState<ReviewQueueItemApi[]>([]);
   const [stats, setStats] = useState({ pending_review: 0, ready_to_publish: 0, approved: 0, rejected: 0, failed: 0 });
-  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>("all");
-  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>("all");
-  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>("all");
+  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>(() => normalizedTypeFilter(searchParams.get("type")));
+  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>(() => normalizedStatusFilter(searchParams.get("status")));
+  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>(() => normalizedModeFilter(searchParams.get("mode")));
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
@@ -142,11 +158,22 @@ export default function ExecutionQueuePage() {
   });
 
   useEffect(() => {
-    const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
-    if (type && typeOptions.includes(type)) {
-      setTypeFilter(type);
+    setTypeFilter(normalizedTypeFilter(searchParams.get("type")));
+    setStatusFilter(normalizedStatusFilter(searchParams.get("status")));
+    setModeFilter(normalizedModeFilter(searchParams.get("mode")));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (typeFilter !== "all") next.set("type", typeFilter);
+    if (statusFilter !== "all") next.set("status", statusFilter);
+    if (modeFilter !== "all") next.set("mode", modeFilter);
+    const query = next.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (href !== `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`) {
+      router.replace(href, { scroll: false });
     }
-  }, []);
+  }, [modeFilter, pathname, router, searchParams, statusFilter, typeFilter]);
 
   const loadQueue = useCallback(async () => {
     setLoadState("loading");

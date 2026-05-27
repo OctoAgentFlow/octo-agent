@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   LayoutDashboard,
   ReceiptText,
@@ -550,11 +552,13 @@ function Metric({
   value,
   icon: Icon,
   tone = "default",
+  href,
 }: {
   label: string;
   value: number | string;
   icon: LucideIcon;
   tone?: "default" | "good" | "warn" | "danger";
+  href?: string;
 }) {
   const toneClass =
     tone === "good"
@@ -563,14 +567,29 @@ function Metric({
         ? "border-[#ffd400]/25 bg-[#ffd400]/10"
         : tone === "danger"
           ? "border-[#f4212e]/25 bg-[#f4212e]/10"
-          : "border-[#2f3336] bg-black";
-  return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+        : "border-[#2f3336] bg-black";
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[#71767b]">{label}</p>
-        <Icon className="size-4 text-[#8ecdf8]" />
+        <span className="flex items-center gap-2">
+          {href ? <ArrowRight className="size-3.5 text-[#71767b]" /> : null}
+          <Icon className="size-4 text-[#8ecdf8]" />
+        </span>
       </div>
       <p className="mt-3 text-2xl font-semibold text-white">{value}</p>
+    </>
+  );
+  if (href) {
+    return (
+      <Link href={href} className={`block rounded-2xl border p-4 transition-colors hover:border-[#1d9bf0]/50 hover:bg-[#16181c] ${toneClass}`}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      {content}
     </div>
   );
 }
@@ -631,12 +650,12 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
         <Card className="bg-[#0f1419]">
           <CardHeader title={t("admin.execution.title")} description={t("admin.execution.description")} />
           <div className="grid gap-3 md:grid-cols-3">
-            <Metric label={t("admin.execution.publishBacklog")} value={publishBacklog} icon={ReceiptText} tone={publishBacklog > 0 ? "warn" : "good"} />
-            <Metric label={t("admin.execution.publishFailed")} value={overview.execution.publish_failed} icon={AlertTriangle} tone={overview.execution.publish_failed > 0 ? "danger" : "good"} />
+            <Metric label={t("admin.execution.publishBacklog")} value={publishBacklog} icon={ReceiptText} tone={publishBacklog > 0 ? "warn" : "good"} href="/execution-queue?status=ready_to_publish" />
+            <Metric label={t("admin.execution.publishFailed")} value={overview.execution.publish_failed} icon={AlertTriangle} tone={overview.execution.publish_failed > 0 ? "danger" : "good"} href="/execution-queue?status=failed" />
             <Metric label={t("admin.execution.publishedThisMonth")} value={overview.execution.published_this_month} icon={CheckCircle2} tone="good" />
             <Metric label={t("admin.execution.autoPostDueNow")} value={overview.execution.auto_post_due_now} icon={Activity} tone={overview.execution.auto_post_due_now > 0 ? "warn" : "default"} />
             <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
-            <Metric label={t("admin.execution.needsReauth")} value={overview.execution.needs_reauth_accounts} icon={ShieldCheck} tone={overview.execution.needs_reauth_accounts > 0 ? "warn" : "good"} />
+            <Metric label={t("admin.execution.needsReauth")} value={overview.execution.needs_reauth_accounts} icon={ShieldCheck} tone={overview.execution.needs_reauth_accounts > 0 ? "warn" : "good"} href="/accounts?filter=needs_reauth" />
           </div>
         </Card>
         <Card className="bg-[#0f1419]">
@@ -1540,8 +1559,8 @@ function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
       <Card className="bg-[#0f1419]">
         <CardHeader title={t("admin.execution.activityTitle")} description={t("admin.execution.activityDesc")} />
         <div className="grid gap-3 md:grid-cols-4">
-          <Metric label={t("admin.execution.publishPending")} value={overview.execution.publish_pending} icon={ReceiptText} tone={overview.execution.publish_pending > 0 ? "warn" : "good"} />
-          <Metric label={t("admin.execution.publishProcessing")} value={overview.execution.publish_processing} icon={Activity} />
+          <Metric label={t("admin.execution.publishPending")} value={overview.execution.publish_pending} icon={ReceiptText} tone={overview.execution.publish_pending > 0 ? "warn" : "good"} href="/execution-queue?status=ready_to_publish" />
+          <Metric label={t("admin.execution.publishProcessing")} value={overview.execution.publish_processing} icon={Activity} href="/execution-queue?status=processing" />
           <Metric label={t("admin.execution.autoPostSkipped24h")} value={overview.execution.auto_post_skipped_24h} icon={AlertTriangle} tone={overview.execution.auto_post_skipped_24h > 0 ? "warn" : "good"} />
           <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} />
         </div>

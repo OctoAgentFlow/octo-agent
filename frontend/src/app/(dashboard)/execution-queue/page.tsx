@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, Send, ShieldAlert, Sparkles, XCircle, type LucideIcon } from "lucide-react";
@@ -139,17 +139,27 @@ export default function ExecutionQueuePage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
+  const urlFilters = useMemo(() => {
+    const params = new URLSearchParams(searchKey);
+    return {
+      type: normalizedTypeFilter(params.get("type")),
+      status: normalizedStatusFilter(params.get("status")),
+      mode: normalizedModeFilter(params.get("mode")),
+    };
+  }, [searchKey]);
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [items, setItems] = useState<ReviewQueueItemApi[]>([]);
   const [stats, setStats] = useState({ pending_review: 0, ready_to_publish: 0, approved: 0, rejected: 0, failed: 0 });
-  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>(() => normalizedTypeFilter(searchParams.get("type")));
-  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>(() => normalizedStatusFilter(searchParams.get("status")));
-  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>(() => normalizedModeFilter(searchParams.get("mode")));
+  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>(() => urlFilters.type);
+  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>(() => urlFilters.status);
+  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>(() => urlFilters.mode);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
   const [publisherStatus, setPublisherStatus] = useState<XPublisherStatusApi | null>(null);
+  const loadSeqRef = useRef(0);
   const [moduleEnabled, setModuleEnabled] = useState<Record<ModuleType, boolean>>({
     post: true,
     comment: true,
@@ -158,10 +168,10 @@ export default function ExecutionQueuePage() {
   });
 
   useEffect(() => {
-    setTypeFilter(normalizedTypeFilter(searchParams.get("type")));
-    setStatusFilter(normalizedStatusFilter(searchParams.get("status")));
-    setModeFilter(normalizedModeFilter(searchParams.get("mode")));
-  }, [searchParams]);
+    setTypeFilter((current) => (current === urlFilters.type ? current : urlFilters.type));
+    setStatusFilter((current) => (current === urlFilters.status ? current : urlFilters.status));
+    setModeFilter((current) => (current === urlFilters.mode ? current : urlFilters.mode));
+  }, [urlFilters.mode, urlFilters.status, urlFilters.type]);
 
   useEffect(() => {
     const next = new URLSearchParams();
@@ -170,12 +180,15 @@ export default function ExecutionQueuePage() {
     if (modeFilter !== "all") next.set("mode", modeFilter);
     const query = next.toString();
     const href = query ? `${pathname}?${query}` : pathname;
-    if (href !== `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`) {
+    const currentHref = searchKey ? `${pathname}?${searchKey}` : pathname;
+    if (href !== currentHref) {
       router.replace(href, { scroll: false });
     }
-  }, [modeFilter, pathname, router, searchParams, statusFilter, typeFilter]);
+  }, [modeFilter, pathname, router, searchKey, statusFilter, typeFilter]);
 
   const loadQueue = useCallback(async () => {
+    const seq = loadSeqRef.current + 1;
+    loadSeqRef.current = seq;
     setLoadState("loading");
     try {
       const [data, publishingStatus, automationData] = await Promise.all([
@@ -189,6 +202,7 @@ export default function ExecutionQueuePage() {
         publishingService.status(),
         automationService.list(),
       ]);
+      if (loadSeqRef.current !== seq) return;
       setItems(data.items);
       setStats(data.stats);
       setPublisherStatus(publishingStatus);
@@ -200,6 +214,7 @@ export default function ExecutionQueuePage() {
       });
       setLoadState("ready");
     } catch (error) {
+      if (loadSeqRef.current !== seq) return;
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message || t("executionQueue.errors.load")
         : t("executionQueue.errors.load");
@@ -431,7 +446,10 @@ export default function ExecutionQueuePage() {
         ) : null}
         {loadState === "error" ? (
           <div className="m-5 rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">
-            {t("executionQueue.errors.load")}
+            <p>{t("executionQueue.errors.load")}</p>
+            <Button className="mt-4" size="sm" variant="outline" onClick={() => void loadQueue()}>
+              {t("common.retry")}
+            </Button>
           </div>
         ) : null}
         {loadState === "ready" && items.length === 0 ? (

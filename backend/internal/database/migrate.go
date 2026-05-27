@@ -70,6 +70,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := BackfillAutomationPackageQuotaOnly(db); err != nil {
 		return err
 	}
+	if err := BackfillAutoPostPlanPackageQuotaOnly(db); err != nil {
+		return err
+	}
 	if err := SeedDefaultPointActivities(db); err != nil {
 		return err
 	}
@@ -303,6 +306,15 @@ SET frequency_daily_limit = 0,
     safety_max_per_hour = 0
 WHERE frequency_daily_limit <> 0
    OR safety_max_per_hour <> 0
+`).Error
+}
+
+// BackfillAutoPostPlanPackageQuotaOnly removes legacy per-day Auto Post Planner limits.
+func BackfillAutoPostPlanPackageQuotaOnly(db *gorm.DB) error {
+	return db.Exec(`
+UPDATE auto_post_plans
+SET daily_limit = 0
+WHERE daily_limit <> 0
 `).Error
 }
 

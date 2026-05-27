@@ -132,7 +132,7 @@ type AutoPostPlanItem struct {
 	BotName            string `json:"bot_name,omitempty"`
 	Enabled            bool   `json:"enabled"`
 	ExecutionMode      string `json:"execution_mode"`
-	DailyLimit         int    `json:"daily_limit"`
+	DailyLimit         int    `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
 	MinIntervalMinutes int    `json:"min_interval_minutes"`
 	PostingWindows     string `json:"posting_windows"`
 	Timezone           string `json:"timezone"`

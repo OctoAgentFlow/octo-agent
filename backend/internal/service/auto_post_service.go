@@ -748,7 +748,7 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		BotName:            botName,
 		Enabled:            row.Enabled,
 		ExecutionMode:      effectiveExecutionMode(row.ExecutionMode),
-		DailyLimit:         row.DailyLimit,
+		DailyLimit:         0,
 		MinIntervalMinutes: row.MinIntervalMinutes,
 		PostingWindows:     row.PostingWindows,
 		Timezone:           row.Timezone,

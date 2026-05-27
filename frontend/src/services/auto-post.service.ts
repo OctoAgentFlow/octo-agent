@@ -18,6 +18,7 @@ export type AutoPostPlanApi = {
   bot_name?: string;
   enabled: boolean;
   execution_mode: AutoPostExecutionMode;
+  /** Deprecated: retained for old API responses; monthly plan quota is enforced instead. */
   daily_limit?: number;
   min_interval_minutes: number;
   posting_windows?: string;

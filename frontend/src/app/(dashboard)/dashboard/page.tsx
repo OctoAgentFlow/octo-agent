@@ -1,7 +1,9 @@
- "use client";
+"use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, ExternalLink, ShieldAlert } from "lucide-react";
 
 import { AutomationOverview } from "@/components/dashboard/automation-overview";
 import { RecentActivityList } from "@/components/dashboard/recent-activity-list";
@@ -21,15 +23,26 @@ import { formatTimeOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { activityService } from "@/services/activity.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
+import { oafBotService } from "@/services/oaf-bot.service";
 import { postService } from "@/services/post.service";
+import { reviewQueueService, type ReviewQueueStatsApi } from "@/services/review-queue.service";
 import { useT } from "@/i18n/use-t";
 import type { ActivityRecord } from "@/types/activity";
 import type { AutomationModule } from "@/types/automation";
+import type { PlanLimits, PlanUsage } from "@/types/billing";
+import type { OAFBot, OAFBotMatrixInspectionSummary } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RelativeTimeLabel = {
   key: string;
   params?: Record<string, string | number>;
+};
+
+type OAFBotDashboardData = {
+  bots: OAFBot[];
+  usage: PlanUsage | null;
+  limits: PlanLimits | null;
+  inspectionSummary: OAFBotMatrixInspectionSummary | null;
 };
 
 function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
@@ -91,6 +104,45 @@ function mapAutomation(item: AutomationModuleApi, timeZone: string): AutomationM
   };
 }
 
+function botPersonaScore(bot: OAFBot) {
+  let score = 0;
+  if (bot.name?.trim()) score += 15;
+  if (bot.twitter_account_id) score += 15;
+  if (bot.occupation?.trim() || bot.industry?.trim()) score += 12;
+  if (bot.project_one_liner?.trim() || bot.core_value_props?.trim()) score += 12;
+  if (bot.identity_summary?.trim()) score += 15;
+  if ((bot.topics || []).length > 0) score += 12;
+  if (bot.growth_goal?.trim()) score += 10;
+  if ((bot.forbidden_topics || []).length > 0 || (bot.avoid_claims || []).length > 0 || bot.compliance_notes?.trim()) score += 9;
+  return Math.min(score, 100);
+}
+
+function isBotReady(bot: OAFBot) {
+  return Boolean(bot.twitter_account_id) && botPersonaScore(bot) >= 60;
+}
+
+function automationMonthlyUsage(data: OAFBotDashboardData | null): Partial<Record<AutomationModule["type"], { used: number; limit: number }>> {
+  if (!data?.usage || !data.limits) return {};
+  return {
+    post: { used: data.usage.autoPostsMonth, limit: data.limits.monthlyAutoPosts },
+    reply: { used: data.usage.autoRepliesMonth, limit: data.limits.monthlyAutoReplies },
+    comment: { used: data.usage.autoCommentsMonth, limit: data.limits.monthlyAutoComments },
+    dm: { used: data.usage.autoDMsMonth, limit: data.limits.monthlyAutoDMs },
+  };
+}
+
+function quotaExhausted(data: OAFBotDashboardData | null) {
+  if (!data?.usage || !data.limits) return false;
+  const pairs = [
+    [data.usage.aiGenerationsMonth, data.limits.aiGenerationsMonthly],
+    [data.usage.autoPostsMonth, data.limits.monthlyAutoPosts],
+    [data.usage.autoRepliesMonth, data.limits.monthlyAutoReplies],
+    [data.usage.autoCommentsMonth, data.limits.monthlyAutoComments],
+    [data.usage.autoDMsMonth, data.limits.monthlyAutoDMs],
+  ];
+  return pairs.some(([used, limit]) => limit > 0 && used >= limit);
+}
+
 export default function DashboardPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -104,6 +156,10 @@ export default function DashboardPage() {
   const [recentLoading, setRecentLoading] = useState(true);
   const [recentError, setRecentError] = useState<string | null>(null);
   const [postCount, setPostCount] = useState(0);
+  const [oafBotDashboard, setOAFBotDashboard] = useState<OAFBotDashboardData | null>(null);
+  const [oafBotDashboardLoading, setOAFBotDashboardLoading] = useState(true);
+  const [oafBotDashboardError, setOAFBotDashboardError] = useState<string | null>(null);
+  const [reviewStats, setReviewStats] = useState<ReviewQueueStatsApi | null>(null);
 
   const fetchOverview = useCallback(async () => {
     setLoadState("loading");
@@ -181,6 +237,35 @@ export default function DashboardPage() {
       setPostCount(0);
     }
   }, []);
+
+  const fetchOAFBotDashboard = useCallback(async () => {
+    setOAFBotDashboardLoading(true);
+    setOAFBotDashboardError(null);
+    try {
+      const [botData, matrixData, queueData] = await Promise.all([
+        oafBotService.list(),
+        oafBotService.matrixSignals(),
+        reviewQueueService.list({ pageSize: 1 }),
+      ]);
+      setOAFBotDashboard({
+        bots: botData.items,
+        usage: botData.usage,
+        limits: botData.limits,
+        inspectionSummary: matrixData.summary || null,
+      });
+      setReviewStats(queueData.stats);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        setOAFBotDashboardError(error.response?.data?.message || t("dashboard.errors.loadOAFBots"));
+      } else {
+        setOAFBotDashboardError(t("dashboard.errors.loadOAFBots"));
+      }
+      setOAFBotDashboard(null);
+      setReviewStats(null);
+    } finally {
+      setOAFBotDashboardLoading(false);
+    }
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,8 +383,13 @@ export default function DashboardPage() {
       void fetchAutomations();
       void fetchRecentActivities();
       void fetchPostCount();
+      void fetchOAFBotDashboard();
     });
-  }, [fetchAutomations, fetchOverview, fetchPostCount, fetchRecentActivities]);
+  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPostCount, fetchRecentActivities]);
+
+  useEffect(() => {
+    void fetchOAFBotDashboard();
+  }, [fetchOAFBotDashboard]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -373,13 +463,60 @@ export default function DashboardPage() {
           setPostCount(0);
         }
 
+        await fetchOAFBotDashboard();
+
         if (overviewOk) {
           broadcastDataSynced(Date.now());
         }
         broadcastPageRefreshComplete();
       })();
     });
-  }, [t]);
+  }, [fetchOAFBotDashboard, t, timeZone]);
+
+  const botCount = oafBotDashboard?.bots.length ?? 0;
+  const boundBotCount = oafBotDashboard?.bots.filter((bot) => Boolean(bot.twitter_account_id)).length ?? 0;
+  const readyBotCount = oafBotDashboard?.bots.filter(isBotReady).length ?? 0;
+  const notReadyBotCount = Math.max(0, botCount - readyBotCount);
+  const pendingReviewCount = (reviewStats?.pending_review ?? 0) + (reviewStats?.ready_to_publish ?? 0);
+  const failedQueueCount = reviewStats?.failed ?? 0;
+  const xAuthIssueCount = recentRecords.filter((record) => record.failureCategory === "x_auth").length;
+  const attentionItems = [
+    {
+      key: "x_auth",
+      count: xAuthIssueCount,
+      labelKey: "dashboard.attention.xAuth",
+      href: "/accounts",
+      tone: "danger" as const,
+    },
+    {
+      key: "review",
+      count: pendingReviewCount,
+      labelKey: "dashboard.attention.reviewBacklog",
+      href: "/review-queue",
+      tone: "warning" as const,
+    },
+    {
+      key: "failed",
+      count: failedQueueCount,
+      labelKey: "dashboard.attention.failedQueue",
+      href: "/execution-queue",
+      tone: "danger" as const,
+    },
+    {
+      key: "auto_post",
+      count: oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0,
+      labelKey: "dashboard.attention.autoPostNotReady",
+      href: "/oaf-bots",
+      tone: "warning" as const,
+    },
+    {
+      key: "quota",
+      count: quotaExhausted(oafBotDashboard) ? 1 : 0,
+      labelKey: "dashboard.attention.quotaExhausted",
+      href: "/billing",
+      tone: "warning" as const,
+    },
+  ].filter((item) => item.count > 0);
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -405,12 +542,29 @@ export default function DashboardPage() {
         postCreated={postCount > 0}
         activityObserved={(overview?.connected_x_count ?? 0) > 0 && (recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0)}
       />
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <OAFBotReadinessCard
+          loading={oafBotDashboardLoading}
+          errorMessage={oafBotDashboardError}
+          total={botCount}
+          bound={boundBotCount}
+          ready={readyBotCount}
+          notReady={notReadyBotCount}
+          autoPostNotReady={oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0}
+          onRetry={() => void fetchOAFBotDashboard()}
+        />
+        <AttentionCard
+          loading={oafBotDashboardLoading || recentLoading}
+          items={attentionItems}
+        />
+      </div>
       <XAccountStatus overview={overview} />
       <AutomationOverview
         modules={automations}
         loading={automationLoading}
         errorMessage={automationError}
         onRetry={() => void fetchAutomations()}
+        monthlyUsage={automationMonthlyUsage(oafBotDashboard)}
       />
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <RecentActivityList
@@ -421,6 +575,126 @@ export default function DashboardPage() {
         />
         <TrialUpgradeBanner overview={overview} />
       </div>
+    </div>
+  );
+}
+
+function OAFBotReadinessCard({
+  loading,
+  errorMessage,
+  total,
+  bound,
+  ready,
+  notReady,
+  autoPostNotReady,
+  onRetry,
+}: {
+  loading: boolean;
+  errorMessage: string | null;
+  total: number;
+  bound: number;
+  ready: number;
+  notReady: number;
+  autoPostNotReady: number;
+  onRetry: () => void;
+}) {
+  const { t } = useT();
+  const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
+  return (
+    <Card>
+      <CardHeader title={t("dashboard.oafBots.title")} description={t("dashboard.oafBots.description")} />
+      {loading ? (
+        <p className="text-sm text-[#71767b]">{t("dashboard.oafBots.loading")}</p>
+      ) : errorMessage ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
+          <p className="text-sm text-rose-100">{errorMessage}</p>
+          <button className="text-xs text-white underline underline-offset-2" onClick={onRetry} type="button">
+            {t("common.retry")}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-3xl font-bold text-[#e7e9ea]">{ready}/{total}</p>
+              <p className="mt-1 text-xs text-[#71767b]">{t("dashboard.oafBots.readyRatio")}</p>
+            </div>
+            <span className="grid size-10 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+              <Bot className="size-5" />
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-[#2f3336]">
+            <span className="block h-full rounded-full bg-[#1d9bf0]" style={{ width: `${readyPct}%` }} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <MiniMetric label={t("dashboard.oafBots.metric.bound")} value={bound} />
+            <MiniMetric label={t("dashboard.oafBots.metric.notReady")} value={notReady} />
+            <MiniMetric label={t("dashboard.oafBots.metric.autoPost")} value={autoPostNotReady} />
+          </div>
+          <Link href="/oaf-bots" className="inline-flex items-center gap-2 text-sm font-semibold text-[#1d9bf0] hover:underline">
+            {t(total > 0 ? "dashboard.oafBots.ctaManage" : "dashboard.oafBots.ctaCreate")}
+            <ExternalLink className="size-4" />
+          </Link>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function AttentionCard({
+  loading,
+  items,
+}: {
+  loading: boolean;
+  items: Array<{ key: string; count: number; labelKey: string; href: string; tone: "warning" | "danger" }>;
+}) {
+  const { t } = useT();
+  return (
+    <Card>
+      <CardHeader title={t("dashboard.attention.title")} description={t("dashboard.attention.description")} />
+      {loading ? (
+        <p className="text-sm text-[#71767b]">{t("dashboard.attention.loading")}</p>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
+          <div className="flex gap-3">
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-200" />
+            <div>
+              <p className="font-semibold text-emerald-100">{t("dashboard.attention.emptyTitle")}</p>
+              <p className="mt-1 text-sm leading-6 text-emerald-100/70">{t("dashboard.attention.emptyDescription")}</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => {
+            const Icon = item.tone === "danger" ? ShieldAlert : AlertTriangle;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 transition hover:bg-[#16181c]"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className={`grid size-8 shrink-0 place-items-center rounded-full ${item.tone === "danger" ? "bg-rose-500/10 text-rose-200" : "bg-amber-400/10 text-amber-100"}`}>
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="min-w-0 text-sm font-semibold text-[#e7e9ea]">{t(item.labelKey, { count: item.count })}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-[#71767b]" />
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 text-lg font-bold text-[#e7e9ea]">{value}</p>
     </div>
   );
 }

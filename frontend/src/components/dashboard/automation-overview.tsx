@@ -12,9 +12,10 @@ type AutomationOverviewProps = {
   loading?: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
+  monthlyUsage?: Partial<Record<AutomationModule["type"], { used: number; limit: number }>>;
 };
 
-export function AutomationOverview({ modules = [], loading = false, errorMessage, onRetry }: AutomationOverviewProps) {
+export function AutomationOverview({ modules = [], loading = false, errorMessage, onRetry, monthlyUsage = {} }: AutomationOverviewProps) {
   const { t } = useT();
   const iconByType = {
     post: Bot,
@@ -40,6 +41,7 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {modules.map((module) => {
           const ModuleIcon = iconByType[module.type];
+          const quota = monthlyUsage[module.type];
           return (
             <article key={module.type} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 transition-colors hover:bg-[#16181c]">
             <div className="flex items-center justify-between">
@@ -54,7 +56,11 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
               </span>
             </div>
             <div className="mt-4 space-y-1 text-sm text-[#71767b]">
-              <p>{t("dashboard.automation.labels.executedToday", { count: module.executedToday })}</p>
+              <p>
+                {quota
+                  ? t("dashboard.automation.labels.executedMonth", { used: quota.used, limit: quota.limit })
+                  : t("dashboard.automation.labels.executedMonthFallback", { count: module.executedToday })}
+              </p>
               <p>{t("dashboard.automation.labels.nextRun", { time: t(module.nextRunKey, module.nextRunParams) })}</p>
             </div>
           </article>

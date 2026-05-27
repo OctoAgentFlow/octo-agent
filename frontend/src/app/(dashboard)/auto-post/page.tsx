@@ -28,6 +28,7 @@ import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callo
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
   autoPostService,
@@ -115,13 +116,6 @@ function defaultLibraryForm(): LibraryForm {
   };
 }
 
-function formatDate(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
 function statusTone(status: string) {
   if (status === "ready_to_publish") return "border-emerald-300/25 bg-emerald-500/10 text-emerald-100";
   if (status === "pending_review" || status === "draft") return "border-amber-300/25 bg-amber-500/10 text-amber-100";
@@ -165,6 +159,7 @@ function readAccountID(value: string | null) {
 
 export default function AutoPostPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -777,8 +772,8 @@ export default function AutoPostPage() {
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
                 <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
-                <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDate(selectedPlan.last_run_at) : t("autoPost.common.emptyValue")} />
-                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDate(selectedPlan.next_run_at) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDateTime(selectedPlan.last_run_at, timeZone) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("autoPost.common.emptyValue")} />
                 <StatusRow label={t("autoPost.status.activeContent")} value={t("autoPost.status.activeContentValue", { count: activeContentCount })} />
                 <StatusRow
                   label={t("autoPost.status.lastRunResult")}
@@ -1115,7 +1110,7 @@ export default function AutoPostPage() {
                               <span key={topic} className="rounded-full bg-[#0f1419] px-2 py-0.5">{topic}</span>
                             ))}
                             <span>{t("autoPost.contentLibrary.usageCount", { count: item.usage_count })}</span>
-                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDate(item.last_used_at) })}</span> : null}
+                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDateTime(item.last_used_at, timeZone) })}</span> : null}
                           </div>
                         </button>
                         <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
@@ -1247,7 +1242,7 @@ export default function AutoPostPage() {
                           <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                             {t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
                           </span>
-                          <span className="text-xs text-[#71767b]">{formatDate(draft.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDateTime(draft.created_at, timeZone)}</span>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
@@ -1342,7 +1337,7 @@ export default function AutoPostPage() {
                               {run.content_title}
                             </span>
                           ) : null}
-                          <span className="text-xs text-[#71767b]">{formatDate(run.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDateTime(run.created_at, timeZone)}</span>
                         </div>
                         {run.skip_reason ? (
                           <p className="mt-2 text-sm leading-6 text-[#71767b]">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, subscribePageRefreshRequest } from "@/lib/app-page-refresh";
 import { mapPaymentMethods } from "@/lib/billing-payment-methods";
+import { formatDateOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import type { DashboardOverview } from "@/services/dashboard.service";
@@ -55,11 +56,9 @@ function recommendationKey(plan: PlanCode) {
   return "dashboard.subscription.highestPlan";
 }
 
-function formatDate(raw?: string) {
+function formatDate(raw: string | undefined, timeZone: string) {
   if (!raw) return "";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+  return formatDateOnly(raw, timeZone, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function formatNumber(value: number, locale: string) {
@@ -84,6 +83,7 @@ function UsageRow({ label, used, limit, locale }: { label: string; used: number;
 
 export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const { t, lang } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const { pushToast } = useToast();
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
@@ -164,10 +164,10 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
     if (plan === "free_trial") {
       return `${t("dashboard.subscription.trial")} · ${t("dashboard.subscription.daysLeft", { days: trialDaysLeft })}`;
     }
-    const expiry = formatDate(subscription?.expiration_date);
+    const expiry = formatDate(subscription?.expiration_date, timeZone);
     const suffix = expiry ? ` · ${t("dashboard.subscription.expiresAt", { date: expiry })}` : "";
     return `${t("dashboard.subscription.currentPlan")}: ${t(planLabel(plan))} · ${t(cycleKey)}${suffix}`;
-  }, [cycleKey, plan, subscription?.expiration_date, t, trialDaysLeft]);
+  }, [cycleKey, plan, subscription?.expiration_date, t, timeZone, trialDaysLeft]);
 
   return (
     <SectionCard title={t("dashboard.subscription.title")} description={t("dashboard.subscription.subtitle")}>

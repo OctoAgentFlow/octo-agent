@@ -21,6 +21,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import {
   automationService,
   type AutoDMRecipientImportApi,
@@ -30,6 +31,7 @@ import {
 
 export default function AutoDMsPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
@@ -251,7 +253,7 @@ export default function AutoDMsPage() {
                               </span>
                               {task.generated_at ? (
                                 <span>
-                                  {t("autoDm.task.generatedAt")}: {new Date(task.generated_at).toLocaleString()}
+                                  {t("autoDm.task.generatedAt")}: {formatDateTime(task.generated_at, timeZone)}
                                 </span>
                               ) : null}
                             </div>
@@ -304,7 +306,7 @@ export default function AutoDMsPage() {
                               <span className={`rounded-full border px-2.5 py-1 text-xs ${recipientStatusClass(rule.status)}`}>
                                 {t(`autoDm.recipientStatus.${rule.status}`)}
                               </span>
-                              {rule.updated_at ? <span className="text-xs text-[#71767b]">{new Date(rule.updated_at).toLocaleString()}</span> : null}
+                              {rule.updated_at ? <span className="text-xs text-[#71767b]">{formatDateTime(rule.updated_at, timeZone)}</span> : null}
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -339,7 +341,7 @@ export default function AutoDMsPage() {
                   <div className="mt-3 space-y-2">
                     {dmImports.slice(0, 3).map((item) => (
                       <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2 text-xs">
-                        <span className="min-w-0 truncate text-[#71767b]">{new Date(item.imported_at).toLocaleString()}</span>
+                        <span className="min-w-0 truncate text-[#71767b]">{formatDateTime(item.imported_at, timeZone)}</span>
                         <span className="shrink-0 text-white">
                           {t("autoDm.import.batchStats", { imported: item.imported, skipped: item.skipped })}
                         </span>

@@ -15,6 +15,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { useT } from "@/i18n/use-t";
+import { formatDateTime, formatTimeOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService } from "@/services/account.service";
 import { activityService } from "@/services/activity.service";
 import {
@@ -40,19 +41,19 @@ type RelativeTimeLabel = {
   params?: Record<string, string | number>;
 };
 
-function mapTimeToKey(iso?: string): RelativeTimeLabel {
+function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
   if (!iso) return { key: "automation.time.paused" };
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return { key: "automation.time.paused" };
   const diffMin = Math.max(1, Math.floor((Date.now() - date.getTime()) / 60000));
-  if (diffMin > 24*60) return { key: "automation.time.yesterdayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
-  if (diffMin > 60) return { key: "automation.time.todayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
+  if (diffMin > 24*60) return { key: "automation.time.yesterdayAt", params: { time: formatTimeOnly(date, timeZone) } };
+  if (diffMin > 60) return { key: "automation.time.todayAt", params: { time: formatTimeOnly(date, timeZone) } };
   return { key: "automation.time.minutesAgo", params: { minutes: diffMin } };
 }
 
-function mapModule(item: AutomationModuleApi): AutomationModule {
-  const last = mapTimeToKey(item.last_run_at);
-  const next = item.config.enabled ? mapTimeToKey(item.next_run_at) : { key: "automation.time.paused" };
+function mapModule(item: AutomationModuleApi, timeZone: string): AutomationModule {
+  const last = mapTimeToKey(item.last_run_at, timeZone);
+  const next = item.config.enabled ? mapTimeToKey(item.next_run_at, timeZone) : { key: "automation.time.paused" };
   const replyUsage = item.reply_usage
     ? {
         todayCount: item.reply_usage.today_count,
@@ -63,7 +64,7 @@ function mapModule(item: AutomationModuleApi): AutomationModule {
     : undefined;
   const lastReply =
     item.type === "reply" && item.reply_usage?.last_executed_at
-      ? mapTimeToKey(item.reply_usage.last_executed_at)
+      ? mapTimeToKey(item.reply_usage.last_executed_at, timeZone)
       : null;
   return {
     type: item.type,
@@ -95,8 +96,8 @@ function mapModule(item: AutomationModuleApi): AutomationModule {
   };
 }
 
-function mapRuntime(data: AutomationRuntimeStatusApi): AutomationRuntimeStatus {
-  const last = mapTimeToKey(data.last_success_at);
+function mapRuntime(data: AutomationRuntimeStatusApi, timeZone: string): AutomationRuntimeStatus {
+  const last = mapTimeToKey(data.last_success_at, timeZone);
   return {
     queueDepth: data.queue_depth,
     lastSuccessKey: last.key,
@@ -108,6 +109,7 @@ function mapRuntime(data: AutomationRuntimeStatusApi): AutomationRuntimeStatus {
 
 export default function AgentsPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -155,8 +157,8 @@ export default function AgentsPage() {
           postService.list({ page: 1, page_size: 1 }),
           activityService.list({ page: 1, page_size: 1 }),
         ]);
-        setModules(mod.modules.map(mapModule));
-        setRuntimeStatus(mapRuntime(runtime));
+        setModules(mod.modules.map((item) => mapModule(item, timeZone)));
+        setRuntimeStatus(mapRuntime(runtime, timeZone));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
@@ -179,7 +181,7 @@ export default function AgentsPage() {
         }
       }
     },
-    [pushToast, t]
+    [pushToast, t, timeZone]
   );
 
   useEffect(() => {
@@ -198,8 +200,8 @@ export default function AgentsPage() {
     ])
       .then(([mod, runtime, dmTaskData, dmRecipientData, dmImportData, commentTargetData, commentTaskData, accountData, postData, activityData]) => {
         if (cancelled) return;
-        setModules(mod.modules.map(mapModule));
-        setRuntimeStatus(mapRuntime(runtime));
+        setModules(mod.modules.map((item) => mapModule(item, timeZone)));
+        setRuntimeStatus(mapRuntime(runtime, timeZone));
         setDMTasks(dmTaskData.items);
         setDMRecipients(dmRecipientData.items);
         setDMImports(dmImportData.items);
@@ -223,7 +225,7 @@ export default function AgentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, timeZone]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -260,9 +262,9 @@ export default function AgentsPage() {
   const onToggle = async (type: AutomationModule["type"], enabled: boolean) => {
     try {
       const updated = await automationService.toggle(type, enabled);
-      setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated) : m)));
+      setModules((prev) => prev.map((m) => (m.type === type ? mapModule(updated, timeZone) : m)));
       const runtime = await automationService.runtimeStatus();
-      setRuntimeStatus(mapRuntime(runtime));
+      setRuntimeStatus(mapRuntime(runtime, timeZone));
       pushToast(t(enabled ? "automation.toast.enabled" : "automation.toast.disabled", { module: t(`automation.module.${type}.name`) }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -476,6 +478,7 @@ function AutoDMReviewPanel({
   onImport: () => void;
 }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [recipientSearch, setRecipientSearch] = useState("");
   const [recipientStatus, setRecipientStatus] = useState<AutoDMRecipientRuleApi["status"] | "">("");
   const [selectedRecipientIDs, setSelectedRecipientIDs] = useState<number[]>([]);
@@ -550,7 +553,7 @@ function AutoDMReviewPanel({
                       <p className="text-xs text-white/55">
                         {task.failure_category ? `${t("automation.dmReview.failure")}: ${task.failure_category}` : ""}
                         {task.failure_category && task.retry_after_at ? " · " : ""}
-                        {task.retry_after_at ? `${t("automation.dmReview.retryAfter")}: ${new Date(task.retry_after_at).toLocaleString()}` : ""}
+                        {task.retry_after_at ? `${t("automation.dmReview.retryAfter")}: ${formatDateTime(task.retry_after_at, timeZone)}` : ""}
                       </p>
                     ) : null}
                     <p className="text-xs text-white/45">
@@ -658,7 +661,7 @@ function AutoDMReviewPanel({
                         </div>
                         <p className="break-all text-xs text-white/50">{rule.recipient_user_id}</p>
                         <p className="text-xs text-white/45">
-                          {t("automation.dmReview.source")}: {rule.source || "—"} · {t("automation.dmReview.updatedAt")}: {rule.updated_at ? new Date(rule.updated_at).toLocaleString() : "—"}
+                          {t("automation.dmReview.source")}: {rule.source || "—"} · {t("automation.dmReview.updatedAt")}: {rule.updated_at ? formatDateTime(rule.updated_at, timeZone) : "—"}
                         </p>
                         {rule.reason ? <p className="line-clamp-2 text-xs text-white/55">{rule.reason}</p> : null}
                       </div>
@@ -690,7 +693,7 @@ function AutoDMReviewPanel({
             <div className="space-y-1.5">
               {imports.slice(0, 5).map((item) => (
                 <div key={item.id} className="text-xs text-white/60">
-                  {new Date(item.imported_at).toLocaleString()} · {item.imported} {t("automation.dmReview.imported")} · {item.skipped} {t("automation.dmReview.skipped")}
+                  {formatDateTime(item.imported_at, timeZone)} · {item.imported} {t("automation.dmReview.imported")} · {item.skipped} {t("automation.dmReview.skipped")}
                   {item.errors?.length ? <span className="text-amber-100/80"> · {item.errors[0]}</span> : null}
                 </div>
               ))}
@@ -744,6 +747,7 @@ function AutoCommentPanel({
   onRetryTask: (id: number) => void;
 }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   return (
     <Card>
       <CardHeader title={t("automation.comment.title")} description={t("automation.comment.description")} />
@@ -775,11 +779,11 @@ function AutoCommentPanel({
                         <p className="break-all text-sm font-semibold text-white">@{target.target_username}</p>
                         <p className="text-xs text-white/55">
                           {t(`automation.comment.status.${target.status}`)}
-                          {target.last_checked_at ? ` · ${t("automation.comment.lastChecked")}: ${new Date(target.last_checked_at).toLocaleString()}` : ""}
+                          {target.last_checked_at ? ` · ${t("automation.comment.lastChecked")}: ${formatDateTime(target.last_checked_at, timeZone)}` : ""}
                         </p>
                         {target.last_commented_at ? (
                           <p className="text-xs text-emerald-100/80">
-                            {t("automation.comment.lastCommented")}: {new Date(target.last_commented_at).toLocaleString()}
+                            {t("automation.comment.lastCommented")}: {formatDateTime(target.last_commented_at, timeZone)}
                           </p>
                         ) : null}
                         {target.last_failure_reason ? (

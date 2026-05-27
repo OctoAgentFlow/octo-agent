@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import type { ActivityRecord } from "@/types/activity";
 import { activityNarrativeLine } from "@/lib/activity-narrative";
+import { formatTimeOnly, usePreferredTimeZone } from "@/lib/timezone";
 
 import { SectionCard } from "./section-card";
 
@@ -51,14 +52,9 @@ function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
   return "";
 }
 
-function formatClock(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 export function RecentActivityList({ records, loading, errorMessage, onRetry }: RecentActivityListProps) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
 
   return (
     <SectionCard
@@ -89,7 +85,7 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
               >
                 <span className="flex items-center gap-2 text-[#71767b]">
                   <Icon className="size-3.5 shrink-0 text-[#1d9bf0]" />
-                  {formatClock(activity.executedAt)}
+                    {formatTimeOnly(activity.executedAt, timeZone)}
                 </span>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

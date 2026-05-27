@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { automationService } from "@/services/automation.service";
 import { autoPostService } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
@@ -27,13 +28,6 @@ type ModuleType = "post" | "comment" | "reply" | "dm";
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
 const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review", "autopilot"];
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
 
 function statusTone(status: string) {
   if (status === "ready_to_publish") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
@@ -136,6 +130,7 @@ function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
 
 export default function ExecutionQueuePage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -539,7 +534,7 @@ export default function ExecutionQueuePage() {
                         <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
                         <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
                         <MetaLine className="md:col-span-2" label={t(targetLabelKey(item.type))} value={displayTarget} />
-                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDate(item.created_at)} />
+                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
                         <MetaLine
                           label={t("executionQueue.item.risk")}
                           value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}

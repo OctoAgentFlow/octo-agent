@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
@@ -2540,6 +2541,7 @@ function QueueMiniMetric({ label, value, tone = "default" }: { label: string; va
 }
 
 function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: string, params?: Record<string, string | number>) => string }) {
+  const timeZone = usePreferredTimeZone();
   return (
     <Link href={`/execution-queue?type=${item.type}`} className="block rounded-xl border border-[#2f3336] bg-black p-3 transition-colors hover:border-[#1d9bf0]/45">
       <div className="flex items-center justify-between gap-3">
@@ -2549,7 +2551,7 @@ function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: stri
       <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.target_summary || item.content}</p>
       <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#71767b]">
         <Clock3 className="size-3" />
-        {formatCompactDate(item.created_at)}
+        {formatCompactDate(item.created_at, timeZone)}
       </p>
     </Link>
   );
@@ -2561,10 +2563,8 @@ function accountStatusKey(status: AccountListItem["status"]) {
   return "accounts.status.disconnected";
 }
 
-function formatCompactDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatCompactDate(value: string, timeZone: string) {
+  return formatDateTime(value, timeZone, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -3155,11 +3155,9 @@ function getSelectLabel(value: string, options: SelectOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function formatFeedbackDate(value: string) {
+function formatFeedbackDate(value: string, timeZone: string) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(value, timeZone);
 }
 
 function BotPreview({
@@ -3932,6 +3930,7 @@ function GenerationFeedbackHistory({
   suggestionLoading: boolean;
   onSuggestProfile: () => void;
 }) {
+  const timeZone = usePreferredTimeZone();
   const negativeCount = items.filter((item) => item.rating === "negative").length;
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
@@ -3966,7 +3965,7 @@ function GenerationFeedbackHistory({
                   {t(`oafBots.feedback.rating.${item.rating}`)}
                 </span>
                 <span>{t(`oafBots.samples.${item.scene}`)}</span>
-                <span>{formatFeedbackDate(item.created_at)}</span>
+                <span>{formatFeedbackDate(item.created_at, timeZone)}</span>
               </div>
               {item.issue_tags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">

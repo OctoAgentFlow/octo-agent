@@ -30,6 +30,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { signOut } from "@/lib/auth-session";
+import { setPreferredTimeZone, supportedTimeZones, timeZoneLabel, usePreferredTimeZone } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 import { authService, type MeData, type NotificationSettingsData } from "@/services/auth.service";
 
@@ -75,6 +76,7 @@ function roleLabelKey(role?: string) {
 export default function SettingsPage() {
   const router = useRouter();
   const { lang, setLang, t } = useT();
+  const preferredTimeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [saving, setSaving] = useState(false);
@@ -485,6 +487,40 @@ export default function SettingsPage() {
               </button>
             );
           })}
+        </div>
+      </Card>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("settings.timezone.title")}
+          description={t("settings.timezone.description")}
+          right={<Languages className="h-5 w-5 text-[#00ba7c]" />}
+        />
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
+          <label className="block space-y-2">
+            <span className="text-sm text-[#71767b]">{t("settings.timezone.label")}</span>
+            <select
+              value={preferredTimeZone}
+              onChange={(event) => {
+                setPreferredTimeZone(event.target.value);
+                pushToast(t("settings.timezone.saved"));
+              }}
+              className="form-input h-10 py-0"
+            >
+              {supportedTimeZones.map((zone) => (
+                <option key={zone} value={zone}>
+                  {timeZoneLabel(zone)}
+                </option>
+              ))}
+              {!supportedTimeZones.includes(preferredTimeZone as typeof supportedTimeZones[number]) ? (
+                <option value={preferredTimeZone}>{timeZoneLabel(preferredTimeZone)}</option>
+              ) : null}
+            </select>
+          </label>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-3 text-sm">
+            <p className="text-xs text-[#71767b]">{t("settings.timezone.current")}</p>
+            <p className="mt-1 font-medium text-white">{timeZoneLabel(preferredTimeZone)}</p>
+          </div>
         </div>
       </Card>
     </div>

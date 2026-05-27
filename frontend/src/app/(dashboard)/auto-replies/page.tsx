@@ -12,6 +12,7 @@ import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callo
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { billingService } from "@/services/billing.service";
 import {
@@ -564,18 +565,6 @@ export default function AutoRepliesPage() {
   );
 }
 
-function formatScanTime(value?: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function replyScanStatusTone(status?: string) {
   if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   if (status === "failed" || status === "reauth_required") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]";
@@ -585,6 +574,7 @@ function replyScanStatusTone(status?: string) {
 
 function ReplyScanStatusCard({ module }: { module: AutomationModuleApi | null }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const status = module?.last_scan_status || "not_scanned";
   const message = t(`autoReply.scan.status.${status}`);
   const tone = replyScanStatusTone(status);
@@ -603,8 +593,8 @@ function ReplyScanStatusCard({ module }: { module: AutomationModuleApi | null })
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <DraftRouteStep label={t("autoReply.scan.lastResult")} value={message} />
-        <DraftRouteStep label={t("autoReply.scan.lastRun")} value={formatScanTime(module?.last_run_at || module?.last_scan_at)} />
-        <DraftRouteStep label={t("autoReply.scan.nextRun")} value={module?.config.enabled ? formatScanTime(module?.next_run_at) : t("automation.time.paused")} />
+        <DraftRouteStep label={t("autoReply.scan.lastRun")} value={formatDateTime(module?.last_run_at || module?.last_scan_at, timeZone)} />
+        <DraftRouteStep label={t("autoReply.scan.nextRun")} value={module?.config.enabled ? formatDateTime(module?.next_run_at, timeZone) : t("automation.time.paused")} />
       </div>
     </Card>
   );

@@ -17,6 +17,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { subscribeDashboardRefresh } from "@/lib/dashboard-refresh";
+import { formatTimeOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { activityService } from "@/services/activity.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
@@ -31,23 +32,23 @@ type RelativeTimeLabel = {
   params?: Record<string, string | number>;
 };
 
-function mapTimeToKey(iso?: string): RelativeTimeLabel {
+function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
   if (!iso) return { key: "automation.time.paused" };
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return { key: "automation.time.paused" };
   const diffMin = Math.max(1, Math.floor((Date.now() - date.getTime()) / 60000));
   if (diffMin > 24 * 60) {
-    return { key: "automation.time.yesterdayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
+    return { key: "automation.time.yesterdayAt", params: { time: formatTimeOnly(date, timeZone) } };
   }
   if (diffMin > 60) {
-    return { key: "automation.time.todayAt", params: { time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) } };
+    return { key: "automation.time.todayAt", params: { time: formatTimeOnly(date, timeZone) } };
   }
   return { key: "automation.time.minutesAgo", params: { minutes: diffMin } };
 }
 
-function mapAutomation(item: AutomationModuleApi): AutomationModule {
-  const last = mapTimeToKey(item.last_run_at);
-  const next = item.config.enabled ? mapTimeToKey(item.next_run_at) : { key: "automation.time.paused" };
+function mapAutomation(item: AutomationModuleApi, timeZone: string): AutomationModule {
+  const last = mapTimeToKey(item.last_run_at, timeZone);
+  const next = item.config.enabled ? mapTimeToKey(item.next_run_at, timeZone) : { key: "automation.time.paused" };
   const replyUsage = item.reply_usage
     ? {
         todayCount: item.reply_usage.today_count,
@@ -58,7 +59,7 @@ function mapAutomation(item: AutomationModuleApi): AutomationModule {
     : undefined;
   const lastReply =
     item.type === "reply" && item.reply_usage?.last_executed_at
-      ? mapTimeToKey(item.reply_usage.last_executed_at)
+      ? mapTimeToKey(item.reply_usage.last_executed_at, timeZone)
       : null;
   return {
     type: item.type,
@@ -92,6 +93,7 @@ function mapAutomation(item: AutomationModuleApi): AutomationModule {
 
 export default function DashboardPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function DashboardPage() {
     setAutomationError(null);
     try {
       const data = await automationService.list();
-      setAutomations(data.modules.map(mapAutomation));
+      setAutomations(data.modules.map((item) => mapAutomation(item, timeZone)));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
@@ -136,7 +138,7 @@ export default function DashboardPage() {
     } finally {
       setAutomationLoading(false);
     }
-  }, [t]);
+  }, [t, timeZone]);
 
   const fetchRecentActivities = useCallback(async () => {
     setRecentLoading(true);
@@ -212,7 +214,7 @@ export default function DashboardPage() {
       .list()
       .then((data) => {
         if (cancelled) return;
-        setAutomations(data.modules.map(mapAutomation));
+        setAutomations(data.modules.map((item) => mapAutomation(item, timeZone)));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -229,7 +231,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, timeZone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,7 +324,7 @@ export default function DashboardPage() {
         setAutomationError(null);
         try {
           const data = await automationService.list();
-          setAutomations(data.modules.map(mapAutomation));
+          setAutomations(data.modules.map((item) => mapAutomation(item, timeZone)));
         } catch (error) {
           if (axios.isAxiosError(error)) {
             setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));

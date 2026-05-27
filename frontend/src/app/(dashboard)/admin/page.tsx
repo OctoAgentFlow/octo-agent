@@ -31,6 +31,7 @@ import {
   broadcastPageRefreshComplete,
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
+import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
 import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
@@ -126,11 +127,9 @@ function activityTypeLabel(type: string, t: (key: string) => string) {
   return type || t("admin.activityTypes.unknown");
 }
 
-function formatDate(value?: string) {
+function formatDate(value: string | undefined, timeZone: string) {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], {
+  return formatDateTimeForZone(value, timeZone, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -217,6 +216,7 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const activeSection = normalizedSection(searchParams.get("section"));
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -698,6 +698,7 @@ function UsersSection({
   onUpdateUser: (userId: number, payload: { role?: string; status?: string }) => Promise<void>;
 }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const canChangeRole = overview.operator.role === "owner";
   return (
     <div className="space-y-4">
@@ -764,7 +765,7 @@ function UsersSection({
                       <p>{planLabel(user.subscription_plan_code, t)}</p>
                       <p className="text-xs text-[#71767b]">{subscriptionLabel(user.subscription_status, t)}</p>
                     </td>
-                    <td className="px-3 py-3">{formatDate(user.created_at)}</td>
+                    <td className="px-3 py-3">{formatDate(user.created_at, timeZone)}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         {canChangeRole ? (
@@ -821,6 +822,7 @@ function BillingSection({
   onUpdateOrder: (orderId: string, action: BillingOpsAction) => Promise<void>;
 }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [scanStatusFilter, setScanStatusFilter] = useState("all");
   const [skipReasonFilter, setSkipReasonFilter] = useState("all");
   const [orders, setOrders] = useState(overview.recent_orders);
@@ -1042,7 +1044,7 @@ function BillingSection({
                         <p className="mt-2 text-sm font-semibold text-white">
                           {formatBps(item.gross_margin_bps)} · {item.gross_profit} USDT
                         </p>
-                        <p className="mt-1 text-xs text-[#71767b]">{formatDate(item.created_at)}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{formatDate(item.created_at, timeZone)}</p>
                       </div>
                       <div className="text-right text-xs text-[#71767b]">
                         <p>{t("admin.billing.margin.revenue")}: {item.revenue_amount} USDT</p>
@@ -1078,7 +1080,7 @@ function BillingSection({
                           <p>{t("admin.billing.margin.target")}: {formatBps(item.target_margin_bps)}</p>
                         </div>
                         <div className="min-w-0">
-                          <p>{t("admin.billing.margin.period")}: {formatDate(item.period_start)} - {formatDate(item.period_end)}</p>
+                          <p>{t("admin.billing.margin.period")}: {formatDate(item.period_start, timeZone)} - {formatDate(item.period_end, timeZone)}</p>
                           <p>{t("admin.billing.margin.ackBy")}: {item.acknowledged_by || "-"}</p>
                           <p className="break-all">{t("admin.billing.margin.larkError")}: {item.lark_error || "-"}</p>
                           <p className="break-all">{t("admin.billing.margin.configSnapshot")}: {item.config_snapshot || "-"}</p>
@@ -1139,7 +1141,7 @@ function BillingSection({
                   {t("admin.billing.orderLine", { orderId: order.order_id, userId: order.user_id })}
                 </p>
                 <p className="mt-1 break-words text-[#71767b]">
-                  {planLabel(order.plan_code, t)} · {order.payable_amount || order.amount} {order.currency} · {order.network} · {formatDate(order.created_at)}
+                  {planLabel(order.plan_code, t)} · {order.payable_amount || order.amount} {order.currency} · {order.network} · {formatDate(order.created_at, timeZone)}
                 </p>
                 {hasOrderUpgradeCredit(order) ? <AdminProrationBreakdown order={order} /> : null}
                 {order.tx_hash ? <p className="mt-1 break-all font-mono text-xs text-[#71767b]">{order.tx_hash}</p> : null}
@@ -1204,6 +1206,7 @@ function AdminProrationBreakdown({ order }: { order: AdminOverviewApi["recent_or
 
 function AdminAutoScanInfo({ order }: { order: AdminOverviewApi["recent_orders"][number] }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const status = normalizedAutoScanStatus(order.auto_scan_status);
   return (
     <div className="mt-3 grid gap-2 rounded-2xl border border-[#1d9bf0]/15 bg-[#1d9bf0]/5 p-3 text-xs sm:grid-cols-3">
@@ -1214,7 +1217,7 @@ function AdminAutoScanInfo({ order }: { order: AdminOverviewApi["recent_orders"]
       />
       <AdminAmountLine
         label={t("billing.history.autoScan.lastScannedAt")}
-        value={order.auto_scanned_at ? formatDate(order.auto_scanned_at) : t("billing.history.autoScan.notScanned")}
+        value={order.auto_scanned_at ? formatDate(order.auto_scanned_at, timeZone) : t("billing.history.autoScan.notScanned")}
         valueClassName="text-[#cfd9de]"
       />
       <AdminAmountLine
@@ -1528,6 +1531,7 @@ const GiftIcon = Coins;
 
 function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-4">
@@ -1548,7 +1552,7 @@ function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
                 <Badge variant={statusVariant(event.status)}>{t(statusLabelKey(event.status))}</Badge>
               </div>
               <p className="mt-2 break-words text-[#71767b]">
-                {event.account_handle || t("admin.activity.noAccount")} · {formatDate(event.executed_at)}
+                {event.account_handle || t("admin.activity.noAccount")} · {formatDate(event.executed_at, timeZone)}
               </p>
               {event.error_message ? <p className="mt-3 line-clamp-3 break-words rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 p-3 text-xs text-[#ff8a91]">{event.error_message}</p> : null}
             </div>

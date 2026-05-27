@@ -6,6 +6,7 @@ import { SectionCard } from "@/components/dashboard/section-card";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import type {
   BillingOpsAction,
   BillingOpsSummary,
@@ -64,13 +65,6 @@ function maskHash(hash: string) {
   return `${s.slice(0, 10)}…${s.slice(-8)}`;
 }
 
-function formatCheckedAt(value: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 function hasUpgradeCredit(record: PaymentRecord) {
   return record.orderType === "upgrade" && Number.parseFloat(record.creditAmount || "0") > 0;
 }
@@ -103,6 +97,7 @@ export function PaymentHistoryTable({
   onOpsAction?: (orderId: string, action: BillingOpsAction, payload?: { opsNote?: string }) => Promise<void>;
 }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [txInputs, setTxInputs] = useState<Record<string, string>>({});
   const [opsInputs, setOpsInputs] = useState<Record<string, OpsInputState>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -310,14 +305,14 @@ export function PaymentHistoryTable({
                             {canOperateBilling ? <AutoScanInfo record={record} /> : null}
                             {record.lastCheckedAt ? (
                               <p className="text-xs text-[#71767b]">
-                                {t("billing.history.lastCheckedAt")}: {formatCheckedAt(record.lastCheckedAt)}
+                                {t("billing.history.lastCheckedAt")}: {formatDateTime(record.lastCheckedAt, timeZone)}
                               </p>
                             ) : null}
                             {canOperateBilling && record.lastAuditAction ? (
                               <p className="text-xs text-[#71767b]">
                                 {t("billing.history.audit.last")}: {t(`billing.history.audit.action.${record.lastAuditAction}`)}
                                 {record.lastAuditOperatorId ? ` · ${t("billing.history.audit.operator")} #${record.lastAuditOperatorId}` : ""}
-                                {record.lastAuditAt ? ` · ${formatCheckedAt(record.lastAuditAt)}` : ""}
+                                {record.lastAuditAt ? ` · ${formatDateTime(record.lastAuditAt, timeZone)}` : ""}
                               </p>
                             ) : null}
                             <div className="grid gap-2 md:grid-cols-3">
@@ -400,6 +395,7 @@ export function PaymentHistoryTable({
 
 function AutoScanInfo({ record }: { record: PaymentRecord }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const status = normalizedAutoScanStatus(record.autoScanStatus || "pending");
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-[#080808] p-3 text-xs">
@@ -411,7 +407,7 @@ function AutoScanInfo({ record }: { record: PaymentRecord }) {
         <div>
           <span className="text-[#71767b]">{t("billing.history.autoScan.lastScannedAt")}</span>
           <div className="mt-1 text-[#e7e9ea]">
-            {record.autoScannedAt ? formatCheckedAt(record.autoScannedAt) : t("billing.history.autoScan.notScanned")}
+            {record.autoScannedAt ? formatDateTime(record.autoScannedAt, timeZone) : t("billing.history.autoScan.notScanned")}
           </div>
         </div>
         <div>

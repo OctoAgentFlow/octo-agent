@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib/app-page-refresh";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { pointService, type PointCenterApi } from "@/services/point.service";
 import { referralService, type ReferralInfoApi } from "@/services/referral.service";
 
 export default function PointsPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [data, setData] = useState<PointCenterApi | null>(null);
   const [referral, setReferral] = useState<ReferralInfoApi | null>(null);
@@ -178,7 +180,7 @@ export default function PointsPage() {
                   <History className="size-4 shrink-0 text-[#71767b]" />
                   <div className="min-w-0">
                     <p className="font-medium text-[#e7e9ea]">{t(`points.event.${item.event_type}`)}</p>
-                    <p className="mt-1 text-xs text-[#71767b]">{new Date(item.created_at).toLocaleString()}</p>
+                    <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.created_at, timeZone)}</p>
                   </div>
                 </div>
                 <div className="text-right">

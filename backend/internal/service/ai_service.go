@@ -96,6 +96,7 @@ type GenerateOAFBotSamplesInput struct {
 	Scene             string
 	SampleContext     string
 	UnsafeContent     string
+	RewriteMode       string
 	SafetyHits        []dto.OAFBotSafetyHit
 	Name              string
 	Occupation        string
@@ -445,6 +446,14 @@ func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in Generat
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
 	user.WriteString("Rules:\n")
 	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
+	switch strings.TrimSpace(in.RewriteMode) {
+	case "conservative":
+		user.WriteString("- Rewrite conservatively: remove risky phrasing, soften claims, and prefer neutral educational language.\n")
+	case "shorter":
+		user.WriteString("- Rewrite shorter: keep the core message but make it more concise and less promotional.\n")
+	default:
+		user.WriteString("- Rewrite naturally: keep the voice close to the original while removing risky wording.\n")
+	}
 	user.WriteString("- Do not include the matched risky terms unless they are necessary as neutral context; prefer safer alternatives.\n")
 	user.WriteString("- Avoid guarantees, urgency traps, wallet/private-key prompts, official-support impersonation, and unsupported financial claims.\n")
 	user.WriteString("- Keep it natural and usable as the requested scene.\n")

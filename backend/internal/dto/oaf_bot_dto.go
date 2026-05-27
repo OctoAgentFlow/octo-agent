@@ -102,6 +102,7 @@ type OAFBotRewriteSafetyRequest struct {
 	Scene         string            `json:"scene"`
 	Content       string            `json:"content"`
 	SampleContext string            `json:"sample_context"`
+	RewriteMode   string            `json:"rewrite_mode"`
 	MatchedHits   []OAFBotSafetyHit `json:"matched_hits"`
 }
 
@@ -172,9 +173,17 @@ type OAFBotGenerationFeedbackResponse struct {
 }
 
 type OAFBotMatrixSignalItem struct {
-	BotID    uint                           `json:"bot_id"`
-	Usages   []OAFBotGenerationUsageItem    `json:"usages"`
-	Feedback []OAFBotGenerationFeedbackItem `json:"feedback"`
+	BotID             uint                           `json:"bot_id"`
+	Usages            []OAFBotGenerationUsageItem    `json:"usages"`
+	Feedback          []OAFBotGenerationFeedbackItem `json:"feedback"`
+	InspectionFlags   []string                       `json:"inspection_flags"`
+	InspectionMetrics OAFBotMatrixInspectionMetrics  `json:"inspection_metrics"`
+}
+
+type OAFBotMatrixInspectionMetrics struct {
+	ActiveContentCount int `json:"active_content_count"`
+	NegativeFeedback   int `json:"negative_feedback"`
+	PendingReview      int `json:"pending_review"`
 }
 
 type OAFBotMatrixInspectionSummary struct {

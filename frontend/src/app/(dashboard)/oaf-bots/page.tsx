@@ -94,6 +94,7 @@ type SafetyRewritePreview = {
   before: string;
   result: OAFBotTestGenerateResult;
 };
+type SafetyRewriteMode = "natural" | "conservative" | "shorter";
 type ProfileDiffItem = {
   key: keyof OAFBotPayload;
   before: OAFBotPayload[keyof OAFBotPayload];
@@ -110,6 +111,7 @@ type BotMatrixRow = {
   autoPostReady: boolean;
   monthlyUsage: number;
   negativeFeedback: number;
+  inspectionFlags: string[];
 };
 type MatrixInspectionItem = {
   key: MatrixFilterKey;
@@ -164,6 +166,7 @@ const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
   "language_strategy",
 ];
 const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
+const safetyRewriteModes: SafetyRewriteMode[] = ["natural", "conservative", "shorter"];
 const negativeFeedbackInspectionThreshold = 3;
 const reviewBacklogInspectionThreshold = 5;
 
@@ -392,12 +395,14 @@ export default function OAFBotsPage() {
   const [form, setForm] = useState<OAFBotPayload>(() => createEmptyForm(defaultPrimaryLanguage));
   const [activeStep, setActiveStep] = useState<WizardStep>("identity");
   const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
+  const [safetyRewriteMode, setSafetyRewriteMode] = useState<SafetyRewriteMode>("natural");
   const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
   const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
   const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
+  const [matrixInspectionFlagsByBot, setMatrixInspectionFlagsByBot] = useState<Record<number, string[]>>({});
   const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
@@ -508,19 +513,27 @@ export default function OAFBotsPage() {
       const usageByScene = aggregateMonthlyUsage(matrixUsageByBot[bot.id] || [], currentMonth);
       const monthlyUsage = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
       const feedback = matrixFeedbackByBot[bot.id] || [];
+      const queueSummary = summarizeQueue(botQueueItems);
+      const fallbackFlags = [
+        ...(!account ? ["unbound"] : []),
+        ...(!(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0) ? ["auto_post_not_ready"] : []),
+        ...(feedback.filter((item) => item.rating === "negative").length >= negativeFeedbackInspectionThreshold ? ["negative_feedback"] : []),
+        ...(queueSummary.pendingReview >= reviewBacklogInspectionThreshold ? ["review_backlog"] : []),
+      ];
       return {
         bot,
         account,
         completion: calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage)),
         activeContentCount,
-        queueSummary: summarizeQueue(botQueueItems),
+        queueSummary,
         plan,
         autoPostReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
         monthlyUsage,
         negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
+        inspectionFlags: matrixInspectionFlagsByBot[bot.id] || fallbackFlags,
       };
     });
-  }, [accountByID, autoPostPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixUsageByBot, queueItems]);
+  }, [accountByID, autoPostPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixInspectionFlagsByBot, matrixUsageByBot, queueItems]);
   const matrixSummary = useMemo(() => {
     return matrixRows.reduce(
       (summary, row) => {
@@ -549,10 +562,10 @@ export default function OAFBotsPage() {
   const filteredMatrixRows = useMemo(() => {
     if (matrixFilter === "all") return matrixRows;
     return matrixRows.filter((row) => {
-      if (matrixFilter === "unbound") return !row.account;
-      if (matrixFilter === "auto_post_not_ready") return !row.autoPostReady;
-      if (matrixFilter === "negative_feedback") return row.negativeFeedback >= negativeFeedbackInspectionThreshold;
-      if (matrixFilter === "review_backlog") return row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold;
+      if (matrixFilter === "unbound") return row.inspectionFlags.includes("unbound");
+      if (matrixFilter === "auto_post_not_ready") return row.inspectionFlags.includes("auto_post_not_ready");
+      if (matrixFilter === "negative_feedback") return row.inspectionFlags.includes("negative_feedback");
+      if (matrixFilter === "review_backlog") return row.inspectionFlags.includes("review_backlog");
       return true;
     });
   }, [matrixFilter, matrixRows]);
@@ -809,6 +822,7 @@ export default function OAFBotsPage() {
     if (items.length === 0) {
       setMatrixUsageByBot({});
       setMatrixFeedbackByBot({});
+      setMatrixInspectionFlagsByBot({});
       setMatrixInspectionSummary(null);
       return;
     }
@@ -818,21 +832,26 @@ export default function OAFBotsPage() {
       const knownIDs = new Set(items.map((bot) => bot.id));
       const usageByBot: Record<number, OAFBotGenerationUsage[]> = {};
       const feedbackByBot: Record<number, OAFBotGenerationFeedback[]> = {};
+      const flagsByBot: Record<number, string[]> = {};
       signals.items.forEach((item) => {
         if (!knownIDs.has(item.bot_id)) return;
         usageByBot[item.bot_id] = item.usages || [];
         feedbackByBot[item.bot_id] = item.feedback || [];
+        flagsByBot[item.bot_id] = item.inspection_flags || [];
       });
       items.forEach((bot) => {
         usageByBot[bot.id] ||= [];
         feedbackByBot[bot.id] ||= [];
+        flagsByBot[bot.id] ||= [];
       });
       setMatrixUsageByBot(usageByBot);
       setMatrixFeedbackByBot(feedbackByBot);
+      setMatrixInspectionFlagsByBot(flagsByBot);
       setMatrixInspectionSummary(signals.summary || null);
     } catch {
       setMatrixUsageByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
       setMatrixFeedbackByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
+      setMatrixInspectionFlagsByBot({});
       setMatrixInspectionSummary(null);
     } finally {
       setMatrixLoading(false);
@@ -895,6 +914,9 @@ export default function OAFBotsPage() {
       setBots((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
       setSelectedID(saved.id);
       setForm(botToPayload(saved, defaultPrimaryLanguage));
+      setCompleteProfilePreview(null);
+      setFeedbackSuggestionPreview(null);
+      setSafetyRewritePreview(null);
       setPendingAppliedFormChange(null);
       setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
       pushToast(t("oafBots.toast.saved"));
@@ -993,6 +1015,7 @@ export default function OAFBotsPage() {
         scene: sampleScene,
         content,
         sample_context: sampleContexts[sampleScene] || "",
+        rewrite_mode: safetyRewriteMode,
         matched_hits: samples.safety_evaluation?.matched_hits || [],
       });
       setSafetyRewritePreview({ before: content, result });
@@ -1564,6 +1587,8 @@ export default function OAFBotsPage() {
                   onSampleContextChange={(value) => setSampleContexts((prev) => ({ ...prev, [sampleScene]: value }))}
                   generating={generating}
                   rewritingSafety={rewritingSafety}
+                  safetyRewriteMode={safetyRewriteMode}
+                  onSafetyRewriteModeChange={setSafetyRewriteMode}
                   onGenerate={testGenerate}
                   onRewriteSafety={rewriteSampleForSafety}
                   selectedID={selectedID}
@@ -3348,7 +3373,9 @@ function SamplePanel({
   onSampleContextChange,
   generating,
   rewritingSafety,
+  safetyRewriteMode,
   onGenerate,
+  onSafetyRewriteModeChange,
   onRewriteSafety,
   selectedID,
   formChanged,
@@ -3384,7 +3411,9 @@ function SamplePanel({
   onSampleContextChange: (value: string) => void;
   generating: boolean;
   rewritingSafety: boolean;
+  safetyRewriteMode: SafetyRewriteMode;
   onGenerate: () => void;
+  onSafetyRewriteModeChange: (mode: SafetyRewriteMode) => void;
   onRewriteSafety: () => void;
   selectedID: number | null;
   formChanged: boolean;
@@ -3502,7 +3531,14 @@ function SamplePanel({
               t={t}
             />
           </div>
-          <SampleSafetyExplanation t={t} evaluation={samples.safety_evaluation} rewriting={rewritingSafety} onRewrite={onRewriteSafety} />
+          <SampleSafetyExplanation
+            t={t}
+            evaluation={samples.safety_evaluation}
+            rewriting={rewritingSafety}
+            rewriteMode={safetyRewriteMode}
+            onRewriteModeChange={onSafetyRewriteModeChange}
+            onRewrite={onRewriteSafety}
+          />
           <SafetyRewritePreviewPanel
             t={t}
             preview={safetyRewritePreview}
@@ -3623,11 +3659,15 @@ function SampleSafetyExplanation({
   t,
   evaluation,
   rewriting,
+  rewriteMode,
+  onRewriteModeChange,
   onRewrite,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   evaluation?: OAFBotTestGenerateResult["safety_evaluation"];
   rewriting: boolean;
+  rewriteMode: SafetyRewriteMode;
+  onRewriteModeChange: (mode: SafetyRewriteMode) => void;
   onRewrite: () => void;
 }) {
   if (!evaluation) return null;
@@ -3675,12 +3715,28 @@ function SampleSafetyExplanation({
         <p className="mt-3 text-xs leading-5 opacity-75">{t("oafBots.safetyExplanation.noHits")}</p>
       )}
       {canRewrite ? (
-        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/15 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-5 opacity-85">{t("oafBots.safetyRewrite.hint")}</p>
-          <Button type="button" size="sm" variant="outline" onClick={onRewrite} disabled={rewriting} className="shrink-0 border-white/15 bg-black/20 text-current hover:bg-black/35">
-            {rewriting ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {rewriting ? t("oafBots.safetyRewrite.loading") : t("oafBots.safetyRewrite.action")}
-          </Button>
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/15 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 opacity-85">{t("oafBots.safetyRewrite.hint")}</p>
+            <Button type="button" size="sm" variant="outline" onClick={onRewrite} disabled={rewriting} className="shrink-0 border-white/15 bg-black/20 text-current hover:bg-black/35">
+              {rewriting ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {rewriting ? t("oafBots.safetyRewrite.loading") : t("oafBots.safetyRewrite.action")}
+            </Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {safetyRewriteModes.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onRewriteModeChange(mode)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                  rewriteMode === mode ? "border-white/20 bg-white/15 text-current" : "border-white/10 bg-black/15 opacity-75 hover:opacity-100"
+                }`}
+              >
+                {t(`oafBots.safetyRewrite.mode.${mode}`)}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -3731,7 +3787,14 @@ function SafetyRewritePreviewPanel({
 
       {evaluation?.matched_hits?.length ? (
         <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
-          {t("oafBots.safetyRewrite.remainingHits", { count: evaluation.matched_hits.length })}
+          <p>{t("oafBots.safetyRewrite.remainingHits", { count: evaluation.matched_hits.length })}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {evaluation.matched_hits.map((hit, index) => (
+              <span key={`${hit.source}-${hit.term}-${index}`} className="rounded-full border border-amber-100/10 bg-black/20 px-2 py-0.5">
+                {t(`oafBots.safetyExplanation.source.${hit.source}`) === `oafBots.safetyExplanation.source.${hit.source}` ? hit.source : t(`oafBots.safetyExplanation.source.${hit.source}`)}: {hit.term}
+              </span>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100">

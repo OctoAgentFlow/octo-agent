@@ -221,6 +221,7 @@ func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id u
 	}
 	input := oafBotSampleInput(bot, scene, req.SampleContext)
 	input.UnsafeContent = content
+	input.RewriteMode = normalizeSafetyRewriteMode(req.RewriteMode)
 	input.SafetyHits = req.MatchedHits
 	out, usage, err := s.ai.RewriteOAFBotSampleForSafety(ctx, input)
 	if err != nil {
@@ -267,7 +268,7 @@ func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResp
 	if err != nil {
 		return nil, err
 	}
-	summary, err := s.matrixInspectionSummary(userID, bots, feedbackRows)
+	inspectionByBot, summary, err := s.matrixInspectionByBot(userID, bots, feedbackRows)
 	if err != nil {
 		return nil, err
 	}
@@ -284,61 +285,44 @@ func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResp
 	}
 	items := make([]dto.OAFBotMatrixSignalItem, 0, len(botIDs))
 	for _, id := range botIDs {
+		inspection := inspectionByBot[id]
 		items = append(items, dto.OAFBotMatrixSignalItem{
-			BotID:    id,
-			Usages:   usageByBot[id],
-			Feedback: feedbackByBot[id],
+			BotID:             id,
+			Usages:            usageByBot[id],
+			Feedback:          feedbackByBot[id],
+			InspectionFlags:   inspection.Flags,
+			InspectionMetrics: inspection.Metrics,
 		})
 	}
 	return &dto.OAFBotMatrixSignalsResponse{Items: items, Summary: summary}, nil
 }
 
-func (s *OAFBotService) matrixInspectionSummary(userID uint, bots []model.OAFBot, feedbackRows []model.OAFBotGenerationFeedback) (dto.OAFBotMatrixInspectionSummary, error) {
-	summary := dto.OAFBotMatrixInspectionSummary{}
+type oafBotMatrixInspection struct {
+	Flags   []string
+	Metrics dto.OAFBotMatrixInspectionMetrics
+}
+
+func (s *OAFBotService) matrixInspectionByBot(userID uint, bots []model.OAFBot, feedbackRows []model.OAFBotGenerationFeedback) (map[uint]oafBotMatrixInspection, dto.OAFBotMatrixInspectionSummary, error) {
 	botIDs := make([]uint, 0, len(bots))
 	for _, bot := range bots {
 		botIDs = append(botIDs, bot.ID)
-		if bot.TwitterAccountID == 0 {
-			summary.UnboundCount++
-		}
 	}
+	summary := dto.OAFBotMatrixInspectionSummary{}
 	accountByID := map[uint]bool{}
 	accounts, err := s.accountRepo.ListByUserID(userID)
 	if err != nil {
-		return summary, err
+		return nil, summary, err
 	}
 	for _, account := range accounts {
 		accountByID[account.ID] = true
 	}
-	planByBot := map[uint]model.AutoPostPlan{}
-	planByAccount := map[uint]model.AutoPostPlan{}
-	if s.planRepo != nil {
-		plans, err := s.planRepo.ListByUser(userID)
-		if err != nil {
-			return summary, err
-		}
-		for _, plan := range plans {
-			if plan.BotID > 0 {
-				planByBot[plan.BotID] = plan
-			}
-			if plan.XAccountID > 0 {
-				planByAccount[plan.XAccountID] = plan
-			}
-		}
+	planByBot, planByAccount, err := s.matrixPlansByBot(userID)
+	if err != nil {
+		return nil, summary, err
 	}
-	activeContentCounts := map[uint]int{}
-	if s.contentRepo != nil {
-		contentItems, err := s.contentRepo.ListActiveByUser(userID)
-		if err != nil {
-			return summary, err
-		}
-		for _, bot := range bots {
-			for _, item := range contentItems {
-				if contentItemMatchesOAFBot(item, bot) {
-					activeContentCounts[bot.ID]++
-				}
-			}
-		}
+	activeContentCounts, err := s.matrixActiveContentCounts(userID, bots)
+	if err != nil {
+		return nil, summary, err
 	}
 	negativeFeedbackByBot := map[uint]int{}
 	for _, row := range feedbackRows {
@@ -348,9 +332,15 @@ func (s *OAFBotService) matrixInspectionSummary(userID uint, bots []model.OAFBot
 	}
 	pendingReviewByBot, err := s.pendingReviewCountsByBot(userID, botIDs)
 	if err != nil {
-		return summary, err
+		return nil, summary, err
 	}
+	out := make(map[uint]oafBotMatrixInspection, len(bots))
 	for _, bot := range bots {
+		flags := []string{}
+		if bot.TwitterAccountID == 0 {
+			flags = append(flags, "unbound")
+			summary.UnboundCount++
+		}
 		plan, ok := planByBot[bot.ID]
 		if !ok && bot.TwitterAccountID > 0 {
 			plan, ok = planByAccount[bot.TwitterAccountID]
@@ -362,16 +352,67 @@ func (s *OAFBotService) matrixInspectionSummary(userID uint, bots []model.OAFBot
 			plan.ExecutionMode == "autopilot" &&
 			activeContentCounts[bot.ID] > 0
 		if !autoPostReady {
+			flags = append(flags, "auto_post_not_ready")
 			summary.AutoPostNotReadyCount++
 		}
 		if negativeFeedbackByBot[bot.ID] >= 3 {
+			flags = append(flags, "negative_feedback")
 			summary.NegativeFeedbackCount++
 		}
 		if pendingReviewByBot[bot.ID] >= 5 {
+			flags = append(flags, "review_backlog")
 			summary.ReviewBacklogCount++
 		}
+		out[bot.ID] = oafBotMatrixInspection{
+			Flags: flags,
+			Metrics: dto.OAFBotMatrixInspectionMetrics{
+				ActiveContentCount: activeContentCounts[bot.ID],
+				NegativeFeedback:   negativeFeedbackByBot[bot.ID],
+				PendingReview:      pendingReviewByBot[bot.ID],
+			},
+		}
 	}
-	return summary, nil
+	return out, summary, nil
+}
+
+func (s *OAFBotService) matrixPlansByBot(userID uint) (map[uint]model.AutoPostPlan, map[uint]model.AutoPostPlan, error) {
+	planByBot := map[uint]model.AutoPostPlan{}
+	planByAccount := map[uint]model.AutoPostPlan{}
+	if s.planRepo == nil {
+		return planByBot, planByAccount, nil
+	}
+	plans, err := s.planRepo.ListByUser(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, plan := range plans {
+		if plan.BotID > 0 {
+			planByBot[plan.BotID] = plan
+		}
+		if plan.XAccountID > 0 {
+			planByAccount[plan.XAccountID] = plan
+		}
+	}
+	return planByBot, planByAccount, nil
+}
+
+func (s *OAFBotService) matrixActiveContentCounts(userID uint, bots []model.OAFBot) (map[uint]int, error) {
+	activeContentCounts := map[uint]int{}
+	if s.contentRepo == nil {
+		return activeContentCounts, nil
+	}
+	contentItems, err := s.contentRepo.ListActiveByUser(userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, bot := range bots {
+		for _, item := range contentItems {
+			if contentItemMatchesOAFBot(item, bot) {
+				activeContentCounts[bot.ID]++
+			}
+		}
+	}
+	return activeContentCounts, nil
 }
 
 func (s *OAFBotService) pendingReviewCountsByBot(userID uint, botIDs []uint) (map[uint]int, error) {
@@ -900,6 +941,15 @@ func normalizeOAFBotLanguageStrategy(value string) string {
 		return v
 	default:
 		return "follow_context"
+	}
+}
+
+func normalizeSafetyRewriteMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case "conservative", "shorter":
+		return strings.TrimSpace(value)
+	default:
+		return "natural"
 	}
 }
 

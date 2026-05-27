@@ -121,6 +121,12 @@ export type OAFBotMatrixSignal = {
   bot_id: number;
   usages: OAFBotGenerationUsage[];
   feedback: OAFBotGenerationFeedback[];
+  inspection_flags?: string[];
+  inspection_metrics?: {
+    active_content_count: number;
+    negative_feedback: number;
+    pending_review: number;
+  };
 };
 
 export type OAFBotMatrixInspectionSummary = {

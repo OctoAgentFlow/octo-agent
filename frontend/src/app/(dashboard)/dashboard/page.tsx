@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Coins, Copy, ExternalLink, Gift, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Coins, Copy, ExternalLink, Gift, PlayCircle, ShieldAlert } from "lucide-react";
 
 import { AutomationOverview } from "@/components/dashboard/automation-overview";
 import { RecentActivityList } from "@/components/dashboard/recent-activity-list";
@@ -499,6 +499,8 @@ export default function DashboardPage() {
   const pendingReviewCount = (reviewStats?.pending_review ?? 0) + (reviewStats?.ready_to_publish ?? 0);
   const failedQueueCount = reviewStats?.failed ?? 0;
   const queueHasSignal = pendingReviewCount > 0 || failedQueueCount > 0 || recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0;
+  const xAccountConnected = (overview?.connected_x_count ?? 0) > 0;
+  const automationEnabled = xAccountConnected && automations.some((module) => module.config.enabled);
   const xAuthIssueCount = recentRecords.filter((record) => record.failureCategory === "x_auth").length;
   const attentionItems = [
     {
@@ -557,11 +559,19 @@ export default function DashboardPage() {
 
       <StatusOverviewCards overview={overview} />
       <UserOnboardingCard
-        accountConnected={(overview?.connected_x_count ?? 0) > 0}
+        accountConnected={xAccountConnected}
         oafBotCreated={botCount > 0}
         autoPostConfigured={autoPostConfigured}
-        automationEnabled={(overview?.connected_x_count ?? 0) > 0 && automations.some((module) => module.config.enabled)}
+        automationEnabled={automationEnabled}
         executionQueueChecked={queueHasSignal}
+      />
+      <FirstUseGuideCard
+        loading={loadState === "loading" || oafBotDashboardLoading || automationLoading || recentLoading}
+        accountConnected={xAccountConnected}
+        hasBot={botCount > 0}
+        autoPostConfigured={autoPostConfigured}
+        automationEnabled={automationEnabled}
+        hasExecutionSignal={queueHasSignal}
       />
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <OAFBotReadinessCard
@@ -604,6 +614,111 @@ export default function DashboardPage() {
         <TrialUpgradeBanner overview={overview} />
       </div>
     </div>
+  );
+}
+
+function FirstUseGuideCard({
+  loading,
+  accountConnected,
+  hasBot,
+  autoPostConfigured,
+  automationEnabled,
+  hasExecutionSignal,
+}: {
+  loading: boolean;
+  accountConnected: boolean;
+  hasBot: boolean;
+  autoPostConfigured: boolean;
+  automationEnabled: boolean;
+  hasExecutionSignal: boolean;
+}) {
+  const { t } = useT();
+  if (loading || (accountConnected && hasBot && autoPostConfigured && automationEnabled && hasExecutionSignal)) {
+    return null;
+  }
+  const items = [
+    {
+      key: "account",
+      done: accountConnected,
+      title: t("dashboard.firstUse.account.title"),
+      description: t("dashboard.firstUse.account.description"),
+      href: "/accounts",
+      cta: t("dashboard.firstUse.account.cta"),
+    },
+    {
+      key: "bot",
+      done: hasBot,
+      title: t("dashboard.firstUse.bot.title"),
+      description: t("dashboard.firstUse.bot.description"),
+      href: "/oaf-bots",
+      cta: t("dashboard.firstUse.bot.cta"),
+    },
+    {
+      key: "autoPost",
+      done: autoPostConfigured,
+      title: t("dashboard.firstUse.autoPost.title"),
+      description: t("dashboard.firstUse.autoPost.description"),
+      href: "/auto-post",
+      cta: t("dashboard.firstUse.autoPost.cta"),
+    },
+    {
+      key: "automation",
+      done: automationEnabled,
+      title: t("dashboard.firstUse.automation.title"),
+      description: t("dashboard.firstUse.automation.description"),
+      href: "/automations",
+      cta: t("dashboard.firstUse.automation.cta"),
+    },
+    {
+      key: "queue",
+      done: hasExecutionSignal,
+      title: t("dashboard.firstUse.queue.title"),
+      description: t("dashboard.firstUse.queue.description"),
+      href: "/execution-queue",
+      cta: t("dashboard.firstUse.queue.cta"),
+    },
+  ];
+  const nextItem = items.find((item) => !item.done) ?? items[items.length - 1];
+  return (
+    <Card className="border-[#1d9bf0]/30 bg-[#06111d]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/12 text-[#1d9bf0]">
+              <PlayCircle className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-[#e7e9ea]">{t("dashboard.firstUse.title")}</h2>
+              <p className="mt-1 text-sm leading-6 text-[#8b98a5]">{t("dashboard.firstUse.description")}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {items.map((item, index) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={`rounded-2xl border p-3 transition hover:bg-[#16181c] ${
+                  item.done ? "border-emerald-300/20 bg-emerald-400/8" : "border-[#2f3336] bg-black"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-[#71767b]">{t("dashboard.firstUse.step", { number: index + 1 })}</span>
+                  <span className={`grid size-6 place-items-center rounded-full ${item.done ? "bg-emerald-400/10 text-emerald-200" : "bg-[#1d9bf0]/10 text-[#1d9bf0]"}`}>
+                    {item.done ? <CheckCircle2 className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.description}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+        <Link href={nextItem.href} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+          {nextItem.cta}
+          <ChevronRight className="size-4" />
+        </Link>
+      </div>
+    </Card>
   );
 }
 

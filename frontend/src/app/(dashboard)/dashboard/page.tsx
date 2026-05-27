@@ -26,7 +26,6 @@ import { automationService, type AutomationModuleApi } from "@/services/automati
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { pointService, type PointCenterApi } from "@/services/point.service";
-import { postService } from "@/services/post.service";
 import { referralService, type ReferralInfoApi } from "@/services/referral.service";
 import { reviewQueueService, type ReviewQueueStatsApi } from "@/services/review-queue.service";
 import { useT } from "@/i18n/use-t";
@@ -164,7 +163,6 @@ export default function DashboardPage() {
   const [recentRecords, setRecentRecords] = useState<ActivityRecord[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
   const [recentError, setRecentError] = useState<string | null>(null);
-  const [postCount, setPostCount] = useState(0);
   const [oafBotDashboard, setOAFBotDashboard] = useState<OAFBotDashboardData | null>(null);
   const [oafBotDashboardLoading, setOAFBotDashboardLoading] = useState(true);
   const [oafBotDashboardError, setOAFBotDashboardError] = useState<string | null>(null);
@@ -240,15 +238,6 @@ export default function DashboardPage() {
       setRecentLoading(false);
     }
   }, [t]);
-
-  const fetchPostCount = useCallback(async () => {
-    try {
-      const data = await postService.list({ page: 1, page_size: 1 });
-      setPostCount(data.pagination.total);
-    } catch {
-      setPostCount(0);
-    }
-  }, []);
 
   const fetchOAFBotDashboard = useCallback(async () => {
     setOAFBotDashboardLoading(true);
@@ -394,32 +383,14 @@ export default function DashboardPage() {
   }, [t]);
 
   useEffect(() => {
-    let cancelled = false;
-    postService
-      .list({ page: 1, page_size: 1 })
-      .then((data) => {
-        if (cancelled) return;
-        setPostCount(data.pagination.total);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPostCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     return subscribeDashboardRefresh(() => {
       void fetchOverview();
       void fetchAutomations();
       void fetchRecentActivities();
-      void fetchPostCount();
       void fetchOAFBotDashboard();
       void fetchPointsDashboard();
     });
-  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPointsDashboard, fetchPostCount, fetchRecentActivities]);
+  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPointsDashboard, fetchRecentActivities]);
 
   useEffect(() => {
     void fetchOAFBotDashboard();
@@ -494,13 +465,6 @@ export default function DashboardPage() {
           setRecentLoading(false);
         }
 
-        try {
-          const data = await postService.list({ page: 1, page_size: 1 });
-          setPostCount(data.pagination.total);
-        } catch {
-          setPostCount(0);
-        }
-
         await fetchOAFBotDashboard();
         await fetchPointsDashboard();
 
@@ -530,8 +494,11 @@ export default function DashboardPage() {
   const boundBotCount = oafBotDashboard?.bots.filter((bot) => Boolean(bot.twitter_account_id)).length ?? 0;
   const readyBotCount = oafBotDashboard?.bots.filter(isBotReady).length ?? 0;
   const notReadyBotCount = Math.max(0, botCount - readyBotCount);
+  const autoPostNotReadyCount = oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0;
+  const autoPostConfigured = botCount > 0 && autoPostNotReadyCount < botCount;
   const pendingReviewCount = (reviewStats?.pending_review ?? 0) + (reviewStats?.ready_to_publish ?? 0);
   const failedQueueCount = reviewStats?.failed ?? 0;
+  const queueHasSignal = pendingReviewCount > 0 || failedQueueCount > 0 || recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0;
   const xAuthIssueCount = recentRecords.filter((record) => record.failureCategory === "x_auth").length;
   const attentionItems = [
     {
@@ -591,9 +558,10 @@ export default function DashboardPage() {
       <StatusOverviewCards overview={overview} />
       <UserOnboardingCard
         accountConnected={(overview?.connected_x_count ?? 0) > 0}
+        oafBotCreated={botCount > 0}
+        autoPostConfigured={autoPostConfigured}
         automationEnabled={(overview?.connected_x_count ?? 0) > 0 && automations.some((module) => module.config.enabled)}
-        postCreated={postCount > 0}
-        activityObserved={(overview?.connected_x_count ?? 0) > 0 && (recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0)}
+        executionQueueChecked={queueHasSignal}
       />
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <OAFBotReadinessCard
@@ -603,7 +571,7 @@ export default function DashboardPage() {
           bound={boundBotCount}
           ready={readyBotCount}
           notReady={notReadyBotCount}
-          autoPostNotReady={oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0}
+          autoPostNotReady={autoPostNotReadyCount}
           onRetry={() => void fetchOAFBotDashboard()}
         />
         <AttentionCard

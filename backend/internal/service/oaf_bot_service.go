@@ -25,16 +25,21 @@ const (
 )
 
 type OAFBotService struct {
-	botRepo      *repository.OAFBotRepository
-	accountRepo  *repository.TwitterAccountRepository
-	userRepo     *repository.UserRepository
-	usageRepo    *repository.AIGenerationUsageRepository
-	feedbackRepo *repository.OAFBotGenerationFeedbackRepository
-	ai           *AIService
+	botRepo         *repository.OAFBotRepository
+	accountRepo     *repository.TwitterAccountRepository
+	userRepo        *repository.UserRepository
+	usageRepo       *repository.AIGenerationUsageRepository
+	feedbackRepo    *repository.OAFBotGenerationFeedbackRepository
+	planRepo        *repository.AutoPostPlanRepository
+	contentRepo     *repository.ContentLibraryRepository
+	postDraftRepo   *repository.AutoPostDraftRepository
+	replyDraftRepo  *repository.AutoReplyDraftRepository
+	commentTaskRepo *repository.AutoCommentTaskRepository
+	ai              *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, postDraftRepo *repository.AutoPostDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, planRepo: planRepo, contentRepo: contentRepo, postDraftRepo: postDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -262,6 +267,10 @@ func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResp
 	if err != nil {
 		return nil, err
 	}
+	summary, err := s.matrixInspectionSummary(userID, bots, feedbackRows)
+	if err != nil {
+		return nil, err
+	}
 	usageByBot := make(map[uint][]dto.OAFBotGenerationUsageItem, len(botIDs))
 	for _, row := range usageRows {
 		usageByBot[row.BotID] = append(usageByBot[row.BotID], oafBotGenerationUsageToDTO(row))
@@ -281,7 +290,133 @@ func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResp
 			Feedback: feedbackByBot[id],
 		})
 	}
-	return &dto.OAFBotMatrixSignalsResponse{Items: items}, nil
+	return &dto.OAFBotMatrixSignalsResponse{Items: items, Summary: summary}, nil
+}
+
+func (s *OAFBotService) matrixInspectionSummary(userID uint, bots []model.OAFBot, feedbackRows []model.OAFBotGenerationFeedback) (dto.OAFBotMatrixInspectionSummary, error) {
+	summary := dto.OAFBotMatrixInspectionSummary{}
+	botIDs := make([]uint, 0, len(bots))
+	for _, bot := range bots {
+		botIDs = append(botIDs, bot.ID)
+		if bot.TwitterAccountID == 0 {
+			summary.UnboundCount++
+		}
+	}
+	accountByID := map[uint]bool{}
+	accounts, err := s.accountRepo.ListByUserID(userID)
+	if err != nil {
+		return summary, err
+	}
+	for _, account := range accounts {
+		accountByID[account.ID] = true
+	}
+	planByBot := map[uint]model.AutoPostPlan{}
+	planByAccount := map[uint]model.AutoPostPlan{}
+	if s.planRepo != nil {
+		plans, err := s.planRepo.ListByUser(userID)
+		if err != nil {
+			return summary, err
+		}
+		for _, plan := range plans {
+			if plan.BotID > 0 {
+				planByBot[plan.BotID] = plan
+			}
+			if plan.XAccountID > 0 {
+				planByAccount[plan.XAccountID] = plan
+			}
+		}
+	}
+	activeContentCounts := map[uint]int{}
+	if s.contentRepo != nil {
+		contentItems, err := s.contentRepo.ListActiveByUser(userID)
+		if err != nil {
+			return summary, err
+		}
+		for _, bot := range bots {
+			for _, item := range contentItems {
+				if contentItemMatchesOAFBot(item, bot) {
+					activeContentCounts[bot.ID]++
+				}
+			}
+		}
+	}
+	negativeFeedbackByBot := map[uint]int{}
+	for _, row := range feedbackRows {
+		if row.Rating == "negative" {
+			negativeFeedbackByBot[row.BotID]++
+		}
+	}
+	pendingReviewByBot, err := s.pendingReviewCountsByBot(userID, botIDs)
+	if err != nil {
+		return summary, err
+	}
+	for _, bot := range bots {
+		plan, ok := planByBot[bot.ID]
+		if !ok && bot.TwitterAccountID > 0 {
+			plan, ok = planByAccount[bot.TwitterAccountID]
+		}
+		autoPostReady := bot.TwitterAccountID > 0 &&
+			accountByID[bot.TwitterAccountID] &&
+			ok &&
+			plan.Enabled &&
+			plan.ExecutionMode == "autopilot" &&
+			activeContentCounts[bot.ID] > 0
+		if !autoPostReady {
+			summary.AutoPostNotReadyCount++
+		}
+		if negativeFeedbackByBot[bot.ID] >= 3 {
+			summary.NegativeFeedbackCount++
+		}
+		if pendingReviewByBot[bot.ID] >= 5 {
+			summary.ReviewBacklogCount++
+		}
+	}
+	return summary, nil
+}
+
+func (s *OAFBotService) pendingReviewCountsByBot(userID uint, botIDs []uint) (map[uint]int, error) {
+	out := map[uint]int{}
+	if len(botIDs) == 0 {
+		return out, nil
+	}
+	if s.postDraftRepo != nil {
+		counts, err := s.postDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	if s.replyDraftRepo != nil {
+		counts, err := s.replyDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	if s.commentTaskRepo != nil {
+		counts, err := s.commentTaskRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	return out, nil
+}
+
+func addBotCounts(dst map[uint]int, src map[uint]int) {
+	for id, count := range src {
+		dst[id] += count
+	}
+}
+
+func contentItemMatchesOAFBot(item model.ContentLibraryItem, bot model.OAFBot) bool {
+	if item.TwitterAccountID != nil && *item.TwitterAccountID != bot.TwitterAccountID {
+		return false
+	}
+	if item.BotID != nil && *item.BotID != bot.ID {
+		return false
+	}
+	return true
 }
 
 func (s *OAFBotService) CreateGenerationFeedback(userID, id uint, req dto.OAFBotGenerationFeedbackRequest) (*dto.OAFBotGenerationFeedbackItem, error) {

@@ -177,6 +177,14 @@ type OAFBotMatrixSignalItem struct {
 	Feedback []OAFBotGenerationFeedbackItem `json:"feedback"`
 }
 
+type OAFBotMatrixInspectionSummary struct {
+	UnboundCount          int `json:"unbound_count"`
+	AutoPostNotReadyCount int `json:"auto_post_not_ready_count"`
+	NegativeFeedbackCount int `json:"negative_feedback_count"`
+	ReviewBacklogCount    int `json:"review_backlog_count"`
+}
+
 type OAFBotMatrixSignalsResponse struct {
-	Items []OAFBotMatrixSignalItem `json:"items"`
+	Items   []OAFBotMatrixSignalItem      `json:"items"`
+	Summary OAFBotMatrixInspectionSummary `json:"summary"`
 }

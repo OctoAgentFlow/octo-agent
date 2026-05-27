@@ -51,6 +51,7 @@ import type {
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackRating,
   OAFBotGenerationUsage,
+  OAFBotMatrixInspectionSummary,
   OAFBotPayload,
   OAFBotProfileAssistMode,
   OAFBotSampleContext,
@@ -393,6 +394,7 @@ export default function OAFBotsPage() {
   const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
   const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
   const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
+  const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
@@ -528,17 +530,17 @@ export default function OAFBotsPage() {
     );
   }, [matrixRows]);
   const matrixInspectionItems = useMemo<MatrixInspectionItem[]>(() => {
-    const unbound = matrixRows.filter((row) => !row.account).length;
-    const autoPostNotReady = matrixRows.filter((row) => !row.autoPostReady).length;
-    const negativeFeedback = matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
-    const reviewBacklog = matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
+    const unbound = matrixInspectionSummary?.unbound_count ?? matrixRows.filter((row) => !row.account).length;
+    const autoPostNotReady = matrixInspectionSummary?.auto_post_not_ready_count ?? matrixRows.filter((row) => !row.autoPostReady).length;
+    const negativeFeedback = matrixInspectionSummary?.negative_feedback_count ?? matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
+    const reviewBacklog = matrixInspectionSummary?.review_backlog_count ?? matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
     return [
       { key: "unbound", count: unbound, tone: unbound > 0 ? "warning" : "neutral" },
       { key: "auto_post_not_ready", count: autoPostNotReady, tone: autoPostNotReady > 0 ? "warning" : "neutral" },
       { key: "negative_feedback", count: negativeFeedback, tone: negativeFeedback > 0 ? "danger" : "neutral" },
       { key: "review_backlog", count: reviewBacklog, tone: reviewBacklog > 0 ? "danger" : "neutral" },
     ];
-  }, [matrixRows]);
+  }, [matrixInspectionSummary, matrixRows]);
   const filteredMatrixRows = useMemo(() => {
     if (matrixFilter === "all") return matrixRows;
     return matrixRows.filter((row) => {
@@ -802,6 +804,7 @@ export default function OAFBotsPage() {
     if (items.length === 0) {
       setMatrixUsageByBot({});
       setMatrixFeedbackByBot({});
+      setMatrixInspectionSummary(null);
       return;
     }
     setMatrixLoading(true);
@@ -821,9 +824,11 @@ export default function OAFBotsPage() {
       });
       setMatrixUsageByBot(usageByBot);
       setMatrixFeedbackByBot(feedbackByBot);
+      setMatrixInspectionSummary(signals.summary || null);
     } catch {
       setMatrixUsageByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
       setMatrixFeedbackByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
+      setMatrixInspectionSummary(null);
     } finally {
       setMatrixLoading(false);
     }

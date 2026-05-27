@@ -122,3 +122,10 @@ export type OAFBotMatrixSignal = {
   usages: OAFBotGenerationUsage[];
   feedback: OAFBotGenerationFeedback[];
 };
+
+export type OAFBotMatrixInspectionSummary = {
+  unbound_count: number;
+  auto_post_not_ready_count: number;
+  negative_feedback_count: number;
+  review_backlog_count: number;
+};

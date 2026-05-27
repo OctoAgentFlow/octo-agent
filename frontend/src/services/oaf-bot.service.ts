@@ -7,6 +7,7 @@ import type {
   OAFBotGenerationFeedbackPayload,
   OAFBotGenerationUsage,
   OAFBotListData,
+  OAFBotMatrixInspectionSummary,
   OAFBotMatrixSignal,
   OAFBotPayload,
   OAFBotProfileAssistMode,
@@ -77,6 +78,7 @@ type OAFBotGenerationFeedbackApi = {
 
 type OAFBotMatrixSignalsApi = {
   items: OAFBotMatrixSignal[];
+  summary?: OAFBotMatrixInspectionSummary;
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {

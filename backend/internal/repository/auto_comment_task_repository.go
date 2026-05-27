@@ -85,3 +85,24 @@ func (r *AutoCommentTaskRepository) CountCreatedBetween(userID uint, from, to ti
 		Count(&n).Error
 	return n, err
 }
+
+func (r *AutoCommentTaskRepository) CountStatusByUserBots(userID uint, botIDs []uint, status string) (map[uint]int, error) {
+	out := map[uint]int{}
+	if len(botIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		BotID uint
+		Count int
+	}
+	var rows []row
+	err := r.DB.Model(&model.AutoCommentTask{}).
+		Select("bot_id, COUNT(*) AS count").
+		Where("user_id = ? AND bot_id IN ? AND status = ?", userID, botIDs, status).
+		Group("bot_id").
+		Scan(&rows).Error
+	for _, item := range rows {
+		out[item.BotID] = item.Count
+	}
+	return out, err
+}

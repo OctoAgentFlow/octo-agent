@@ -323,6 +323,16 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 		}
 		handle := formatXAccountHandle(acc.Username)
 		rootIDs, err := twitter.ListUserRootTweetIDs(ctx, nil, tok, twid, 8)
+		if isXUnauthorizedError(err) {
+			if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, acc, append(base,
+				zap.Uint("x_account_id", acc.ID),
+				zap.String("account_handle", handle),
+				zap.String("operation", "list_user_tweets"))...); ok {
+				acc = refreshed
+				tok = strings.TrimSpace(acc.AccessToken)
+				rootIDs, err = twitter.ListUserRootTweetIDs(ctx, nil, tok, twid, 8)
+			}
+		}
 		if err != nil {
 			zap.L().Warn("auto reply: list user tweets failed", append(base,
 				zap.Uint("x_account_id", acc.ID),
@@ -332,6 +342,17 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 		}
 		for _, rootID := range rootIDs {
 			replies, err := twitter.ListDirectRepliesFromOthers(ctx, nil, tok, rootID, twid)
+			if isXUnauthorizedError(err) {
+				if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, acc, append(base,
+					zap.Uint("x_account_id", acc.ID),
+					zap.String("account_handle", handle),
+					zap.String("root_tweet_id", rootID),
+					zap.String("operation", "list_direct_replies"))...); ok {
+					acc = refreshed
+					tok = strings.TrimSpace(acc.AccessToken)
+					replies, err = twitter.ListDirectRepliesFromOthers(ctx, nil, tok, rootID, twid)
+				}
+			}
 			if err != nil {
 				zap.L().Warn("auto reply: conversation search failed", append(base,
 					zap.String("root_tweet_id", rootID),
@@ -365,6 +386,17 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 				outPrev := truncateReplyPreview(template, autoReplyPreviewRunes)
 				at := time.Now().UTC()
 				tweetID, apiErr := twitter.CreateReplyTweet(ctx, tok, template, c.TweetID)
+				if isXUnauthorizedError(apiErr) {
+					if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, acc, append(base,
+						zap.Uint("x_account_id", acc.ID),
+						zap.String("account_handle", handle),
+						zap.String("comment_tweet_id", c.TweetID),
+						zap.String("operation", "create_reply_tweet"))...); ok {
+						acc = refreshed
+						tok = strings.TrimSpace(acc.AccessToken)
+						tweetID, apiErr = twitter.CreateReplyTweet(ctx, tok, template, c.TweetID)
+					}
+				}
 				if apiErr != nil {
 					if s.replyResRepo != nil {
 						_ = s.replyResRepo.Release(userID, c.TweetID)
@@ -428,6 +460,24 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 		}
 	}
 	return nil
+}
+
+func (s *AutoReplyService) refreshXAccountAfterUnauthorized(ctx context.Context, acc model.TwitterAccount, fields ...zap.Field) (model.TwitterAccount, bool) {
+	if s == nil || s.publishing == nil {
+		zap.L().Warn("auto reply: x token refresh unavailable", fields...)
+		return acc, false
+	}
+	refreshed, err := s.publishing.RefreshXAccessTokenForAccount(ctx, &acc)
+	if err != nil {
+		zap.L().Warn("auto reply: x token refresh failed; account marked for reauth", append(fields, zap.Error(err))...)
+		return acc, false
+	}
+	if refreshed == nil {
+		zap.L().Warn("auto reply: x token refresh returned empty account", fields...)
+		return acc, false
+	}
+	zap.L().Info("auto reply: x token refreshed after unauthorized", fields...)
+	return *refreshed, true
 }
 
 func (s *AutoReplyService) replyLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {

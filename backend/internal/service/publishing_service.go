@@ -822,6 +822,20 @@ func (s *PublishingService) publishWithAdapterRetryingUnauthorized(ctx context.C
 	return s.publishWithAdapter(ctx, job, *refreshed, targetTweetID)
 }
 
+func (s *PublishingService) RefreshXAccessTokenForAccount(ctx context.Context, account *model.TwitterAccount) (*model.TwitterAccount, error) {
+	if s == nil {
+		return nil, fmt.Errorf("publishing service is not configured")
+	}
+	refreshed, err := s.refreshXAccessToken(ctx, account)
+	if err != nil {
+		if s != nil && s.accountRepo != nil && account != nil {
+			_ = s.accountRepo.MarkNeedsReauth(account.UserID, account.ID)
+		}
+		return nil, err
+	}
+	return refreshed, nil
+}
+
 func isXUnauthorizedError(err error) bool {
 	var pub *twitter.PublishError
 	return errors.As(err, &pub) && pub.StatusCode == http.StatusUnauthorized

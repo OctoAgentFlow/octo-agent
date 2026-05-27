@@ -90,6 +90,10 @@ type PendingAppliedFormChange = {
   source: "complete_profile" | "feedback_suggestion";
   count: number;
 };
+type SafetyRewritePreview = {
+  before: string;
+  result: OAFBotTestGenerateResult;
+};
 type ProfileDiffItem = {
   key: keyof OAFBotPayload;
   before: OAFBotPayload[keyof OAFBotPayload];
@@ -403,6 +407,7 @@ export default function OAFBotsPage() {
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
   const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
   const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
+  const [safetyRewritePreview, setSafetyRewritePreview] = useState<SafetyRewritePreview | null>(null);
   const [pendingAppliedFormChange, setPendingAppliedFormChange] = useState<PendingAppliedFormChange | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
@@ -851,6 +856,7 @@ export default function OAFBotsPage() {
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
+    setSafetyRewritePreview(null);
     setPendingAppliedFormChange(null);
   };
 
@@ -865,6 +871,7 @@ export default function OAFBotsPage() {
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
+    setSafetyRewritePreview(null);
     setPendingAppliedFormChange(null);
   };
 
@@ -954,6 +961,7 @@ export default function OAFBotsPage() {
     try {
       const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene]);
       setSamples(result);
+      setSafetyRewritePreview(null);
       setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       await loadGenerationUsages(selectedID);
       void loadMatrixSignals(bots);
@@ -987,11 +995,11 @@ export default function OAFBotsPage() {
         sample_context: sampleContexts[sampleScene] || "",
         matched_hits: samples.safety_evaluation?.matched_hits || [],
       });
-      setSamples(result);
+      setSafetyRewritePreview({ before: content, result });
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
       await loadGenerationUsages(selectedID);
       void loadMatrixSignals(bots);
-      pushToast(t("oafBots.safetyRewrite.applied"));
+      pushToast(t("oafBots.safetyRewrite.previewReady"));
     } catch (error) {
       const body = getErrorBody(error);
       if (body?.error_code === "ai_generation_quota_exceeded") {
@@ -1002,6 +1010,13 @@ export default function OAFBotsPage() {
     } finally {
       setRewritingSafety(false);
     }
+  };
+
+  const applySafetyRewritePreview = () => {
+    if (!safetyRewritePreview) return;
+    setSamples(safetyRewritePreview.result);
+    setSafetyRewritePreview(null);
+    pushToast(t("oafBots.safetyRewrite.applied"));
   };
 
   const handlePreviewTest = () => {
@@ -1092,6 +1107,7 @@ export default function OAFBotsPage() {
   const handleSampleSceneChange = (scene: SampleScene) => {
     setSampleScene(scene);
     setSamples(null);
+    setSafetyRewritePreview(null);
   };
 
   if (loading) {
@@ -1566,12 +1582,15 @@ export default function OAFBotsPage() {
                   feedbackSaving={feedbackSaving}
                   feedbackSuggestionLoading={feedbackSuggestionLoading}
                   feedbackSuggestionPreview={feedbackSuggestionPreview}
+                  safetyRewritePreview={safetyRewritePreview}
                   feedbackIssueOptions={feedbackIssueOptions}
                   onFeedbackDraftChange={setFeedbackDraft}
                   onFeedbackSubmit={submitGenerationFeedback}
                   onFeedbackProfileSuggestion={generateFeedbackProfileSuggestion}
                   onApplyFeedbackSuggestion={applyFeedbackProfileSuggestion}
                   onDismissFeedbackSuggestion={() => setFeedbackSuggestionPreview(null)}
+                  onApplySafetyRewrite={applySafetyRewritePreview}
+                  onDismissSafetyRewrite={() => setSafetyRewritePreview(null)}
                 />
               </WizardPanel>
             ) : null}
@@ -3347,12 +3366,15 @@ function SamplePanel({
   feedbackSaving,
   feedbackSuggestionLoading,
   feedbackSuggestionPreview,
+  safetyRewritePreview,
   feedbackIssueOptions,
   onFeedbackDraftChange,
   onFeedbackSubmit,
   onFeedbackProfileSuggestion,
   onApplyFeedbackSuggestion,
   onDismissFeedbackSuggestion,
+  onApplySafetyRewrite,
+  onDismissSafetyRewrite,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
@@ -3380,12 +3402,15 @@ function SamplePanel({
   feedbackSaving: boolean;
   feedbackSuggestionLoading: boolean;
   feedbackSuggestionPreview: OAFBotFeedbackProfileSuggestionResult | null;
+  safetyRewritePreview: SafetyRewritePreview | null;
   feedbackIssueOptions: ChipOption[];
   onFeedbackDraftChange: (draft: FeedbackDraft) => void;
   onFeedbackSubmit: () => void;
   onFeedbackProfileSuggestion: () => void;
   onApplyFeedbackSuggestion: () => void;
   onDismissFeedbackSuggestion: () => void;
+  onApplySafetyRewrite: () => void;
+  onDismissSafetyRewrite: () => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -3478,6 +3503,13 @@ function SamplePanel({
             />
           </div>
           <SampleSafetyExplanation t={t} evaluation={samples.safety_evaluation} rewriting={rewritingSafety} onRewrite={onRewriteSafety} />
+          <SafetyRewritePreviewPanel
+            t={t}
+            preview={safetyRewritePreview}
+            sceneTitle={selectedSceneItem.title}
+            onApply={onApplySafetyRewrite}
+            onDismiss={onDismissSafetyRewrite}
+          />
           <GenerationFeedbackPanel
             t={t}
             draft={feedbackDraft}
@@ -3651,6 +3683,80 @@ function SampleSafetyExplanation({
           </Button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SafetyRewritePreviewPanel({
+  t,
+  preview,
+  sceneTitle,
+  onApply,
+  onDismiss,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  preview: SafetyRewritePreview | null;
+  sceneTitle: string;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  if (!preview) return null;
+  const after = normalizeSampleContent(preview.result, preview.result.scene);
+  const evaluation = preview.result.safety_evaluation;
+  const actionLabel = evaluation ? t(`oafBots.safetyExplanation.action.${evaluation.action}`) : "";
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.safetyRewrite.previewTitle")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.safetyRewrite.previewDescription")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <span className="rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">{sceneTitle}</span>
+          {evaluation ? (
+            <span className="rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
+              {actionLabel === `oafBots.safetyExplanation.action.${evaluation.action}` ? evaluation.action : actionLabel}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
+        <RewriteValueBox label={t("oafBots.diff.before")} value={preview.before} tone="before" />
+        <div className="hidden items-center justify-center text-[#71767b] lg:flex">
+          <ArrowRight className="size-4" />
+        </div>
+        <RewriteValueBox label={t("oafBots.diff.after")} value={after || t("oafBots.samples.empty")} tone="after" />
+      </div>
+
+      {evaluation?.matched_hits?.length ? (
+        <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+          {t("oafBots.safetyRewrite.remainingHits", { count: evaluation.matched_hits.length })}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100">
+          {t("oafBots.safetyRewrite.noRemainingHits")}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+          {t("oafBots.safetyRewrite.dismiss")}
+        </Button>
+        <Button type="button" size="sm" onClick={onApply}>
+          <CheckCircle2 className="size-4" />
+          {t("oafBots.safetyRewrite.apply")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RewriteValueBox({ label, value, tone }: { label: string; value: string; tone: "before" | "after" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-3 ${tone === "after" ? "border-emerald-300/20 bg-emerald-400/8" : "border-rose-300/15 bg-rose-400/6"}`}>
+      <p className="text-[11px] font-semibold uppercase text-[#71767b]">{label}</p>
+      <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea] [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

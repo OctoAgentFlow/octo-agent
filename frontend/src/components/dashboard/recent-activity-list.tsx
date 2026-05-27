@@ -1,6 +1,7 @@
 "use client";
 
-import { Bot, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
+import Link from "next/link";
+import { Bot, ChevronRight, ClipboardList, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
@@ -73,7 +74,27 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
           ) : null}
         </div>
       ) : records.length === 0 ? (
-        <p className="text-sm text-[#71767b]">{t("dashboard.activity.empty")}</p>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <div className="flex gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+              <ClipboardList className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-[#e7e9ea]">{t("dashboard.activity.emptyTitle")}</p>
+              <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("dashboard.activity.empty")}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/automations" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+                  {t("dashboard.activity.emptyAutomationCta")}
+                  <ChevronRight className="size-4" />
+                </Link>
+                <Link href="/execution-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+                  {t("dashboard.activity.emptyQueueCta")}
+                  <ChevronRight className="size-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
           {records.map((activity) => {

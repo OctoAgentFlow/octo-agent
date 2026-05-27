@@ -200,6 +200,9 @@ type AutoPostGenerationRunItem struct {
 type AutoPostGenerationRunQuery struct {
 	Status     string `form:"status"`
 	XAccountID uint   `form:"x_account_id"`
+	Range      string `form:"range"`
+	DateFrom   string `form:"date_from"`
+	DateTo     string `form:"date_to"`
 	Page       int    `form:"page"`
 	PageSize   int    `form:"page_size"`
 }

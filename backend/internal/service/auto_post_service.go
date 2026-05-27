@@ -169,12 +169,15 @@ func (s *AutoPostService) ListRuns(userID uint, query dto.AutoPostGenerationRunQ
 	}
 
 	status := normalizeAutoPostRunStatusForQuery(query.Status)
+	createdFrom, createdTo := autoPostRunTimeRange(query)
 	rows, total, err := s.runRepo.List(repository.AutoPostGenerationRunListQuery{
-		UserID:     userID,
-		Status:     status,
-		XAccountID: query.XAccountID,
-		Page:       page,
-		PageSize:   pageSize,
+		UserID:      userID,
+		Status:      status,
+		XAccountID:  query.XAccountID,
+		CreatedFrom: createdFrom,
+		CreatedTo:   createdTo,
+		Page:        page,
+		PageSize:    pageSize,
 	})
 	if err != nil {
 		return nil, err
@@ -989,6 +992,37 @@ func normalizeAutoPostRunStatusForQuery(value string) string {
 	default:
 		return ""
 	}
+}
+
+func autoPostRunTimeRange(query dto.AutoPostGenerationRunQuery) (time.Time, time.Time) {
+	if from := parseAutoPostRunQueryTime(query.DateFrom); !from.IsZero() {
+		return from, parseAutoPostRunQueryTime(query.DateTo)
+	}
+	now := time.Now().UTC()
+	switch strings.ToLower(strings.TrimSpace(query.Range)) {
+	case "24h":
+		return now.Add(-24 * time.Hour), time.Time{}
+	case "7d":
+		return now.AddDate(0, 0, -7), time.Time{}
+	case "30d":
+		return now.AddDate(0, 0, -30), time.Time{}
+	default:
+		return time.Time{}, parseAutoPostRunQueryTime(query.DateTo)
+	}
+}
+
+func parseAutoPostRunQueryTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.UTC()
+	}
+	if t, err := time.Parse("2006-01-02", value); err == nil {
+		return t.UTC()
+	}
+	return time.Time{}
 }
 
 func windowContainsMinute(window autoPostTimeWindow, minute int) bool {

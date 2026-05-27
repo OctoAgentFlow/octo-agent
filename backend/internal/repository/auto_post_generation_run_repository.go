@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"octo-agent/backend/internal/model"
 
 	"gorm.io/gorm"
@@ -11,11 +13,13 @@ type AutoPostGenerationRunRepository struct {
 }
 
 type AutoPostGenerationRunListQuery struct {
-	UserID     uint
-	Status     string
-	XAccountID uint
-	Page       int
-	PageSize   int
+	UserID      uint
+	Status      string
+	XAccountID  uint
+	CreatedFrom time.Time
+	CreatedTo   time.Time
+	Page        int
+	PageSize    int
 }
 
 func NewAutoPostGenerationRunRepository(db *gorm.DB) *AutoPostGenerationRunRepository {
@@ -54,6 +58,12 @@ func (r *AutoPostGenerationRunRepository) List(query AutoPostGenerationRunListQu
 	}
 	if query.XAccountID > 0 {
 		q = q.Where("x_account_id = ?", query.XAccountID)
+	}
+	if !query.CreatedFrom.IsZero() {
+		q = q.Where("created_at >= ?", query.CreatedFrom)
+	}
+	if !query.CreatedTo.IsZero() {
+		q = q.Where("created_at <= ?", query.CreatedTo)
 	}
 
 	var total int64

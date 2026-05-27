@@ -96,6 +96,9 @@ export type AutoPostGenerationRunsData = {
 export type AutoPostGenerationRunQuery = {
   status?: AutoPostGenerationRunApi["status"] | "all";
   xAccountID?: number;
+  range?: "all" | "24h" | "7d" | "30d";
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 };
@@ -139,6 +142,9 @@ export const autoPostService = {
       params: {
         status: query?.status && query.status !== "all" ? query.status : undefined,
         x_account_id: query?.xAccountID || undefined,
+        range: query?.range && query.range !== "all" ? query.range : undefined,
+        date_from: query?.dateFrom || undefined,
+        date_to: query?.dateTo || undefined,
         page: query?.page || 1,
         page_size: query?.pageSize || 20,
       },

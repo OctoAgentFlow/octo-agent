@@ -52,6 +52,7 @@ type LoadState = "loading" | "ready" | "error";
 type WorkbenchPanel = "generate" | "planner" | "content" | "history";
 type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
 type RunAccountScope = "selected" | "all";
+type RunRangeFilter = "all" | "24h" | "7d" | "30d";
 
 type PlannerForm = {
   enabled: boolean;
@@ -75,6 +76,7 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
 ];
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 const runAccountScopes: RunAccountScope[] = ["selected", "all"];
+const runRangeFilters: RunRangeFilter[] = ["all", "24h", "7d", "30d"];
 
 type LibraryForm = {
   title: string;
@@ -147,6 +149,10 @@ function readRunAccountScope(value: string | null): RunAccountScope {
   return value === "all" ? "all" : "selected";
 }
 
+function readRunRange(value: string | null): RunRangeFilter {
+  return value === "24h" || value === "7d" || value === "30d" ? value : "all";
+}
+
 function readRunPage(value: string | null) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
@@ -182,6 +188,7 @@ export default function AutoPostPage() {
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
   const [runAccountScope, setRunAccountScope] = useState<RunAccountScope>(() => readRunAccountScope(searchParams.get("account_scope")));
+  const [runRangeFilter, setRunRangeFilter] = useState<RunRangeFilter>(() => readRunRange(searchParams.get("run_range")));
   const [runPage, setRunPage] = useState(() => readRunPage(searchParams.get("run_page")));
   const [runsLoading, setRunsLoading] = useState(false);
   const [runPagination, setRunPagination] = useState({ page: 1, pageSize: 12, total: 0 });
@@ -271,6 +278,7 @@ export default function AutoPostPage() {
     setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
     setRunStatusFilter(readRunStatus(searchParams.get("run_status")));
     setRunAccountScope(readRunAccountScope(searchParams.get("account_scope")));
+    setRunRangeFilter(readRunRange(searchParams.get("run_range")));
     setRunPage(readRunPage(searchParams.get("run_page")));
   }, [searchParams]);
 
@@ -279,13 +287,14 @@ export default function AutoPostPage() {
     if (activePanel !== "generate") next.set("panel", activePanel);
     if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
     if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
+    if (runRangeFilter !== "all") next.set("run_range", runRangeFilter);
     if (runPage > 1) next.set("run_page", String(runPage));
     const nextQuery = next.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [activePanel, pathname, router, runAccountScope, runPage, runStatusFilter, searchParams]);
+  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams]);
 
   const fetchRuns = useCallback(async () => {
     if (runAccountScope === "selected" && !selectedAccountID) {
@@ -298,6 +307,7 @@ export default function AutoPostPage() {
       const data = await autoPostService.runs({
         status: runStatusFilter,
         xAccountID: runAccountScope === "selected" ? selectedAccountID : undefined,
+        range: runRangeFilter,
         page: runPage,
         pageSize: 12,
       });
@@ -314,7 +324,7 @@ export default function AutoPostPage() {
     } finally {
       setRunsLoading(false);
     }
-  }, [pushToast, runAccountScope, runPage, runStatusFilter, selectedAccountID, t]);
+  }, [pushToast, runAccountScope, runPage, runRangeFilter, runStatusFilter, selectedAccountID, t]);
 
   useEffect(() => {
     void fetchRuns();
@@ -1274,6 +1284,21 @@ export default function AutoPostPage() {
                         {runStatusFilters.map((status) => (
                           <option key={status} value={status}>
                             {t(`autoPost.runs.filter.${status}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={runRangeFilter}
+                        onChange={(event) => {
+                          setRunRangeFilter(event.target.value as RunRangeFilter);
+                          setRunPage(1);
+                        }}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                        aria-label={t("autoPost.runs.rangeLabel")}
+                      >
+                        {runRangeFilters.map((range) => (
+                          <option key={range} value={range}>
+                            {t(`autoPost.runs.range.${range}`)}
                           </option>
                         ))}
                       </select>

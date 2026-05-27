@@ -115,7 +115,7 @@ Base path: `/api/v1`
 ### GET /api/v1/auto-post/runs
 
 - **用途**：查看最近 Auto Post scheduler / run-now 运行记录。
-- **查询参数**：`status=completed|skipped|failed`、`x_account_id`、`page`、`page_size`。
+- **查询参数**：`status=completed|skipped|failed`、`x_account_id`、`range=24h|7d|30d`、`date_from`、`date_to`、`page`、`page_size`。
 - **返回**：`items` 和 `pagination`，用于后台按状态/账号分页排查。
 - **状态**：`completed` / `skipped` / `failed`。
 - **skip_reason**：如 `no_active_content_source`、`ai_generation_quota_exceeded`、`daily_auto_post_limit_exceeded`、`duplicate_content`。

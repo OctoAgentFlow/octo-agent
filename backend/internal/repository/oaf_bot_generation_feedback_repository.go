@@ -31,6 +31,27 @@ func (r *OAFBotGenerationFeedbackRepository) ListRecentByUserBot(userID, botID u
 	return rows, err
 }
 
+func (r *OAFBotGenerationFeedbackRepository) ListRecentByUserBots(userID uint, botIDs []uint, limitPerBot int) ([]model.OAFBotGenerationFeedback, error) {
+	if len(botIDs) == 0 {
+		return []model.OAFBotGenerationFeedback{}, nil
+	}
+	if limitPerBot <= 0 {
+		limitPerBot = 10
+	}
+	if limitPerBot > 50 {
+		limitPerBot = 50
+	}
+	var rows []model.OAFBotGenerationFeedback
+	ranked := r.DB.Model(&model.OAFBotGenerationFeedback{}).
+		Select("*, ROW_NUMBER() OVER (PARTITION BY bot_id ORDER BY id DESC) AS rn").
+		Where("user_id = ? AND bot_id IN ?", userID, botIDs)
+	err := r.DB.Table("(?) AS ranked_feedback", ranked).
+		Where("rn <= ?", limitPerBot).
+		Order("bot_id ASC, id DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserBot(userID, botID uint, limit int) ([]model.OAFBotGenerationFeedback, error) {
 	if limit <= 0 {
 		limit = 8

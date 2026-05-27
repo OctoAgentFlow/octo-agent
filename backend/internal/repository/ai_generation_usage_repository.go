@@ -56,6 +56,17 @@ func (r *AIGenerationUsageRepository) ListByUserBot(userID, botID uint, limit in
 	return rows, err
 }
 
+func (r *AIGenerationUsageRepository) ListByUserBotsMonth(userID uint, botIDs []uint, month string) ([]model.AIGenerationUsage, error) {
+	if len(botIDs) == 0 {
+		return []model.AIGenerationUsage{}, nil
+	}
+	var rows []model.AIGenerationUsage
+	err := r.DB.Where("user_id = ? AND bot_id IN ? AND month = ?", userID, botIDs, month).
+		Order("bot_id ASC, scene ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string, at time.Time, delta int64) error {
 	return r.IncrementWithCost(userID, botID, scene, at, delta, 0, 0, "")
 }

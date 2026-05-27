@@ -116,3 +116,9 @@ export type OAFBotGenerationFeedback = OAFBotGenerationFeedbackPayload & {
   bot_id: number;
   created_at: string;
 };
+
+export type OAFBotMatrixSignal = {
+  bot_id: number;
+  usages: OAFBotGenerationUsage[];
+  feedback: OAFBotGenerationFeedback[];
+};

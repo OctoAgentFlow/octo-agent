@@ -7,6 +7,7 @@ import type {
   OAFBotGenerationFeedbackPayload,
   OAFBotGenerationUsage,
   OAFBotListData,
+  OAFBotMatrixSignal,
   OAFBotPayload,
   OAFBotProfileAssistMode,
   OAFBotSampleScene,
@@ -71,6 +72,10 @@ type OAFBotGenerationUsagesApi = {
 
 type OAFBotGenerationFeedbackApi = {
   items: OAFBotGenerationFeedback[];
+};
+
+type OAFBotMatrixSignalsApi = {
+  items: OAFBotMatrixSignal[];
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {
@@ -152,6 +157,10 @@ export const oafBotService = {
   },
   async generationFeedback(id: number) {
     const res = await request.get<ApiResponse<OAFBotGenerationFeedbackApi>>(`/oaf-bots/${id}/generation-feedback`);
+    return res.data.data;
+  },
+  async matrixSignals() {
+    const res = await request.get<ApiResponse<OAFBotMatrixSignalsApi>>("/oaf-bots/matrix-signals");
     return res.data.data;
   },
   async createGenerationFeedback(id: number, body: OAFBotGenerationFeedbackPayload) {

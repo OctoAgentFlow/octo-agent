@@ -800,17 +800,24 @@ export default function OAFBotsPage() {
     }
     setMatrixLoading(true);
     try {
-      const pairs = await Promise.all(
-        items.map(async (bot) => {
-          const [usageData, feedbackData] = await Promise.all([
-            oafBotService.generationUsages(bot.id).catch(() => ({ items: [] as OAFBotGenerationUsage[] })),
-            oafBotService.generationFeedback(bot.id).catch(() => ({ items: [] as OAFBotGenerationFeedback[] })),
-          ]);
-          return [bot.id, usageData.items, feedbackData.items] as const;
-        }),
-      );
-      setMatrixUsageByBot(Object.fromEntries(pairs.map(([id, usageItems]) => [id, usageItems])));
-      setMatrixFeedbackByBot(Object.fromEntries(pairs.map(([id, , feedbackItems]) => [id, feedbackItems])));
+      const signals = await oafBotService.matrixSignals();
+      const knownIDs = new Set(items.map((bot) => bot.id));
+      const usageByBot: Record<number, OAFBotGenerationUsage[]> = {};
+      const feedbackByBot: Record<number, OAFBotGenerationFeedback[]> = {};
+      signals.items.forEach((item) => {
+        if (!knownIDs.has(item.bot_id)) return;
+        usageByBot[item.bot_id] = item.usages || [];
+        feedbackByBot[item.bot_id] = item.feedback || [];
+      });
+      items.forEach((bot) => {
+        usageByBot[bot.id] ||= [];
+        feedbackByBot[bot.id] ||= [];
+      });
+      setMatrixUsageByBot(usageByBot);
+      setMatrixFeedbackByBot(feedbackByBot);
+    } catch {
+      setMatrixUsageByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
+      setMatrixFeedbackByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
     } finally {
       setMatrixLoading(false);
     }

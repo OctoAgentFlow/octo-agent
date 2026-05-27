@@ -163,3 +163,13 @@ type OAFBotGenerationFeedbackItem struct {
 type OAFBotGenerationFeedbackResponse struct {
 	Items []OAFBotGenerationFeedbackItem `json:"items"`
 }
+
+type OAFBotMatrixSignalItem struct {
+	BotID    uint                           `json:"bot_id"`
+	Usages   []OAFBotGenerationUsageItem    `json:"usages"`
+	Feedback []OAFBotGenerationFeedbackItem `json:"feedback"`
+}
+
+type OAFBotMatrixSignalsResponse struct {
+	Items []OAFBotMatrixSignalItem `json:"items"`
+}

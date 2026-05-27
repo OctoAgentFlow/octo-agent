@@ -238,15 +238,48 @@ func (s *OAFBotService) GenerationUsages(userID, id uint) (*dto.OAFBotGeneration
 	}
 	items := make([]dto.OAFBotGenerationUsageItem, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, dto.OAFBotGenerationUsageItem{
-			BotID:     row.BotID,
-			Scene:     row.Scene,
-			Month:     row.Month,
-			Count:     row.Count,
-			UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
-		})
+		items = append(items, oafBotGenerationUsageToDTO(row))
 	}
 	return &dto.OAFBotGenerationUsageResponse{Items: items}, nil
+}
+
+func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResponse, error) {
+	bots, err := s.botRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	botIDs := make([]uint, 0, len(bots))
+	for _, bot := range bots {
+		botIDs = append(botIDs, bot.ID)
+	}
+	usageRows, err := s.usageRepo.ListByUserBotsMonth(userID, botIDs, repository.UsageMonth(time.Now().UTC()))
+	if err != nil {
+		return nil, err
+	}
+	feedbackRows, err := s.feedbackRepo.ListRecentByUserBots(userID, botIDs, 10)
+	if err != nil {
+		return nil, err
+	}
+	usageByBot := make(map[uint][]dto.OAFBotGenerationUsageItem, len(botIDs))
+	for _, row := range usageRows {
+		usageByBot[row.BotID] = append(usageByBot[row.BotID], oafBotGenerationUsageToDTO(row))
+	}
+	feedbackByBot := make(map[uint][]dto.OAFBotGenerationFeedbackItem, len(botIDs))
+	for _, row := range feedbackRows {
+		if len(feedbackByBot[row.BotID]) >= 10 {
+			continue
+		}
+		feedbackByBot[row.BotID] = append(feedbackByBot[row.BotID], oafBotGenerationFeedbackToDTO(row))
+	}
+	items := make([]dto.OAFBotMatrixSignalItem, 0, len(botIDs))
+	for _, id := range botIDs {
+		items = append(items, dto.OAFBotMatrixSignalItem{
+			BotID:    id,
+			Usages:   usageByBot[id],
+			Feedback: feedbackByBot[id],
+		})
+	}
+	return &dto.OAFBotMatrixSignalsResponse{Items: items}, nil
 }
 
 func (s *OAFBotService) CreateGenerationFeedback(userID, id uint, req dto.OAFBotGenerationFeedbackRequest) (*dto.OAFBotGenerationFeedbackItem, error) {
@@ -662,6 +695,16 @@ func oafBotGenerationFeedbackToDTO(row model.OAFBotGenerationFeedback) dto.OAFBo
 		GeneratedContent: row.GeneratedContent,
 		Provider:         row.Provider,
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func oafBotGenerationUsageToDTO(row model.AIGenerationUsage) dto.OAFBotGenerationUsageItem {
+	return dto.OAFBotGenerationUsageItem{
+		BotID:     row.BotID,
+		Scene:     row.Scene,
+		Month:     row.Month,
+		Count:     row.Count,
+		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

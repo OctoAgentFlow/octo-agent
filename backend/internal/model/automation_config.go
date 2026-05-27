@@ -17,4 +17,7 @@ type AutomationConfig struct {
 	SafetyBlockedKeywords    string     `gorm:"type:text;comment:屏蔽关键词JSON" json:"safety_blocked_keywords"`
 	LastRunAt                *time.Time `gorm:"comment:最近执行时间" json:"last_run_at,omitempty"`
 	NextRunAt                *time.Time `gorm:"comment:下次执行时间" json:"next_run_at,omitempty"`
+	LastScanStatus           string     `gorm:"size:64;comment:最近扫描状态" json:"last_scan_status,omitempty"`
+	LastScanMessage          string     `gorm:"size:512;comment:最近扫描说明" json:"last_scan_message,omitempty"`
+	LastScanAt               *time.Time `gorm:"comment:最近扫描时间" json:"last_scan_at,omitempty"`
 }

@@ -26,6 +26,9 @@ export type AutomationModuleApi = {
   };
   last_run_at?: string;
   next_run_at?: string;
+  last_scan_status?: string;
+  last_scan_message?: string;
+  last_scan_at?: string;
   executed_today: number;
   reply_usage?: {
     today_count: number;

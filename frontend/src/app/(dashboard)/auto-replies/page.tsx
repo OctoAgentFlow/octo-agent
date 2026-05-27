@@ -16,6 +16,7 @@ import { accountService, type AccountListItem } from "@/services/account.service
 import { billingService } from "@/services/billing.service";
 import {
   automationService,
+  type AutomationModuleApi,
   type AutoReplyDraftApi,
 } from "@/services/automation.service";
 import { oafBotService } from "@/services/oaf-bot.service";
@@ -62,6 +63,7 @@ export default function AutoRepliesPage() {
   const [drafts, setDrafts] = useState<AutoReplyDraftApi[]>([]);
   const [plan, setPlan] = useState("free_trial");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
+  const [replyModule, setReplyModule] = useState<AutomationModuleApi | null>(null);
   const [xAccountID, setXAccountID] = useState<number>(0);
   const [commentURL, setCommentURL] = useState("");
   const [authorHandle, setAuthorHandle] = useState("");
@@ -106,6 +108,7 @@ export default function AutoRepliesPage() {
       setPlan(subscriptionData.plan);
       setQuotaUpgradeVisible(false);
       const replyModule = automationData.modules.find((item) => item.type === "reply");
+      setReplyModule(replyModule ?? null);
       setExecutionMode(replyModule?.config.execution_mode || "review");
       setXAccountID((current) => current || connected[0]?.id || 0);
       setLoadState("ready");
@@ -269,6 +272,7 @@ export default function AutoRepliesPage() {
             executionMode={executionMode}
             queueHref="/execution-queue?type=reply"
           />
+          <ReplyScanStatusCard module={replyModule} />
         </>
       ) : null}
 
@@ -521,6 +525,52 @@ export default function AutoRepliesPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function formatScanTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function replyScanStatusTone(status?: string) {
+  if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (status === "failed" || status === "reauth_required") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]";
+  if (status === "token_refreshed") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return "border-[#2f3336] bg-black text-[#e7e9ea]";
+}
+
+function ReplyScanStatusCard({ module }: { module: AutomationModuleApi | null }) {
+  const { t } = useT();
+  const status = module?.last_scan_status || "not_scanned";
+  const message = t(`autoReply.scan.status.${status}`);
+  const tone = replyScanStatusTone(status);
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoReply.scan.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoReply.scan.description")}</p>
+        </div>
+        <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}>
+          <ListChecks className="size-3.5" />
+          {t(`autoReply.scan.status.${status}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <DraftRouteStep label={t("autoReply.scan.lastResult")} value={message} />
+        <DraftRouteStep label={t("autoReply.scan.lastRun")} value={formatScanTime(module?.last_run_at || module?.last_scan_at)} />
+        <DraftRouteStep label={t("autoReply.scan.nextRun")} value={module?.config.enabled ? formatScanTime(module?.next_run_at) : t("automation.time.paused")} />
+      </div>
+    </Card>
   );
 }
 

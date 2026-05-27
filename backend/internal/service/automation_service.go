@@ -443,6 +443,11 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 	if m.NextRunAt != nil {
 		data.NextRunAt = m.NextRunAt.UTC().Format(time.RFC3339)
 	}
+	data.LastScanStatus = strings.TrimSpace(m.LastScanStatus)
+	data.LastScanMessage = strings.TrimSpace(m.LastScanMessage)
+	if m.LastScanAt != nil {
+		data.LastScanAt = m.LastScanAt.UTC().Format(time.RFC3339)
+	}
 	return data
 }
 

@@ -31,12 +31,15 @@ type AutomationReplyUsage struct {
 }
 
 type AutomationModuleData struct {
-	Type      string                  `json:"type"`
-	Name      string                  `json:"name"`
-	State     string                  `json:"state"`
-	Config    AutomationConfigPayload `json:"config"`
-	LastRunAt string                  `json:"last_run_at,omitempty"`
-	NextRunAt string                  `json:"next_run_at,omitempty"`
+	Type            string                  `json:"type"`
+	Name            string                  `json:"name"`
+	State           string                  `json:"state"`
+	Config          AutomationConfigPayload `json:"config"`
+	LastRunAt       string                  `json:"last_run_at,omitempty"`
+	NextRunAt       string                  `json:"next_run_at,omitempty"`
+	LastScanStatus  string                  `json:"last_scan_status,omitempty"`
+	LastScanMessage string                  `json:"last_scan_message,omitempty"`
+	LastScanAt      string                  `json:"last_scan_at,omitempty"`
 	// ExecutedToday is today's successful execution count for this automation type.
 	ExecutedToday int `json:"executed_today"`
 	// ReplyUsage is set only for type=reply (today count, remaining daily quota, last reply activity time).

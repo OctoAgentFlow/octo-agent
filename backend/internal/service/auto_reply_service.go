@@ -28,9 +28,25 @@ var autoReplyTemplates = []string{
 }
 
 const (
-	autoReplyPreviewRunes = 160
-	replyReservationStale = 30 * time.Minute
+	autoReplyPreviewRunes            = 160
+	replyReservationStale            = 30 * time.Minute
+	autoReplyDefaultIntervalMinutes  = 15
+	autoReplyScanNoAccountReady      = "no_account_ready"
+	autoReplyScanNoRecentPosts       = "no_recent_posts"
+	autoReplyScanNoReplyCandidates   = "no_reply_candidates"
+	autoReplyScanAlreadyHandled      = "already_handled"
+	autoReplyScanTokenRefreshed      = "token_refreshed"
+	autoReplyScanPublished           = "published"
+	autoReplyScanFailed              = "failed"
+	autoReplyScanSkippedSubscription = "skipped_subscription"
+	autoReplyScanSkippedLimit        = "skipped_limit"
+	autoReplyScanReauthRequired      = "reauth_required"
 )
+
+type autoReplyScanResult struct {
+	status  string
+	message string
+}
 
 type AutoReplyService struct {
 	accountRepo    *repository.TwitterAccountRepository
@@ -276,44 +292,56 @@ func (s *AutoReplyService) RunTick(ctx context.Context) {
 			zap.L().Info("auto reply: removed orphan reservations", zap.Int64("rows", n))
 		}
 	}
-	ids, err := s.automationRepo.ListUserIDsWithReplyAutomationEnabled(100)
+	now := time.Now().UTC()
+	configs, err := s.automationRepo.ListDueReplyAutomationConfigs(100, now)
 	if err != nil {
-		zap.L().Warn("auto reply: list users failed", zap.Error(err))
+		zap.L().Warn("auto reply: list due configs failed", zap.Error(err))
 		return
 	}
-	for _, uid := range ids {
+	for _, cfg := range configs {
 		runCtx := requestid.NewContext(ctx, "scheduler")
-		if err := s.runOnceForUser(runCtx, uid); err != nil {
-			zap.L().Warn("auto reply: user tick failed", zap.Uint("user_id", uid), zap.Error(err))
+		result, err := s.runOnceForUser(runCtx, cfg.UserID)
+		if err != nil {
+			zap.L().Warn("auto reply: user tick failed", zap.Uint("user_id", cfg.UserID), zap.Error(err))
+			result = autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}
+		}
+		if err := s.finishRun(&cfg, time.Now().UTC(), result); err != nil {
+			zap.L().Warn("auto reply: finish run failed", zap.Uint("user_id", cfg.UserID), zap.Error(err))
 		}
 	}
 }
 
-func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) error {
+func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) (autoReplyScanResult, error) {
 	rid := requestid.FromContext(ctx)
 	if rid == "" {
 		rid = "scheduler"
 	}
 	base := []zap.Field{zap.String("request_id", rid), zap.Uint("user_id", userID)}
 	now := time.Now().UTC()
+	result := autoReplyScanResult{status: autoReplyScanNoReplyCandidates, message: "Scanned. No new reply candidates found."}
+	tokenRefreshed := false
+	accountsChecked := 0
+	rootsChecked := 0
+	repliesChecked := 0
+	alreadyHandled := 0
 
 	u, err := s.userRepo.GetByID(userID)
 	if err != nil {
-		return err
+		return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 	}
 	if err := subscription.AssertUserMayProduceContent(u, now); err != nil {
 		zap.L().Debug("auto reply: skip (subscription)", append(base, zap.Error(err))...)
-		return nil
+		return autoReplyScanResult{status: autoReplyScanSkippedSubscription, message: err.Error()}, nil
 	}
 
 	if hit, why := s.replyLimitsExceeded(userID, now); hit {
 		zap.L().Debug("auto reply: skip (limits)", append(base, zap.String("reason", why))...)
-		return nil
+		return autoReplyScanResult{status: autoReplyScanSkippedLimit, message: why}, nil
 	}
 
 	accts, err := s.accountRepo.ListByUserID(userID)
 	if err != nil {
-		return err
+		return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 	}
 	for _, acc := range accts {
 		twid := strings.TrimSpace(acc.TwitterUserID)
@@ -321,6 +349,7 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 		if twid == "" || tok == "" {
 			continue
 		}
+		accountsChecked++
 		handle := formatXAccountHandle(acc.Username)
 		rootIDs, err := twitter.ListUserRootTweetIDs(ctx, nil, tok, twid, 8)
 		if isXUnauthorizedError(err) {
@@ -330,7 +359,10 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 				zap.String("operation", "list_user_tweets"))...); ok {
 				acc = refreshed
 				tok = strings.TrimSpace(acc.AccessToken)
+				tokenRefreshed = true
 				rootIDs, err = twitter.ListUserRootTweetIDs(ctx, nil, tok, twid, 8)
+			} else {
+				result = autoReplyScanResult{status: autoReplyScanReauthRequired, message: "X authorization expired. Reauthorization is required."}
 			}
 		}
 		if err != nil {
@@ -338,8 +370,12 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 				zap.Uint("x_account_id", acc.ID),
 				zap.String("account_handle", handle),
 				zap.Error(err))...)
+			if result.status != autoReplyScanReauthRequired {
+				result = autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}
+			}
 			continue
 		}
+		rootsChecked += len(rootIDs)
 		for _, rootID := range rootIDs {
 			replies, err := twitter.ListDirectRepliesFromOthers(ctx, nil, tok, rootID, twid)
 			if isXUnauthorizedError(err) {
@@ -350,7 +386,10 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 					zap.String("operation", "list_direct_replies"))...); ok {
 					acc = refreshed
 					tok = strings.TrimSpace(acc.AccessToken)
+					tokenRefreshed = true
 					replies, err = twitter.ListDirectRepliesFromOthers(ctx, nil, tok, rootID, twid)
+				} else {
+					result = autoReplyScanResult{status: autoReplyScanReauthRequired, message: "X authorization expired. Reauthorization is required."}
 				}
 			}
 			if err != nil {
@@ -358,25 +397,31 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 					zap.String("root_tweet_id", rootID),
 					zap.String("account_handle", handle),
 					zap.Error(err))...)
+				if result.status != autoReplyScanReauthRequired {
+					result = autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}
+				}
 				continue
 			}
+			repliesChecked += len(replies)
 			for _, c := range replies {
 				if c.TweetID == "" {
 					continue
 				}
 				ok, err := s.activityRepo.HasSuccessfulReplyToRefTweet(userID, c.TweetID)
 				if err != nil {
-					return err
+					return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 				}
 				if ok {
+					alreadyHandled++
 					continue
 				}
 				if s.replyResRepo != nil {
 					acquired, err := s.replyResRepo.TryAcquire(userID, c.TweetID)
 					if err != nil {
-						return err
+						return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 					}
 					if !acquired {
+						alreadyHandled++
 						continue
 					}
 				}
@@ -394,7 +439,10 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 						zap.String("operation", "create_reply_tweet"))...); ok {
 						acc = refreshed
 						tok = strings.TrimSpace(acc.AccessToken)
+						tokenRefreshed = true
 						tweetID, apiErr = twitter.CreateReplyTweet(ctx, tok, template, c.TweetID)
+					} else {
+						result = autoReplyScanResult{status: autoReplyScanReauthRequired, message: "X authorization expired. Reauthorization is required."}
 					}
 				}
 				if apiErr != nil {
@@ -421,13 +469,16 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 						ReplyTextPreview:    outPrev,
 					}
 					if err := s.activityRepo.DB.Create(log).Error; err != nil {
-						return err
+						return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 					}
 					zap.L().Warn("auto reply: x api rejected", append(base,
 						zap.String("account_handle", handle),
 						zap.String("comment_tweet_id", c.TweetID),
 						zap.String("detail", msg))...)
-					return nil
+					if result.status == autoReplyScanReauthRequired {
+						return result, nil
+					}
+					return autoReplyScanResult{status: autoReplyScanFailed, message: msg}, nil
 				}
 				ref := c.TweetID
 				log := &model.ActivityLog{
@@ -448,18 +499,57 @@ func (s *AutoReplyService) runOnceForUser(ctx context.Context, userID uint) erro
 					if s.replyResRepo != nil {
 						_ = s.replyResRepo.Release(userID, c.TweetID)
 					}
-					return err
+					return autoReplyScanResult{status: autoReplyScanFailed, message: err.Error()}, err
 				}
 				zap.L().Info("auto reply: published", append(base,
 					zap.String("account_handle", handle),
 					zap.String("comment_tweet_id", c.TweetID),
 					zap.String("reply_tweet_id", tweetID),
 				)...)
-				return nil
+				return autoReplyScanResult{status: autoReplyScanPublished, message: fmt.Sprintf("Published an auto reply to %s.", toUser)}, nil
 			}
 		}
 	}
-	return nil
+	if accountsChecked == 0 {
+		return autoReplyScanResult{status: autoReplyScanNoAccountReady, message: "No connected X account with usable token was found."}, nil
+	}
+	if tokenRefreshed {
+		return autoReplyScanResult{status: autoReplyScanTokenRefreshed, message: "X authorization was refreshed. Scanned successfully."}, nil
+	}
+	if rootsChecked == 0 && result.status == autoReplyScanNoReplyCandidates {
+		return autoReplyScanResult{status: autoReplyScanNoRecentPosts, message: "Scanned. No recent original posts found."}, nil
+	}
+	if repliesChecked > 0 && alreadyHandled >= repliesChecked {
+		return autoReplyScanResult{status: autoReplyScanAlreadyHandled, message: "Scanned. Existing replies have already been handled."}, nil
+	}
+	return result, nil
+}
+
+func (s *AutoReplyService) finishRun(cfg *model.AutomationConfig, now time.Time, result autoReplyScanResult) error {
+	if cfg == nil {
+		return nil
+	}
+	status := strings.TrimSpace(result.status)
+	if status == "" {
+		status = autoReplyScanNoReplyCandidates
+	}
+	cfg.LastRunAt = &now
+	cfg.LastScanAt = &now
+	cfg.LastScanStatus = status
+	cfg.LastScanMessage = truncateRunes(strings.TrimSpace(result.message), 512)
+	next := now.Add(time.Duration(autoReplyIntervalMinutes(cfg)) * time.Minute)
+	cfg.NextRunAt = &next
+	if cfg.Enabled && cfg.State != "Paused" {
+		cfg.State = "Queued"
+	}
+	return s.automationRepo.Save(cfg)
+}
+
+func autoReplyIntervalMinutes(cfg *model.AutomationConfig) int {
+	if cfg == nil || cfg.FrequencyIntervalMinutes <= 0 {
+		return autoReplyDefaultIntervalMinutes
+	}
+	return cfg.FrequencyIntervalMinutes
 }
 
 func (s *AutoReplyService) refreshXAccountAfterUnauthorized(ctx context.Context, acc model.TwitterAccount, fields ...zap.Field) (model.TwitterAccount, bool) {

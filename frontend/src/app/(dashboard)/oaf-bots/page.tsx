@@ -25,6 +25,8 @@ import {
   Save,
   Send,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   WalletCards,
   Workflow,
 } from "lucide-react";
@@ -42,7 +44,17 @@ import { contentLibraryService, type ContentLibraryItemApi } from "@/services/co
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotProfileAssistMode, OAFBotSampleContext, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type {
+  OAFBot,
+  OAFBotGenerationFeedback,
+  OAFBotGenerationFeedbackRating,
+  OAFBotGenerationUsage,
+  OAFBotPayload,
+  OAFBotProfileAssistMode,
+  OAFBotSampleContext,
+  OAFBotSampleScene,
+  OAFBotTestGenerateResult,
+} from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
@@ -65,6 +77,11 @@ type AutoPostReadinessStep = {
   key: "account" | "content" | "planner" | "autopilot";
   ready: boolean;
   href: string;
+};
+type FeedbackDraft = {
+  rating: OAFBotGenerationFeedbackRating | "";
+  issueTags: string[];
+  comment: string;
 };
 
 type SelectOption = {
@@ -315,7 +332,11 @@ export default function OAFBotsPage() {
   const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
+  const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [completingProfile, setCompletingProfile] = useState(false);
@@ -476,6 +497,10 @@ export default function OAFBotsPage() {
     () => optionKeys("voicePresets", ["concise", "natural", "web3Native", "founder", "technical", "growth", "community"], t),
     [t],
   );
+  const feedbackIssueOptions = useMemo(
+    () => optionKeys("feedbackIssues", ["offPersona", "tooGeneric", "tooSalesy", "unsafeClaim", "wrongLanguage", "tooLong", "weakCTA", "missingContext"], t),
+    [t],
+  );
 
   const ageOptions = useMemo<SelectOption[]>(
     () => [
@@ -615,6 +640,19 @@ export default function OAFBotsPage() {
     }
   }, [pushToast, t]);
 
+  const loadGenerationFeedback = useCallback(async (botID: number) => {
+    setFeedbackLoading(true);
+    try {
+      const data = await oafBotService.generationFeedback(botID);
+      setGenerationFeedback(data.items);
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.feedback.loadFailed")));
+      setGenerationFeedback([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [pushToast, t]);
+
   useEffect(() => {
     if (!selectedID) {
       setGenerationUsages([]);
@@ -622,6 +660,14 @@ export default function OAFBotsPage() {
     }
     void loadGenerationUsages(selectedID);
   }, [loadGenerationUsages, selectedID]);
+
+  useEffect(() => {
+    if (!selectedID) {
+      setGenerationFeedback([]);
+      return;
+    }
+    void loadGenerationFeedback(selectedID);
+  }, [loadGenerationFeedback, selectedID]);
 
   const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -633,6 +679,7 @@ export default function OAFBotsPage() {
     setActiveStep("identity");
     setSamples(null);
     setSampleContexts({});
+    setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
   };
 
   const startCreate = () => {
@@ -641,7 +688,9 @@ export default function OAFBotsPage() {
     setActiveStep("identity");
     setSamples(null);
     setGenerationUsages([]);
+    setGenerationFeedback([]);
     setSampleContexts({});
+    setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -725,6 +774,7 @@ export default function OAFBotsPage() {
     try {
       const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene]);
       setSamples(result);
+      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       await loadGenerationUsages(selectedID);
       void loadRelationshipContext();
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
@@ -756,6 +806,38 @@ export default function OAFBotsPage() {
       return;
     }
     void testGenerate();
+  };
+
+  const submitGenerationFeedback = async () => {
+    if (!selectedID || !samples) return;
+    if (!feedbackDraft.rating) {
+      pushToast(t("oafBots.feedback.needRating"));
+      return;
+    }
+    const generatedContent = normalizeSampleContent(samples, sampleScene);
+    if (!generatedContent.trim()) {
+      pushToast(t("oafBots.feedback.needSample"));
+      return;
+    }
+    setFeedbackSaving(true);
+    try {
+      const saved = await oafBotService.createGenerationFeedback(selectedID, {
+        scene: sampleScene,
+        rating: feedbackDraft.rating,
+        issue_tags: feedbackDraft.issueTags,
+        comment: feedbackDraft.comment,
+        sample_context: sampleContexts[sampleScene] || "",
+        generated_content: generatedContent,
+        provider: samples.provider || "",
+      });
+      setGenerationFeedback((items) => [saved, ...items].slice(0, 10));
+      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+      pushToast(t("oafBots.feedback.saved"));
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.feedback.saveFailed")));
+    } finally {
+      setFeedbackSaving(false);
+    }
   };
 
   const handleSampleSceneChange = (scene: SampleScene) => {
@@ -1213,6 +1295,13 @@ export default function OAFBotsPage() {
                   safetyOptions={safetyOptions}
                   languageOptions={languageOptions}
                   languageStrategyOptions={languageStrategyOptions}
+                  feedbackItems={generationFeedback}
+                  feedbackLoading={feedbackLoading}
+                  feedbackDraft={feedbackDraft}
+                  feedbackSaving={feedbackSaving}
+                  feedbackIssueOptions={feedbackIssueOptions}
+                  onFeedbackDraftChange={setFeedbackDraft}
+                  onFeedbackSubmit={submitGenerationFeedback}
                 />
               </WizardPanel>
             ) : null}
@@ -2489,6 +2578,13 @@ function getSelectLabel(value: string, options: SelectOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
+function formatFeedbackDate(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
 function BotPreview({
   t,
   form,
@@ -2710,6 +2806,13 @@ function SamplePanel({
   safetyOptions,
   languageOptions,
   languageStrategyOptions,
+  feedbackItems,
+  feedbackLoading,
+  feedbackDraft,
+  feedbackSaving,
+  feedbackIssueOptions,
+  onFeedbackDraftChange,
+  onFeedbackSubmit,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
@@ -2729,6 +2832,13 @@ function SamplePanel({
   safetyOptions: SelectOption[];
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
+  feedbackItems: OAFBotGenerationFeedback[];
+  feedbackLoading: boolean;
+  feedbackDraft: FeedbackDraft;
+  feedbackSaving: boolean;
+  feedbackIssueOptions: ChipOption[];
+  onFeedbackDraftChange: (draft: FeedbackDraft) => void;
+  onFeedbackSubmit: () => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -2816,6 +2926,20 @@ function SamplePanel({
               t={t}
             />
           </div>
+          <GenerationFeedbackPanel
+            t={t}
+            draft={feedbackDraft}
+            saving={feedbackSaving}
+            issueOptions={feedbackIssueOptions}
+            onChange={onFeedbackDraftChange}
+            onSubmit={onFeedbackSubmit}
+          />
+          <GenerationFeedbackHistory
+            t={t}
+            items={feedbackItems}
+            loading={feedbackLoading}
+            issueOptions={feedbackIssueOptions}
+          />
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
       ) : (
@@ -2892,6 +3016,154 @@ function SampleCard({
           {t("oafBots.samples.saveDraft")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function GenerationFeedbackPanel({
+  t,
+  draft,
+  saving,
+  issueOptions,
+  onChange,
+  onSubmit,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  draft: FeedbackDraft;
+  saving: boolean;
+  issueOptions: ChipOption[];
+  onChange: (draft: FeedbackDraft) => void;
+  onSubmit: () => void;
+}) {
+  const toggleIssue = (value: string) => {
+    const exists = draft.issueTags.includes(value);
+    onChange({ ...draft, issueTags: exists ? draft.issueTags.filter((item) => item !== value) : [...draft.issueTags, value] });
+  };
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedback.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.feedback.description")}</p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ ...draft, rating: "positive", issueTags: [] })}
+            className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold ${
+              draft.rating === "positive" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+            }`}
+          >
+            <ThumbsUp className="size-4" />
+            {t("oafBots.feedback.positive")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ ...draft, rating: "negative" })}
+            className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold ${
+              draft.rating === "negative" ? "border-amber-300/30 bg-amber-400/15 text-amber-100" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+            }`}
+          >
+            <ThumbsDown className="size-4" />
+            {t("oafBots.feedback.negative")}
+          </button>
+        </div>
+      </div>
+
+      {draft.rating === "negative" ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold text-[#e7e9ea]">{t("oafBots.feedback.issueTitle")}</p>
+          <div className="flex flex-wrap gap-2">
+            {issueOptions.map((option) => {
+              const selected = draft.issueTags.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleIssue(option.value)}
+                  className={`rounded-full border px-3 py-1 text-xs ${
+                    selected ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/12 text-[#8ecdf8]" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4">
+        <textarea
+          className="form-input min-h-24 resize-y leading-relaxed"
+          value={draft.comment}
+          placeholder={draft.rating === "positive" ? t("oafBots.feedback.commentPositivePlaceholder") : t("oafBots.feedback.commentPlaceholder")}
+          onChange={(event) => onChange({ ...draft, comment: event.target.value })}
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs leading-5 text-[#71767b]">{t("oafBots.feedback.loopHint")}</p>
+        <Button type="button" size="sm" onClick={onSubmit} disabled={saving || !draft.rating}>
+          {saving ? <RefreshCw className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+          {saving ? t("oafBots.feedback.saving") : t("oafBots.feedback.submit")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function GenerationFeedbackHistory({
+  t,
+  items,
+  loading,
+  issueOptions,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  items: OAFBotGenerationFeedback[];
+  loading: boolean;
+  issueOptions: ChipOption[];
+}) {
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedback.historyTitle")}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.feedback.historyDescription")}</p>
+        </div>
+        <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+          {t("oafBots.feedback.historyCount", { count: items.length })}
+        </span>
+      </div>
+      {loading ? (
+        <p className="mt-4 text-sm text-[#71767b]">{t("oafBots.feedback.loading")}</p>
+      ) : items.length === 0 ? (
+        <p className="mt-4 text-sm leading-6 text-[#71767b]">{t("oafBots.feedback.empty")}</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {items.slice(0, 5).map((item) => (
+            <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+                <span className={`rounded-full border px-2 py-0.5 ${item.rating === "positive" ? "border-emerald-300/20 text-emerald-100" : "border-amber-300/20 text-amber-100"}`}>
+                  {t(`oafBots.feedback.rating.${item.rating}`)}
+                </span>
+                <span>{t(`oafBots.samples.${item.scene}`)}</span>
+                <span>{formatFeedbackDate(item.created_at)}</span>
+              </div>
+              {item.issue_tags.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {item.issue_tags.map((tag) => (
+                    <span key={tag} className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#8ecdf8]">
+                      {getChipLabel(tag, issueOptions)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {item.comment ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#e7e9ea]/75">{item.comment}</p> : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

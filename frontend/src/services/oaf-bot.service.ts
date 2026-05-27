@@ -1,5 +1,16 @@
 import { request } from "@/lib/request";
-import type { OAFBot, OAFBotCompleteProfileResult, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotProfileAssistMode, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type {
+  OAFBot,
+  OAFBotCompleteProfileResult,
+  OAFBotGenerationFeedback,
+  OAFBotGenerationFeedbackPayload,
+  OAFBotGenerationUsage,
+  OAFBotListData,
+  OAFBotPayload,
+  OAFBotProfileAssistMode,
+  OAFBotSampleScene,
+  OAFBotTestGenerateResult,
+} from "@/types/oaf-bot";
 
 type ApiResponse<T> = {
   code: number;
@@ -55,6 +66,10 @@ type OAFBotListApi = {
 
 type OAFBotGenerationUsagesApi = {
   items: OAFBotGenerationUsage[];
+};
+
+type OAFBotGenerationFeedbackApi = {
+  items: OAFBotGenerationFeedback[];
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {
@@ -128,6 +143,14 @@ export const oafBotService = {
   },
   async generationUsages(id: number) {
     const res = await request.get<ApiResponse<OAFBotGenerationUsagesApi>>(`/oaf-bots/${id}/generation-usages`);
+    return res.data.data;
+  },
+  async generationFeedback(id: number) {
+    const res = await request.get<ApiResponse<OAFBotGenerationFeedbackApi>>(`/oaf-bots/${id}/generation-feedback`);
+    return res.data.data;
+  },
+  async createGenerationFeedback(id: number, body: OAFBotGenerationFeedbackPayload) {
+    const res = await request.post<ApiResponse<OAFBotGenerationFeedback>>(`/oaf-bots/${id}/generation-feedback`, body);
     return res.data.data;
   },
 };

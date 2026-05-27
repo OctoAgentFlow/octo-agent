@@ -25,15 +25,16 @@ const (
 )
 
 type OAFBotService struct {
-	botRepo     *repository.OAFBotRepository
-	accountRepo *repository.TwitterAccountRepository
-	userRepo    *repository.UserRepository
-	usageRepo   *repository.AIGenerationUsageRepository
-	ai          *AIService
+	botRepo      *repository.OAFBotRepository
+	accountRepo  *repository.TwitterAccountRepository
+	userRepo     *repository.UserRepository
+	usageRepo    *repository.AIGenerationUsageRepository
+	feedbackRepo *repository.OAFBotGenerationFeedbackRepository
+	ai           *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -211,6 +212,52 @@ func (s *OAFBotService) GenerationUsages(userID, id uint) (*dto.OAFBotGeneration
 	return &dto.OAFBotGenerationUsageResponse{Items: items}, nil
 }
 
+func (s *OAFBotService) CreateGenerationFeedback(userID, id uint, req dto.OAFBotGenerationFeedbackRequest) (*dto.OAFBotGenerationFeedbackItem, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	scene := normalizeOAFBotSampleScene(req.Scene)
+	if scene == "" {
+		return nil, fmt.Errorf("invalid sample scene")
+	}
+	rating := normalizeOAFBotFeedbackRating(req.Rating)
+	if rating == "" {
+		return nil, fmt.Errorf("invalid feedback rating")
+	}
+	row := &model.OAFBotGenerationFeedback{
+		UserID:           userID,
+		BotID:            bot.ID,
+		Scene:            scene,
+		Rating:           rating,
+		IssueTags:        encodeStringList(req.IssueTags),
+		Comment:          limitString(req.Comment, 1200),
+		SampleContext:    limitString(req.SampleContext, 2000),
+		GeneratedContent: limitString(req.GeneratedContent, 4000),
+		Provider:         limitString(req.Provider, 64),
+	}
+	if err := s.feedbackRepo.Create(row); err != nil {
+		return nil, err
+	}
+	item := oafBotGenerationFeedbackToDTO(*row)
+	return &item, nil
+}
+
+func (s *OAFBotService) GenerationFeedback(userID, id uint) (*dto.OAFBotGenerationFeedbackResponse, error) {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return nil, err
+	}
+	rows, err := s.feedbackRepo.ListRecentByUserBot(userID, id, 10)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.OAFBotGenerationFeedbackItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, oafBotGenerationFeedbackToDTO(row))
+	}
+	return &dto.OAFBotGenerationFeedbackResponse{Items: items}, nil
+}
+
 func (s *OAFBotService) assertTwitterAccountBinding(userID uint, currentBotID uint, accountID uint) error {
 	if accountID == 0 {
 		return nil
@@ -312,6 +359,15 @@ func normalizeSafetyMode(value string) string {
 	}
 }
 
+func normalizeOAFBotFeedbackRating(value string) string {
+	switch strings.TrimSpace(value) {
+	case "positive", "negative":
+		return strings.TrimSpace(value)
+	default:
+		return ""
+	}
+}
+
 func normalizeOAFBotProfileAssistMode(value string) string {
 	switch strings.TrimSpace(value) {
 	case oafBotProfileAssistModeImproveAll:
@@ -409,6 +465,21 @@ func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
 		CreatedAt:         bot.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:         bot.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func oafBotGenerationFeedbackToDTO(row model.OAFBotGenerationFeedback) dto.OAFBotGenerationFeedbackItem {
+	return dto.OAFBotGenerationFeedbackItem{
+		ID:               row.ID,
+		BotID:            row.BotID,
+		Scene:            row.Scene,
+		Rating:           row.Rating,
+		IssueTags:        decodeStringList(row.IssueTags),
+		Comment:          row.Comment,
+		SampleContext:    row.SampleContext,
+		GeneratedContent: row.GeneratedContent,
+		Provider:         row.Provider,
+		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

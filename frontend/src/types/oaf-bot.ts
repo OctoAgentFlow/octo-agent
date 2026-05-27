@@ -76,3 +76,21 @@ export type OAFBotGenerationUsage = {
   count: number;
   updated_at: string;
 };
+
+export type OAFBotGenerationFeedbackRating = "positive" | "negative";
+
+export type OAFBotGenerationFeedbackPayload = {
+  scene: OAFBotSampleScene;
+  rating: OAFBotGenerationFeedbackRating;
+  issue_tags: string[];
+  comment: string;
+  sample_context: string;
+  generated_content: string;
+  provider: string;
+};
+
+export type OAFBotGenerationFeedback = OAFBotGenerationFeedbackPayload & {
+  id: number;
+  bot_id: number;
+  created_at: string;
+};

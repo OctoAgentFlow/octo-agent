@@ -114,3 +114,30 @@ type OAFBotGenerationUsageItem struct {
 type OAFBotGenerationUsageResponse struct {
 	Items []OAFBotGenerationUsageItem `json:"items"`
 }
+
+type OAFBotGenerationFeedbackRequest struct {
+	Scene            string   `json:"scene" binding:"required"`
+	Rating           string   `json:"rating" binding:"required"`
+	IssueTags        []string `json:"issue_tags"`
+	Comment          string   `json:"comment"`
+	SampleContext    string   `json:"sample_context"`
+	GeneratedContent string   `json:"generated_content"`
+	Provider         string   `json:"provider"`
+}
+
+type OAFBotGenerationFeedbackItem struct {
+	ID               uint     `json:"id"`
+	BotID            uint     `json:"bot_id"`
+	Scene            string   `json:"scene"`
+	Rating           string   `json:"rating"`
+	IssueTags        []string `json:"issue_tags"`
+	Comment          string   `json:"comment"`
+	SampleContext    string   `json:"sample_context"`
+	GeneratedContent string   `json:"generated_content"`
+	Provider         string   `json:"provider"`
+	CreatedAt        string   `json:"created_at"`
+}
+
+type OAFBotGenerationFeedbackResponse struct {
+	Items []OAFBotGenerationFeedbackItem `json:"items"`
+}

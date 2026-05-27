@@ -174,6 +174,45 @@ func (ctl *OAFBotController) GenerationUsages(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) CreateGenerationFeedback(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	var req dto.OAFBotGenerationFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.oafBotService.CreateGenerationFeedback(userID, id, req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *OAFBotController) GenerationFeedback(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	data, err := ctl.oafBotService.GenerationFeedback(userID, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) userAndBotID(c *gin.Context) (uint, uint, bool) {
 	userID, ok := getUserID(c)
 	if !ok {

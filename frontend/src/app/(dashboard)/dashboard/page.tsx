@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { AlertTriangle, Bot, CheckCircle2, ChevronRight, ExternalLink, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Coins, Copy, ExternalLink, Gift, ShieldAlert } from "lucide-react";
 
 import { AutomationOverview } from "@/components/dashboard/automation-overview";
 import { RecentActivityList } from "@/components/dashboard/recent-activity-list";
@@ -11,6 +11,7 @@ import { StatusOverviewCards } from "@/components/dashboard/status-overview-card
 import { TrialUpgradeBanner } from "@/components/dashboard/trial-upgrade-banner";
 import { XAccountStatus } from "@/components/dashboard/x-account-status";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
+import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import {
@@ -24,7 +25,9 @@ import { activityService } from "@/services/activity.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { dashboardService, type DashboardOverview } from "@/services/dashboard.service";
 import { oafBotService } from "@/services/oaf-bot.service";
+import { pointService, type PointCenterApi } from "@/services/point.service";
 import { postService } from "@/services/post.service";
+import { referralService, type ReferralInfoApi } from "@/services/referral.service";
 import { reviewQueueService, type ReviewQueueStatsApi } from "@/services/review-queue.service";
 import { useT } from "@/i18n/use-t";
 import type { ActivityRecord } from "@/types/activity";
@@ -43,6 +46,11 @@ type OAFBotDashboardData = {
   usage: PlanUsage | null;
   limits: PlanLimits | null;
   inspectionSummary: OAFBotMatrixInspectionSummary | null;
+};
+
+type PointsDashboardData = {
+  points: PointCenterApi;
+  referral: ReferralInfoApi | null;
 };
 
 function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
@@ -145,6 +153,7 @@ function quotaExhausted(data: OAFBotDashboardData | null) {
 
 export default function DashboardPage() {
   const { t } = useT();
+  const { pushToast } = useToast();
   const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
@@ -160,6 +169,9 @@ export default function DashboardPage() {
   const [oafBotDashboardLoading, setOAFBotDashboardLoading] = useState(true);
   const [oafBotDashboardError, setOAFBotDashboardError] = useState<string | null>(null);
   const [reviewStats, setReviewStats] = useState<ReviewQueueStatsApi | null>(null);
+  const [pointsDashboard, setPointsDashboard] = useState<PointsDashboardData | null>(null);
+  const [pointsDashboardLoading, setPointsDashboardLoading] = useState(true);
+  const [pointsDashboardError, setPointsDashboardError] = useState<string | null>(null);
 
   const fetchOverview = useCallback(async () => {
     setLoadState("loading");
@@ -264,6 +276,27 @@ export default function DashboardPage() {
       setReviewStats(null);
     } finally {
       setOAFBotDashboardLoading(false);
+    }
+  }, [t]);
+
+  const fetchPointsDashboard = useCallback(async () => {
+    setPointsDashboardLoading(true);
+    setPointsDashboardError(null);
+    try {
+      const [points, referral] = await Promise.all([
+        pointService.center(),
+        referralService.info().catch(() => null),
+      ]);
+      setPointsDashboard({ points, referral });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        setPointsDashboardError(error.response?.data?.message || t("dashboard.points.loadFailed"));
+      } else {
+        setPointsDashboardError(t("dashboard.points.loadFailed"));
+      }
+      setPointsDashboard(null);
+    } finally {
+      setPointsDashboardLoading(false);
     }
   }, [t]);
 
@@ -384,12 +417,17 @@ export default function DashboardPage() {
       void fetchRecentActivities();
       void fetchPostCount();
       void fetchOAFBotDashboard();
+      void fetchPointsDashboard();
     });
-  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPostCount, fetchRecentActivities]);
+  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPointsDashboard, fetchPostCount, fetchRecentActivities]);
 
   useEffect(() => {
     void fetchOAFBotDashboard();
   }, [fetchOAFBotDashboard]);
+
+  useEffect(() => {
+    void fetchPointsDashboard();
+  }, [fetchPointsDashboard]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -464,6 +502,7 @@ export default function DashboardPage() {
         }
 
         await fetchOAFBotDashboard();
+        await fetchPointsDashboard();
 
         if (overviewOk) {
           broadcastDataSynced(Date.now());
@@ -471,7 +510,21 @@ export default function DashboardPage() {
         broadcastPageRefreshComplete();
       })();
     });
-  }, [fetchOAFBotDashboard, t, timeZone]);
+  }, [fetchOAFBotDashboard, fetchPointsDashboard, t, timeZone]);
+
+  const copyInviteLink = useCallback(async () => {
+    const link = pointsDashboard?.referral?.invite_link;
+    if (!link) {
+      pushToast(t("dashboard.points.copyUnavailable"));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      pushToast(t("dashboard.points.copied"));
+    } catch {
+      pushToast(t("dashboard.points.copyFailed"));
+    }
+  }, [pointsDashboard?.referral?.invite_link, pushToast, t]);
 
   const botCount = oafBotDashboard?.bots.length ?? 0;
   const boundBotCount = oafBotDashboard?.bots.filter((bot) => Boolean(bot.twitter_account_id)).length ?? 0;
@@ -558,6 +611,13 @@ export default function DashboardPage() {
           items={attentionItems}
         />
       </div>
+      <PointsEntryCard
+        loading={pointsDashboardLoading}
+        errorMessage={pointsDashboardError}
+        data={pointsDashboard}
+        onRetry={() => void fetchPointsDashboard()}
+        onCopyInvite={copyInviteLink}
+      />
       <XAccountStatus overview={overview} />
       <AutomationOverview
         modules={automations}
@@ -576,6 +636,85 @@ export default function DashboardPage() {
         <TrialUpgradeBanner overview={overview} />
       </div>
     </div>
+  );
+}
+
+function PointsEntryCard({
+  loading,
+  errorMessage,
+  data,
+  onRetry,
+  onCopyInvite,
+}: {
+  loading: boolean;
+  errorMessage: string | null;
+  data: PointsDashboardData | null;
+  onRetry: () => void;
+  onCopyInvite: () => void;
+}) {
+  const { t } = useT();
+  const balance = data?.points.account.balance ?? 0;
+  const frozen = data?.points.account.frozen ?? 0;
+  const rate = Number.parseFloat(data?.points.account.exchange_rate || "10") || 10;
+  const discount = balance / rate;
+  const inviteUses = data?.referral?.use_count ?? 0;
+  return (
+    <Card>
+      <CardHeader title={t("dashboard.points.title")} description={t("dashboard.points.description")} />
+      {loading ? (
+        <p className="text-sm text-[#71767b]">{t("dashboard.points.loading")}</p>
+      ) : errorMessage ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
+          <p className="text-sm text-rose-100">{errorMessage}</p>
+          <button className="text-xs text-white underline underline-offset-2" onClick={onRetry} type="button">
+            {t("common.retry")}
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-stretch">
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-[#71767b]">{t("dashboard.points.balance")}</p>
+                <p className="mt-2 text-3xl font-bold text-[#e7e9ea]">{balance}</p>
+              </div>
+              <span className="grid size-10 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                <Coins className="size-5" />
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-[#71767b]">{t("dashboard.points.frozen", { count: frozen })}</p>
+          </div>
+          <div className="rounded-2xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-[#7ee0b5]">{t("dashboard.points.discountLabel")}</p>
+                <p className="mt-2 text-3xl font-bold text-white">{discount.toFixed(1).replace(/\.0$/, "")} USDT</p>
+              </div>
+              <span className="grid size-10 place-items-center rounded-full bg-[#00ba7c]/10 text-[#7ee0b5]">
+                <Gift className="size-5" />
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-[#7ee0b5]/80">{t("dashboard.points.rate", { points: rate })}</p>
+          </div>
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-64">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("dashboard.points.referralTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("dashboard.points.referralUses", { count: inviteUses })}</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <Button type="button" onClick={onCopyInvite} disabled={!data?.referral?.invite_link}>
+                <Copy className="size-4" />
+                {t("dashboard.points.copyInvite")}
+              </Button>
+              <Link href="/points" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+                {t("dashboard.points.openCenter")}
+                <ChevronRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

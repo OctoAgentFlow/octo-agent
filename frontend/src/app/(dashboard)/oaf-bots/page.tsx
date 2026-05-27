@@ -417,7 +417,6 @@ export default function OAFBotsPage() {
   const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
-  const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
@@ -788,15 +787,12 @@ export default function OAFBotsPage() {
   }, [defaultPrimaryLanguage, selectedID]);
 
   const loadGenerationUsages = useCallback(async (botID: number) => {
-    setGenerationUsagesLoading(true);
     try {
       const data = await oafBotService.generationUsages(botID);
       setGenerationUsages(data.items);
     } catch (error) {
       pushToast(errorMessage(error, t("oafBots.usages.loadFailed")));
       setGenerationUsages([]);
-    } finally {
-      setGenerationUsagesLoading(false);
     }
   }, [pushToast, t]);
 
@@ -1805,20 +1801,10 @@ export default function OAFBotsPage() {
               generating={generating}
               onTest={handlePreviewTest}
               canTest={canTestBot}
-              occupationOptions={occupationOptions}
-              industryOptions={industryOptions}
               languageOptions={languageOptions}
               languageStrategyOptions={languageStrategyOptions}
               defaultPrimaryLanguage={defaultPrimaryLanguage}
               isDefaultLanguageConfig={isDefaultLanguageConfig}
-            />
-            <GenerationUsageCard
-              t={t}
-              selectedID={selectedID}
-              generationUsages={generationUsages}
-              loading={generationUsagesLoading}
-              usage={usage}
-              limits={limits}
             />
           </div>
         </div>
@@ -3238,8 +3224,6 @@ function BotPreview({
   generating,
   onTest,
   canTest,
-  occupationOptions,
-  industryOptions,
   languageOptions,
   languageStrategyOptions,
   defaultPrimaryLanguage,
@@ -3260,8 +3244,6 @@ function BotPreview({
   generating: boolean;
   onTest: () => void;
   canTest: boolean;
-  occupationOptions: ChipOption[];
-  industryOptions: ChipOption[];
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
   defaultPrimaryLanguage: string;
@@ -3291,27 +3273,11 @@ function BotPreview({
     { label: t("oafBots.fields.primaryLanguage"), value: `${getSelectLabel(currentPrimaryLanguage, languageOptions)}${defaultBadge}` },
     { label: t("oafBots.fields.languageStrategy"), value: `${getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}${defaultBadge}` },
   ];
-  const previewRows = [
-    { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
-    { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
-    { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
-    { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
-    { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
-    { label: t("oafBots.fields.websiteUrl"), value: form.website_url },
-    { label: t("oafBots.fields.telegramUrl"), value: form.telegram_url },
-    { label: t("oafBots.fields.ctaPolicy"), value: form.cta_policy },
-    { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
-    { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
-    { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
-    { label: t("oafBots.fields.preferredCTA"), value: form.preferred_cta },
-    { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
-    { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
-  ].filter((row) => row.value.trim());
   return (
     <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")} className="bg-black p-4 md:p-5">
-      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[#1d9bf0]">
+      <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[#1d9bf0]">
             <Bot className="size-5" />
           </div>
           <div className="min-w-0">
@@ -3320,12 +3286,7 @@ function BotPreview({
           </div>
         </div>
 
-        <div className={`mt-4 rounded-xl border p-3 ${modeClass}`}>
-          <p className="text-xs opacity-75">{t(`oafBots.preview.mode.${modeTone}.title`)}</p>
-          <p className="mt-1 text-sm leading-relaxed text-white/78">{t(`oafBots.preview.mode.${modeTone}.description`)}</p>
-        </div>
-
-        <div className="mt-5">
+        <div className="mt-4">
           <div className="flex items-center justify-between text-xs text-[#71767b]">
             <span>{t("oafBots.preview.completeness")}</span>
             <span className="text-[#e7e9ea]">{completion}%</span>
@@ -3341,22 +3302,34 @@ function BotPreview({
           </p>
         </div>
 
-        <div className="mt-4 grid gap-3">
+        <div className={`mt-4 rounded-xl border p-3 ${modeClass}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs opacity-75">{t(`oafBots.preview.mode.${modeTone}.title`)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/78">{t(`oafBots.preview.mode.${modeTone}.description`)}</p>
+            </div>
+            <span className="shrink-0 rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/70">
+              {readyCompletion ? t("oafBots.preview.readyBadge") : t("oafBots.preview.setupBadge")}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
           {languageSummaryRows.map((row) => (
             <PreviewRow key={row.label} label={row.label} value={row.value} />
           ))}
         </div>
 
-        <div className="mt-5 grid gap-3">
+        <div className="mt-4 grid gap-3">
+          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={5} compact />
           {showDetails ? (
-            <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" />
+            <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" maxItems={4} compact />
           ) : null}
-          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={4} />
           <div className="rounded-xl border border-blue-300/15 bg-blue-400/10 p-3">
             <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
-          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics} empty={t("oafBots.quality.empty")} />
+          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics.slice(0, 2)} empty={t("oafBots.quality.empty")} />
           <Button type="button" onClick={onTest} disabled={!canTest || generating} className="w-full disabled:opacity-50">
             {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {testButtonLabel}
@@ -3365,21 +3338,28 @@ function BotPreview({
             {!canTest ? t("oafBots.test.disabledHint") : selectedID && !formChanged ? t("oafBots.preview.testReadyHint") : t("oafBots.preview.testNeedsSaveHint")}
           </p>
         </div>
-
-        {showDetails && previewRows.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            {previewRows.map((row) => (
-              <PreviewRow key={row.label} label={row.label} value={row.value} />
-            ))}
-          </div>
-        ) : null}
       </div>
     </SectionCard>
   );
 }
 
-function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: string; items: string[]; empty: string; tone: "success" | "warning"; maxItems?: number }) {
+function ChecklistBlock({
+  title,
+  items,
+  empty,
+  tone,
+  maxItems = 5,
+  compact = false,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+  tone: "success" | "warning";
+  maxItems?: number;
+  compact?: boolean;
+}) {
   const toneClass = tone === "success" ? "border-emerald-300/15 bg-emerald-400/10 text-emerald-100" : "border-amber-300/15 bg-amber-400/10 text-amber-100";
+  const hiddenCount = Math.max(items.length - maxItems, 0);
   return (
     <div className={`rounded-xl border p-3 ${toneClass}`}>
       <p className="text-xs opacity-75">{title}</p>
@@ -3388,10 +3368,15 @@ function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: st
       ) : (
         <div className="mt-2 flex flex-wrap gap-2">
           {items.slice(0, maxItems).map((item) => (
-            <span key={item} className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/78">
+            <span key={item} className={`rounded-full border border-white/10 bg-black/15 text-xs text-white/78 ${compact ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
               {item}
             </span>
           ))}
+          {hiddenCount > 0 ? (
+            <span className={`rounded-full border border-white/10 bg-black/15 text-xs text-white/60 ${compact ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
+              +{hiddenCount}
+            </span>
+          ) : null}
         </div>
       )}
     </div>
@@ -4258,84 +4243,6 @@ function getSamplePersonaRows(
   ].filter((row) => row.value.trim());
 }
 
-function GenerationUsageCard({
-  t,
-  selectedID,
-  generationUsages,
-  loading,
-  usage,
-  limits,
-}: {
-  t: (key: string, params?: Record<string, string | number>) => string;
-  selectedID: number | null;
-  generationUsages: OAFBotGenerationUsage[];
-  loading: boolean;
-  usage: PlanUsage;
-  limits: PlanLimits;
-}) {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const usageByScene = useMemo(() => aggregateMonthlyUsage(generationUsages, currentMonth), [currentMonth, generationUsages]);
-  const total = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
-  const planLimit = limits.aiGenerationsMonthly;
-  const planUsed = usage.aiGenerationsMonth;
-  const planRemaining = Math.max(planLimit - planUsed, 0);
-  return (
-    <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
-      {!selectedID ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.selectBot")}
-        </p>
-      ) : loading ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.loading")}
-        </p>
-      ) : total === 0 ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.empty")}
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="space-y-2 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-[#8ecdf8]">{t("oafBots.usages.botMonthlyTotal")}</span>
-              <span className="font-semibold text-[#e7e9ea]">{t("oafBots.usages.countWithUnit", { count: total })}</span>
-            </div>
-            <p className="text-xs leading-relaxed text-[#e7e9ea]/68">
-              {t("oafBots.usages.sharedQuotaHint", {
-                limit: planLimit,
-                used: planUsed,
-                remaining: planRemaining,
-              })}
-            </p>
-          </div>
-          {usageSceneOrder.map((scene) => {
-            const item = usageByScene.get(scene);
-            const count = item?.count ?? 0;
-            const ratio = total > 0 ? Math.round((count / total) * 100) : 0;
-            return (
-              <div key={scene} className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#e7e9ea]/72">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-[#e7e9ea]">{usageSceneLabel(scene, t)}</p>
-                    <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.usages.latestMonth", { month: item?.month ?? currentMonth })}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1 text-xs text-[#71767b]">
-                    {t("oafBots.usages.countWithUnit", { count })}
-                  </span>
-                </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
-                  <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${ratio}%` }} />
-                </div>
-                <p className="mt-2 text-xs text-[#71767b]">{t("oafBots.usages.sceneShare", { percent: ratio })}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
 function normalizeUsageScene(scene: string) {
   return scene === "test_generate" ? "oaf_bot_test_generate" : scene;
 }
@@ -4353,10 +4260,4 @@ function aggregateMonthlyUsage(items: OAFBotGenerationUsage[], currentMonth: str
     });
   });
   return usageByScene;
-}
-
-function usageSceneLabel(scene: string, t: (key: string, params?: Record<string, string | number>) => string) {
-  const key = `oafBots.usages.scene.${scene}`;
-  const label = t(key);
-  return label === key ? scene : label;
 }

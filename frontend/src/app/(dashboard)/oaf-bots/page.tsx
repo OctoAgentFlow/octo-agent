@@ -46,6 +46,7 @@ import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-q
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type {
   OAFBot,
+  OAFBotCompleteProfileResult,
   OAFBotFeedbackProfileSuggestionResult,
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackRating,
@@ -394,6 +395,7 @@ export default function OAFBotsPage() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
+  const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
   const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
@@ -418,6 +420,10 @@ export default function OAFBotsPage() {
     if (!selectedBot) return false;
     return JSON.stringify(botToPayload(selectedBot, defaultPrimaryLanguage)) !== JSON.stringify(form);
   }, [defaultPrimaryLanguage, form, selectedBot]);
+  const completeProfileDiffs = useMemo(
+    () => (completeProfilePreview ? getFeedbackSuggestionDiffs(form, completeProfilePreview.profile) : []),
+    [completeProfilePreview, form],
+  );
 
   const accountByID = useMemo(() => {
     return new Map(accounts.map((account) => [account.id, account]));
@@ -825,6 +831,7 @@ export default function OAFBotsPage() {
     setSamples(null);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
   };
 
@@ -837,6 +844,7 @@ export default function OAFBotsPage() {
     setGenerationFeedback([]);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
   };
 
@@ -882,15 +890,9 @@ export default function OAFBotsPage() {
     setCompletingProfile(true);
     try {
       const result = await oafBotService.completeProfile(form, profileAssistMode);
-      setForm((prev) => ({
-        ...prev,
-        ...result.profile,
-        name: prev.name || result.profile.name,
-        twitter_account_id: prev.twitter_account_id || result.profile.twitter_account_id,
-      }));
-      setSamples(null);
+      setCompleteProfilePreview(result);
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.completeProfile.success"));
+      pushToast(t("oafBots.completeProfile.previewReady"));
     } catch (error) {
       const body = getErrorBody(error);
       if (body?.error_code === "ai_generation_quota_exceeded") {
@@ -901,6 +903,14 @@ export default function OAFBotsPage() {
     } finally {
       setCompletingProfile(false);
     }
+  };
+
+  const applyCompleteProfilePreview = () => {
+    if (!completeProfilePreview) return;
+    setForm((prev) => mergeFeedbackSuggestionProfile(prev, completeProfilePreview.profile));
+    setSamples(null);
+    setCompleteProfilePreview(null);
+    pushToast(t("oafBots.completeProfile.success"));
   };
 
   const testGenerate = async () => {
@@ -1524,6 +1534,20 @@ export default function OAFBotsPage() {
                 </div>
               </div>
             ) : null}
+
+            <ProfileDiffPreview
+              t={t}
+              visible={Boolean(completeProfilePreview)}
+              title={t("oafBots.completeProfile.previewTitle")}
+              description={completeProfileDiffs.length > 0 ? t("oafBots.completeProfile.previewDescription", { count: completeProfileDiffs.length }) : t("oafBots.completeProfile.noDiffDescription")}
+              meta={t(`oafBots.completeProfile.mode.${profileAssistMode}`)}
+              diffs={completeProfileDiffs}
+              noDiff={t("oafBots.completeProfile.noDiff")}
+              dismissLabel={t("oafBots.completeProfile.dismiss")}
+              applyLabel={t("oafBots.completeProfile.apply")}
+              onApply={applyCompleteProfilePreview}
+              onDismiss={() => setCompleteProfilePreview(null)}
+            />
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -3397,10 +3421,16 @@ function SamplePanel({
             suggestionLoading={feedbackSuggestionLoading}
             onSuggestProfile={onFeedbackProfileSuggestion}
           />
-          <FeedbackSuggestionDiffPreview
+          <ProfileDiffPreview
             t={t}
-            result={feedbackSuggestionPreview}
+            visible={Boolean(feedbackSuggestionPreview)}
+            title={t("oafBots.feedbackSuggestion.previewTitle")}
+            description={suggestionDiffs.length > 0 ? t("oafBots.feedbackSuggestion.previewDescription", { count: suggestionDiffs.length }) : t("oafBots.feedbackSuggestion.noDiffDescription")}
+            meta={feedbackSuggestionPreview ? t("oafBots.feedbackSuggestion.feedbackCount", { count: feedbackSuggestionPreview.feedback_count || 0 }) : ""}
             diffs={suggestionDiffs}
+            noDiff={t("oafBots.feedbackSuggestion.noDiff")}
+            dismissLabel={t("oafBots.feedbackSuggestion.dismiss")}
+            applyLabel={t("oafBots.feedbackSuggestion.apply")}
             onApply={onApplyFeedbackSuggestion}
             onDismiss={onDismissFeedbackSuggestion}
           />
@@ -3700,32 +3730,44 @@ function GenerationFeedbackHistory({
   );
 }
 
-function FeedbackSuggestionDiffPreview({
+function ProfileDiffPreview({
   t,
-  result,
+  visible,
+  title,
+  description,
+  meta,
   diffs,
+  noDiff,
+  dismissLabel,
+  applyLabel,
   onApply,
   onDismiss,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
-  result: OAFBotFeedbackProfileSuggestionResult | null;
+  visible: boolean;
+  title: string;
+  description: string;
+  meta?: string;
   diffs: ProfileDiffItem[];
+  noDiff: string;
+  dismissLabel: string;
+  applyLabel: string;
   onApply: () => void;
   onDismiss: () => void;
 }) {
-  if (!result) return null;
+  if (!visible) return null;
   return (
     <div className="rounded-2xl border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedbackSuggestion.previewTitle")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
-            {diffs.length > 0 ? t("oafBots.feedbackSuggestion.previewDescription", { count: diffs.length }) : t("oafBots.feedbackSuggestion.noDiffDescription")}
-          </p>
+          <p className="text-sm font-bold text-[#e7e9ea]">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{description}</p>
         </div>
-        <span className="shrink-0 rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
-          {t("oafBots.feedbackSuggestion.feedbackCount", { count: result.feedback_count || 0 })}
-        </span>
+        {meta ? (
+          <span className="shrink-0 rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
+            {meta}
+          </span>
+        ) : null}
       </div>
 
       {diffs.length > 0 ? (
@@ -3734,26 +3776,26 @@ function FeedbackSuggestionDiffPreview({
             <div key={String(diff.key)} className="rounded-xl border border-[#2f3336] bg-black p-3">
               <p className="text-xs font-semibold text-[#e7e9ea]">{fieldLabel(diff.key, t)}</p>
               <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
-                <DiffValueBox label={t("oafBots.feedbackSuggestion.before")} value={formatProfileValue(diff.before, t)} tone="before" />
+                <DiffValueBox label={t("oafBots.diff.before")} value={formatProfileValue(diff.before, t)} tone="before" />
                 <div className="hidden items-center justify-center text-[#71767b] md:flex">
                   <ArrowRight className="size-4" />
                 </div>
-                <DiffValueBox label={t("oafBots.feedbackSuggestion.after")} value={formatProfileValue(diff.after, t)} tone="after" />
+                <DiffValueBox label={t("oafBots.diff.after")} value={formatProfileValue(diff.after, t)} tone="after" />
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="mt-4 rounded-xl border border-[#2f3336] bg-black p-3 text-sm leading-6 text-[#71767b]">{t("oafBots.feedbackSuggestion.noDiff")}</p>
+        <p className="mt-4 rounded-xl border border-[#2f3336] bg-black p-3 text-sm leading-6 text-[#71767b]">{noDiff}</p>
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
-          {t("oafBots.feedbackSuggestion.dismiss")}
+          {dismissLabel}
         </Button>
         <Button type="button" size="sm" onClick={onApply} disabled={diffs.length === 0}>
           <CheckCircle2 className="size-4" />
-          {t("oafBots.feedbackSuggestion.apply")}
+          {applyLabel}
         </Button>
       </div>
     </div>

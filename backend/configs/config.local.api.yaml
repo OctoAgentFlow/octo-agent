@@ -52,7 +52,7 @@ email:
 app:
   frontend_base_url: "http://localhost:3000"
   official_x_url: "https://x.com/octo_agent_flow"
-  telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
+  telegram_url: "https://t.me/+79oSyfuh6C80NDU1"
 
 # X（Twitter）OAuth 2.0：在 Developer Portal 配置相同 redirect_uri / Callback URL
 x_oauth:

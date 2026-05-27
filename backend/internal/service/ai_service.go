@@ -46,6 +46,11 @@ type GenerateAutoCommentInput struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -83,6 +88,11 @@ type GenerateAutoReplyInput struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -119,6 +129,11 @@ type GenerateOAFBotSamplesInput struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -151,6 +166,11 @@ type CompleteOAFBotProfileInput struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -197,6 +217,11 @@ type GenerateAutoPostInput struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -269,6 +294,11 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 			ContentPillars:    in.ContentPillars,
 			ContentObjectives: in.ContentObjectives,
 			PreferredCTA:      in.PreferredCTA,
+			WebsiteURL:        in.WebsiteURL,
+			TelegramURL:       in.TelegramURL,
+			DiscordURL:        in.DiscordURL,
+			DocsURL:           in.DocsURL,
+			CTAPolicy:         in.CTAPolicy,
 			Hashtags:          in.Hashtags,
 			Keywords:          in.Keywords,
 			ComplianceNotes:   in.ComplianceNotes,
@@ -358,6 +388,11 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 			ContentPillars:    in.ContentPillars,
 			ContentObjectives: in.ContentObjectives,
 			PreferredCTA:      in.PreferredCTA,
+			WebsiteURL:        in.WebsiteURL,
+			TelegramURL:       in.TelegramURL,
+			DiscordURL:        in.DiscordURL,
+			DocsURL:           in.DocsURL,
+			CTAPolicy:         in.CTAPolicy,
 			Hashtags:          in.Hashtags,
 			Keywords:          in.Keywords,
 			ComplianceNotes:   in.ComplianceNotes,
@@ -534,6 +569,11 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 		ContentPillars:    in.ContentPillars,
 		ContentObjectives: in.ContentObjectives,
 		PreferredCTA:      in.PreferredCTA,
+		WebsiteURL:        in.WebsiteURL,
+		TelegramURL:       in.TelegramURL,
+		DiscordURL:        in.DiscordURL,
+		DocsURL:           in.DocsURL,
+		CTAPolicy:         in.CTAPolicy,
 		Hashtags:          in.Hashtags,
 		Keywords:          in.Keywords,
 		ComplianceNotes:   in.ComplianceNotes,
@@ -606,7 +646,7 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 		for i, signal := range in.FeedbackSignals {
 			user.WriteString(fmt.Sprintf("%d. %s\n", i+1, strings.TrimSpace(signal)))
 		}
-		user.WriteString("When feedback mentions off-persona, generic output, unsafe claims, wrong language, length, CTA, or missing context, reflect the fix in identity_summary, voice_tone, topics, forbidden_topics, growth_goal, content_objectives, preferred_cta, keywords, compliance_notes, avoid_claims, primary_language, or language_strategy as appropriate.\n")
+		user.WriteString("When feedback mentions off-persona, generic output, unsafe claims, wrong language, length, CTA, promotion links, or missing context, reflect the fix in identity_summary, voice_tone, topics, forbidden_topics, growth_goal, content_objectives, preferred_cta, cta_policy, keywords, compliance_notes, avoid_claims, primary_language, or language_strategy as appropriate.\n")
 	}
 	user.WriteString("name: " + name + "\n")
 	user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
@@ -630,6 +670,11 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 		ContentPillars:    in.ContentPillars,
 		ContentObjectives: in.ContentObjectives,
 		PreferredCTA:      in.PreferredCTA,
+		WebsiteURL:        in.WebsiteURL,
+		TelegramURL:       in.TelegramURL,
+		DiscordURL:        in.DiscordURL,
+		DocsURL:           in.DocsURL,
+		CTAPolicy:         in.CTAPolicy,
 		Hashtags:          in.Hashtags,
 		Keywords:          in.Keywords,
 		ComplianceNotes:   in.ComplianceNotes,
@@ -639,12 +684,13 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 	user.WriteString("primary_language: " + primaryLanguage + "\n")
 	user.WriteString("language_strategy: " + languageStrategy + "\n\n")
 	user.WriteString("Return JSON with exactly these keys:\n")
-	user.WriteString("occupation, industry, personality_tags, identity_summary, voice_tone, topics, forbidden_topics, growth_goal, project_one_liner, target_audience, core_value_props, product_features, differentiators, content_pillars, content_objectives, preferred_cta, hashtags, keywords, compliance_notes, avoid_claims, safety_mode, primary_language, language_strategy.\n")
+	user.WriteString("occupation, industry, personality_tags, identity_summary, voice_tone, topics, forbidden_topics, growth_goal, project_one_liner, target_audience, core_value_props, product_features, differentiators, content_pillars, content_objectives, preferred_cta, website_url, telegram_url, discord_url, docs_url, cta_policy, hashtags, keywords, compliance_notes, avoid_claims, safety_mode, primary_language, language_strategy.\n")
 	user.WriteString("Rules:\n")
 	user.WriteString("- Arrays must contain short strings, usually 3-6 items.\n")
 	user.WriteString("- Keep identity_summary under 260 characters.\n")
 	user.WriteString("- Keep voice_tone under 120 characters.\n")
 	user.WriteString("- If project details are thin, make practical assumptions but do not invent partnerships, guarantees, token prices, or regulated claims.\n")
+	user.WriteString("- Do not invent website, Telegram, Discord, or docs URLs. Keep URL fields empty unless they are already present in the draft.\n")
 	user.WriteString("- Use the primary language for natural-language fields unless language_strategy implies bilingual or mixed output.\n")
 
 	result, err := s.openai.GenerateTextWithUsageMaxTokens(ctx, []openaiint.ChatMessage{
@@ -721,6 +767,11 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 			ContentPillars:    in.ContentPillars,
 			ContentObjectives: in.ContentObjectives,
 			PreferredCTA:      in.PreferredCTA,
+			WebsiteURL:        in.WebsiteURL,
+			TelegramURL:       in.TelegramURL,
+			DiscordURL:        in.DiscordURL,
+			DocsURL:           in.DocsURL,
+			CTAPolicy:         in.CTAPolicy,
 			Hashtags:          in.Hashtags,
 			Keywords:          in.Keywords,
 			ComplianceNotes:   in.ComplianceNotes,
@@ -788,6 +839,11 @@ type oafBotStrategyContext struct {
 	ContentPillars    []string
 	ContentObjectives string
 	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
 	Hashtags          []string
 	Keywords          []string
 	ComplianceNotes   string
@@ -803,6 +859,12 @@ func writeOAFBotStrategyContext(user *strings.Builder, in oafBotStrategyContext)
 	user.WriteString("content_pillars: " + strings.Join(in.ContentPillars, ", ") + "\n")
 	user.WriteString("content_objectives: " + strings.TrimSpace(in.ContentObjectives) + "\n")
 	user.WriteString("preferred_cta: " + strings.TrimSpace(in.PreferredCTA) + "\n")
+	user.WriteString("promotion_website_url: " + strings.TrimSpace(in.WebsiteURL) + "\n")
+	user.WriteString("promotion_telegram_url: " + strings.TrimSpace(in.TelegramURL) + "\n")
+	user.WriteString("promotion_discord_url: " + strings.TrimSpace(in.DiscordURL) + "\n")
+	user.WriteString("promotion_docs_url: " + strings.TrimSpace(in.DocsURL) + "\n")
+	user.WriteString("promotion_cta_policy: " + strings.TrimSpace(in.CTAPolicy) + "\n")
+	user.WriteString("promotion_rules: Use only configured promotion links. Never invent website, Telegram, Discord, or docs links. Include a link only when the user intent, content item, or CTA policy makes it useful.\n")
 	user.WriteString("preferred_hashtags: " + strings.Join(in.Hashtags, ", ") + "\n")
 	user.WriteString("keywords: " + strings.Join(in.Keywords, ", ") + "\n")
 	user.WriteString("compliance_notes: " + strings.TrimSpace(in.ComplianceNotes) + "\n")
@@ -941,6 +1003,11 @@ func parseCompletedOAFBotProfile(raw string) (dto.OAFBotUpsertRequest, error) {
 	out.Differentiators = strings.TrimSpace(out.Differentiators)
 	out.ContentObjectives = strings.TrimSpace(out.ContentObjectives)
 	out.PreferredCTA = strings.TrimSpace(out.PreferredCTA)
+	out.WebsiteURL = strings.TrimSpace(out.WebsiteURL)
+	out.TelegramURL = strings.TrimSpace(out.TelegramURL)
+	out.DiscordURL = strings.TrimSpace(out.DiscordURL)
+	out.DocsURL = strings.TrimSpace(out.DocsURL)
+	out.CTAPolicy = strings.TrimSpace(out.CTAPolicy)
 	out.ComplianceNotes = strings.TrimSpace(out.ComplianceNotes)
 	out.SafetyMode = strings.TrimSpace(out.SafetyMode)
 	out.PrimaryLanguage = strings.TrimSpace(out.PrimaryLanguage)

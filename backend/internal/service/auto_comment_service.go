@@ -914,6 +914,11 @@ func autoCommentInputFromValues(username, tweet, tone string, blocked []string, 
 	in.ContentPillars = decodeStringList(bot.ContentPillars)
 	in.ContentObjectives = bot.ContentObjectives
 	in.PreferredCTA = bot.PreferredCTA
+	in.WebsiteURL = bot.WebsiteURL
+	in.TelegramURL = bot.TelegramURL
+	in.DiscordURL = bot.DiscordURL
+	in.DocsURL = bot.DocsURL
+	in.CTAPolicy = bot.CTAPolicy
 	in.Hashtags = decodeStringList(bot.Hashtags)
 	in.Keywords = decodeStringList(bot.Keywords)
 	in.ComplianceNotes = bot.ComplianceNotes

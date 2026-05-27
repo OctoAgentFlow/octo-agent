@@ -24,6 +24,11 @@ type OAFBotItem struct {
 	ContentPillars    []string `json:"content_pillars"`
 	ContentObjectives string   `json:"content_objectives"`
 	PreferredCTA      string   `json:"preferred_cta"`
+	WebsiteURL        string   `json:"website_url"`
+	TelegramURL       string   `json:"telegram_url"`
+	DiscordURL        string   `json:"discord_url"`
+	DocsURL           string   `json:"docs_url"`
+	CTAPolicy         string   `json:"cta_policy"`
 	Hashtags          []string `json:"hashtags"`
 	Keywords          []string `json:"keywords"`
 	ComplianceNotes   string   `json:"compliance_notes"`
@@ -64,6 +69,11 @@ type OAFBotUpsertRequest struct {
 	ContentPillars    []string `json:"content_pillars"`
 	ContentObjectives string   `json:"content_objectives"`
 	PreferredCTA      string   `json:"preferred_cta"`
+	WebsiteURL        string   `json:"website_url"`
+	TelegramURL       string   `json:"telegram_url"`
+	DiscordURL        string   `json:"discord_url"`
+	DocsURL           string   `json:"docs_url"`
+	CTAPolicy         string   `json:"cta_policy"`
 	Hashtags          []string `json:"hashtags"`
 	Keywords          []string `json:"keywords"`
 	ComplianceNotes   string   `json:"compliance_notes"`

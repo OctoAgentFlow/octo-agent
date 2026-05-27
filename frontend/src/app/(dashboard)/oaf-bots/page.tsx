@@ -158,6 +158,11 @@ const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
   "content_pillars",
   "content_objectives",
   "preferred_cta",
+  "website_url",
+  "telegram_url",
+  "discord_url",
+  "docs_url",
+  "cta_policy",
   "hashtags",
   "keywords",
   "compliance_notes",
@@ -239,6 +244,11 @@ function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
     content_pillars: [],
     content_objectives: "",
     preferred_cta: "",
+    website_url: "",
+    telegram_url: "",
+    discord_url: "",
+    docs_url: "",
+    cta_policy: "",
     hashtags: [],
     keywords: [],
     compliance_notes: "",
@@ -1438,6 +1448,51 @@ export default function OAFBotsPage() {
                       helper={t("oafBots.helpers.differentiators")}
                     />
                   </div>
+                  <div className="md:col-span-2 rounded-[8px] border border-[#2f3336] bg-black/25 p-4">
+                    <div className="mb-4 flex flex-col gap-1">
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.promotion.title")}</p>
+                      <p className="text-xs leading-relaxed text-[#71767b]">{t("oafBots.promotion.description")}</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TextField
+                        label={t("oafBots.fields.websiteUrl")}
+                        value={form.website_url}
+                        onChange={(value) => updateForm("website_url", value)}
+                        placeholder={t("oafBots.placeholders.websiteUrl")}
+                        helper={t("oafBots.helpers.websiteUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.telegramUrl")}
+                        value={form.telegram_url}
+                        onChange={(value) => updateForm("telegram_url", value)}
+                        placeholder={t("oafBots.placeholders.telegramUrl")}
+                        helper={t("oafBots.helpers.telegramUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.discordUrl")}
+                        value={form.discord_url}
+                        onChange={(value) => updateForm("discord_url", value)}
+                        placeholder={t("oafBots.placeholders.discordUrl")}
+                        helper={t("oafBots.helpers.discordUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.docsUrl")}
+                        value={form.docs_url}
+                        onChange={(value) => updateForm("docs_url", value)}
+                        placeholder={t("oafBots.placeholders.docsUrl")}
+                        helper={t("oafBots.helpers.docsUrl")}
+                      />
+                      <div className="md:col-span-2">
+                        <TextArea
+                          label={t("oafBots.fields.ctaPolicy")}
+                          value={form.cta_policy}
+                          onChange={(value) => updateForm("cta_policy", value)}
+                          placeholder={t("oafBots.placeholders.ctaPolicy")}
+                          helper={t("oafBots.helpers.ctaPolicy")}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </WizardPanel>
             ) : null}
@@ -1796,6 +1851,11 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     content_pillars: bot.content_pillars || [],
     content_objectives: bot.content_objectives || "",
     preferred_cta: bot.preferred_cta || "",
+    website_url: bot.website_url || "",
+    telegram_url: bot.telegram_url || "",
+    discord_url: bot.discord_url || "",
+    docs_url: bot.docs_url || "",
+    cta_policy: bot.cta_policy || "",
     hashtags: bot.hashtags || [],
     keywords: bot.keywords || [],
     compliance_notes: bot.compliance_notes || "",
@@ -1879,6 +1939,11 @@ function isUnconfiguredDraft(form: OAFBotPayload) {
     form.content_pillars.length === 0 &&
     !form.content_objectives.trim() &&
     !form.preferred_cta.trim() &&
+    !form.website_url.trim() &&
+    !form.telegram_url.trim() &&
+    !form.discord_url.trim() &&
+    !form.docs_url.trim() &&
+    !form.cta_policy.trim() &&
     form.hashtags.length === 0 &&
     form.keywords.length === 0 &&
     !form.compliance_notes.trim() &&
@@ -1901,6 +1966,7 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   if (form.occupation.trim() || form.industry.trim()) score += 10;
   if (form.project_one_liner.trim()) score += 10;
   if (form.target_audience.trim() || form.core_value_props.trim()) score += 10;
+  if (form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) score += 4;
   if (form.primary_language.trim() && form.language_strategy.trim()) score += 8;
   if (form.personality_tags.length > 0) score += 8;
   if (form.topics.length > 0) score += 10;
@@ -1927,7 +1993,7 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
   if (form.name.trim()) completed.add("name");
   if (form.twitter_account_id) completed.add("account");
   if (form.occupation.trim() || form.industry.trim()) completed.add("role");
-  if (form.project_one_liner.trim() || form.core_value_props.trim()) completed.add("brand");
+  if (form.project_one_liner.trim() || form.core_value_props.trim() || form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) completed.add("brand");
   if (form.target_audience.trim()) completed.add("audience");
   if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
   if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
@@ -3231,6 +3297,9 @@ function BotPreview({
     { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
     { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
     { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
+    { label: t("oafBots.fields.websiteUrl"), value: form.website_url },
+    { label: t("oafBots.fields.telegramUrl"), value: form.telegram_url },
+    { label: t("oafBots.fields.ctaPolicy"), value: form.cta_policy },
     { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
@@ -4175,6 +4244,11 @@ function getSamplePersonaRows(
     { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
     { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
     { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
+    { label: t("oafBots.fields.websiteUrl"), value: form.website_url },
+    { label: t("oafBots.fields.telegramUrl"), value: form.telegram_url },
+    { label: t("oafBots.fields.discordUrl"), value: form.discord_url },
+    { label: t("oafBots.fields.docsUrl"), value: form.docs_url },
+    { label: t("oafBots.fields.ctaPolicy"), value: form.cta_policy },
     { label: t("oafBots.fields.voiceTone"), value: form.voice_tone },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },

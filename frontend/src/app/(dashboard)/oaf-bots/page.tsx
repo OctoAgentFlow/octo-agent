@@ -83,6 +83,7 @@ type FeedbackDraft = {
   issueTags: string[];
   comment: string;
 };
+type MatrixFilterKey = "all" | "unbound" | "auto_post_not_ready" | "negative_feedback" | "review_backlog";
 type BotMatrixRow = {
   bot: OAFBot;
   account?: AccountListItem;
@@ -93,6 +94,11 @@ type BotMatrixRow = {
   autoPostReady: boolean;
   monthlyUsage: number;
   negativeFeedback: number;
+};
+type MatrixInspectionItem = {
+  key: MatrixFilterKey;
+  count: number;
+  tone: "neutral" | "warning" | "danger";
 };
 
 type SelectOption = {
@@ -114,6 +120,9 @@ type PersonaChecklistKey = typeof personaChecklistKeys[number];
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
+const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
+const negativeFeedbackInspectionThreshold = 3;
+const reviewBacklogInspectionThreshold = 5;
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -347,6 +356,7 @@ export default function OAFBotsPage() {
   const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
   const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
   const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
@@ -471,6 +481,28 @@ export default function OAFBotsPage() {
       { bound: 0, ready: 0, review: 0, usage: 0, negativeFeedback: 0 },
     );
   }, [matrixRows]);
+  const matrixInspectionItems = useMemo<MatrixInspectionItem[]>(() => {
+    const unbound = matrixRows.filter((row) => !row.account).length;
+    const autoPostNotReady = matrixRows.filter((row) => !row.autoPostReady).length;
+    const negativeFeedback = matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
+    const reviewBacklog = matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
+    return [
+      { key: "unbound", count: unbound, tone: unbound > 0 ? "warning" : "neutral" },
+      { key: "auto_post_not_ready", count: autoPostNotReady, tone: autoPostNotReady > 0 ? "warning" : "neutral" },
+      { key: "negative_feedback", count: negativeFeedback, tone: negativeFeedback > 0 ? "danger" : "neutral" },
+      { key: "review_backlog", count: reviewBacklog, tone: reviewBacklog > 0 ? "danger" : "neutral" },
+    ];
+  }, [matrixRows]);
+  const filteredMatrixRows = useMemo(() => {
+    if (matrixFilter === "all") return matrixRows;
+    return matrixRows.filter((row) => {
+      if (matrixFilter === "unbound") return !row.account;
+      if (matrixFilter === "auto_post_not_ready") return !row.autoPostReady;
+      if (matrixFilter === "negative_feedback") return row.negativeFeedback >= negativeFeedbackInspectionThreshold;
+      if (matrixFilter === "review_backlog") return row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold;
+      return true;
+    });
+  }, [matrixFilter, matrixRows]);
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
@@ -996,8 +1028,12 @@ export default function OAFBotsPage() {
 
       <BotMatrixPanel
         t={t}
-        rows={matrixRows}
+        rows={filteredMatrixRows}
+        allRowsCount={matrixRows.length}
         summary={matrixSummary}
+        inspectionItems={matrixInspectionItems}
+        activeFilter={matrixFilter}
+        onFilterChange={setMatrixFilter}
         loading={matrixLoading || relationshipLoading}
         enabled={limits.multiBotMatrix}
         selectedID={selectedID}
@@ -1812,7 +1848,11 @@ function BotStatusPill({ tone, label }: { tone: "success" | "warning" | "neutral
 function BotMatrixPanel({
   t,
   rows,
+  allRowsCount,
   summary,
+  inspectionItems,
+  activeFilter,
+  onFilterChange,
   loading,
   enabled,
   selectedID,
@@ -1820,7 +1860,11 @@ function BotMatrixPanel({
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   rows: BotMatrixRow[];
+  allRowsCount: number;
   summary: { bound: number; ready: number; review: number; usage: number; negativeFeedback: number };
+  inspectionItems: MatrixInspectionItem[];
+  activeFilter: MatrixFilterKey;
+  onFilterChange: (filter: MatrixFilterKey) => void;
   loading: boolean;
   enabled: boolean;
   selectedID: number | null;
@@ -1831,7 +1875,7 @@ function BotMatrixPanel({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
-            <MatrixMetric label={t("oafBots.matrix.totalBots")} value={rows.length} />
+            <MatrixMetric label={t("oafBots.matrix.totalBots")} value={allRowsCount} />
             <MatrixMetric label={t("oafBots.matrix.boundBots")} value={summary.bound} />
             <MatrixMetric label={t("oafBots.matrix.readyBots")} value={summary.ready} />
             <MatrixMetric label={t("oafBots.matrix.pendingReview")} value={summary.review} />
@@ -1848,14 +1892,72 @@ function BotMatrixPanel({
           </div>
         </div>
 
+        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.matrix.inspectionTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.matrix.inspectionDescription")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {matrixFilters.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => onFilterChange(filter)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    activeFilter === filter
+                      ? "border-[#1d9bf0] bg-[#1d9bf0]/15 text-[#8ecdf8]"
+                      : "border-[#2f3336] bg-black text-[#b6bec5] hover:bg-[#16181c]"
+                  }`}
+                >
+                  {t(`oafBots.matrix.filters.${filter}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
+            {inspectionItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onFilterChange(item.key)}
+                className={`rounded-xl border p-3 text-left transition hover:bg-black ${
+                  activeFilter === item.key
+                    ? "border-[#1d9bf0] bg-[#1d9bf0]/10"
+                    : item.tone === "danger"
+                      ? "border-rose-300/25 bg-rose-400/8"
+                      : item.tone === "warning"
+                        ? "border-amber-300/25 bg-amber-400/8"
+                        : "border-[#2f3336] bg-black"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-[#e7e9ea]">{t(`oafBots.matrix.inspection.${item.key}.title`)}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.count > 0 ? "bg-[#1d9bf0]/15 text-[#8ecdf8]" : "bg-[#202327] text-[#71767b]"}`}>
+                    {item.count}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[#71767b]">{t(`oafBots.matrix.inspection.${item.key}.description`)}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? <p className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-sm text-[#71767b]">{t("oafBots.matrix.loading")}</p> : null}
 
-        {rows.length === 0 ? (
+        {allRowsCount === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#2f3336] bg-[#0f1419] p-5 text-sm leading-6 text-[#71767b]">
             {t("oafBots.matrix.empty")}
           </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-[#0f1419] p-5 text-sm leading-6 text-[#71767b]">
+            {t("oafBots.matrix.filteredEmpty")}
+          </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-[#2f3336]">
+            <div className="border-b border-[#2f3336] bg-[#0f1419] px-4 py-3 text-xs text-[#71767b]">
+              {t("oafBots.matrix.filteredCount", { count: rows.length, total: allRowsCount })}
+            </div>
             <table className="min-w-[980px] w-full text-left text-sm">
               <thead className="bg-[#0f1419] text-xs uppercase text-[#71767b]">
                 <tr>

@@ -311,11 +311,11 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
   const { t } = useT();
   if (!subscription) return null;
 
-  const dailyItems: Array<[string, number, number, LucideIcon]> = [
-    ["billing.usage.items.autoPosts", subscription.usage.autoPostsToday, subscription.limits.dailyAutoPosts, Zap],
-    ["billing.usage.items.autoReplies", subscription.usage.autoRepliesToday, subscription.limits.dailyAutoReplies, Zap],
-    ["billing.usage.items.autoComments", subscription.usage.autoCommentsToday, subscription.limits.dailyAutoComments, Zap],
-    ["billing.usage.items.autoDMs", subscription.usage.autoDMsToday, subscription.limits.dailyAutoDMs, Zap],
+  const monthlyItems: Array<[string, number, number, LucideIcon]> = [
+    ["billing.usage.items.autoPosts", subscription.usage.autoPostsMonth, subscription.limits.monthlyAutoPosts, Zap],
+    ["billing.usage.items.autoReplies", subscription.usage.autoRepliesMonth, subscription.limits.monthlyAutoReplies, Zap],
+    ["billing.usage.items.autoComments", subscription.usage.autoCommentsMonth, subscription.limits.monthlyAutoComments, Zap],
+    ["billing.usage.items.autoDMs", subscription.usage.autoDMsMonth, subscription.limits.monthlyAutoDMs, Zap],
   ];
   const capabilityItems: Array<[string, string, LucideIcon]> = [
     ["billing.usage.capabilities.analytics", t("billing.usage.capabilities.analyticsValue", { days: subscription.limits.analyticsDays }), CalendarClock],
@@ -341,7 +341,7 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {dailyItems.map(([labelKey, used, limit, Icon]) => {
+          {monthlyItems.map(([labelKey, used, limit, Icon]) => {
             const pct = usagePercent(used, limit);
             const isHot = pct >= 80;
             return (

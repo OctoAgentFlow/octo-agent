@@ -2,12 +2,12 @@ package dto
 
 type AutomationFrequency struct {
 	IntervalMinutes int `json:"interval_minutes" binding:"required,min=1,max=1440"`
-	DailyLimit      int `json:"daily_limit" binding:"required,min=0,max=5000"`
+	DailyLimit      int `json:"daily_limit" binding:"omitempty,min=0,max=5000"` // Deprecated: accepted for API compatibility; monthly plan quota is enforced instead.
 }
 
 type AutomationSafety struct {
 	RequireApproval bool     `json:"require_approval"`
-	MaxPerHour      int      `json:"max_per_hour" binding:"required,min=0,max=500"`
+	MaxPerHour      int      `json:"max_per_hour" binding:"omitempty,min=0,max=500"` // Deprecated: accepted for API compatibility; monthly plan quota is enforced instead.
 	BlockedKeywords []string `json:"blocked_keywords"`
 }
 
@@ -31,12 +31,15 @@ type AutomationReplyUsage struct {
 }
 
 type AutomationModuleData struct {
-	Type      string                  `json:"type"`
-	Name      string                  `json:"name"`
-	State     string                  `json:"state"`
-	Config    AutomationConfigPayload `json:"config"`
-	LastRunAt string                  `json:"last_run_at,omitempty"`
-	NextRunAt string                  `json:"next_run_at,omitempty"`
+	Type            string                  `json:"type"`
+	Name            string                  `json:"name"`
+	State           string                  `json:"state"`
+	Config          AutomationConfigPayload `json:"config"`
+	LastRunAt       string                  `json:"last_run_at,omitempty"`
+	NextRunAt       string                  `json:"next_run_at,omitempty"`
+	LastScanStatus  string                  `json:"last_scan_status,omitempty"`
+	LastScanMessage string                  `json:"last_scan_message,omitempty"`
+	LastScanAt      string                  `json:"last_scan_at,omitempty"`
 	// ExecutedToday is today's successful execution count for this automation type.
 	ExecutedToday int `json:"executed_today"`
 	// ReplyUsage is set only for type=reply (today count, remaining daily quota, last reply activity time).
@@ -103,7 +106,7 @@ type AutoPostPlanRequest struct {
 	XAccountID         uint   `json:"x_account_id" binding:"required"`
 	Enabled            bool   `json:"enabled"`
 	ExecutionMode      string `json:"execution_mode"`
-	DailyLimit         int    `json:"daily_limit"`
+	DailyLimit         int    `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
 	MinIntervalMinutes int    `json:"min_interval_minutes"`
 	PostingWindows     string `json:"posting_windows"`
 	Timezone           string `json:"timezone"`
@@ -132,7 +135,7 @@ type AutoPostPlanItem struct {
 	BotName            string `json:"bot_name,omitempty"`
 	Enabled            bool   `json:"enabled"`
 	ExecutionMode      string `json:"execution_mode"`
-	DailyLimit         int    `json:"daily_limit"`
+	DailyLimit         int    `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
 	MinIntervalMinutes int    `json:"min_interval_minutes"`
 	PostingWindows     string `json:"posting_windows"`
 	Timezone           string `json:"timezone"`
@@ -197,8 +200,19 @@ type AutoPostGenerationRunItem struct {
 	CreatedAt        string `json:"created_at"`
 }
 
+type AutoPostGenerationRunQuery struct {
+	Status     string `form:"status"`
+	XAccountID uint   `form:"x_account_id"`
+	Range      string `form:"range"`
+	DateFrom   string `form:"date_from"`
+	DateTo     string `form:"date_to"`
+	Page       int    `form:"page"`
+	PageSize   int    `form:"page_size"`
+}
+
 type AutoPostGenerationRunsResponse struct {
-	Items []AutoPostGenerationRunItem `json:"items"`
+	Items      []AutoPostGenerationRunItem `json:"items"`
+	Pagination ActivityPagination          `json:"pagination"`
 }
 
 type AutoDMTaskItem struct {

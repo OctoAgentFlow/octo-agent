@@ -24,7 +24,10 @@ export function AppHeader() {
   const router = useRouter();
   const { t } = useT();
   const { pushToast } = useToast();
-  const { bindWallet, unbindWallet } = useWalletBinding({ onMessage: pushToast });
+  const { bindWallet, unbindWallet } = useWalletBinding({
+    onMessage: pushToast,
+    unbindSuccessMessage: t("wallet.toast.unbound"),
+  });
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [headerBusy, setHeaderBusy] = useState(false);
   const [clock, setClock] = useState(() => Date.now());

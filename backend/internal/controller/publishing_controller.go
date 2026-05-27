@@ -59,6 +59,11 @@ func (ctl *PublishingController) Retry(c *gin.Context) {
 	}
 	data, err := ctl.service.RetryJob(userID, id)
 	if err != nil {
+		var publishingErr *service.PublishingError
+		if errors.As(err, &publishingErr) && publishingErr.Code != "" {
+			response.FailWithCode(c, http.StatusForbidden, publishingErr.Message, publishingErr.Code)
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

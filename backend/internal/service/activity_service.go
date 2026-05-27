@@ -36,8 +36,15 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	}
 
 	typ := strings.TrimSpace(strings.ToLower(query.Type))
-	if typ != "" && typ != "post" && typ != "reply" && typ != "dm" && typ != "comment" {
+	if typ != "" && typ != "post" && typ != "reply" && typ != "dm" && typ != "comment" && typ != "system" {
 		return nil, errors.New("invalid activity type")
+	}
+	eventScope := strings.TrimSpace(strings.ToLower(query.EventScope))
+	if eventScope != "" && eventScope != "all" && eventScope != "execution" && eventScope != "system" {
+		return nil, errors.New("invalid activity event scope")
+	}
+	if eventScope == "all" {
+		eventScope = ""
 	}
 	status := strings.TrimSpace(strings.ToLower(query.Status))
 	if status != "" && status != "success" && status != "review" && status != "failed" {
@@ -65,23 +72,30 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 	if len([]rune(errorReason)) > 512 {
 		return nil, errors.New("invalid error reason")
 	}
+	failureCategory := strings.TrimSpace(strings.ToLower(query.FailureCategory))
+	if failureCategory != "" && !isValidActivityFailureCategory(failureCategory) {
+		return nil, errors.New("invalid activity failure category")
+	}
 
-	items, total, err := s.repo.List(userID, page, pageSize, typ, status, from, to, accountID, accountHandle, errorReason)
+	items, total, err := s.repo.List(userID, page, pageSize, typ, eventScope, status, from, to, accountID, accountHandle, errorReason, failureCategory)
 	if err != nil {
 		return nil, err
 	}
 
 	data := make([]dto.ActivityItemData, 0, len(items))
 	for _, item := range items {
+		accountHandle, sourceModule := activityDisplaySource(item.Type, item.AccountHandle)
 		data = append(data, dto.ActivityItemData{
 			ID:                  item.ID,
 			XAccountID:          item.XAccountID,
 			Type:                item.Type,
 			Status:              item.Status,
 			PreviewKey:          item.PreviewKey,
-			AccountHandle:       item.AccountHandle,
+			AccountHandle:       accountHandle,
+			SourceModule:        sourceModule,
 			ExecutedAt:          item.ExecutedAt.UTC().Format(time.RFC3339),
 			ErrorMessage:        item.ErrorMessage,
+			FailureCategory:     classifyActivityFailure(item.Status, item.ErrorMessage),
 			ReplyCommentTweetID: item.ReplyCommentTweetID,
 			ReplyToUsername:     item.ReplyToUsername,
 			ReplyToTextPreview:  item.ReplyToTextPreview,
@@ -111,5 +125,32 @@ func activityRangeBounds(value string, now time.Time) (time.Time, time.Time, err
 		return now.AddDate(0, 0, -30), now, nil
 	default:
 		return time.Time{}, time.Time{}, errors.New("invalid activity range")
+	}
+}
+
+func activityDisplaySource(typ string, accountHandle string) (string, string) {
+	if typ != "system" {
+		return accountHandle, ""
+	}
+	handle := strings.TrimSpace(accountHandle)
+	if handle == "" {
+		return "System", ""
+	}
+	parts := strings.Split(handle, "/")
+	if len(parts) < 2 {
+		return handle, ""
+	}
+	source := strings.TrimSpace(parts[len(parts)-1])
+	switch source {
+	case "Auto Post":
+		return strings.TrimSpace(parts[0]), "post"
+	case "Auto Reply":
+		return strings.TrimSpace(parts[0]), "reply"
+	case "Auto Comment":
+		return strings.TrimSpace(parts[0]), "comment"
+	case "Auto DM":
+		return strings.TrimSpace(parts[0]), "dm"
+	default:
+		return handle, ""
 	}
 }

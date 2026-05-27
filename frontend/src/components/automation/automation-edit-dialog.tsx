@@ -36,10 +36,10 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
     resolver: zodResolver(schema),
     values: (module?.config ?? {
       enabled: false,
-      frequency: { intervalMinutes: 60, dailyLimit: 20 },
+      frequency: { intervalMinutes: 60, dailyLimit: 0 },
       tone: "Professional",
       executionMode: "review",
-      safety: { requireApproval: true, maxPerHour: 5, blockedKeywords: [] },
+      safety: { requireApproval: true, maxPerHour: 0, blockedKeywords: [] },
     }) as Values,
   });
 
@@ -65,7 +65,7 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
       className="max-w-lg"
     >
       <form className="space-y-4" onSubmit={submit}>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2">
           <label className="text-xs text-white/70">
             {t("automation.edit.intervalMinutes")}
             <Input
@@ -75,17 +75,6 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
               defaultValue={module.config.frequency.intervalMinutes}
               error={form.formState.errors.frequency?.intervalMinutes?.message as string | undefined}
               {...form.register("frequency.intervalMinutes", { valueAsNumber: true })}
-            />
-          </label>
-          <label className="text-xs text-white/70">
-            {t("automation.edit.dailyLimit")}
-            <Input
-              type="number"
-              min={0}
-              max={5000}
-              defaultValue={module.config.frequency.dailyLimit}
-              error={form.formState.errors.frequency?.dailyLimit?.message as string | undefined}
-              {...form.register("frequency.dailyLimit", { valueAsNumber: true })}
             />
           </label>
         </div>
@@ -119,23 +108,10 @@ export function AutomationEditDialog({ module, open, onOpenChange, onSave }: Pro
 
         <div className="space-y-2">
           <p className="text-xs font-semibold tracking-wide text-white/70 uppercase">{t("automation.edit.safety")}</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-white/75">
-              <input type="checkbox" className="accent-blue-400" defaultChecked={module.config.safety.requireApproval} {...form.register("safety.requireApproval")} />
-              {t("automation.edit.requireApproval")}
-            </label>
-            <label className="text-xs text-white/70">
-              {t("automation.edit.maxPerHour")}
-              <Input
-                type="number"
-                min={0}
-                max={500}
-                defaultValue={module.config.safety.maxPerHour}
-                error={form.formState.errors.safety?.maxPerHour?.message as string | undefined}
-                {...form.register("safety.maxPerHour", { valueAsNumber: true })}
-              />
-            </label>
-          </div>
+          <label className="flex items-center gap-2 text-sm text-white/75">
+            <input type="checkbox" className="accent-blue-400" defaultChecked={module.config.safety.requireApproval} {...form.register("safety.requireApproval")} />
+            {t("automation.edit.requireApproval")}
+          </label>
 
           <label className="text-xs text-white/70">
             {t("automation.edit.blockedKeywords")}

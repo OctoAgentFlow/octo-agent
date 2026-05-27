@@ -1,5 +1,20 @@
 import { request } from "@/lib/request";
-import type { OAFBot, OAFBotCompleteProfileResult, OAFBotGenerationUsage, OAFBotListData, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type {
+  OAFBot,
+  OAFBotCompleteProfileResult,
+  OAFBotFeedbackProfileSuggestionResult,
+  OAFBotGenerationFeedback,
+  OAFBotGenerationFeedbackPayload,
+  OAFBotGenerationUsage,
+  OAFBotListData,
+  OAFBotMatrixInspectionSummary,
+  OAFBotMatrixSignal,
+  OAFBotPayload,
+  OAFBotProfileAssistMode,
+  OAFBotSafetyHit,
+  OAFBotSampleScene,
+  OAFBotTestGenerateResult,
+} from "@/types/oaf-bot";
 
 type ApiResponse<T> = {
   code: number;
@@ -13,6 +28,10 @@ type OAFBotListApi = {
     oaf_bots: number;
     twitter_accounts: number;
     ai_generations_month: number;
+    auto_posts_month: number;
+    auto_replies_month: number;
+    auto_comments_month: number;
+    auto_dms_month: number;
     auto_posts_today: number;
     auto_replies_today: number;
     auto_comments_today: number;
@@ -25,6 +44,10 @@ type OAFBotListApi = {
     monthly_x_writes: number;
     monthly_x_url_posts: number;
     monthly_cost_cap_cents: number;
+    monthly_auto_posts: number;
+    monthly_auto_replies: number;
+    monthly_auto_comments: number;
+    monthly_auto_dms: number;
     daily_auto_posts: number;
     daily_auto_replies: number;
     daily_auto_comments: number;
@@ -49,6 +72,15 @@ type OAFBotGenerationUsagesApi = {
   items: OAFBotGenerationUsage[];
 };
 
+type OAFBotGenerationFeedbackApi = {
+  items: OAFBotGenerationFeedback[];
+};
+
+type OAFBotMatrixSignalsApi = {
+  items: OAFBotMatrixSignal[];
+  summary?: OAFBotMatrixInspectionSummary;
+};
+
 function mapList(data: OAFBotListApi): OAFBotListData {
   return {
     items: data.items,
@@ -56,6 +88,10 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       oafBots: data.usage.oaf_bots,
       twitterAccounts: data.usage.twitter_accounts,
       aiGenerationsMonth: data.usage.ai_generations_month,
+      autoPostsMonth: data.usage.auto_posts_month,
+      autoRepliesMonth: data.usage.auto_replies_month,
+      autoCommentsMonth: data.usage.auto_comments_month,
+      autoDMsMonth: data.usage.auto_dms_month,
       autoPostsToday: data.usage.auto_posts_today,
       autoRepliesToday: data.usage.auto_replies_today,
       autoCommentsToday: data.usage.auto_comments_today,
@@ -68,6 +104,10 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       monthlyXWrites: data.limits.monthly_x_writes,
       monthlyXUrlPosts: data.limits.monthly_x_url_posts,
       monthlyCostCapCents: data.limits.monthly_cost_cap_cents,
+      monthlyAutoPosts: data.limits.monthly_auto_posts,
+      monthlyAutoReplies: data.limits.monthly_auto_replies,
+      monthlyAutoComments: data.limits.monthly_auto_comments,
+      monthlyAutoDMs: data.limits.monthly_auto_dms,
       dailyAutoPosts: data.limits.daily_auto_posts,
       dailyAutoReplies: data.limits.daily_auto_replies,
       dailyAutoComments: data.limits.daily_auto_comments,
@@ -102,16 +142,36 @@ export const oafBotService = {
     const res = await request.put<ApiResponse<OAFBot>>(`/oaf-bots/${id}`, body);
     return res.data.data;
   },
-  async completeProfile(draft: OAFBotPayload) {
-    const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft });
+  async completeProfile(draft: OAFBotPayload, mode: OAFBotProfileAssistMode = "fill_missing_only") {
+    const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft, mode });
     return res.data.data;
   },
-  async testGenerate(id: number, scene: OAFBotSampleScene) {
-    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene });
+  async suggestProfileFromFeedback(id: number) {
+    const res = await request.post<ApiResponse<OAFBotFeedbackProfileSuggestionResult>>(`/oaf-bots/${id}/feedback-profile-suggestion`, {});
+    return res.data.data;
+  },
+  async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene, sample_context: sampleContext });
+    return res.data.data;
+  },
+  async rewriteSafety(id: number, body: { scene: OAFBotSampleScene; content: string; sample_context?: string; rewrite_mode?: string; matched_hits?: OAFBotSafetyHit[] }) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/rewrite-safety`, body);
     return res.data.data;
   },
   async generationUsages(id: number) {
     const res = await request.get<ApiResponse<OAFBotGenerationUsagesApi>>(`/oaf-bots/${id}/generation-usages`);
+    return res.data.data;
+  },
+  async generationFeedback(id: number) {
+    const res = await request.get<ApiResponse<OAFBotGenerationFeedbackApi>>(`/oaf-bots/${id}/generation-feedback`);
+    return res.data.data;
+  },
+  async matrixSignals() {
+    const res = await request.get<ApiResponse<OAFBotMatrixSignalsApi>>("/oaf-bots/matrix-signals");
+    return res.data.data;
+  },
+  async createGenerationFeedback(id: number, body: OAFBotGenerationFeedbackPayload) {
+    const res = await request.post<ApiResponse<OAFBotGenerationFeedback>>(`/oaf-bots/${id}/generation-feedback`, body);
     return res.data.data;
   },
 };

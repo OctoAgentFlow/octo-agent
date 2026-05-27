@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, MessageCircleReply, Send } from "lucide-react";
+import { Bot, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
@@ -19,13 +19,36 @@ type RecentActivityListProps = {
 function typeIcon(type: ActivityRecord["type"]) {
   if (type === "post") return Bot;
   if (type === "reply") return MessageCircleReply;
+  if (type === "comment") return MessageCircle;
+  if (type === "system") return Settings;
   return Send;
 }
 
 function typeLabelKey(type: ActivityRecord["type"]) {
   if (type === "post") return "activity.type.post";
   if (type === "reply") return "activity.type.reply";
+  if (type === "comment") return "activity.type.comment";
+  if (type === "system") return "activity.type.system";
   return "activity.type.dm";
+}
+
+function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
+  if (sourceModule === "post") return "activity.source.post";
+  if (sourceModule === "reply") return "activity.source.reply";
+  if (sourceModule === "comment") return "activity.source.comment";
+  if (sourceModule === "dm") return "activity.source.dm";
+  return "";
+}
+
+function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureCategory.x_auth";
+  if (category === "rate_limit") return "activity.failureCategory.rate_limit";
+  if (category === "safety") return "activity.failureCategory.safety";
+  if (category === "configuration") return "activity.failureCategory.configuration";
+  if (category === "network") return "activity.failureCategory.network";
+  if (category === "system") return "activity.failureCategory.system";
+  if (category === "unknown") return "activity.failureCategory.unknown";
+  return "";
 }
 
 function formatClock(iso: string) {
@@ -69,7 +92,19 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
                   {formatClock(activity.executedAt)}
                 </span>
                 <div>
-                  <p className="font-semibold text-[#e7e9ea]">{t(typeLabelKey(activity.type))}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-[#e7e9ea]">{t(typeLabelKey(activity.type))}</p>
+                    {activity.sourceModule ? (
+                      <span className="rounded-full border border-blue-300/25 bg-blue-500/10 px-2 py-0.5 text-[11px] text-blue-200">
+                        {t(sourceModuleLabelKey(activity.sourceModule))}
+                      </span>
+                    ) : null}
+                    {activity.failureCategory ? (
+                      <span className="rounded-full border border-rose-300/25 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-200">
+                        {t(failureCategoryLabelKey(activity.failureCategory))}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="line-clamp-3 text-xs leading-5 text-[#e7e9ea]/78">{activityNarrativeLine(activity, t)}</p>
                   {activity.errorMessage ? (
                     <p className="mt-1 line-clamp-2 text-xs text-rose-200/85">{activity.errorMessage}</p>

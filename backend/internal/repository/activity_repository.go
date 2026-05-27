@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -31,9 +32,10 @@ type ActivityDailyStatusCount struct {
 }
 
 type ActivityFailureReasonCount struct {
-	Reason string
-	Count  int64
-	LastAt *time.Time
+	Reason   string
+	Category string
+	Count    int64
+	LastAt   *time.Time
 }
 
 type ActivityAccountStatusCount struct {
@@ -99,10 +101,14 @@ func (r *ActivityRepository) LatestReplyExecutedAt(userID uint) (*time.Time, err
 	return &t, nil
 }
 
-func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string) ([]model.ActivityLog, int64, error) {
+func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ string, eventScope string, status string, from, to time.Time, accountID uint, accountHandle string, errorReason string, failureCategory string) ([]model.ActivityLog, int64, error) {
 	q := r.DB.Model(&model.ActivityLog{}).Where("user_id = ?", userID)
-	if typ != "" {
+	if eventScope == "system" {
+		q = q.Where("type = ?", "system")
+	} else if typ != "" {
 		q = q.Where("type = ?", typ)
+	} else if eventScope == "execution" {
+		q = q.Where("type <> ?", "system")
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -116,6 +122,7 @@ func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ strin
 	if errorReason != "" {
 		q = q.Where("COALESCE(NULLIF(TRIM(error_message), ''), 'Unknown error') = ?", errorReason)
 	}
+	q = applyActivityFailureCategoryFilter(q, failureCategory)
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -129,6 +136,63 @@ func (r *ActivityRepository) List(userID uint, page int, pageSize int, typ strin
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+func applyActivityFailureCategoryFilter(q *gorm.DB, category string) *gorm.DB {
+	switch category {
+	case "x_auth":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(8)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%",
+		)...)...)
+	case "rate_limit":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(4)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%rate limit%", "%too many requests%", "%429%", "%retry after%",
+		)...)...)
+	case "safety":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(7)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%",
+		)...)...)
+	case "configuration":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(8)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%",
+		)...)...)
+	case "network":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(6)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%",
+		)...)...)
+	case "system":
+		return q.Where("status = ? AND ("+activityErrorLikeClause(7)+")", append([]any{"failed"}, activityErrorLikeArgs(
+			"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%",
+		)...)...)
+	case "unknown":
+		known := append([]any{"failed"}, activityErrorLikeArgs(
+			"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%",
+			"%rate limit%", "%too many requests%", "%429%", "%retry after%",
+			"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%",
+			"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%",
+			"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%",
+			"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%",
+		)...)
+		return q.Where("status = ? AND (TRIM(COALESCE(error_message, '')) = '' OR NOT ("+activityErrorLikeClause(len(known)-1)+"))", known...)
+	default:
+		return q
+	}
+}
+
+func activityErrorLikeClause(count int) string {
+	parts := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		parts = append(parts, "LOWER(COALESCE(error_message, '')) LIKE ?")
+	}
+	return strings.Join(parts, " OR ")
+}
+
+func activityErrorLikeArgs(patterns ...string) []any {
+	args := make([]any, 0, len(patterns))
+	for _, pattern := range patterns {
+		args = append(args, pattern)
+	}
+	return args
 }
 
 // CountExecutedBetween counts rows with executed_at in [from, to). Pass zero to from or to to leave that bound open.
@@ -308,6 +372,47 @@ func (r *ActivityRepository) CountFailureReasonsBetween(userID uint, from, to ti
 	q = applyActivityAccountFilter(q, accountID, accountHandle)
 	err := q.Group(reasonExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
 	return rows, err
+}
+
+// CountFailureCategoriesBetween aggregates failed activities by normalized failure category in [from, to).
+func (r *ActivityRepository) CountFailureCategoriesBetween(userID uint, from, to time.Time, accountID uint, accountHandle string, limit int) ([]ActivityFailureReasonCount, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	var rows []ActivityFailureReasonCount
+	categoryExpr := activityFailureCategoryCaseExpr()
+	q := r.DB.Model(&model.ActivityLog{}).
+		Select(categoryExpr+" AS category, "+categoryExpr+" AS reason, COUNT(*) AS count, MAX(executed_at) AS last_at").
+		Where("user_id = ? AND status = ?", userID, "failed")
+	if !from.IsZero() {
+		q = q.Where("executed_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("executed_at < ?", to)
+	}
+	q = applyActivityAccountFilter(q, accountID, accountHandle)
+	err := q.Group(categoryExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+func activityFailureCategoryCaseExpr() string {
+	text := "LOWER(COALESCE(error_message, ''))"
+	return "CASE" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%unauthorized%", "%401%", "%oauth%", "%token%", "%credential%", "%reauth%", "%authorization%", "%forbidden%"}) + " THEN 'x_auth'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%rate limit%", "%too many requests%", "%429%", "%retry after%"}) + " THEN 'rate_limit'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%blocked_keyword%", "%blocked keyword%", "%risk%", "%sensitive%", "%safety%", "%policy%", "%rejected%"}) + " THEN 'safety'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%missing%", "%not configured%", "%no account%", "%setup%", "%capability%", "%permission%", "%empty%", "%disabled%"}) + " THEN 'configuration'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%timeout%", "%connection%", "%dial tcp%", "%network%", "%dns%", "%tls%"}) + " THEN 'network'" +
+		" WHEN " + activityCategoryLikeExpr(text, []string{"%panic%", "%database%", "% sql%", "%internal%", "%server error%", "%500%", "%bad gateway%"}) + " THEN 'system'" +
+		" ELSE 'unknown' END"
+}
+
+func activityCategoryLikeExpr(textExpr string, patterns []string) string {
+	parts := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		parts = append(parts, textExpr+" LIKE '"+pattern+"'")
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
 }
 
 // ListAttentionBetween returns recent failed or review activities in [from, to).

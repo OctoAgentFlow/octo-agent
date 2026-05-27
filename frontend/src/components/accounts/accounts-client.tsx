@@ -257,6 +257,12 @@ export function AccountsClient() {
   const needsActionCount = accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired).length;
   const boundBotCount = bots.filter((bot) => accounts.some((account) => Number(account.id) === bot.twitter_account_id)).length;
   const accountLimit = subscription?.limits.max_twitter_accounts ?? 1;
+  const activeFilter = searchParams.get("filter");
+  const showNeedsReauthOnly = activeFilter === "needs_reauth";
+  const visibleAccounts = useMemo(
+    () => (showNeedsReauthOnly ? accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired) : accounts),
+    [accounts, showNeedsReauthOnly]
+  );
 
   const startOAuth = useCallback(async (options?: { bypassFreeLimit?: boolean }) => {
     if (isFreeAccountLimitReached && !options?.bypassFreeLimit) {
@@ -327,8 +333,21 @@ export function AccountsClient() {
             <AccountMetricCard label={t("accounts.overview.needsAction")} value={String(needsActionCount)} tone={needsActionCount > 0 ? "warning" : "success"} />
             <AccountMetricCard label={t("accounts.overview.automationReady")} value={String(accounts.filter((account) => account.status === "connected" && account.publishReady).length)} />
           </div>
+          {showNeedsReauthOnly ? (
+            <Card className="border-amber-300/25 bg-amber-500/10 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-50">{t("accounts.filters.needsReauth.title", { count: visibleAccounts.length })}</p>
+                  <p className="mt-1 text-sm leading-6 text-amber-50/75">{t("accounts.filters.needsReauth.description")}</p>
+                </div>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => router.replace(pathname)}>
+                  {t("accounts.filters.clear")}
+                </Button>
+              </div>
+            </Card>
+          ) : null}
           <AccountList
-            accounts={accounts}
+            accounts={visibleAccounts}
             bots={bots}
             automationModules={automationModules}
             autoPostPlans={autoPostPlans}

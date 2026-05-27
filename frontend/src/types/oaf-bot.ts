@@ -44,6 +44,8 @@ export type OAFBotListData = {
 };
 
 export type OAFBotSampleScene = "tweet" | "reply" | "comment" | "dm";
+export type OAFBotSampleContext = Partial<Record<OAFBotSampleScene, string>>;
+export type OAFBotProfileAssistMode = "fill_missing_only" | "improve_all";
 
 export type OAFBotSamples = {
   tweet: string;
@@ -52,12 +54,26 @@ export type OAFBotSamples = {
   dm: string;
 };
 
+export type OAFBotSafetyHit = {
+  source: "forbidden_topic" | "avoid_claim" | "platform_policy" | "conservative_review" | string;
+  term: string;
+};
+
+export type OAFBotSafetyEvaluation = {
+  level: "low" | "medium" | "high" | string;
+  action: "allow" | "review" | "avoid" | string;
+  category: string;
+  reason: string;
+  matched_hits: OAFBotSafetyHit[];
+};
+
 export type OAFBotTestGenerateResult = Partial<OAFBotSamples> & {
   scene: OAFBotSampleScene;
   content: string;
   provider: string;
   usage_consumed: number;
   raw_result?: string;
+  safety_evaluation?: OAFBotSafetyEvaluation;
 };
 
 export type OAFBotCompleteProfileResult = {
@@ -67,10 +83,55 @@ export type OAFBotCompleteProfileResult = {
   raw_result?: string;
 };
 
+export type OAFBotFeedbackProfileSuggestionResult = {
+  profile: OAFBotPayload;
+  provider: string;
+  usage_consumed: number;
+  feedback_count: number;
+  raw_result?: string;
+};
+
 export type OAFBotGenerationUsage = {
   bot_id: number;
   scene: string;
   month: string;
   count: number;
   updated_at: string;
+};
+
+export type OAFBotGenerationFeedbackRating = "positive" | "negative";
+
+export type OAFBotGenerationFeedbackPayload = {
+  scene: OAFBotSampleScene;
+  rating: OAFBotGenerationFeedbackRating;
+  issue_tags: string[];
+  comment: string;
+  sample_context: string;
+  generated_content: string;
+  provider: string;
+};
+
+export type OAFBotGenerationFeedback = OAFBotGenerationFeedbackPayload & {
+  id: number;
+  bot_id: number;
+  created_at: string;
+};
+
+export type OAFBotMatrixSignal = {
+  bot_id: number;
+  usages: OAFBotGenerationUsage[];
+  feedback: OAFBotGenerationFeedback[];
+  inspection_flags?: string[];
+  inspection_metrics?: {
+    active_content_count: number;
+    negative_feedback: number;
+    pending_review: number;
+  };
+};
+
+export type OAFBotMatrixInspectionSummary = {
+  unbound_count: number;
+  auto_post_not_ready_count: number;
+  negative_feedback_count: number;
+  review_backlog_count: number;
 };

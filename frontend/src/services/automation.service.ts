@@ -14,18 +14,21 @@ export type AutomationModuleApi = {
     enabled: boolean;
     frequency: {
       interval_minutes: number;
-      daily_limit: number;
+      daily_limit?: number;
     };
     tone: "Professional" | "Friendly" | "Degen" | "Web3-native";
     execution_mode: "manual" | "review" | "autopilot";
     safety: {
       require_approval: boolean;
-      max_per_hour: number;
+      max_per_hour?: number;
       blocked_keywords: string[];
     };
   };
   last_run_at?: string;
   next_run_at?: string;
+  last_scan_status?: string;
+  last_scan_message?: string;
+  last_scan_at?: string;
   executed_today: number;
   reply_usage?: {
     today_count: number;
@@ -240,13 +243,13 @@ export type AutomationSavePayload = {
   enabled: boolean;
   frequency: {
     interval_minutes: number;
-    daily_limit: number;
+    daily_limit?: number;
   };
   tone: "Professional" | "Friendly" | "Degen" | "Web3-native";
   execution_mode?: "manual" | "review" | "autopilot";
   safety: {
     require_approval: boolean;
-    max_per_hour: number;
+    max_per_hour?: number;
     blocked_keywords: string[];
   };
 };
@@ -257,7 +260,18 @@ export const automationService = {
     return res.data.data;
   },
   async update(type: "post" | "reply" | "dm" | "comment", payload: AutomationSavePayload) {
-    const res = await request.put<ApiResponse<AutomationModuleApi>>(`/automations/${type}`, payload);
+    const { frequency, safety, ...rest } = payload;
+    const body: AutomationSavePayload = {
+      ...rest,
+      frequency: {
+        interval_minutes: frequency.interval_minutes,
+      },
+      safety: {
+        require_approval: safety.require_approval,
+        blocked_keywords: safety.blocked_keywords,
+      },
+    };
+    const res = await request.put<ApiResponse<AutomationModuleApi>>(`/automations/${type}`, body);
     return res.data.data;
   },
   async toggle(type: "post" | "reply" | "dm" | "comment", enabled: boolean) {

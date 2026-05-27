@@ -50,10 +50,10 @@ export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Languag
     t("planBenefits.xAccounts", { count: count(limits.maxTwitterAccounts) }),
     t("planBenefits.aiGenerationsMonthly", { count: count(limits.aiGenerationsMonthly) }),
     t("planBenefits.monthlyXWrites", { count: count(limits.monthlyXWrites) }),
-    t("planBenefits.dailyAutoPost", { count: count(limits.dailyAutoPosts) }),
-    t("planBenefits.dailyAutoReply", { count: count(limits.dailyAutoReplies) }),
-    t("planBenefits.dailyAutoComment", { count: count(limits.dailyAutoComments) }),
-    t("planBenefits.dailyAutoDm", { count: count(limits.dailyAutoDMs) }),
+    t("planBenefits.monthlyAutoPost", { count: count(limits.monthlyAutoPosts) }),
+    t("planBenefits.monthlyAutoReply", { count: count(limits.monthlyAutoReplies) }),
+    t("planBenefits.monthlyAutoComment", { count: count(limits.monthlyAutoComments) }),
+    t("planBenefits.monthlyAutoDm", { count: count(limits.monthlyAutoDMs) }),
     t("planBenefits.analyticsDays", { days: count(limits.analyticsDays) }),
   ];
 

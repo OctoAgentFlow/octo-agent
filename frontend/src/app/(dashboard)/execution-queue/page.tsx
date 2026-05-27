@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, Send, ShieldAlert, Sparkles, XCircle, type LucideIcon } from "lucide-react";
 
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { automationService } from "@/services/automation.service";
 import { autoPostService } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
@@ -20,6 +22,7 @@ import {
 } from "@/services/review-queue.service";
 
 type LoadState = "loading" | "ready" | "error";
+type ModuleType = "post" | "comment" | "reply" | "dm";
 
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
@@ -108,31 +111,87 @@ function publishTone(status?: string) {
   return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
 }
 
+function automationPausedToast(t: (key: string, values?: Record<string, string | number>) => string, error: unknown, fallback: string) {
+  return apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || fallback;
+}
+
+function moduleNameKey(type: string) {
+  if (type === "post") return "automation.module.post.name";
+  if (type === "comment") return "automation.module.comment.name";
+  if (type === "reply") return "automation.module.reply.name";
+  return "automation.module.dm.name";
+}
+
+function normalizedTypeFilter(value: string | null): ReviewQueueType {
+  return value && typeOptions.includes(value as ReviewQueueType) ? (value as ReviewQueueType) : "all";
+}
+
+function normalizedStatusFilter(value: string | null): ReviewQueueStatus {
+  return value && statusOptions.includes(value as ReviewQueueStatus) ? (value as ReviewQueueStatus) : "all";
+}
+
+function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
+  return value && modeOptions.includes(value as ReviewQueueExecutionMode) ? (value as ReviewQueueExecutionMode) : "all";
+}
+
 export default function ExecutionQueuePage() {
   const { t } = useT();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
+  const urlFilters = useMemo(() => {
+    const params = new URLSearchParams(searchKey);
+    return {
+      type: normalizedTypeFilter(params.get("type")),
+      status: normalizedStatusFilter(params.get("status")),
+      mode: normalizedModeFilter(params.get("mode")),
+    };
+  }, [searchKey]);
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [items, setItems] = useState<ReviewQueueItemApi[]>([]);
   const [stats, setStats] = useState({ pending_review: 0, ready_to_publish: 0, approved: 0, rejected: 0, failed: 0 });
-  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>("all");
-  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>("all");
-  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>("all");
+  const [typeFilter, setTypeFilter] = useState<ReviewQueueType>(() => urlFilters.type);
+  const [statusFilter, setStatusFilter] = useState<ReviewQueueStatus>(() => urlFilters.status);
+  const [modeFilter, setModeFilter] = useState<ReviewQueueExecutionMode>(() => urlFilters.mode);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busyID, setBusyID] = useState<number | null>(null);
   const [publisherStatus, setPublisherStatus] = useState<XPublisherStatusApi | null>(null);
+  const loadSeqRef = useRef(0);
+  const [moduleEnabled, setModuleEnabled] = useState<Record<ModuleType, boolean>>({
+    post: true,
+    comment: true,
+    reply: true,
+    dm: true,
+  });
 
   useEffect(() => {
-    const type = new URLSearchParams(window.location.search).get("type") as ReviewQueueType | null;
-    if (type && typeOptions.includes(type)) {
-      setTypeFilter(type);
+    setTypeFilter((current) => (current === urlFilters.type ? current : urlFilters.type));
+    setStatusFilter((current) => (current === urlFilters.status ? current : urlFilters.status));
+    setModeFilter((current) => (current === urlFilters.mode ? current : urlFilters.mode));
+  }, [urlFilters.mode, urlFilters.status, urlFilters.type]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (typeFilter !== "all") next.set("type", typeFilter);
+    if (statusFilter !== "all") next.set("status", statusFilter);
+    if (modeFilter !== "all") next.set("mode", modeFilter);
+    const query = next.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
+    const currentHref = searchKey ? `${pathname}?${searchKey}` : pathname;
+    if (href !== currentHref) {
+      router.replace(href, { scroll: false });
     }
-  }, []);
+  }, [modeFilter, pathname, router, searchKey, statusFilter, typeFilter]);
 
   const loadQueue = useCallback(async () => {
+    const seq = loadSeqRef.current + 1;
+    loadSeqRef.current = seq;
     setLoadState("loading");
     try {
-      const [data, publishingStatus] = await Promise.all([
+      const [data, publishingStatus, automationData] = await Promise.all([
         reviewQueueService.list({
           type: typeFilter,
           status: statusFilter,
@@ -141,12 +200,21 @@ export default function ExecutionQueuePage() {
           pageSize: 50,
         }),
         publishingService.status(),
+        automationService.list(),
       ]);
+      if (loadSeqRef.current !== seq) return;
       setItems(data.items);
       setStats(data.stats);
       setPublisherStatus(publishingStatus);
+      setModuleEnabled({
+        post: automationData.modules.find((item) => item.type === "post")?.config.enabled ?? true,
+        comment: automationData.modules.find((item) => item.type === "comment")?.config.enabled ?? true,
+        reply: automationData.modules.find((item) => item.type === "reply")?.config.enabled ?? true,
+        dm: automationData.modules.find((item) => item.type === "dm")?.config.enabled ?? true,
+      });
       setLoadState("ready");
     } catch (error) {
+      if (loadSeqRef.current !== seq) return;
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message || t("executionQueue.errors.load")
         : t("executionQueue.errors.load");
@@ -168,6 +236,14 @@ export default function ExecutionQueuePage() {
       { key: "failed", value: stats.failed, label: t("executionQueue.stats.failed"), icon: ShieldAlert },
     ],
     [stats, t]
+  );
+  const disabledModuleTypes = useMemo(
+    () =>
+      (Object.keys(moduleEnabled) as ModuleType[]).filter((type) => {
+        if (moduleEnabled[type]) return false;
+        return typeFilter === "all" || typeFilter === type;
+      }),
+    [moduleEnabled, typeFilter]
   );
 
   const updateLocalItem = (updated: ReviewQueueItemApi, patch: Partial<ReviewQueueItemApi>) => {
@@ -220,7 +296,7 @@ export default function ExecutionQueuePage() {
       pushToast(t(item.type === "post" ? "executionQueue.toast.postPublishJobCreated" : "executionQueue.toast.approved"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.approve") : t("executionQueue.errors.approve"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.approve")));
     } finally {
       setBusyID(null);
     }
@@ -253,7 +329,7 @@ export default function ExecutionQueuePage() {
       pushToast(t("executionQueue.toast.retryQueued"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.retry") : t("executionQueue.errors.retry"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.retry")));
     } finally {
       setBusyID(null);
     }
@@ -267,7 +343,7 @@ export default function ExecutionQueuePage() {
       pushToast(t("executionQueue.toast.postPublishJobCreated"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.preparePublish") : t("executionQueue.errors.preparePublish"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.preparePublish")));
     } finally {
       setBusyID(null);
     }
@@ -283,7 +359,7 @@ export default function ExecutionQueuePage() {
       pushToast(updated.publish_mode === "dry_run" ? t("executionQueue.toast.dryRunPublish") : t("executionQueue.toast.realPublish"));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.realPublish") : t("executionQueue.errors.realPublish"));
+      pushToast(automationPausedToast(t, error, t("executionQueue.errors.realPublish")));
     } finally {
       setBusyID(null);
     }
@@ -350,6 +426,17 @@ export default function ExecutionQueuePage() {
         </div>
       </Card>
 
+      {disabledModuleTypes.length > 0 ? (
+        <Card className="border-amber-300/25 bg-amber-500/10 p-4">
+          <p className="text-sm font-semibold text-amber-50">{t("executionQueue.pausedNotice.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-amber-50/75">
+            {t("executionQueue.pausedNotice.description", {
+              modules: disabledModuleTypes.map((type) => t(moduleNameKey(type))).join(" / "),
+            })}
+          </p>
+        </Card>
+      ) : null}
+
       <Card className="overflow-hidden bg-[#0f1419] p-0">
         <div className="border-b border-[#2f3336] p-5 md:p-6">
           <CardHeader title={t("executionQueue.list.title")} description={t("executionQueue.list.description")} />
@@ -359,7 +446,10 @@ export default function ExecutionQueuePage() {
         ) : null}
         {loadState === "error" ? (
           <div className="m-5 rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">
-            {t("executionQueue.errors.load")}
+            <p>{t("executionQueue.errors.load")}</p>
+            <Button className="mt-4" size="sm" variant="outline" onClick={() => void loadQueue()}>
+              {t("common.retry")}
+            </Button>
           </div>
         ) : null}
         {loadState === "ready" && items.length === 0 ? (
@@ -378,6 +468,10 @@ export default function ExecutionQueuePage() {
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
               const publishStatusLabel = t(publishStatusKey(item.publish_status));
+              const modulePaused = moduleEnabled[item.type as ModuleType] === false;
+              const modulePausedTip = modulePaused
+                ? t("automation.pausedNotice.actionDisabled", { module: t(moduleNameKey(item.type)) })
+                : "";
               return (
                 <div key={`${item.type}-${item.id}`} className="bg-black p-4 transition-colors hover:bg-[#080808] md:p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -434,6 +528,12 @@ export default function ExecutionQueuePage() {
                           <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{item.content || "—"}</p>
                         )}
                       </div>
+
+                      {modulePaused ? (
+                        <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                          {modulePausedTip}
+                        </p>
+                      ) : null}
 
                       <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
                         <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
@@ -497,7 +597,13 @@ export default function ExecutionQueuePage() {
                             </Button>
                           ) : null}
                           {canReview ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void approve(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void approve(item)}
+                            >
                               <CheckCircle2 className="size-4" />
                               {t("executionQueue.actions.approve")}
                             </Button>
@@ -509,13 +615,25 @@ export default function ExecutionQueuePage() {
                             </Button>
                           ) : null}
                           {item.status === "failed" && item.publish_job_id ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void retryPublish(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void retryPublish(item)}
+                            >
                               <Send className="size-4" />
                               {t("executionQueue.actions.retryPublish")}
                             </Button>
                           ) : null}
                           {item.type === "post" && !item.publish_job_id && (item.status === "ready_to_publish" || item.status === "approved") ? (
-                            <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void preparePostPublish(item)}>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={busyID === item.id || modulePaused}
+                              title={modulePausedTip}
+                              onClick={() => void preparePostPublish(item)}
+                            >
                               <Send className="size-4" />
                               {t("executionQueue.actions.preparePublish")}
                             </Button>
@@ -525,8 +643,8 @@ export default function ExecutionQueuePage() {
                               size="sm"
                               variant="outline"
                               className="w-full sm:w-auto"
-                              disabled={busyID === item.id || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
-                              title={!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
+                              disabled={busyID === item.id || modulePaused || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
+                              title={modulePaused ? modulePausedTip : !publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
                               onClick={() => void realPublish(item)}
                             >
                               <Send className="size-4" />

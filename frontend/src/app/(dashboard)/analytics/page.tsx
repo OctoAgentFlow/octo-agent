@@ -22,6 +22,7 @@ import {
 } from "@/services/analytics.service";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import type { ActivityRecord } from "@/types/activity";
+import type { ActivityFailureCategory } from "@/types/activity";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -87,6 +88,7 @@ function activityHref(params: {
   type?: string;
   accountID?: number;
   errorReason?: string;
+  failureCategory?: string;
 }) {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
@@ -94,7 +96,43 @@ function activityHref(params: {
   query.set("range", params.range);
   if (params.accountID) query.set("account_id", String(params.accountID));
   if (params.errorReason) query.set("error_reason", params.errorReason);
+  if (params.failureCategory) query.set("failure_category", params.failureCategory);
   return `/activity?${query.toString()}`;
+}
+
+function failureCategoryLabelKey(category?: string) {
+  if (category === "x_auth") return "activity.failureCategory.x_auth";
+  if (category === "rate_limit") return "activity.failureCategory.rate_limit";
+  if (category === "safety") return "activity.failureCategory.safety";
+  if (category === "configuration") return "activity.failureCategory.configuration";
+  if (category === "network") return "activity.failureCategory.network";
+  if (category === "system") return "activity.failureCategory.system";
+  if (category === "unknown") return "activity.failureCategory.unknown";
+  return "analytics.failureReasons.unknown";
+}
+
+function failureCategoryAdviceKey(category?: string) {
+  if (category === "x_auth") return "activity.failureAdvice.x_auth";
+  if (category === "rate_limit") return "activity.failureAdvice.rate_limit";
+  if (category === "safety") return "activity.failureAdvice.safety";
+  if (category === "configuration") return "activity.failureAdvice.configuration";
+  if (category === "network") return "activity.failureAdvice.network";
+  if (category === "system") return "activity.failureAdvice.system";
+  if (category === "unknown") return "activity.failureAdvice.unknown";
+  return "activity.failureAdvice.unknown";
+}
+
+function normalizedFailureCategory(item: AnalyticsOverview["failure_reasons"][number]): ActivityFailureCategory | undefined {
+  const category = item.category || item.reason;
+  return category === "x_auth" ||
+    category === "rate_limit" ||
+    category === "safety" ||
+    category === "configuration" ||
+    category === "network" ||
+    category === "system" ||
+    category === "unknown"
+    ? category
+    : undefined;
 }
 
 function MetricCard({
@@ -713,36 +751,44 @@ export default function AnalyticsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {overview.failure_reasons.map((item) => (
-                <div key={`${item.reason}-${item.last_at ?? ""}`} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 break-words text-sm font-medium text-white">
-                      {compactText(item.reason || t("analytics.failureReasons.unknown"))}
-                    </p>
-                    <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">
-                      {t("analytics.failureReasons.count", { count: item.count })}
-                    </span>
+              {overview.failure_reasons.map((item) => {
+                const category = normalizedFailureCategory(item);
+                return (
+                  <div key={`${item.category || item.reason}-${item.last_at ?? ""}`} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-white">
+                          {t(failureCategoryLabelKey(category))}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">
+                          {t(failureCategoryAdviceKey(category))}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">
+                        {t("analytics.failureReasons.count", { count: item.count })}
+                      </span>
+                    </div>
+                    {item.last_at ? (
+                      <p className="mt-2 text-xs text-[#71767b]">
+                        {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex justify-end">
+                      <Link
+                        className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
+                        href={activityHref({
+                          range,
+                          status: "failed",
+                          accountID: selectedAccountID,
+                          failureCategory: category,
+                        })}
+                      >
+                        {t("analytics.viewInActivity")}
+                      </Link>
+                    </div>
                   </div>
-                  {item.last_at ? (
-                    <p className="mt-2 text-xs text-[#71767b]">
-                      {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 flex justify-end">
-                    <Link
-                      className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-                      href={activityHref({
-                        range,
-                        status: "failed",
-                        accountID: selectedAccountID,
-                        errorReason: item.reason || t("analytics.failureReasons.unknown"),
-                      })}
-                    >
-                      {t("analytics.viewInActivity")}
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -849,7 +895,7 @@ function AnalyticsInsightPanel({
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5]">
             {topFailure
               ? t("analytics.insights.failureHint", {
-                  reason: compactText(topFailure.reason || t("analytics.failureReasons.unknown"), 80),
+                  reason: t(failureCategoryLabelKey(normalizedFailureCategory(topFailure))),
                   count: topFailure.count,
                 })
               : t("analytics.insights.noFailureHint")}

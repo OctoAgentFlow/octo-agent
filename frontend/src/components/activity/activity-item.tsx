@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, Clipboard, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import type { ActivityRecord } from "@/types/activity";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,38 @@ function typeMeta(type: ActivityRecord["type"]) {
   if (type === "post") return { labelKey: "activity.type.post", icon: Bot };
   if (type === "reply") return { labelKey: "activity.type.reply", icon: MessageCircleReply };
   if (type === "comment") return { labelKey: "activity.type.comment", icon: MessageCircle };
+  if (type === "system") return { labelKey: "activity.type.system", icon: Settings };
   return { labelKey: "activity.type.dm", icon: Send };
+}
+
+function sourceModuleLabelKey(sourceModule: ActivityRecord["sourceModule"]) {
+  if (sourceModule === "post") return "activity.source.post";
+  if (sourceModule === "reply") return "activity.source.reply";
+  if (sourceModule === "comment") return "activity.source.comment";
+  if (sourceModule === "dm") return "activity.source.dm";
+  return "";
+}
+
+function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureCategory.x_auth";
+  if (category === "rate_limit") return "activity.failureCategory.rate_limit";
+  if (category === "safety") return "activity.failureCategory.safety";
+  if (category === "configuration") return "activity.failureCategory.configuration";
+  if (category === "network") return "activity.failureCategory.network";
+  if (category === "system") return "activity.failureCategory.system";
+  if (category === "unknown") return "activity.failureCategory.unknown";
+  return "";
+}
+
+function failureCategoryAdviceKey(category: ActivityRecord["failureCategory"]) {
+  if (category === "x_auth") return "activity.failureAdvice.x_auth";
+  if (category === "rate_limit") return "activity.failureAdvice.rate_limit";
+  if (category === "safety") return "activity.failureAdvice.safety";
+  if (category === "configuration") return "activity.failureAdvice.configuration";
+  if (category === "network") return "activity.failureAdvice.network";
+  if (category === "system") return "activity.failureAdvice.system";
+  if (category === "unknown") return "activity.failureAdvice.unknown";
+  return "";
 }
 
 function relativeTime(iso: string, t: (key: string, params?: Record<string, string | number>) => string) {
@@ -68,6 +99,8 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-white">{t(meta.labelKey)}</p>
+              {record.sourceModule ? <Badge variant="info">{t(sourceModuleLabelKey(record.sourceModule))}</Badge> : null}
+              {record.failureCategory ? <Badge variant="danger">{t(failureCategoryLabelKey(record.failureCategory))}</Badge> : null}
               <Badge variant={statusVariant(record.status)}>{t(`activity.status.${record.status}`)}</Badge>
               <span className="text-xs text-[#71767b]">{relativeTime(record.executedAt, t)}</span>
             </div>
@@ -114,6 +147,12 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DetailField label={t("activity.detail.fields.id")} value={`#${record.id}`} />
             <DetailField label={t("activity.detail.fields.account")} value={record.accountHandle || "—"} />
+            {record.sourceModule ? (
+              <DetailField label={t("activity.detail.fields.sourceModule")} value={t(sourceModuleLabelKey(record.sourceModule))} />
+            ) : null}
+            {record.failureCategory ? (
+              <DetailField label={t("activity.detail.fields.failureCategory")} value={t(failureCategoryLabelKey(record.failureCategory))} />
+            ) : null}
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
             <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
             <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />
@@ -135,6 +174,11 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
                 </Button>
               </div>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#ffdadd]">{record.errorMessage}</p>
+              {record.failureCategory ? (
+                <p className="mt-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs leading-5 text-[#ffdadd]">
+                  {t(failureCategoryAdviceKey(record.failureCategory))}
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-[#71767b]">

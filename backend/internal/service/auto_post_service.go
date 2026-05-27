@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrAutoPostDailyLimitExceeded = errors.New("daily auto post quota exceeded")
+var ErrAutoPostMonthlyLimitExceeded = errors.New("monthly auto post quota exceeded")
 var ErrAutoPostDuplicateContent = errors.New("auto_post_duplicate_content")
 
 const autoPostPreviewRunes = 280
@@ -29,32 +29,34 @@ type autoPostPlannerRunOptions struct {
 }
 
 type AutoPostService struct {
-	accountRepo  *repository.TwitterAccountRepository
-	planRepo     *repository.AutoPostPlanRepository
-	draftRepo    *repository.AutoPostDraftRepository
-	runRepo      *repository.AutoPostGenerationRunRepository
-	contentRepo  *repository.ContentLibraryRepository
-	activityRepo *repository.ActivityRepository
-	userRepo     *repository.UserRepository
-	oafBotRepo   *repository.OAFBotRepository
-	usageRepo    *repository.AIGenerationUsageRepository
-	ai           *AIService
-	publishing   *PublishingService
+	accountRepo    *repository.TwitterAccountRepository
+	automationRepo *repository.AutomationRepository
+	planRepo       *repository.AutoPostPlanRepository
+	draftRepo      *repository.AutoPostDraftRepository
+	runRepo        *repository.AutoPostGenerationRunRepository
+	contentRepo    *repository.ContentLibraryRepository
+	activityRepo   *repository.ActivityRepository
+	userRepo       *repository.UserRepository
+	oafBotRepo     *repository.OAFBotRepository
+	usageRepo      *repository.AIGenerationUsageRepository
+	ai             *AIService
+	publishing     *PublishingService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
 	return &AutoPostService{
-		accountRepo:  accountRepo,
-		planRepo:     planRepo,
-		draftRepo:    draftRepo,
-		runRepo:      runRepo,
-		contentRepo:  contentRepo,
-		activityRepo: activityRepo,
-		userRepo:     userRepo,
-		oafBotRepo:   oafBotRepo,
-		usageRepo:    usageRepo,
-		ai:           ai,
-		publishing:   publishing,
+		accountRepo:    accountRepo,
+		automationRepo: automationRepo,
+		planRepo:       planRepo,
+		draftRepo:      draftRepo,
+		runRepo:        runRepo,
+		contentRepo:    contentRepo,
+		activityRepo:   activityRepo,
+		userRepo:       userRepo,
+		oafBotRepo:     oafBotRepo,
+		usageRepo:      usageRepo,
+		ai:             ai,
+		publishing:     publishing,
 	}
 }
 
@@ -94,14 +96,14 @@ func (s *AutoPostService) CreatePlan(userID uint, req dto.AutoPostPlanRequest) (
 	}
 	if plan == nil || plan.ID == 0 {
 		plan = &model.AutoPostPlan{UserID: userID, XAccountID: acc.ID}
-		applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
+		applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 		if err := s.planRepo.Create(plan); err != nil {
 			return nil, err
 		}
 		item := s.toPlanItem(*plan)
 		return &item, nil
 	}
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
+	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -123,7 +125,7 @@ func (s *AutoPostService) UpdatePlan(userID, id uint, req dto.AutoPostPlanReques
 		return nil, err
 	}
 	plan.XAccountID = acc.ID
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), s.defaultDailyLimit(userID), acc.XSubscriptionTier)
+	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -143,11 +145,40 @@ func (s *AutoPostService) ListDrafts(userID uint) (*dto.AutoPostDraftsResponse, 
 	return &dto.AutoPostDraftsResponse{Items: items}, nil
 }
 
-func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResponse, error) {
-	if s.runRepo == nil {
-		return &dto.AutoPostGenerationRunsResponse{Items: []dto.AutoPostGenerationRunItem{}}, nil
+func (s *AutoPostService) ListRuns(userID uint, query dto.AutoPostGenerationRunQuery) (*dto.AutoPostGenerationRunsResponse, error) {
+	page := query.Page
+	if page <= 0 {
+		page = 1
 	}
-	rows, err := s.runRepo.ListByUser(userID, 50)
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	if s.runRepo == nil {
+		return &dto.AutoPostGenerationRunsResponse{
+			Items: []dto.AutoPostGenerationRunItem{},
+			Pagination: dto.ActivityPagination{
+				Page:     page,
+				PageSize: pageSize,
+				Total:    0,
+			},
+		}, nil
+	}
+
+	status := normalizeAutoPostRunStatusForQuery(query.Status)
+	createdFrom, createdTo := autoPostRunTimeRange(query)
+	rows, total, err := s.runRepo.List(repository.AutoPostGenerationRunListQuery{
+		UserID:      userID,
+		Status:      status,
+		XAccountID:  query.XAccountID,
+		CreatedFrom: createdFrom,
+		CreatedTo:   createdTo,
+		Page:        page,
+		PageSize:    pageSize,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -155,12 +186,22 @@ func (s *AutoPostService) ListRuns(userID uint) (*dto.AutoPostGenerationRunsResp
 	for _, row := range rows {
 		items = append(items, s.toRunItem(row))
 	}
-	return &dto.AutoPostGenerationRunsResponse{Items: items}, nil
+	return &dto.AutoPostGenerationRunsResponse{
+		Items: items,
+		Pagination: dto.ActivityPagination{
+			Page:     page,
+			PageSize: pageSize,
+			Total:    total,
+		},
+	}, nil
 }
 
 func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (*dto.AutoPostGenerationRunItem, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "run auto post planner now"); err != nil {
+		return nil, err
 	}
 	if _, err := s.planRepo.GetByUserAndID(userID, planID); err != nil {
 		return nil, err
@@ -201,7 +242,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	if err := s.assertDailyQuota(userID, acc.ID, plan, now); err != nil {
+	if err := s.assertMonthlyQuota(userID, now); err != nil {
 		return nil, err
 	}
 	recentDrafts, err := s.draftRepo.RecentByAccount(userID, acc.ID, 8)
@@ -409,8 +450,8 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 		switch {
 		case errors.Is(err, ErrAIGenerationQuotaExceeded):
 			return recordSkip("ai_generation_quota_exceeded")
-		case errors.Is(err, ErrAutoPostDailyLimitExceeded):
-			return recordSkip("daily_auto_post_limit_exceeded")
+		case errors.Is(err, ErrAutoPostMonthlyLimitExceeded):
+			return recordSkip("monthly_auto_post_limit_exceeded")
 		case errors.Is(err, ErrAutoPostDuplicateContent):
 			return recordSkip("duplicate_content")
 		default:
@@ -465,6 +506,9 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 }
 
 func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem, error) {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "approve auto post draft"); err != nil {
+		return nil, err
+	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -489,6 +533,9 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 }
 
 func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftItem, error) {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypePost, "prepare auto post publish job"); err != nil {
+		return nil, err
+	}
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -525,29 +572,23 @@ func (s *AutoPostService) RejectDraft(userID, id uint, reason string) (*dto.Auto
 	return &item, nil
 }
 
-func (s *AutoPostService) assertDailyQuota(userID, xAccountID uint, plan *model.AutoPostPlan, now time.Time) error {
-	limit := plan.DailyLimit
-	if limit <= 0 {
-		limit = s.defaultDailyLimit(userID)
-	}
+func (s *AutoPostService) assertMonthlyQuota(userID uint, now time.Time) error {
+	limit := int64(0)
 	if s.userRepo != nil {
 		if u, err := s.userRepo.GetByID(userID); err == nil {
-			planLimit := int(subscription.LimitsForUser(u).DailyAutoPosts)
-			if planLimit > 0 && (limit <= 0 || planLimit < limit) {
-				limit = planLimit
-			}
+			limit = subscription.LimitsForUser(u).MonthlyAutoPosts
 		}
 	}
 	if limit <= 0 {
-		return ErrAutoPostDailyLimitExceeded
+		return ErrAutoPostMonthlyLimitExceeded
 	}
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	used, err := s.draftRepo.CountCreatedBetweenForAccount(userID, xAccountID, dayStart, now)
+	monthStart := startOfUTCMonth(now)
+	used, err := s.draftRepo.CountCreatedBetween(userID, monthStart, now)
 	if err != nil {
 		return err
 	}
-	if int(used) >= limit {
-		return ErrAutoPostDailyLimitExceeded
+	if used >= limit {
+		return ErrAutoPostMonthlyLimitExceeded
 	}
 	return nil
 }
@@ -604,17 +645,6 @@ func (s *AutoPostService) contentItemAllowedForPlan(item *model.ContentLibraryIt
 		return false
 	}
 	return true
-}
-
-func (s *AutoPostService) defaultDailyLimit(userID uint) int {
-	if s.userRepo != nil {
-		if u, err := s.userRepo.GetByID(userID); err == nil {
-			if v := subscription.LimitsForUser(u).DailyAutoPosts; v > 0 {
-				return int(v)
-			}
-		}
-	}
-	return 3
 }
 
 func (s *AutoPostService) botForAccount(userID, xAccountID uint) (*model.OAFBot, error) {
@@ -754,7 +784,7 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		BotName:            botName,
 		Enabled:            row.Enabled,
 		ExecutionMode:      effectiveExecutionMode(row.ExecutionMode),
-		DailyLimit:         row.DailyLimit,
+		DailyLimit:         0,
 		MinIntervalMinutes: row.MinIntervalMinutes,
 		PostingWindows:     row.PostingWindows,
 		Timezone:           row.Timezone,
@@ -819,17 +849,14 @@ func (s *AutoPostService) contentTitle(userID, contentID uint) string {
 	return item.Title
 }
 
-func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, defaultDailyLimit int, accountTier string) {
+func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, accountTier string) {
 	plan.BotID = botID
 	plan.Enabled = req.Enabled
 	plan.ExecutionMode = effectiveExecutionMode(req.ExecutionMode)
 	if plan.ExecutionMode == "" {
 		plan.ExecutionMode = ExecutionModeReview
 	}
-	plan.DailyLimit = req.DailyLimit
-	if plan.DailyLimit <= 0 {
-		plan.DailyLimit = defaultDailyLimit
-	}
+	plan.DailyLimit = 0
 	plan.MinIntervalMinutes = req.MinIntervalMinutes
 	if plan.MinIntervalMinutes <= 0 {
 		plan.MinIntervalMinutes = 120
@@ -956,6 +983,46 @@ func parseAutoPostClock(value string) (int, bool) {
 		return 0, false
 	}
 	return hour*60 + minute, true
+}
+
+func normalizeAutoPostRunStatusForQuery(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "completed", "skipped", "failed":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func autoPostRunTimeRange(query dto.AutoPostGenerationRunQuery) (time.Time, time.Time) {
+	if from := parseAutoPostRunQueryTime(query.DateFrom); !from.IsZero() {
+		return from, parseAutoPostRunQueryTime(query.DateTo)
+	}
+	now := time.Now().UTC()
+	switch strings.ToLower(strings.TrimSpace(query.Range)) {
+	case "24h":
+		return now.Add(-24 * time.Hour), time.Time{}
+	case "7d":
+		return now.AddDate(0, 0, -7), time.Time{}
+	case "30d":
+		return now.AddDate(0, 0, -30), time.Time{}
+	default:
+		return time.Time{}, parseAutoPostRunQueryTime(query.DateTo)
+	}
+}
+
+func parseAutoPostRunQueryTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.UTC()
+	}
+	if t, err := time.Parse("2006-01-02", value); err == nil {
+		return t.UTC()
+	}
+	return time.Time{}
 }
 
 func windowContainsMinute(window autoPostTimeWindow, minute int) bool {

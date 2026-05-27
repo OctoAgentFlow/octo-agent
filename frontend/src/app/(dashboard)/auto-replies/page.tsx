@@ -7,12 +7,16 @@ import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { billingService } from "@/services/billing.service";
 import {
   automationService,
+  type AutomationModuleApi,
   type AutoReplyDraftApi,
 } from "@/services/automation.service";
 import { oafBotService } from "@/services/oaf-bot.service";
@@ -59,6 +63,7 @@ export default function AutoRepliesPage() {
   const [drafts, setDrafts] = useState<AutoReplyDraftApi[]>([]);
   const [plan, setPlan] = useState("free_trial");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
+  const [replyModule, setReplyModule] = useState<AutomationModuleApi | null>(null);
   const [xAccountID, setXAccountID] = useState<number>(0);
   const [commentURL, setCommentURL] = useState("");
   const [authorHandle, setAuthorHandle] = useState("");
@@ -67,6 +72,8 @@ export default function AutoRepliesPage() {
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -99,7 +106,9 @@ export default function AutoRepliesPage() {
       setBots(botData.items);
       setDrafts(draftData.items);
       setPlan(subscriptionData.plan);
+      setQuotaUpgradeVisible(false);
       const replyModule = automationData.modules.find((item) => item.type === "reply");
+      setReplyModule(replyModule ?? null);
       setExecutionMode(replyModule?.config.execution_mode || "review");
       setXAccountID((current) => current || connected[0]?.id || 0);
       setLoadState("ready");
@@ -134,11 +143,14 @@ export default function AutoRepliesPage() {
       setAuthorHandle("");
       setRootTweetText("");
       setCommentText("");
+      setQuotaUpgradeVisible(false);
       pushToast(t(draft.status === "ready_to_publish" ? "autoReply.toast.readyToPublish" : "autoReply.toast.generated"));
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
+      const isQuotaError = body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_reply_monthly_limit_exceeded";
+      if (isQuotaError) setQuotaUpgradeVisible(true);
       const message =
-        body?.error_code === "ai_generation_quota_exceeded"
+        isQuotaError
           ? t("autoReply.errors.quota")
           : body?.message || t("autoReply.errors.generate");
       pushToast(message);
@@ -153,7 +165,7 @@ export default function AutoRepliesPage() {
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoReply.toast.approved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoReply.errors.approve") : t("autoReply.errors.approve"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoReply.errors.approve"));
     }
   };
 
@@ -203,6 +215,10 @@ export default function AutoRepliesPage() {
 
   const canGenerate = Boolean(selectedAccount && authorHandle.trim() && commentText.trim() && !busy);
   const hasTargetInput = Boolean(authorHandle.trim() && commentText.trim());
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.reply.name") })
+    : undefined;
 
   return (
     <div className="space-y-5">
@@ -234,6 +250,10 @@ export default function AutoRepliesPage() {
         </Card>
       ) : null}
 
+      <AutomationModulePausedNotice type="reply" onEnabledChange={setModuleEnabled} />
+
+      {quotaUpgradeVisible ? <QuotaUpgradeCallout /> : null}
+
       {loadState === "ready" ? (
         <>
           <AutomationSetupGuide
@@ -252,6 +272,7 @@ export default function AutoRepliesPage() {
             executionMode={executionMode}
             queueHref="/execution-queue?type=reply"
           />
+          <ReplyScanStatusCard module={replyModule} />
         </>
       ) : null}
 
@@ -417,7 +438,12 @@ export default function AutoRepliesPage() {
 
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
-          <CardHeader title={t("autoReply.review.title")} description={t("autoReply.review.description")} />
+            <CardHeader title={t("autoReply.review.title")} description={t("autoReply.review.description")} />
+            {modulePaused ? (
+              <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                {modulePausedActionTip}
+              </p>
+            ) : null}
           </div>
           <div className="divide-y divide-[#2f3336]">
             {drafts.length === 0 ? (
@@ -476,7 +502,7 @@ export default function AutoRepliesPage() {
                               {t("autoReply.review.edit")}
                             </Button>
                             {canReview ? (
-                              <Button size="sm" onClick={() => void approveDraft(draft.id)}>
+                              <Button size="sm" onClick={() => void approveDraft(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
                                 <CheckCircle2 className="size-4" />
                                 {t("autoReply.review.approve")}
                               </Button>
@@ -499,6 +525,52 @@ export default function AutoRepliesPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function formatScanTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function replyScanStatusTone(status?: string) {
+  if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (status === "failed" || status === "reauth_required") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]";
+  if (status === "token_refreshed") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return "border-[#2f3336] bg-black text-[#e7e9ea]";
+}
+
+function ReplyScanStatusCard({ module }: { module: AutomationModuleApi | null }) {
+  const { t } = useT();
+  const status = module?.last_scan_status || "not_scanned";
+  const message = t(`autoReply.scan.status.${status}`);
+  const tone = replyScanStatusTone(status);
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoReply.scan.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoReply.scan.description")}</p>
+        </div>
+        <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}>
+          <ListChecks className="size-3.5" />
+          {t(`autoReply.scan.status.${status}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <DraftRouteStep label={t("autoReply.scan.lastResult")} value={message} />
+        <DraftRouteStep label={t("autoReply.scan.lastRun")} value={formatScanTime(module?.last_run_at || module?.last_scan_at)} />
+        <DraftRouteStep label={t("autoReply.scan.nextRun")} value={module?.config.enabled ? formatScanTime(module?.next_run_at) : t("automation.time.paused")} />
+      </div>
+    </Card>
   );
 }
 

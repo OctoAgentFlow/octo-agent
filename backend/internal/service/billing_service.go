@@ -27,14 +27,18 @@ import (
 )
 
 type BillingService struct {
-	userRepo        *repository.UserRepository
-	orderRepo       *repository.BillingOrderRepository
-	pointRepo       *repository.PointRepository
-	referralService *ReferralService
-	accountRepo     *repository.TwitterAccountRepository
-	oafBotRepo      *repository.OAFBotRepository
-	usageRepo       *repository.AIGenerationUsageRepository
-	cfg             *config.Config
+	userRepo            *repository.UserRepository
+	orderRepo           *repository.BillingOrderRepository
+	pointRepo           *repository.PointRepository
+	referralService     *ReferralService
+	accountRepo         *repository.TwitterAccountRepository
+	oafBotRepo          *repository.OAFBotRepository
+	usageRepo           *repository.AIGenerationUsageRepository
+	autoPostDraftRepo   *repository.AutoPostDraftRepository
+	autoReplyDraftRepo  *repository.AutoReplyDraftRepository
+	autoCommentTaskRepo *repository.AutoCommentTaskRepository
+	activityRepo        *repository.ActivityRepository
+	cfg                 *config.Config
 }
 
 type BillingAutoConfirmStats struct {
@@ -127,8 +131,8 @@ type billingQuoteCalc struct {
 	pointDiscountCents int64
 }
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, autoPostDraftRepo *repository.AutoPostDraftRepository, autoReplyDraftRepo *repository.AutoReplyDraftRepository, autoCommentTaskRepo *repository.AutoCommentTaskRepository, activityRepo *repository.ActivityRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, autoPostDraftRepo: autoPostDraftRepo, autoReplyDraftRepo: autoReplyDraftRepo, autoCommentTaskRepo: autoCommentTaskRepo, activityRepo: activityRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -571,8 +575,35 @@ func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 			usage.TwitterAccounts = n
 		}
 	}
-	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, time.Now().UTC())
+	now := time.Now().UTC()
+	monthStart := startOfUTCMonth(now)
+	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, now)
+	if s.autoPostDraftRepo != nil {
+		if n, err := s.autoPostDraftRepo.CountCreatedBetween(userID, monthStart, now); err == nil {
+			usage.AutoPostsMonth = n
+		}
+	}
+	if s.autoReplyDraftRepo != nil {
+		if n, err := s.autoReplyDraftRepo.CountCreatedBetween(userID, monthStart, now); err == nil {
+			usage.AutoRepliesMonth = n
+		}
+	}
+	if s.autoCommentTaskRepo != nil {
+		if n, err := s.autoCommentTaskRepo.CountCreatedBetween(userID, monthStart, now); err == nil {
+			usage.AutoCommentsMonth = n
+		}
+	}
+	if s.activityRepo != nil {
+		if n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", monthStart, now); err == nil {
+			usage.AutoDMsMonth = n
+		}
+	}
 	return usage
+}
+
+func startOfUTCMonth(now time.Time) time.Time {
+	u := now.UTC()
+	return time.Date(u.Year(), u.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
 func calculateBillingQuote(user *model.User, targetPlanCode, targetBillingCycle string, now time.Time) (billingQuoteCalc, error) {

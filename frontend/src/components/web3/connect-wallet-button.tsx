@@ -6,7 +6,6 @@ import { Wallet } from "lucide-react";
 import { useAccount, useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { useWeb3Ready } from "@/components/providers/web3-provider";
-import { clearBoundWalletAddress } from "@/lib/web3/wallet-binding";
 import { cn } from "@/lib/utils";
 
 type ConnectWalletButtonProps = {
@@ -97,7 +96,6 @@ function ConnectWalletButtonInner({
       void Promise.resolve(onDisconnected?.(address));
     }
     disconnect();
-    clearBoundWalletAddress();
   };
 
   if (isConnected && address) {

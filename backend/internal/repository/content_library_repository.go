@@ -45,6 +45,14 @@ func (r *ContentLibraryRepository) ListByUser(userID uint, query ContentLibraryQ
 	return rows, err
 }
 
+func (r *ContentLibraryRepository) ListActiveByUser(userID uint) ([]model.ContentLibraryItem, error) {
+	var rows []model.ContentLibraryItem
+	err := r.DB.Where("user_id = ? AND status = ?", userID, "active").
+		Order("priority DESC, updated_at DESC, id DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *ContentLibraryRepository) GetByUserAndID(userID, id uint) (*model.ContentLibraryItem, error) {
 	var row model.ContentLibraryItem
 	err := r.DB.Where("user_id = ? AND id = ?", userID, id).First(&row).Error

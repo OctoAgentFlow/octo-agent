@@ -13,8 +13,13 @@ func RegisterOAFBot(rg *gin.RouterGroup, c *controller.OAFBotController) {
 	group.GET("", c.List)
 	group.POST("", c.Create)
 	group.POST("/complete-profile", c.CompleteProfile)
+	group.GET("/matrix-signals", c.MatrixSignals)
 	group.GET("/:id", c.Get)
 	group.PUT("/:id", c.Update)
+	group.POST("/:id/feedback-profile-suggestion", c.SuggestProfileFromFeedback)
 	group.POST("/:id/test-generate", c.TestGenerate)
+	group.POST("/:id/rewrite-safety", c.RewriteSampleForSafety)
 	group.GET("/:id/generation-usages", c.GenerationUsages)
+	group.GET("/:id/generation-feedback", c.GenerationFeedback)
+	group.POST("/:id/generation-feedback", c.CreateGenerationFeedback)
 }

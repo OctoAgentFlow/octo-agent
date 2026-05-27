@@ -71,11 +71,6 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 			if err != nil {
 				return nil, err
 			}
-			dl := items[i].Config.Frequency.DailyLimit
-			rem := dl - int(nDay)
-			if rem < 0 {
-				rem = 0
-			}
 			last, err := s.activityRepo.LatestReplyExecutedAt(userID)
 			if err != nil {
 				return nil, err
@@ -86,8 +81,8 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 			}
 			items[i].ReplyUsage = &dto.AutomationReplyUsage{
 				TodayCount:     int(nDay),
-				DailyLimit:     dl,
-				RemainingToday: rem,
+				DailyLimit:     0,
+				RemainingToday: 0,
 				LastExecutedAt: lastStr,
 			}
 		}
@@ -110,6 +105,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		return nil, err
 	}
 	keywords, _ := json.Marshal(req.Safety.BlockedKeywords)
+	wasEnabled := cfg.Enabled
 
 	if req.Enabled {
 		if err := s.assertSubscriptionForAutomation(userID); err != nil {
@@ -118,7 +114,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	}
 	cfg.Enabled = req.Enabled
 	cfg.FrequencyIntervalMinutes = req.Frequency.IntervalMinutes
-	cfg.FrequencyDailyLimit = req.Frequency.DailyLimit
+	cfg.FrequencyDailyLimit = 0
 	cfg.Tone = req.Tone
 	if mode := normalizeExecutionMode(req.ExecutionMode); mode != "" {
 		if mode == ExecutionModeAutopilot {
@@ -131,7 +127,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 		cfg.ExecutionMode = ExecutionModeReview
 	}
 	cfg.SafetyRequireApproval = req.Safety.RequireApproval
-	cfg.SafetyMaxPerHour = req.Safety.MaxPerHour
+	cfg.SafetyMaxPerHour = 0
 	cfg.SafetyBlockedKeywords = string(keywords)
 	if err := s.syncAutoPostPlannerEnabled(userID, typ, req.Enabled, cfg.FrequencyIntervalMinutes); err != nil {
 		return nil, err
@@ -150,6 +146,15 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	}
 	if err := s.repo.Save(cfg); err != nil {
 		return nil, err
+	}
+	if wasEnabled != cfg.Enabled {
+		previewKey := "activity.preview.automationModuleDisabled"
+		status := "review"
+		if cfg.Enabled {
+			previewKey = "activity.preview.automationModuleEnabled"
+			status = "success"
+		}
+		_ = recordAutomationActivity(s.activityRepo, userID, typ, status, previewKey, "")
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {
@@ -199,6 +204,7 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	wasEnabled := cfg.Enabled
 	if enabled {
 		if err := s.assertSubscriptionForAutomation(userID); err != nil {
 			return nil, err
@@ -221,6 +227,15 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 	}
 	if err := s.repo.Save(cfg); err != nil {
 		return nil, err
+	}
+	if wasEnabled != cfg.Enabled {
+		previewKey := "activity.preview.automationModuleDisabled"
+		status := "review"
+		if cfg.Enabled {
+			previewKey = "activity.preview.automationModuleEnabled"
+			status = "success"
+		}
+		_ = recordAutomationActivity(s.activityRepo, userID, typ, status, previewKey, "")
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {
@@ -427,6 +442,11 @@ func toAutomationModuleData(m model.AutomationConfig) dto.AutomationModuleData {
 	}
 	if m.NextRunAt != nil {
 		data.NextRunAt = m.NextRunAt.UTC().Format(time.RFC3339)
+	}
+	data.LastScanStatus = strings.TrimSpace(m.LastScanStatus)
+	data.LastScanMessage = strings.TrimSpace(m.LastScanMessage)
+	if m.LastScanAt != nil {
+		data.LastScanAt = m.LastScanAt.UTC().Format(time.RFC3339)
 	}
 	return data
 }

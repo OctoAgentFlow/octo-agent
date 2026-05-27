@@ -41,6 +41,10 @@ export type PlanLimitsApi = {
   monthly_x_writes: number;
   monthly_x_url_posts: number;
   monthly_cost_cap_cents: number;
+  monthly_auto_posts: number;
+  monthly_auto_replies: number;
+  monthly_auto_comments: number;
+  monthly_auto_dms: number;
   daily_auto_posts: number;
   daily_auto_replies: number;
   daily_auto_comments: number;
@@ -71,6 +75,10 @@ export type PlanUsageApi = {
   oaf_bots: number;
   twitter_accounts: number;
   ai_generations_month: number;
+  auto_posts_month: number;
+  auto_replies_month: number;
+  auto_comments_month: number;
+  auto_dms_month: number;
   auto_posts_today: number;
   auto_replies_today: number;
   auto_comments_today: number;

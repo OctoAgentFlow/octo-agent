@@ -18,7 +18,8 @@ export type AutoPostPlanApi = {
   bot_name?: string;
   enabled: boolean;
   execution_mode: AutoPostExecutionMode;
-  daily_limit: number;
+  /** Deprecated: retained for old API responses; monthly plan quota is enforced instead. */
+  daily_limit?: number;
   min_interval_minutes: number;
   posting_windows?: string;
   timezone: string;
@@ -85,13 +86,27 @@ export type AutoPostGenerationRunApi = {
 
 export type AutoPostGenerationRunsData = {
   items: AutoPostGenerationRunApi[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+  };
+};
+
+export type AutoPostGenerationRunQuery = {
+  status?: AutoPostGenerationRunApi["status"] | "all";
+  xAccountID?: number;
+  range?: "all" | "24h" | "7d" | "30d";
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export type AutoPostPlanPayload = {
   x_account_id: number;
   enabled: boolean;
   execution_mode: AutoPostExecutionMode;
-  daily_limit: number;
   min_interval_minutes: number;
   posting_windows: string;
   timezone: string;
@@ -122,8 +137,18 @@ export const autoPostService = {
     const res = await request.get<ApiResponse<AutoPostDraftsData>>("/auto-post/drafts");
     return res.data.data;
   },
-  async runs() {
-    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs");
+  async runs(query?: AutoPostGenerationRunQuery) {
+    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs", {
+      params: {
+        status: query?.status && query.status !== "all" ? query.status : undefined,
+        x_account_id: query?.xAccountID || undefined,
+        range: query?.range && query.range !== "all" ? query.range : undefined,
+        date_from: query?.dateFrom || undefined,
+        date_to: query?.dateTo || undefined,
+        page: query?.page || 1,
+        page_size: query?.pageSize || 20,
+      },
+    });
     return res.data.data;
   },
   async runNow(planID: number) {

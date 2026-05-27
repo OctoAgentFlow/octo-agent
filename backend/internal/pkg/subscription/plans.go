@@ -25,6 +25,10 @@ type PlanLimits struct {
 	MonthlyXWrites       int64 `json:"monthly_x_writes"`
 	MonthlyXURLPosts     int64 `json:"monthly_x_url_posts"`
 	MonthlyCostCapCents  int64 `json:"monthly_cost_cap_cents"`
+	MonthlyAutoPosts     int64 `json:"monthly_auto_posts"`
+	MonthlyAutoReplies   int64 `json:"monthly_auto_replies"`
+	MonthlyAutoComments  int64 `json:"monthly_auto_comments"`
+	MonthlyAutoDMs       int64 `json:"monthly_auto_dms"`
 	DailyAutoPosts       int64 `json:"daily_auto_posts"`
 	DailyAutoReplies     int64 `json:"daily_auto_replies"`
 	DailyAutoComments    int64 `json:"daily_auto_comments"`
@@ -82,6 +86,10 @@ func Catalog() []PlanDefinition {
 				MonthlyXWrites:       100,
 				MonthlyXURLPosts:     5,
 				MonthlyCostCapCents:  400,
+				MonthlyAutoPosts:     60,
+				MonthlyAutoReplies:   480,
+				MonthlyAutoComments:  240,
+				MonthlyAutoDMs:       480,
 				DailyAutoPosts:       2,
 				DailyAutoReplies:     16,
 				DailyAutoComments:    8,
@@ -94,7 +102,7 @@ func Catalog() []PlanDefinition {
 				"1 X account",
 				"500 AI generations / month",
 				"100 real X writes / month",
-				"Daily Auto Post 2, Auto Reply 16, Auto Comment 8, Auto DM 16",
+				"Monthly Auto Post 60, Auto Reply 480, Auto Comment 240, Auto DM 480",
 				"7-day basic Analytics",
 			},
 		},
@@ -106,7 +114,7 @@ func Catalog() []PlanDefinition {
 			Currency:     "USDT",
 			Audience:     "Small teams running several growth accounts",
 			Badge:        "Most Popular",
-			Description:  "Unlock full persona fields and more daily automation capacity.",
+			Description:  "Unlock full persona fields and more monthly automation capacity.",
 			Limits: PlanLimits{
 				MaxBots:              3,
 				MaxTwitterAccounts:   3,
@@ -114,6 +122,10 @@ func Catalog() []PlanDefinition {
 				MonthlyXWrites:       400,
 				MonthlyXURLPosts:     20,
 				MonthlyCostCapCents:  1450,
+				MonthlyAutoPosts:     300,
+				MonthlyAutoReplies:   3000,
+				MonthlyAutoComments:  1500,
+				MonthlyAutoDMs:       3000,
 				DailyAutoPosts:       10,
 				DailyAutoReplies:     100,
 				DailyAutoComments:    50,
@@ -149,6 +161,10 @@ func Catalog() []PlanDefinition {
 				MonthlyXWrites:       1200,
 				MonthlyXURLPosts:     50,
 				MonthlyCostCapCents:  3950,
+				MonthlyAutoPosts:     1500,
+				MonthlyAutoReplies:   15000,
+				MonthlyAutoComments:  9000,
+				MonthlyAutoDMs:       15000,
 				DailyAutoPosts:       50,
 				DailyAutoReplies:     500,
 				DailyAutoComments:    300,
@@ -187,6 +203,10 @@ func Catalog() []PlanDefinition {
 				MonthlyXWrites:       2500,
 				MonthlyXURLPosts:     120,
 				MonthlyCostCapCents:  9950,
+				MonthlyAutoPosts:     6000,
+				MonthlyAutoReplies:   60000,
+				MonthlyAutoComments:  30000,
+				MonthlyAutoDMs:       60000,
 				DailyAutoPosts:       200,
 				DailyAutoReplies:     2000,
 				DailyAutoComments:    1000,
@@ -287,6 +307,10 @@ func FreeTrialLimits() PlanLimits {
 		MonthlyXWrites:       10,
 		MonthlyXURLPosts:     0,
 		MonthlyCostCapCents:  0,
+		MonthlyAutoPosts:     30,
+		MonthlyAutoReplies:   150,
+		MonthlyAutoComments:  90,
+		MonthlyAutoDMs:       150,
 		DailyAutoPosts:       1,
 		DailyAutoReplies:     5,
 		DailyAutoComments:    3,

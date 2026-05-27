@@ -6,7 +6,7 @@ import axios from "axios";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock3, ListChecks } from "lucide-react";
 
-import type { ActivityRange, ActivityRecord, ActivityStatus, ActivityType } from "@/types/activity";
+import type { ActivityEventScope, ActivityFailureCategory, ActivityRange, ActivityRecord, ActivityStatus, ActivityType } from "@/types/activity";
 import { activityService } from "@/services/activity.service";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import {
@@ -25,15 +25,21 @@ import { ActivityEmptyState } from "@/components/activity/activity-empty-state";
 import { ActivityPageHeader } from "@/components/activity/activity-page-header";
 
 type Filters = {
+  eventScope: ActivityEventScope;
   type: ActivityType | "all";
   status: ActivityStatus | "all";
   range: ActivityRange;
   accountID: string;
   errorReason: string;
+  failureCategory: ActivityFailureCategory | "all";
 };
 
 function readType(value: string | null): Filters["type"] {
-  return value === "post" || value === "reply" || value === "comment" || value === "dm" ? value : "all";
+  return value === "post" || value === "reply" || value === "comment" || value === "dm" || value === "system" ? value : "all";
+}
+
+function readEventScope(value: string | null): ActivityEventScope {
+  return value === "execution" || value === "system" || value === "all" ? value : "all";
 }
 
 function readStatus(value: string | null): Filters["status"] {
@@ -55,6 +61,18 @@ function readPage(value: string | null) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
 }
 
+function readFailureCategory(value: string | null): Filters["failureCategory"] {
+  return value === "x_auth" ||
+    value === "rate_limit" ||
+    value === "safety" ||
+    value === "configuration" ||
+    value === "network" ||
+    value === "system" ||
+    value === "unknown"
+    ? value
+    : "all";
+}
+
 export default function ActivityPage() {
   const { t } = useT();
   const router = useRouter();
@@ -68,11 +86,13 @@ export default function ActivityPage() {
   const [total, setTotal] = useState(0);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [filters, setFilters] = useState<Filters>(() => ({
+    eventScope: readEventScope(searchParams.get("event_scope")),
     type: readType(searchParams.get("type")),
     status: readStatus(searchParams.get("status")),
     range: readRange(searchParams.get("range")),
     accountID: readAccountID(searchParams.get("account_id")),
     errorReason: searchParams.get("error_reason")?.trim() ?? "",
+    failureCategory: readFailureCategory(searchParams.get("failure_category")),
   }));
 
   const selectedAccountID = useMemo(() => {
@@ -88,11 +108,13 @@ export default function ActivityPage() {
       const data = await activityService.list({
         page,
         page_size: pageSize,
+        event_scope: filters.eventScope === "all" ? undefined : filters.eventScope,
         type: filters.type === "all" ? undefined : filters.type,
         status: filters.status === "all" ? undefined : filters.status,
         range: filters.range,
         account_id: selectedAccountID,
         error_reason: filters.errorReason || undefined,
+        failure_category: filters.failureCategory === "all" ? undefined : filters.failureCategory,
       });
       setRecordsRaw(
         data.items.map((item) => ({
@@ -102,8 +124,10 @@ export default function ActivityPage() {
           status: item.status,
           previewKey: item.preview_key,
           accountHandle: item.account_handle,
+          sourceModule: item.source_module,
           executedAt: item.executed_at,
           errorMessage: item.error_message,
+          failureCategory: item.failure_category,
           replyCommentTweetId: item.reply_comment_tweet_id,
           replyToUsername: item.reply_to_username,
           replyToTextPreview: item.reply_to_text_preview,
@@ -121,7 +145,7 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.errorReason, filters.range, filters.status, filters.type, page, pageSize, selectedAccountID, t]);
+  }, [filters.errorReason, filters.eventScope, filters.failureCategory, filters.range, filters.status, filters.type, page, pageSize, selectedAccountID, t]);
 
   useEffect(() => {
     void fetchActivities();
@@ -148,18 +172,20 @@ export default function ActivityPage() {
 
   useEffect(() => {
     const next = new URLSearchParams();
+    if (filters.eventScope !== "all") next.set("event_scope", filters.eventScope);
     if (filters.type !== "all") next.set("type", filters.type);
     if (filters.status !== "all") next.set("status", filters.status);
     if (filters.range !== "24h") next.set("range", filters.range);
     if (selectedAccountID) next.set("account_id", String(selectedAccountID));
     if (filters.errorReason) next.set("error_reason", filters.errorReason);
+    if (filters.failureCategory !== "all") next.set("failure_category", filters.failureCategory);
     if (page > 1) next.set("page", String(page));
     const nextQuery = next.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [filters.accountID, filters.errorReason, filters.range, filters.status, filters.type, page, pathname, router, searchParams, selectedAccountID]);
+  }, [filters.accountID, filters.errorReason, filters.eventScope, filters.failureCategory, filters.range, filters.status, filters.type, page, pathname, router, searchParams, selectedAccountID]);
 
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
@@ -175,7 +201,7 @@ export default function ActivityPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters.accountID, filters.errorReason, filters.range, filters.type, filters.status]);
+  }, [filters.accountID, filters.errorReason, filters.eventScope, filters.failureCategory, filters.range, filters.type, filters.status]);
 
   const records = useMemo(() => {
     return [...recordsRaw].sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());

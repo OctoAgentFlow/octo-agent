@@ -47,6 +47,7 @@ export type AnalyticsOverview = {
   }>;
   failure_reasons: Array<{
     reason: string;
+    category?: "x_auth" | "rate_limit" | "safety" | "configuration" | "network" | "system" | "unknown";
     count: number;
     last_at?: string;
   }>;

@@ -20,6 +20,14 @@ type ApiErrBody = {
   message?: string;
 };
 
+export function apiErrorCode(error: unknown) {
+  return axios.isAxiosError(error) ? (error.response?.data as ApiErrBody | undefined)?.error_code : undefined;
+}
+
+export function apiErrorMessage(error: unknown) {
+  return axios.isAxiosError(error) ? (error.response?.data as ApiErrBody | undefined)?.message : undefined;
+}
+
 type TokenData = {
   access_token: string;
   refresh_token: string;

@@ -569,28 +569,6 @@ func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic st
 }
 
 func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {
-	cfg, err := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypePost)
-	if err != nil {
-		return false, ""
-	}
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	nDay, err := s.activityRepo.CountPostPublishSuccessBetween(userID, dayStart, now)
-	if err != nil {
-		zap.L().Warn("post scheduler: count daily successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.FrequencyDailyLimit > 0 && int(nDay) >= cfg.FrequencyDailyLimit {
-		return true, "daily_limit"
-	}
-	hourAgo := now.Add(-time.Hour)
-	nHour, err := s.activityRepo.CountPostPublishSuccessBetween(userID, hourAgo, now)
-	if err != nil {
-		zap.L().Warn("post scheduler: count hourly successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.SafetyMaxPerHour > 0 && int(nHour) >= cfg.SafetyMaxPerHour {
-		return true, "hourly_limit"
-	}
 	return false, ""
 }
 

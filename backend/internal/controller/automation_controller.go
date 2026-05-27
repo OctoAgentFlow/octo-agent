@@ -34,6 +34,14 @@ func NewAutomationController(automationService *service.AutomationService, autoR
 	return &AutomationController{automationService: automationService, autoReplyService: autoReplyService, autoDMService: autoDMService, autoCommentService: autoCommentService}
 }
 
+func automationActionError(c *gin.Context, err error) bool {
+	if errors.Is(err, service.ErrAutomationModulePaused) {
+		response.FailWithCode(c, http.StatusForbidden, err.Error(), "automation_module_paused")
+		return true
+	}
+	return false
+}
+
 func (ctl *AutomationController) List(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -169,6 +177,10 @@ func (ctl *AutomationController) GenerateReplyDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
 			return
 		}
+		if strings.Contains(err.Error(), "monthly auto reply quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_reply_monthly_limit_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -212,6 +224,9 @@ func (ctl *AutomationController) ApproveReplyDraft(c *gin.Context) {
 	}
 	data, err := ctl.autoReplyService.ApproveDraft(userID, draftID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -361,6 +376,9 @@ func (ctl *AutomationController) ApproveDMTask(c *gin.Context) {
 	}
 	data, err := ctl.autoDMService.ApproveTask(userID, taskID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -404,6 +422,9 @@ func (ctl *AutomationController) RetryDMTask(c *gin.Context) {
 	}
 	data, err := ctl.autoDMService.RetryTask(userID, taskID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -560,6 +581,10 @@ func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
 			return
 		}
+		if strings.Contains(err.Error(), "monthly auto comment quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_comment_monthly_limit_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -579,6 +604,9 @@ func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
 	}
 	data, err := ctl.autoCommentService.ApproveTask(c.Request.Context(), userID, taskID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -667,6 +695,9 @@ func (ctl *AutomationController) RetryCommentTask(c *gin.Context) {
 	}
 	data, err := ctl.autoCommentService.RetryTask(c.Request.Context(), userID, taskID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

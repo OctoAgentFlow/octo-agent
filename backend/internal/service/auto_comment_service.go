@@ -203,7 +203,7 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	cfg := s.commentConfig(userID)
 	mode := s.effectiveCommentExecutionMode(userID, cfg)
 	if mode == ExecutionModeAutopilot {
-		if err := s.assertAutoCommentDailyQuota(userID, now); err != nil {
+		if err := s.assertAutoCommentMonthlyQuota(userID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -257,6 +257,9 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 }
 
 func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "approve comment draft"); err != nil {
+		return nil, err
+	}
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -335,6 +338,9 @@ func (s *AutoCommentService) BlockTask(userID, id uint, reason string) (*dto.Aut
 }
 
 func (s *AutoCommentService) RetryTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "retry comment task"); err != nil {
+		return nil, err
+	}
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -502,7 +508,7 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	blocked := blockedWordsFromConfig(&cfg)
 	mode := s.effectiveCommentExecutionMode(target.UserID, &cfg)
 	if mode == ExecutionModeAutopilot {
-		if err := s.assertAutoCommentDailyQuota(target.UserID, now); err != nil {
+		if err := s.assertAutoCommentMonthlyQuota(target.UserID, now); err != nil {
 			return nil, err
 		}
 	}
@@ -637,24 +643,6 @@ func (s *AutoCommentService) failTask(task *model.AutoCommentTask, category, rea
 }
 
 func (s *AutoCommentService) commentLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	dayCount, err := s.taskRepo.CountSuccessBetween(userID, dayStart, now)
-	if err != nil {
-		zap.L().Warn("auto comment: count daily successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.FrequencyDailyLimit > 0 && int(dayCount) >= cfg.FrequencyDailyLimit {
-		return true, "daily_limit"
-	}
-	hourAgo := now.Add(-time.Hour)
-	hourCount, err := s.taskRepo.CountSuccessBetween(userID, hourAgo, now)
-	if err != nil {
-		zap.L().Warn("auto comment: count hourly successes failed", zap.Uint("user_id", userID), zap.Error(err))
-		return false, ""
-	}
-	if cfg.SafetyMaxPerHour > 0 && int(hourCount) >= cfg.SafetyMaxPerHour {
-		return true, "hourly_limit"
-	}
 	return false, ""
 }
 
@@ -790,7 +778,7 @@ func (s *AutoCommentService) effectiveCommentExecutionMode(userID uint, cfg *mod
 	return ExecutionModeReview
 }
 
-func (s *AutoCommentService) assertAutoCommentDailyQuota(userID uint, now time.Time) error {
+func (s *AutoCommentService) assertAutoCommentMonthlyQuota(userID uint, now time.Time) error {
 	if s.taskRepo == nil || s.userRepo == nil {
 		return nil
 	}
@@ -798,17 +786,17 @@ func (s *AutoCommentService) assertAutoCommentDailyQuota(userID uint, now time.T
 	if err != nil {
 		return err
 	}
-	limit := subscription.LimitsForUser(u).DailyAutoComments
+	limit := subscription.LimitsForUser(u).MonthlyAutoComments
 	if limit <= 0 {
-		return fmt.Errorf("daily auto comment quota exceeded")
+		return fmt.Errorf("monthly auto comment quota exceeded")
 	}
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	used, err := s.taskRepo.CountCreatedBetween(userID, dayStart, now)
+	monthStart := startOfUTCMonth(now)
+	used, err := s.taskRepo.CountCreatedBetween(userID, monthStart, now)
 	if err != nil {
 		return err
 	}
 	if used >= limit {
-		return fmt.Errorf("daily auto comment quota exceeded")
+		return fmt.Errorf("monthly auto comment quota exceeded")
 	}
 	return nil
 }

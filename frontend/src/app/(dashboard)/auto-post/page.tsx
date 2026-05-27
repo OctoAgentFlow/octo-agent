@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import {
   ArrowRight,
@@ -22,8 +23,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
   autoPostService,
@@ -46,11 +50,13 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type WorkbenchPanel = "generate" | "planner" | "content" | "history";
+type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
+type RunAccountScope = "selected" | "all";
+type RunRangeFilter = "all" | "24h" | "7d" | "30d";
 
 type PlannerForm = {
   enabled: boolean;
   executionMode: AutoPostExecutionMode;
-  dailyLimit: number;
   minIntervalMinutes: number;
   postingWindows: string;
   timezone: string;
@@ -68,6 +74,9 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
   { id: "content", labelKey: "autoPost.tabs.content", descriptionKey: "autoPost.tabs.contentDesc" },
   { id: "history", labelKey: "autoPost.tabs.history", descriptionKey: "autoPost.tabs.historyDesc" },
 ];
+const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
+const runAccountScopes: RunAccountScope[] = ["selected", "all"];
+const runRangeFilters: RunRangeFilter[] = ["all", "24h", "7d", "30d"];
 
 type LibraryForm = {
   title: string;
@@ -81,11 +90,10 @@ type LibraryForm = {
   status: ContentLibraryStatus;
 };
 
-function defaultForm(limit?: number): PlannerForm {
+function defaultForm(): PlannerForm {
   return {
     enabled: false,
     executionMode: "review",
-    dailyLimit: limit && limit > 0 ? limit : 3,
     minIntervalMinutes: 120,
     postingWindows: "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -129,8 +137,37 @@ function runTone(status: string) {
   return "border-white/10 bg-white/[0.05] text-white/65";
 }
 
+function readWorkbenchPanel(value: string | null): WorkbenchPanel {
+  return value === "planner" || value === "content" || value === "history" || value === "generate" ? value : "generate";
+}
+
+function readRunStatus(value: string | null): RunStatusFilter {
+  return value === "completed" || value === "skipped" || value === "failed" ? value : "all";
+}
+
+function readRunAccountScope(value: string | null): RunAccountScope {
+  return value === "all" ? "all" : "selected";
+}
+
+function readRunRange(value: string | null): RunRangeFilter {
+  return value === "24h" || value === "7d" || value === "30d" ? value : "all";
+}
+
+function readRunPage(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+}
+
+function readAccountID(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
@@ -140,7 +177,7 @@ export default function AutoPostPage() {
   const [runs, setRuns] = useState<AutoPostGenerationRunApi[]>([]);
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
-  const [selectedAccountID, setSelectedAccountID] = useState(0);
+  const [selectedAccountID, setSelectedAccountID] = useState(() => readAccountID(searchParams.get("account")));
   const [selectedContentItemID, setSelectedContentItemID] = useState(0);
   const [form, setForm] = useState<PlannerForm>(() => defaultForm());
   const [libraryForm, setLibraryForm] = useState<LibraryForm>(() => defaultLibraryForm());
@@ -153,18 +190,26 @@ export default function AutoPostPage() {
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
-  const [activePanel, setActivePanel] = useState<WorkbenchPanel>("generate");
+  const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
+  const [runAccountScope, setRunAccountScope] = useState<RunAccountScope>(() => readRunAccountScope(searchParams.get("account_scope")));
+  const [runRangeFilter, setRunRangeFilter] = useState<RunRangeFilter>(() => readRunRange(searchParams.get("run_range")));
+  const [runPage, setRunPage] = useState(() => readRunPage(searchParams.get("run_page")));
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runPagination, setRunPagination] = useState({ page: 1, pageSize: 12, total: 0 });
+  const [latestRun, setLatestRun] = useState<AutoPostGenerationRunApi | null>(null);
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [accountData, botData, planData, draftData, runData, libraryData, subscriptionData] = await Promise.all([
+      const [accountData, botData, planData, draftData, libraryData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
         autoPostService.plans(),
         autoPostService.drafts(),
-        autoPostService.runs(),
         contentLibraryService.list({ limit: 100 }),
         billingService.subscription(),
       ]);
@@ -173,19 +218,19 @@ export default function AutoPostPage() {
       setBots(botData.items);
       setPlans(planData.items);
       setDrafts(draftData.items);
-      setRuns(runData.items);
       setContentItems(libraryData.items);
       setSubscription(subscriptionData);
-      const firstAccountID = selectedAccountID || connected[0]?.id || 0;
+      setQuotaUpgradeVisible(false);
+      const firstAccountID = selectedAccountID || readAccountID(searchParams.get("account")) || connected[0]?.id || 0;
       setSelectedAccountID(firstAccountID);
       const currentPlan = planData.items.find((item) => item.x_account_id === firstAccountID);
-      setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm(subscriptionData.limits.daily_auto_posts));
+      setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm());
       setLoadState("ready");
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.load") : t("autoPost.errors.load"));
       setLoadState("error");
     }
-  }, [pushToast, selectedAccountID, t]);
+  }, [pushToast, searchParams, selectedAccountID, t]);
 
   useEffect(() => {
     void load();
@@ -211,7 +256,7 @@ export default function AutoPostPage() {
   );
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
-  const accountRuns = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID).slice(0, 5), [runs, selectedAccountID]);
+  const accountRuns = runs;
   const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
   const queuedDraftCount = useMemo(
     () => accountDraftsAll.filter((draft) => ["draft", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
@@ -225,10 +270,92 @@ export default function AutoPostPage() {
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
-  const latestRun = accountRuns[0];
+  const runTotalPages = Math.max(1, Math.ceil(runPagination.total / runPagination.pageSize));
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
+    : undefined;
+
+  useEffect(() => {
+    setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
+    setRunStatusFilter(readRunStatus(searchParams.get("run_status")));
+    setRunAccountScope(readRunAccountScope(searchParams.get("account_scope")));
+    setRunRangeFilter(readRunRange(searchParams.get("run_range")));
+    setRunPage(readRunPage(searchParams.get("run_page")));
+    const accountID = readAccountID(searchParams.get("account"));
+    if (accountID) {
+      setSelectedAccountID((current) => (current === accountID ? current : accountID));
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (selectedAccountID > 0) next.set("account", String(selectedAccountID));
+    if (activePanel !== "generate") next.set("panel", activePanel);
+    if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
+    if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
+    if (runRangeFilter !== "all") next.set("run_range", runRangeFilter);
+    if (runPage > 1) next.set("run_page", String(runPage));
+    const nextQuery = next.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams, selectedAccountID]);
+
+  const fetchRuns = useCallback(async () => {
+    if (runAccountScope === "selected" && !selectedAccountID) {
+      setRuns([]);
+      setRunPagination({ page: 1, pageSize: 12, total: 0 });
+      return;
+    }
+    setRunsLoading(true);
+    try {
+      const data = await autoPostService.runs({
+        status: runStatusFilter,
+        xAccountID: runAccountScope === "selected" ? selectedAccountID : undefined,
+        range: runRangeFilter,
+        page: runPage,
+        pageSize: 12,
+      });
+      setRuns(data.items);
+      setRunPagination({
+        page: data.pagination?.page || runPage,
+        pageSize: data.pagination?.page_size || 12,
+        total: data.pagination?.total || data.items.length,
+      });
+    } catch (error) {
+      setRuns([]);
+      setRunPagination({ page: 1, pageSize: 12, total: 0 });
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runs.loadFailed") : t("autoPost.runs.loadFailed"));
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [pushToast, runAccountScope, runPage, runRangeFilter, runStatusFilter, selectedAccountID, t]);
+
+  useEffect(() => {
+    void fetchRuns();
+  }, [fetchRuns]);
+
+  const fetchLatestRun = useCallback(async () => {
+    if (!selectedAccountID) {
+      setLatestRun(null);
+      return;
+    }
+    try {
+      const data = await autoPostService.runs({ xAccountID: selectedAccountID, page: 1, pageSize: 1 });
+      setLatestRun(data.items[0] ?? null);
+    } catch {
+      setLatestRun(null);
+    }
+  }, [selectedAccountID]);
+
+  useEffect(() => {
+    void fetchLatestRun();
+  }, [fetchLatestRun]);
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -250,8 +377,9 @@ export default function AutoPostPage() {
   const onAccountChange = (accountID: number) => {
     setSelectedAccountID(accountID);
     setSelectedContentItemID(0);
+    setRunPage(1);
     const plan = plans.find((item) => item.x_account_id === accountID);
-    setForm(plan ? formFromPlan(plan) : defaultForm(subscription?.limits.daily_auto_posts));
+    setForm(plan ? formFromPlan(plan) : defaultForm());
   };
 
   const savePlan = async () => {
@@ -269,7 +397,6 @@ export default function AutoPostPage() {
         x_account_id: selectedAccountID,
         enabled: form.enabled,
         execution_mode: form.executionMode,
-        daily_limit: Number(form.dailyLimit) || 1,
         min_interval_minutes: Number(form.minIntervalMinutes) || 1,
         posting_windows: form.postingWindows.trim(),
         timezone: form.timezone.trim() || "UTC",
@@ -281,6 +408,7 @@ export default function AutoPostPage() {
         return [saved, ...without];
       });
       setForm(formFromPlan(saved));
+      setQuotaUpgradeVisible(false);
       pushToast(t("autoPost.toast.saved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.save") : t("autoPost.errors.save"));
@@ -443,7 +571,6 @@ export default function AutoPostPage() {
           x_account_id: selectedAccountID,
           enabled: form.enabled,
           execution_mode: form.executionMode,
-          daily_limit: Number(form.dailyLimit) || 1,
           min_interval_minutes: Number(form.minIntervalMinutes) || 1,
           posting_windows: form.postingWindows.trim(),
           timezone: form.timezone.trim() || "UTC",
@@ -455,14 +582,17 @@ export default function AutoPostPage() {
       const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id);
       setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
       setContentDirection("");
+      setQuotaUpgradeVisible(false);
       pushToast(t("autoPost.toast.generated"));
       setActivePanel("history");
       void load();
     } catch (error) {
       const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
       if (code === "ai_generation_quota_exceeded") {
+        setQuotaUpgradeVisible(true);
         pushToast(t("autoPost.errors.aiQuotaExceeded"));
-      } else if (code === "auto_post_daily_limit_exceeded") {
+      } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
+        setQuotaUpgradeVisible(true);
         pushToast(t("autoPost.errors.dailyLimitExceeded"));
       } else if (code === "auto_post_duplicate_content") {
         pushToast(t("autoPost.errors.duplicateContent"));
@@ -483,7 +613,6 @@ export default function AutoPostPage() {
     setRunningPlanner(true);
     try {
       const run = await autoPostService.runNow(selectedPlan.id);
-      setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
       if (run.status === "completed") {
         pushToast(t("autoPost.runNow.toast.completed"));
       } else if (run.status === "skipped") {
@@ -492,9 +621,12 @@ export default function AutoPostPage() {
         pushToast(t("autoPost.runNow.toast.failed"));
       }
       setActivePanel("history");
+      setRunPage(1);
+      void fetchRuns();
+      void fetchLatestRun();
       void load();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runNow.errors.failed") : t("autoPost.runNow.errors.failed"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoPost.runNow.errors.failed"));
     } finally {
       setRunningPlanner(false);
     }
@@ -531,6 +663,10 @@ export default function AutoPostPage() {
           </Button>
         </Card>
       ) : null}
+
+      <AutomationModulePausedNotice type="post" onEnabledChange={setModuleEnabled} />
+
+      {quotaUpgradeVisible ? <QuotaUpgradeCallout /> : null}
 
       {loadState === "ready" ? (
         <>
@@ -620,13 +756,24 @@ export default function AutoPostPage() {
                 title={t("autoPost.status.title")}
                 description={t("autoPost.status.description")}
                 right={
-                  <Button size="sm" type="button" onClick={() => void runPlannerNow()} disabled={runningPlanner || !selectedAccountID}>
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => void runPlannerNow()}
+                    disabled={runningPlanner || !selectedAccountID || modulePaused}
+                    title={modulePausedActionTip}
+                  >
                     {runningPlanner ? <Loader2 className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
                     {t("autoPost.runNow.button")}
                   </Button>
                 }
               />
               <div className="space-y-3 text-sm">
+                {modulePaused ? (
+                  <p className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                    {modulePausedActionTip}
+                  </p>
+                ) : null}
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
                 <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
@@ -637,7 +784,6 @@ export default function AutoPostPage() {
                   label={t("autoPost.status.lastRunResult")}
                   value={latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.common.emptyValue")}
                 />
-                <StatusRow label={t("autoPost.status.dailyLimit")} value={String(selectedPlan?.daily_limit || form.dailyLimit)} />
                 <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
                 <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
                 <StatusRow label={t("autoPost.status.lengthMode")} value={t(`autoPost.lengthMode.${selectedPlan?.content_length_mode || form.contentLengthMode}`)} />
@@ -722,14 +868,7 @@ export default function AutoPostPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <TextInput
-                    type="number"
-                    label={t("autoPost.fields.dailyLimit")}
-                    value={String(form.dailyLimit)}
-                    onChange={(value) => setForm((current) => ({ ...current, dailyLimit: Number(value) }))}
-                    helper={t("autoPost.fields.dailyLimitHelper")}
-                  />
+                <div className="grid gap-4">
                   <TextInput
                     type="number"
                     label={t("autoPost.fields.minInterval")}
@@ -1124,10 +1263,66 @@ export default function AutoPostPage() {
                 </Card>
 
                 <Card>
-                <CardHeader title={t("autoPost.runs.title")} description={t("autoPost.runs.description")} />
-                {accountRuns.length === 0 ? (
+                <CardHeader
+                  title={t("autoPost.runs.title")}
+                  description={t("autoPost.runs.description")}
+                  right={
+                    <div className="grid gap-2 sm:flex">
+                      <select
+                        value={runAccountScope}
+                        onChange={(event) => {
+                          setRunAccountScope(event.target.value as RunAccountScope);
+                          setRunPage(1);
+                        }}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                        aria-label={t("autoPost.runs.scopeLabel")}
+                      >
+                        {runAccountScopes.map((scope) => (
+                          <option key={scope} value={scope}>
+                            {t(`autoPost.runs.scope.${scope}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={runStatusFilter}
+                        onChange={(event) => {
+                          setRunStatusFilter(event.target.value as RunStatusFilter);
+                          setRunPage(1);
+                        }}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                      >
+                        {runStatusFilters.map((status) => (
+                          <option key={status} value={status}>
+                            {t(`autoPost.runs.filter.${status}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={runRangeFilter}
+                        onChange={(event) => {
+                          setRunRangeFilter(event.target.value as RunRangeFilter);
+                          setRunPage(1);
+                        }}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                        aria-label={t("autoPost.runs.rangeLabel")}
+                      >
+                        {runRangeFilters.map((range) => (
+                          <option key={range} value={range}>
+                            {t(`autoPost.runs.range.${range}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  }
+                />
+                {runsLoading ? (
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t("autoPost.runs.loading")}
+                  </div>
+                ) : accountRuns.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
-                    {t("autoPost.runs.empty")}
+                    {runStatusFilter === "all" ? t("autoPost.runs.empty") : t("autoPost.runs.emptyFiltered")}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1137,6 +1332,11 @@ export default function AutoPostPage() {
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${runTone(run.status)}`}>
                             {t(`autoPost.runs.status.${run.status}`)}
                           </span>
+                          {runAccountScope === "all" ? (
+                            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+                              {run.account_handle ? `@${run.account_handle}` : t("autoPost.runs.accountFallback", { id: run.x_account_id })}
+                            </span>
+                          ) : null}
                           {run.content_title ? (
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                               {run.content_title}
@@ -1164,6 +1364,25 @@ export default function AutoPostPage() {
                         </div>
                       </div>
                     ))}
+                    {runTotalPages > 1 ? (
+                      <div className="flex flex-col gap-2 rounded-2xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b] sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          {t("autoPost.runs.pagination", {
+                            page: runPagination.page,
+                            total: runTotalPages,
+                            count: runPagination.total,
+                          })}
+                        </span>
+                        <div className="grid gap-2 sm:flex">
+                          <Button type="button" size="sm" variant="outline" disabled={runPagination.page <= 1 || runsLoading} onClick={() => setRunPage((current) => Math.max(1, current - 1))}>
+                            {t("common.previous")}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" disabled={runPagination.page >= runTotalPages || runsLoading} onClick={() => setRunPage((current) => current + 1)}>
+                            {t("common.next")}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
                 </Card>
@@ -1274,7 +1493,7 @@ function AutoPostPipelineSummary({
   selectedPlan: AutoPostPlanApi | null;
   queuedDraftCount: number;
   publishReadyCount: number;
-  latestRun?: AutoPostGenerationRunApi;
+  latestRun?: AutoPostGenerationRunApi | null;
   onOpenPanel: (panel: WorkbenchPanel) => void;
 }) {
   const { t } = useT();
@@ -1413,7 +1632,6 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
   return {
     enabled: plan.enabled,
     executionMode: plan.execution_mode,
-    dailyLimit: plan.daily_limit,
     minIntervalMinutes: plan.min_interval_minutes,
     postingWindows: plan.posting_windows || "",
     timezone: plan.timezone || "UTC",

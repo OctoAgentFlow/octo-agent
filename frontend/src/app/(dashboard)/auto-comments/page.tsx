@@ -7,8 +7,11 @@ import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
+import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { billingService } from "@/services/billing.service";
 import {
@@ -68,6 +71,8 @@ export default function AutoCommentsPage() {
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -102,6 +107,7 @@ export default function AutoCommentsPage() {
       setTargets(targetData.items);
       setDrafts(draftData.items);
       setPlan(subscriptionData.plan);
+      setQuotaUpgradeVisible(false);
       const commentModule = automationData.modules.find((item) => item.type === "comment");
       setExecutionMode(commentModule?.config.execution_mode || "review");
       setXAccountID((current) => current || connected[0]?.id || 0);
@@ -137,11 +143,14 @@ export default function AutoCommentsPage() {
       setTweetURL("");
       setAuthorHandle("");
       setTargetText("");
+      setQuotaUpgradeVisible(false);
       pushToast(t(draft.status === "ready_to_publish" ? "autoComment.toast.readyToPublish" : "autoComment.toast.generated"));
     } catch (error) {
       const body = axios.isAxiosError(error) ? error.response?.data : null;
+      const isQuotaError = body?.error_code === "ai_generation_quota_exceeded" || body?.error_code === "auto_comment_monthly_limit_exceeded";
+      if (isQuotaError) setQuotaUpgradeVisible(true);
       const message =
-        body?.error_code === "ai_generation_quota_exceeded"
+        isQuotaError
           ? t("autoComment.errors.quota")
           : body?.message || t("autoComment.errors.generate");
       pushToast(message);
@@ -156,7 +165,7 @@ export default function AutoCommentsPage() {
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
       pushToast(t("autoComment.toast.approved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.approve") : t("autoComment.errors.approve"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoComment.errors.approve"));
     }
   };
 
@@ -190,6 +199,10 @@ export default function AutoCommentsPage() {
 
   const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
   const hasTargetInput = Boolean(tweetURL.trim() && authorHandle.trim() && targetText.trim());
+  const modulePaused = moduleEnabled === false;
+  const modulePausedActionTip = modulePaused
+    ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.comment.name") })
+    : undefined;
 
   const selectExecutionMode = async (mode: ExecutionMode) => {
     if (mode === "autopilot" && !autopilotAvailable) return;
@@ -236,6 +249,10 @@ export default function AutoCommentsPage() {
           <Button onClick={() => void loadAll()}>{t("autoComment.retry")}</Button>
         </Card>
       ) : null}
+
+      <AutomationModulePausedNotice type="comment" onEnabledChange={setModuleEnabled} />
+
+      {quotaUpgradeVisible ? <QuotaUpgradeCallout /> : null}
 
       {loadState === "ready" ? (
         <>
@@ -410,7 +427,12 @@ export default function AutoCommentsPage() {
 
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
-          <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+            <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+            {modulePaused ? (
+              <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+                {modulePausedActionTip}
+              </p>
+            ) : null}
           </div>
           <div className="divide-y divide-[#2f3336]">
             {drafts.length === 0 ? (
@@ -469,7 +491,7 @@ export default function AutoCommentsPage() {
                               {t("autoComment.review.edit")}
                             </Button>
                             {canReview ? (
-                              <Button size="sm" onClick={() => void approveDraft(draft.id)}>
+                              <Button size="sm" onClick={() => void approveDraft(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
                                 <CheckCircle2 className="size-4" />
                                 {t("autoComment.review.approve")}
                               </Button>

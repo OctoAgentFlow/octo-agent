@@ -24,11 +24,11 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			Enabled:                  false,
 			State:                    "Paused",
 			FrequencyIntervalMinutes: 180,
-			FrequencyDailyLimit:      6,
+			FrequencyDailyLimit:      0,
 			Tone:                     "Professional",
 			ExecutionMode:            "review",
 			SafetyRequireApproval:    true,
-			SafetyMaxPerHour:         2,
+			SafetyMaxPerHour:         0,
 			SafetyBlockedKeywords:    `["airdrop","giveaway"]`,
 		},
 		{
@@ -37,11 +37,11 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			Enabled:                  false,
 			State:                    "Paused",
 			FrequencyIntervalMinutes: 15,
-			FrequencyDailyLimit:      120,
+			FrequencyDailyLimit:      0,
 			Tone:                     "Friendly",
 			ExecutionMode:            "review",
 			SafetyRequireApproval:    false,
-			SafetyMaxPerHour:         30,
+			SafetyMaxPerHour:         0,
 			SafetyBlockedKeywords:    `["price","pump"]`,
 		},
 		{
@@ -50,11 +50,11 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			Enabled:                  false,
 			State:                    "Paused",
 			FrequencyIntervalMinutes: 60,
-			FrequencyDailyLimit:      40,
+			FrequencyDailyLimit:      0,
 			Tone:                     "Web3-native",
 			ExecutionMode:            "review",
 			SafetyRequireApproval:    true,
-			SafetyMaxPerHour:         10,
+			SafetyMaxPerHour:         0,
 			SafetyBlockedKeywords:    `["seed phrase","private key"]`,
 		},
 		{
@@ -63,11 +63,11 @@ func (r *AutomationRepository) EnsureDefaults(userID uint) error {
 			Enabled:                  false,
 			State:                    "Paused",
 			FrequencyIntervalMinutes: 10,
-			FrequencyDailyLimit:      20,
+			FrequencyDailyLimit:      0,
 			Tone:                     "Friendly",
 			ExecutionMode:            "review",
 			SafetyRequireApproval:    true,
-			SafetyMaxPerHour:         6,
+			SafetyMaxPerHour:         0,
 			SafetyBlockedKeywords:    `["airdrop","giveaway","seed phrase","private key"]`,
 		},
 	}
@@ -148,6 +148,23 @@ func (r *AutomationRepository) ListUserIDsWithReplyAutomationEnabled(limit int) 
 		Limit(limit).
 		Pluck("automation_configs.user_id", &ids).Error
 	return ids, err
+}
+
+// ListDueReplyAutomationConfigs returns due Auto Reply configs for active subscribers.
+func (r *AutomationRepository) ListDueReplyAutomationConfigs(limit int, now time.Time) ([]model.AutomationConfig, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var rows []model.AutomationConfig
+	err := r.DB.Model(&model.AutomationConfig{}).
+		Joins(`INNER JOIN users ON users.id = automation_configs.user_id AND users.subscription_status = ? AND users.subscription_expires_at IS NOT NULL AND users.subscription_expires_at > ?`,
+			"active", now).
+		Where("automation_configs.type = ? AND automation_configs.enabled = ?", AutomationTypeReply, true).
+		Where("(automation_configs.next_run_at IS NULL OR automation_configs.next_run_at <= ?)", now).
+		Order("automation_configs.next_run_at ASC, automation_configs.id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
 }
 
 // ListDueDMAutomationConfigs returns due Auto DM configs for active subscribers.

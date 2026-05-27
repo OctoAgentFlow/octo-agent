@@ -94,6 +94,10 @@ type GenerateAutoReplyInput struct {
 
 type GenerateOAFBotSamplesInput struct {
 	Scene             string
+	SampleContext     string
+	UnsafeContent     string
+	RewriteMode       string
+	SafetyHits        []dto.OAFBotSafetyHit
 	Name              string
 	Occupation        string
 	Industry          string
@@ -125,6 +129,7 @@ type GenerateOAFBotSamplesInput struct {
 }
 
 type CompleteOAFBotProfileInput struct {
+	Mode              string
 	Name              string
 	Occupation        string
 	Industry          string
@@ -153,6 +158,7 @@ type CompleteOAFBotProfileInput struct {
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
+	FeedbackSignals   []string
 }
 
 type GenerateAutoPostInput struct {
@@ -282,6 +288,9 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
 	user.WriteString("- Directly respond to the comment; do not answer a different question.\n")
+	user.WriteString("- If the comment asks a question, answer that exact question using the original post and persona/product context. Do not use generic thanks-only replies.\n")
+	user.WriteString("- If the answer is not fully known from context, acknowledge briefly and offer the safest next step instead of inventing details.\n")
+	user.WriteString("- Language is mandatory: when language_strategy is follow_context, reply in the same language as the comment whenever the comment language is clear.\n")
 	user.WriteString("- If the comment is negative, stay calm, professional, and non-defensive.\n")
 	user.WriteString("- Do not sound like an ad and do not over-direct traffic.\n")
 	user.WriteString("- You may ask a light follow-up question if it improves the interaction.\n")
@@ -390,6 +399,87 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
 }
 
+func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {
+	scene := normalizeSampleScene(in.Scene)
+	if scene == "" {
+		scene = "tweet"
+	}
+	unsafeContent := strings.TrimSpace(in.UnsafeContent)
+	if unsafeContent == "" {
+		return nil, openaiint.TextUsage{}, fmt.Errorf("content is required")
+	}
+	sceneInstruction, maxChars := sampleSceneInstruction(scene)
+	system := strings.Join([]string{
+		"You rewrite X/Twitter content for Octo-Agent Flow OAF Bot safety review.",
+		"Preserve the user's persona, intent, language, and useful specifics.",
+		"Remove or soften risky wording that matched safety rules.",
+		"Return plain text only. Do not return JSON, markdown, labels, or surrounding quotes.",
+	}, " ")
+	var user strings.Builder
+	user.WriteString("Requested scene: " + scene + "\n")
+	user.WriteString(sceneInstruction + "\n")
+	user.WriteString("Original content to rewrite:\n")
+	user.WriteString(truncateRunes(unsafeContent, 1200))
+	user.WriteString("\n")
+	user.WriteString("Matched safety hits:\n")
+	if len(in.SafetyHits) == 0 {
+		user.WriteString("- No explicit hit list provided; rewrite conservatively.\n")
+	}
+	for _, hit := range in.SafetyHits {
+		term := strings.TrimSpace(hit.Term)
+		if term == "" {
+			continue
+		}
+		user.WriteString("- " + strings.TrimSpace(hit.Source) + ": " + term + "\n")
+	}
+	if context := strings.TrimSpace(in.SampleContext); context != "" {
+		user.WriteString("External sample context:\n")
+		user.WriteString(truncateRunes(context, 1200))
+		user.WriteString("\n")
+	}
+	user.WriteString("Persona and boundaries:\n")
+	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+	user.WriteString("Industry: " + strings.TrimSpace(in.Industry) + "\n")
+	user.WriteString("Identity summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+	user.WriteString("Voice tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+	user.WriteString("Topics: " + strings.Join(in.Topics, ", ") + "\n")
+	user.WriteString("Forbidden topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+	user.WriteString("Avoid claims: " + strings.Join(in.AvoidClaims, ", ") + "\n")
+	user.WriteString("Compliance notes: " + strings.TrimSpace(in.ComplianceNotes) + "\n")
+	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	user.WriteString("Rules:\n")
+	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
+	switch strings.TrimSpace(in.RewriteMode) {
+	case "conservative":
+		user.WriteString("- Rewrite conservatively: remove risky phrasing, soften claims, and prefer neutral educational language.\n")
+	case "shorter":
+		user.WriteString("- Rewrite shorter: keep the core message but make it more concise and less promotional.\n")
+	default:
+		user.WriteString("- Rewrite naturally: keep the voice close to the original while removing risky wording.\n")
+	}
+	user.WriteString("- Do not include the matched risky terms unless they are necessary as neutral context; prefer safer alternatives.\n")
+	user.WriteString("- Avoid guarantees, urgency traps, wallet/private-key prompts, official-support impersonation, and unsupported financial claims.\n")
+	user.WriteString("- Keep it natural and usable as the requested scene.\n")
+
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return nil, openaiint.TextUsage{}, err
+	}
+	content := extractSceneContent(result.Text, scene)
+	content = truncateRunes(stripGeneratedJSONWrapper(content, scene), maxChars)
+	out := dto.OAFBotTestGenerateResponse{
+		Scene:     scene,
+		Content:   content,
+		Provider:  s.providerSource(),
+		RawResult: strings.TrimSpace(result.Text),
+	}
+	setSampleSceneContent(&out, scene, content)
+	return &out, result.Usage, nil
+}
+
 func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -414,6 +504,13 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	var user strings.Builder
 	user.WriteString("Requested scene: " + scene + "\n")
 	user.WriteString(sceneInstruction + "\n")
+	if context := strings.TrimSpace(in.SampleContext); context != "" {
+		user.WriteString("External sample context:\n")
+		user.WriteString(truncateRunes(context, 1200))
+		user.WriteString("\n")
+	} else {
+		user.WriteString("External sample context: not provided.\n")
+	}
 	user.WriteString("Internal bot name: " + name + "\n")
 	user.WriteString("Important: The internal bot name is only for dashboard identification. Do not mention the bot name in generated content unless the user's persona fields explicitly instruct self-introduction with that exact name.\n")
 	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
@@ -444,7 +541,11 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	})
 	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
-	user.WriteString("No external input context is provided for this sample. If language_strategy is follow_context, use primary_language for this sample.\n")
+	if strings.TrimSpace(in.SampleContext) == "" {
+		user.WriteString("If language_strategy is follow_context, use primary_language for this sample.\n")
+	} else {
+		user.WriteString("Use the external sample context as the immediate situation for the requested scene. If language_strategy is follow_context, match the context language when it is clear.\n")
+	}
 	user.WriteString("Rules:\n")
 	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
 	user.WriteString("- Generate only the requested scene and no other scene.\n")
@@ -495,6 +596,18 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 
 	var user strings.Builder
 	user.WriteString("Current draft fields. Empty fields need help; non-empty fields should be refined only when necessary.\n")
+	if strings.TrimSpace(in.Mode) == oafBotProfileAssistModeImproveAll {
+		user.WriteString("Assist mode: improve_all. You may refine existing fields when it clearly improves specificity, consistency, or safety.\n")
+	} else {
+		user.WriteString("Assist mode: fill_missing_only. Prioritize missing fields and avoid changing user-provided intent.\n")
+	}
+	if len(in.FeedbackSignals) > 0 {
+		user.WriteString("Recent negative generation feedback to fix. Treat these as concrete quality signals for the revised persona and strategy fields:\n")
+		for i, signal := range in.FeedbackSignals {
+			user.WriteString(fmt.Sprintf("%d. %s\n", i+1, strings.TrimSpace(signal)))
+		}
+		user.WriteString("When feedback mentions off-persona, generic output, unsafe claims, wrong language, length, CTA, or missing context, reflect the fix in identity_summary, voice_tone, topics, forbidden_topics, growth_goal, content_objectives, preferred_cta, keywords, compliance_notes, avoid_claims, primary_language, or language_strategy as appropriate.\n")
+	}
 	user.WriteString("name: " + name + "\n")
 	user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
 	user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")

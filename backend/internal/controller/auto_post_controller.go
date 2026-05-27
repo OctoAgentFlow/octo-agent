@@ -120,7 +120,12 @@ func (ctl *AutoPostController) ListRuns(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoPostService.ListRuns(userID)
+	var query dto.AutoPostGenerationRunQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoPostService.ListRuns(userID, query)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -147,8 +152,8 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
 			return
 		}
-		if errors.Is(err, service.ErrAutoPostDailyLimitExceeded) {
-			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_post_daily_limit_exceeded")
+		if errors.Is(err, service.ErrAutoPostMonthlyLimitExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_post_monthly_limit_exceeded")
 			return
 		}
 		if errors.Is(err, service.ErrAutoPostDuplicateContent) {
@@ -174,6 +179,9 @@ func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.RunPlanNow(c.Request.Context(), userID, planID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "auto post plan not found")
 			return
@@ -221,6 +229,9 @@ func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.ApproveDraft(userID, draftID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -240,6 +251,9 @@ func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
 	}
 	data, err := ctl.autoPostService.PreparePublish(userID, draftID)
 	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

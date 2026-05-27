@@ -75,6 +75,7 @@ type OAFBotUpsertRequest struct {
 
 type OAFBotCompleteProfileRequest struct {
 	Draft OAFBotUpsertRequest `json:"draft"`
+	Mode  string              `json:"mode"`
 }
 
 type OAFBotCompleteProfileResponse struct {
@@ -84,21 +85,52 @@ type OAFBotCompleteProfileResponse struct {
 	RawResult     string              `json:"raw_result,omitempty"`
 }
 
+type OAFBotFeedbackProfileSuggestionResponse struct {
+	Profile       OAFBotUpsertRequest `json:"profile"`
+	Provider      string              `json:"provider"`
+	UsageConsumed int                 `json:"usage_consumed"`
+	FeedbackCount int                 `json:"feedback_count"`
+	RawResult     string              `json:"raw_result,omitempty"`
+}
+
 type OAFBotTestGenerateRequest struct {
-	Scene string `json:"scene"`
+	Scene         string `json:"scene"`
+	SampleContext string `json:"sample_context"`
+}
+
+type OAFBotRewriteSafetyRequest struct {
+	Scene         string            `json:"scene"`
+	Content       string            `json:"content"`
+	SampleContext string            `json:"sample_context"`
+	RewriteMode   string            `json:"rewrite_mode"`
+	MatchedHits   []OAFBotSafetyHit `json:"matched_hits"`
 }
 
 type OAFBotTestGenerateResponse struct {
-	BotID         uint   `json:"bot_id"`
-	Scene         string `json:"scene"`
-	Content       string `json:"content"`
-	Provider      string `json:"provider"`
-	UsageConsumed int    `json:"usage_consumed"`
-	RawResult     string `json:"raw_result,omitempty"`
-	Tweet         string `json:"tweet"`
-	Reply         string `json:"reply"`
-	Comment       string `json:"comment"`
-	DM            string `json:"dm"`
+	BotID            uint                         `json:"bot_id"`
+	Scene            string                       `json:"scene"`
+	Content          string                       `json:"content"`
+	Provider         string                       `json:"provider"`
+	UsageConsumed    int                          `json:"usage_consumed"`
+	RawResult        string                       `json:"raw_result,omitempty"`
+	SafetyEvaluation OAFBotSafetyEvaluationResult `json:"safety_evaluation"`
+	Tweet            string                       `json:"tweet"`
+	Reply            string                       `json:"reply"`
+	Comment          string                       `json:"comment"`
+	DM               string                       `json:"dm"`
+}
+
+type OAFBotSafetyHit struct {
+	Source string `json:"source"`
+	Term   string `json:"term"`
+}
+
+type OAFBotSafetyEvaluationResult struct {
+	Level       string            `json:"level"`
+	Action      string            `json:"action"`
+	Category    string            `json:"category"`
+	Reason      string            `json:"reason"`
+	MatchedHits []OAFBotSafetyHit `json:"matched_hits"`
 }
 
 type OAFBotGenerationUsageItem struct {
@@ -111,4 +143,57 @@ type OAFBotGenerationUsageItem struct {
 
 type OAFBotGenerationUsageResponse struct {
 	Items []OAFBotGenerationUsageItem `json:"items"`
+}
+
+type OAFBotGenerationFeedbackRequest struct {
+	Scene            string   `json:"scene" binding:"required"`
+	Rating           string   `json:"rating" binding:"required"`
+	IssueTags        []string `json:"issue_tags"`
+	Comment          string   `json:"comment"`
+	SampleContext    string   `json:"sample_context"`
+	GeneratedContent string   `json:"generated_content"`
+	Provider         string   `json:"provider"`
+}
+
+type OAFBotGenerationFeedbackItem struct {
+	ID               uint     `json:"id"`
+	BotID            uint     `json:"bot_id"`
+	Scene            string   `json:"scene"`
+	Rating           string   `json:"rating"`
+	IssueTags        []string `json:"issue_tags"`
+	Comment          string   `json:"comment"`
+	SampleContext    string   `json:"sample_context"`
+	GeneratedContent string   `json:"generated_content"`
+	Provider         string   `json:"provider"`
+	CreatedAt        string   `json:"created_at"`
+}
+
+type OAFBotGenerationFeedbackResponse struct {
+	Items []OAFBotGenerationFeedbackItem `json:"items"`
+}
+
+type OAFBotMatrixSignalItem struct {
+	BotID             uint                           `json:"bot_id"`
+	Usages            []OAFBotGenerationUsageItem    `json:"usages"`
+	Feedback          []OAFBotGenerationFeedbackItem `json:"feedback"`
+	InspectionFlags   []string                       `json:"inspection_flags"`
+	InspectionMetrics OAFBotMatrixInspectionMetrics  `json:"inspection_metrics"`
+}
+
+type OAFBotMatrixInspectionMetrics struct {
+	ActiveContentCount int `json:"active_content_count"`
+	NegativeFeedback   int `json:"negative_feedback"`
+	PendingReview      int `json:"pending_review"`
+}
+
+type OAFBotMatrixInspectionSummary struct {
+	UnboundCount          int `json:"unbound_count"`
+	AutoPostNotReadyCount int `json:"auto_post_not_ready_count"`
+	NegativeFeedbackCount int `json:"negative_feedback_count"`
+	ReviewBacklogCount    int `json:"review_backlog_count"`
+}
+
+type OAFBotMatrixSignalsResponse struct {
+	Items   []OAFBotMatrixSignalItem      `json:"items"`
+	Summary OAFBotMatrixInspectionSummary `json:"summary"`
 }

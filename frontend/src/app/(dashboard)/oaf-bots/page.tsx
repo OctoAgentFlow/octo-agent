@@ -25,6 +25,8 @@ import {
   Save,
   Send,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   WalletCards,
   Workflow,
 } from "lucide-react";
@@ -38,10 +40,24 @@ import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
+import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type {
+  OAFBot,
+  OAFBotCompleteProfileResult,
+  OAFBotFeedbackProfileSuggestionResult,
+  OAFBotGenerationFeedback,
+  OAFBotGenerationFeedbackRating,
+  OAFBotGenerationUsage,
+  OAFBotMatrixInspectionSummary,
+  OAFBotPayload,
+  OAFBotProfileAssistMode,
+  OAFBotSampleContext,
+  OAFBotSampleScene,
+  OAFBotTestGenerateResult,
+} from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
@@ -59,6 +75,48 @@ type QueueSummary = {
   readyToPublish: number;
   failed: number;
   published: number;
+};
+type AutoPostReadinessStep = {
+  key: "account" | "content" | "planner" | "autopilot";
+  ready: boolean;
+  href: string;
+};
+type FeedbackDraft = {
+  rating: OAFBotGenerationFeedbackRating | "";
+  issueTags: string[];
+  comment: string;
+};
+type PendingAppliedFormChange = {
+  source: "complete_profile" | "feedback_suggestion";
+  count: number;
+};
+type SafetyRewritePreview = {
+  before: string;
+  result: OAFBotTestGenerateResult;
+};
+type SafetyRewriteMode = "natural" | "conservative" | "shorter";
+type ProfileDiffItem = {
+  key: keyof OAFBotPayload;
+  before: OAFBotPayload[keyof OAFBotPayload];
+  after: OAFBotPayload[keyof OAFBotPayload];
+};
+type MatrixFilterKey = "all" | "unbound" | "auto_post_not_ready" | "negative_feedback" | "review_backlog";
+type BotMatrixRow = {
+  bot: OAFBot;
+  account?: AccountListItem;
+  completion: number;
+  activeContentCount: number;
+  queueSummary: QueueSummary;
+  plan?: AutoPostPlanApi;
+  autoPostReady: boolean;
+  monthlyUsage: number;
+  negativeFeedback: number;
+  inspectionFlags: string[];
+};
+type MatrixInspectionItem = {
+  key: MatrixFilterKey;
+  count: number;
+  tone: "neutral" | "warning" | "danger";
 };
 
 type SelectOption = {
@@ -79,6 +137,38 @@ type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
+const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
+const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
+  "name",
+  "twitter_account_id",
+  "occupation",
+  "industry",
+  "personality_tags",
+  "identity_summary",
+  "voice_tone",
+  "topics",
+  "forbidden_topics",
+  "growth_goal",
+  "project_one_liner",
+  "target_audience",
+  "core_value_props",
+  "product_features",
+  "differentiators",
+  "content_pillars",
+  "content_objectives",
+  "preferred_cta",
+  "hashtags",
+  "keywords",
+  "compliance_notes",
+  "avoid_claims",
+  "safety_mode",
+  "primary_language",
+  "language_strategy",
+];
+const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
+const safetyRewriteModes: SafetyRewriteMode[] = ["natural", "conservative", "shorter"];
+const negativeFeedbackInspectionThreshold = 3;
+const reviewBacklogInspectionThreshold = 5;
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -87,6 +177,10 @@ const emptyLimits: PlanLimits = {
   monthlyXWrites: 10,
   monthlyXUrlPosts: 0,
   monthlyCostCapCents: 0,
+  monthlyAutoPosts: 30,
+  monthlyAutoReplies: 150,
+  monthlyAutoComments: 90,
+  monthlyAutoDMs: 150,
   dailyAutoPosts: 1,
   dailyAutoReplies: 5,
   dailyAutoComments: 3,
@@ -110,6 +204,10 @@ const emptyUsage: PlanUsage = {
   oafBots: 0,
   twitterAccounts: 0,
   aiGenerationsMonth: 0,
+  autoPostsMonth: 0,
+  autoRepliesMonth: 0,
+  autoCommentsMonth: 0,
+  autoDMsMonth: 0,
   autoPostsToday: 0,
   autoRepliesToday: 0,
   autoCommentsToday: 0,
@@ -288,6 +386,7 @@ export default function OAFBotsPage() {
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
   const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
   const [relationshipLoading, setRelationshipLoading] = useState(true);
   const [limits, setLimits] = useState<PlanLimits>(emptyLimits);
@@ -296,12 +395,31 @@ export default function OAFBotsPage() {
   const [form, setForm] = useState<OAFBotPayload>(() => createEmptyForm(defaultPrimaryLanguage));
   const [activeStep, setActiveStep] = useState<WizardStep>("identity");
   const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
+  const [safetyRewriteMode, setSafetyRewriteMode] = useState<SafetyRewriteMode>("natural");
+  const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
+  const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
+  const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
+  const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
+  const [matrixInspectionFlagsByBot, setMatrixInspectionFlagsByBot] = useState<Record<number, string[]>>({});
+  const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
+  const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
+  const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
+  const [safetyRewritePreview, setSafetyRewritePreview] = useState<SafetyRewritePreview | null>(null);
+  const [pendingAppliedFormChange, setPendingAppliedFormChange] = useState<PendingAppliedFormChange | null>(null);
+  const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [rewritingSafety, setRewritingSafety] = useState(false);
   const [completingProfile, setCompletingProfile] = useState(false);
+  const [profileAssistMode, setProfileAssistMode] = useState<OAFBotProfileAssistMode>("fill_missing_only");
 
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
@@ -320,6 +438,10 @@ export default function OAFBotsPage() {
     if (!selectedBot) return false;
     return JSON.stringify(botToPayload(selectedBot, defaultPrimaryLanguage)) !== JSON.stringify(form);
   }, [defaultPrimaryLanguage, form, selectedBot]);
+  const completeProfileDiffs = useMemo(
+    () => (completeProfilePreview ? getFeedbackSuggestionDiffs(form, completeProfilePreview.profile) : []),
+    [completeProfilePreview, form],
+  );
 
   const accountByID = useMemo(() => {
     return new Map(accounts.map((account) => [account.id, account]));
@@ -343,6 +465,23 @@ export default function OAFBotsPage() {
     if (!selectedBot) return undefined;
     return autoPostPlans.find((plan) => plan.bot_id === selectedBot.id || plan.x_account_id === selectedBot.twitter_account_id);
   }, [autoPostPlans, selectedBot]);
+  const selectedCompatibleContentItems = useMemo(() => {
+    if (!selectedBot) return [];
+    return contentItems.filter((item) => contentItemMatchesBot(item, selectedBot));
+  }, [contentItems, selectedBot]);
+  const selectedActiveContentItems = useMemo(
+    () => selectedCompatibleContentItems.filter((item) => item.status === "active"),
+    [selectedCompatibleContentItems],
+  );
+  const selectedAutoPostReadiness = useMemo<AutoPostReadinessStep[]>(() => {
+    const accountID = selectedBot?.twitter_account_id || 0;
+    return [
+      { key: "account", ready: Boolean(selectedAccount), href: "/accounts" },
+      { key: "content", ready: selectedActiveContentItems.length > 0, href: accountID ? `/auto-post?panel=content&account=${accountID}` : "/auto-post?panel=content" },
+      { key: "planner", ready: Boolean(selectedPostPlan?.enabled), href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
+      { key: "autopilot", ready: selectedPostPlan?.execution_mode === "autopilot", href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
+    ];
+  }, [selectedAccount, selectedActiveContentItems.length, selectedBot, selectedPostPlan]);
 
   const selectedQueueItems = useMemo(() => {
     if (!selectedID) return [];
@@ -364,6 +503,72 @@ export default function OAFBotsPage() {
       };
     });
   }, [automationModules, selectedPostPlan]);
+  const matrixRows = useMemo<BotMatrixRow[]>(() => {
+    return bots.map((bot) => {
+      const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : undefined;
+      const plan = autoPostPlans.find((item) => item.bot_id === bot.id || item.x_account_id === bot.twitter_account_id);
+      const compatibleContent = contentItems.filter((item) => contentItemMatchesBot(item, bot));
+      const activeContentCount = compatibleContent.filter((item) => item.status === "active").length;
+      const botQueueItems = queueItems.filter((item) => item.bot_id === bot.id);
+      const usageByScene = aggregateMonthlyUsage(matrixUsageByBot[bot.id] || [], currentMonth);
+      const monthlyUsage = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
+      const feedback = matrixFeedbackByBot[bot.id] || [];
+      const queueSummary = summarizeQueue(botQueueItems);
+      const fallbackFlags = [
+        ...(!account ? ["unbound"] : []),
+        ...(!(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0) ? ["auto_post_not_ready"] : []),
+        ...(feedback.filter((item) => item.rating === "negative").length >= negativeFeedbackInspectionThreshold ? ["negative_feedback"] : []),
+        ...(queueSummary.pendingReview >= reviewBacklogInspectionThreshold ? ["review_backlog"] : []),
+      ];
+      return {
+        bot,
+        account,
+        completion: calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage)),
+        activeContentCount,
+        queueSummary,
+        plan,
+        autoPostReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
+        monthlyUsage,
+        negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
+        inspectionFlags: matrixInspectionFlagsByBot[bot.id] || fallbackFlags,
+      };
+    });
+  }, [accountByID, autoPostPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixInspectionFlagsByBot, matrixUsageByBot, queueItems]);
+  const matrixSummary = useMemo(() => {
+    return matrixRows.reduce(
+      (summary, row) => {
+        summary.bound += row.account ? 1 : 0;
+        summary.ready += row.autoPostReady ? 1 : 0;
+        summary.review += row.queueSummary.pendingReview;
+        summary.usage += row.monthlyUsage;
+        summary.negativeFeedback += row.negativeFeedback;
+        return summary;
+      },
+      { bound: 0, ready: 0, review: 0, usage: 0, negativeFeedback: 0 },
+    );
+  }, [matrixRows]);
+  const matrixInspectionItems = useMemo<MatrixInspectionItem[]>(() => {
+    const unbound = matrixInspectionSummary?.unbound_count ?? matrixRows.filter((row) => !row.account).length;
+    const autoPostNotReady = matrixInspectionSummary?.auto_post_not_ready_count ?? matrixRows.filter((row) => !row.autoPostReady).length;
+    const negativeFeedback = matrixInspectionSummary?.negative_feedback_count ?? matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
+    const reviewBacklog = matrixInspectionSummary?.review_backlog_count ?? matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
+    return [
+      { key: "unbound", count: unbound, tone: unbound > 0 ? "warning" : "neutral" },
+      { key: "auto_post_not_ready", count: autoPostNotReady, tone: autoPostNotReady > 0 ? "warning" : "neutral" },
+      { key: "negative_feedback", count: negativeFeedback, tone: negativeFeedback > 0 ? "danger" : "neutral" },
+      { key: "review_backlog", count: reviewBacklog, tone: reviewBacklog > 0 ? "danger" : "neutral" },
+    ];
+  }, [matrixInspectionSummary, matrixRows]);
+  const filteredMatrixRows = useMemo(() => {
+    if (matrixFilter === "all") return matrixRows;
+    return matrixRows.filter((row) => {
+      if (matrixFilter === "unbound") return row.inspectionFlags.includes("unbound");
+      if (matrixFilter === "auto_post_not_ready") return row.inspectionFlags.includes("auto_post_not_ready");
+      if (matrixFilter === "negative_feedback") return row.inspectionFlags.includes("negative_feedback");
+      if (matrixFilter === "review_backlog") return row.inspectionFlags.includes("review_backlog");
+      return true;
+    });
+  }, [matrixFilter, matrixRows]);
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
@@ -371,6 +576,7 @@ export default function OAFBotsPage() {
     (form.primary_language || defaultPrimaryLanguage) === defaultPrimaryLanguage && (form.language_strategy || "follow_context") === "follow_context";
   const activeStepIndex = wizardStepOrder.indexOf(activeStep);
   const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
+  const qualityDiagnostics = useMemo(() => getPersonaQualityDiagnostics(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
   const canTestBot = personaCompleteness >= 40;
 
@@ -438,6 +644,10 @@ export default function OAFBotsPage() {
   );
   const voicePresetOptions = useMemo(
     () => optionKeys("voicePresets", ["concise", "natural", "web3Native", "founder", "technical", "growth", "community"], t),
+    [t],
+  );
+  const feedbackIssueOptions = useMemo(
+    () => optionKeys("feedbackIssues", ["offPersona", "tooGeneric", "tooSalesy", "unsafeClaim", "wrongLanguage", "tooLong", "weakCTA", "missingContext"], t),
     [t],
   );
 
@@ -533,18 +743,21 @@ export default function OAFBotsPage() {
   const loadRelationshipContext = useCallback(async () => {
     setRelationshipLoading(true);
     try {
-      const [automationData, planData, queueData] = await Promise.all([
+      const [automationData, planData, queueData, contentData] = await Promise.all([
         automationService.list(),
         autoPostService.plans(),
         reviewQueueService.list({ pageSize: 100 }),
+        contentLibraryService.list({ limit: 100 }),
       ]);
       setAutomationModules(automationData.modules);
       setAutoPostPlans(planData.items);
       setQueueItems(queueData.items);
+      setContentItems(contentData.items);
     } catch {
       setAutomationModules([]);
       setAutoPostPlans([]);
       setQueueItems([]);
+      setContentItems([]);
     } finally {
       setRelationshipLoading(false);
     }
@@ -576,6 +789,19 @@ export default function OAFBotsPage() {
     }
   }, [pushToast, t]);
 
+  const loadGenerationFeedback = useCallback(async (botID: number) => {
+    setFeedbackLoading(true);
+    try {
+      const data = await oafBotService.generationFeedback(botID);
+      setGenerationFeedback(data.items);
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.feedback.loadFailed")));
+      setGenerationFeedback([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [pushToast, t]);
+
   useEffect(() => {
     if (!selectedID) {
       setGenerationUsages([]);
@@ -583,6 +809,58 @@ export default function OAFBotsPage() {
     }
     void loadGenerationUsages(selectedID);
   }, [loadGenerationUsages, selectedID]);
+
+  useEffect(() => {
+    if (!selectedID) {
+      setGenerationFeedback([]);
+      return;
+    }
+    void loadGenerationFeedback(selectedID);
+  }, [loadGenerationFeedback, selectedID]);
+
+  const loadMatrixSignals = useCallback(async (items: OAFBot[]) => {
+    if (items.length === 0) {
+      setMatrixUsageByBot({});
+      setMatrixFeedbackByBot({});
+      setMatrixInspectionFlagsByBot({});
+      setMatrixInspectionSummary(null);
+      return;
+    }
+    setMatrixLoading(true);
+    try {
+      const signals = await oafBotService.matrixSignals();
+      const knownIDs = new Set(items.map((bot) => bot.id));
+      const usageByBot: Record<number, OAFBotGenerationUsage[]> = {};
+      const feedbackByBot: Record<number, OAFBotGenerationFeedback[]> = {};
+      const flagsByBot: Record<number, string[]> = {};
+      signals.items.forEach((item) => {
+        if (!knownIDs.has(item.bot_id)) return;
+        usageByBot[item.bot_id] = item.usages || [];
+        feedbackByBot[item.bot_id] = item.feedback || [];
+        flagsByBot[item.bot_id] = item.inspection_flags || [];
+      });
+      items.forEach((bot) => {
+        usageByBot[bot.id] ||= [];
+        feedbackByBot[bot.id] ||= [];
+        flagsByBot[bot.id] ||= [];
+      });
+      setMatrixUsageByBot(usageByBot);
+      setMatrixFeedbackByBot(feedbackByBot);
+      setMatrixInspectionFlagsByBot(flagsByBot);
+      setMatrixInspectionSummary(signals.summary || null);
+    } catch {
+      setMatrixUsageByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
+      setMatrixFeedbackByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
+      setMatrixInspectionFlagsByBot({});
+      setMatrixInspectionSummary(null);
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMatrixSignals(bots);
+  }, [bots, loadMatrixSignals]);
 
   const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -593,6 +871,12 @@ export default function OAFBotsPage() {
     setForm(botToPayload(bot, defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
+    setSampleContexts({});
+    setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setCompleteProfilePreview(null);
+    setFeedbackSuggestionPreview(null);
+    setSafetyRewritePreview(null);
+    setPendingAppliedFormChange(null);
   };
 
   const startCreate = () => {
@@ -601,6 +885,13 @@ export default function OAFBotsPage() {
     setActiveStep("identity");
     setSamples(null);
     setGenerationUsages([]);
+    setGenerationFeedback([]);
+    setSampleContexts({});
+    setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+    setCompleteProfilePreview(null);
+    setFeedbackSuggestionPreview(null);
+    setSafetyRewritePreview(null);
+    setPendingAppliedFormChange(null);
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -623,6 +914,10 @@ export default function OAFBotsPage() {
       setBots((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
       setSelectedID(saved.id);
       setForm(botToPayload(saved, defaultPrimaryLanguage));
+      setCompleteProfilePreview(null);
+      setFeedbackSuggestionPreview(null);
+      setSafetyRewritePreview(null);
+      setPendingAppliedFormChange(null);
       setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
       pushToast(t("oafBots.toast.saved"));
     } catch (error) {
@@ -644,16 +939,10 @@ export default function OAFBotsPage() {
     }
     setCompletingProfile(true);
     try {
-      const result = await oafBotService.completeProfile(form);
-      setForm((prev) => ({
-        ...prev,
-        ...result.profile,
-        name: prev.name || result.profile.name,
-        twitter_account_id: prev.twitter_account_id || result.profile.twitter_account_id,
-      }));
-      setSamples(null);
+      const result = await oafBotService.completeProfile(form, profileAssistMode);
+      setCompleteProfilePreview(result);
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.completeProfile.success"));
+      pushToast(t("oafBots.completeProfile.previewReady"));
     } catch (error) {
       const body = getErrorBody(error);
       if (body?.error_code === "ai_generation_quota_exceeded") {
@@ -664,6 +953,16 @@ export default function OAFBotsPage() {
     } finally {
       setCompletingProfile(false);
     }
+  };
+
+  const applyCompleteProfilePreview = () => {
+    if (!completeProfilePreview) return;
+    const changedCount = getFeedbackSuggestionDiffs(form, completeProfilePreview.profile).length;
+    setForm((prev) => mergeFeedbackSuggestionProfile(prev, completeProfilePreview.profile));
+    setSamples(null);
+    setCompleteProfilePreview(null);
+    setPendingAppliedFormChange({ source: "complete_profile", count: changedCount });
+    pushToast(t("oafBots.completeProfile.success"));
   };
 
   const testGenerate = async () => {
@@ -682,9 +981,12 @@ export default function OAFBotsPage() {
     }
     setGenerating(true);
     try {
-      const result = await oafBotService.testGenerate(selectedID, sampleScene);
+      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene]);
       setSamples(result);
+      setSafetyRewritePreview(null);
+      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       await loadGenerationUsages(selectedID);
+      void loadMatrixSignals(bots);
       void loadRelationshipContext();
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
       pushToast(t("oafBots.test.success"));
@@ -698,6 +1000,46 @@ export default function OAFBotsPage() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const rewriteSampleForSafety = async () => {
+    if (!selectedID || !samples) return;
+    const content = normalizeSampleContent(samples, sampleScene);
+    if (!content.trim()) {
+      pushToast(t("oafBots.safetyRewrite.needContent"));
+      return;
+    }
+    setRewritingSafety(true);
+    try {
+      const result = await oafBotService.rewriteSafety(selectedID, {
+        scene: sampleScene,
+        content,
+        sample_context: sampleContexts[sampleScene] || "",
+        rewrite_mode: safetyRewriteMode,
+        matched_hits: samples.safety_evaluation?.matched_hits || [],
+      });
+      setSafetyRewritePreview({ before: content, result });
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      await loadGenerationUsages(selectedID);
+      void loadMatrixSignals(bots);
+      pushToast(t("oafBots.safetyRewrite.previewReady"));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.safetyRewrite.failed"));
+      }
+    } finally {
+      setRewritingSafety(false);
+    }
+  };
+
+  const applySafetyRewritePreview = () => {
+    if (!safetyRewritePreview) return;
+    setSamples(safetyRewritePreview.result);
+    setSafetyRewritePreview(null);
+    pushToast(t("oafBots.safetyRewrite.applied"));
   };
 
   const handlePreviewTest = () => {
@@ -717,9 +1059,78 @@ export default function OAFBotsPage() {
     void testGenerate();
   };
 
+  const submitGenerationFeedback = async () => {
+    if (!selectedID || !samples) return;
+    if (!feedbackDraft.rating) {
+      pushToast(t("oafBots.feedback.needRating"));
+      return;
+    }
+    const generatedContent = normalizeSampleContent(samples, sampleScene);
+    if (!generatedContent.trim()) {
+      pushToast(t("oafBots.feedback.needSample"));
+      return;
+    }
+    setFeedbackSaving(true);
+    try {
+      const saved = await oafBotService.createGenerationFeedback(selectedID, {
+        scene: sampleScene,
+        rating: feedbackDraft.rating,
+        issue_tags: feedbackDraft.issueTags,
+        comment: feedbackDraft.comment,
+        sample_context: sampleContexts[sampleScene] || "",
+        generated_content: generatedContent,
+        provider: samples.provider || "",
+      });
+      setGenerationFeedback((items) => [saved, ...items].slice(0, 10));
+      setMatrixFeedbackByBot((prev) => ({ ...prev, [selectedID]: [saved, ...(prev[selectedID] || [])].slice(0, 10) }));
+      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+      pushToast(t("oafBots.feedback.saved"));
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.feedback.saveFailed")));
+    } finally {
+      setFeedbackSaving(false);
+    }
+  };
+
+  const generateFeedbackProfileSuggestion = async () => {
+    if (!selectedID) return;
+    if (generationFeedback.filter((item) => item.rating === "negative").length === 0) {
+      pushToast(t("oafBots.feedbackSuggestion.needNegative"));
+      return;
+    }
+    setFeedbackSuggestionLoading(true);
+    try {
+      const result = await oafBotService.suggestProfileFromFeedback(selectedID);
+      setFeedbackSuggestionPreview(result);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      pushToast(t("oafBots.feedbackSuggestion.previewReady", { count: result.feedback_count || 0 }));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.feedbackSuggestion.failed"));
+      }
+    } finally {
+      setFeedbackSuggestionLoading(false);
+    }
+  };
+
+  const applyFeedbackProfileSuggestion = () => {
+    if (!feedbackSuggestionPreview) return;
+    const changedCount = getFeedbackSuggestionDiffs(form, feedbackSuggestionPreview.profile).length;
+    setForm((prev) => mergeFeedbackSuggestionProfile(prev, feedbackSuggestionPreview.profile));
+    setActiveStep("goals");
+    setSamples(null);
+    setFeedbackSuggestionPreview(null);
+    setPendingAppliedFormChange({ source: "feedback_suggestion", count: changedCount });
+    pushToast(t("oafBots.feedbackSuggestion.applied", { count: feedbackSuggestionPreview.feedback_count || 0 }));
+  };
+
   const handleSampleSceneChange = (scene: SampleScene) => {
     setSampleScene(scene);
     setSamples(null);
+    setSafetyRewritePreview(null);
   };
 
   if (loading) {
@@ -748,7 +1159,7 @@ export default function OAFBotsPage() {
         <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
         <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
         <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
-        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsToday} limit={limits.dailyAutoComments} />
+        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsMonth} limit={limits.monthlyAutoComments} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
@@ -758,6 +1169,20 @@ export default function OAFBotsPage() {
           <ArrowRight className="size-4" />
         </Link>
       </div>
+
+      <BotMatrixPanel
+        t={t}
+        rows={filteredMatrixRows}
+        allRowsCount={matrixRows.length}
+        summary={matrixSummary}
+        inspectionItems={matrixInspectionItems}
+        activeFilter={matrixFilter}
+        onFilterChange={setMatrixFilter}
+        loading={matrixLoading || relationshipLoading}
+        enabled={limits.multiBotMatrix}
+        selectedID={selectedID}
+        onSelect={selectBot}
+      />
 
       {!canCreate ? (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -1070,42 +1495,20 @@ export default function OAFBotsPage() {
                   placeholder={t("oafBots.placeholders.tagInput")}
                   recommended
                 />
-                <div className="mt-4">
-                  <TagPicker
-                    label={t("oafBots.fields.forbiddenTopics")}
-                    values={form.forbidden_topics}
-                    options={forbiddenTopicOptions}
-                    onChange={(values) => updateForm("forbidden_topics", values)}
-                    helper={t("oafBots.helpers.forbiddenTopics")}
-                    placeholder={t("oafBots.placeholders.tagInput")}
-                  />
-                </div>
-                <div className="mt-4">
-                  <SelectField
-                    label={t("oafBots.fields.safetyMode")}
-                    value={form.safety_mode}
-                    onChange={(value) => updateForm("safety_mode", value)}
-                    options={safetyOptions}
-                    helper={t("oafBots.helpers.safetyMode")}
-                  />
-                </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <TagPicker
-                    label={t("oafBots.fields.avoidClaims")}
-                    values={form.avoid_claims}
-                    options={avoidClaimOptions}
-                    onChange={(values) => updateForm("avoid_claims", values)}
-                    helper={t("oafBots.helpers.avoidClaims")}
-                    placeholder={t("oafBots.placeholders.tagInput")}
-                  />
-                  <TextArea
-                    label={t("oafBots.fields.complianceNotes")}
-                    value={form.compliance_notes}
-                    onChange={(value) => updateForm("compliance_notes", value)}
-                    placeholder={t("oafBots.placeholders.complianceNotes")}
-                    helper={t("oafBots.helpers.complianceNotes")}
-                  />
-                </div>
+                <SafetyRulesPanel
+                  t={t}
+                  safetyMode={form.safety_mode}
+                  forbiddenTopics={form.forbidden_topics}
+                  avoidClaims={form.avoid_claims}
+                  complianceNotes={form.compliance_notes}
+                  safetyOptions={safetyOptions}
+                  forbiddenTopicOptions={forbiddenTopicOptions}
+                  avoidClaimOptions={avoidClaimOptions}
+                  onSafetyModeChange={(value) => updateForm("safety_mode", value)}
+                  onForbiddenTopicsChange={(values) => updateForm("forbidden_topics", values)}
+                  onAvoidClaimsChange={(values) => updateForm("avoid_claims", values)}
+                  onComplianceNotesChange={(value) => updateForm("compliance_notes", value)}
+                />
               </WizardPanel>
             ) : null}
 
@@ -1180,8 +1583,14 @@ export default function OAFBotsPage() {
                   samples={samples}
                   scene={sampleScene}
                   onSceneChange={handleSampleSceneChange}
+                  sampleContext={sampleContexts[sampleScene] || ""}
+                  onSampleContextChange={(value) => setSampleContexts((prev) => ({ ...prev, [sampleScene]: value }))}
                   generating={generating}
+                  rewritingSafety={rewritingSafety}
+                  safetyRewriteMode={safetyRewriteMode}
+                  onSafetyRewriteModeChange={setSafetyRewriteMode}
                   onGenerate={testGenerate}
+                  onRewriteSafety={rewriteSampleForSafety}
                   selectedID={selectedID}
                   formChanged={formChanged}
                   previewDisabled={!canTestBot}
@@ -1192,6 +1601,21 @@ export default function OAFBotsPage() {
                   safetyOptions={safetyOptions}
                   languageOptions={languageOptions}
                   languageStrategyOptions={languageStrategyOptions}
+                  feedbackItems={generationFeedback}
+                  feedbackLoading={feedbackLoading}
+                  feedbackDraft={feedbackDraft}
+                  feedbackSaving={feedbackSaving}
+                  feedbackSuggestionLoading={feedbackSuggestionLoading}
+                  feedbackSuggestionPreview={feedbackSuggestionPreview}
+                  safetyRewritePreview={safetyRewritePreview}
+                  feedbackIssueOptions={feedbackIssueOptions}
+                  onFeedbackDraftChange={setFeedbackDraft}
+                  onFeedbackSubmit={submitGenerationFeedback}
+                  onFeedbackProfileSuggestion={generateFeedbackProfileSuggestion}
+                  onApplyFeedbackSuggestion={applyFeedbackProfileSuggestion}
+                  onDismissFeedbackSuggestion={() => setFeedbackSuggestionPreview(null)}
+                  onApplySafetyRewrite={applySafetyRewritePreview}
+                  onDismissSafetyRewrite={() => setSafetyRewritePreview(null)}
                 />
               </WizardPanel>
             ) : null}
@@ -1209,10 +1633,34 @@ export default function OAFBotsPage() {
               <div className="mt-5 rounded-xl border border-blue-300/20 bg-blue-400/10 p-4 text-sm leading-relaxed text-blue-100">
                 <div className="flex gap-2">
                   <Info className="mt-0.5 size-4 shrink-0" />
-                  <p>{t("oafBots.test.unsavedHint")}</p>
+                  <div>
+                    <p>{t("oafBots.test.unsavedHint")}</p>
+                    {pendingAppliedFormChange ? (
+                      <p className="mt-1 text-xs text-blue-100/80">
+                        {t("oafBots.pendingAppliedChange.summary", {
+                          source: t(`oafBots.pendingAppliedChange.source.${pendingAppliedFormChange.source}`),
+                          count: pendingAppliedFormChange.count,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
+
+            <ProfileDiffPreview
+              t={t}
+              visible={Boolean(completeProfilePreview)}
+              title={t("oafBots.completeProfile.previewTitle")}
+              description={completeProfileDiffs.length > 0 ? t("oafBots.completeProfile.previewDescription", { count: completeProfileDiffs.length }) : t("oafBots.completeProfile.noDiffDescription")}
+              meta={t(`oafBots.completeProfile.mode.${profileAssistMode}`)}
+              diffs={completeProfileDiffs}
+              noDiff={t("oafBots.completeProfile.noDiff")}
+              dismissLabel={t("oafBots.completeProfile.dismiss")}
+              applyLabel={t("oafBots.completeProfile.apply")}
+              onApply={applyCompleteProfilePreview}
+              onDismiss={() => setCompleteProfilePreview(null)}
+            />
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -1226,35 +1674,51 @@ export default function OAFBotsPage() {
                 </Button>
               </div>
               <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={completeProfile}
-                disabled={completingProfile || saving || generating}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className="size-4" />
-                {completingProfile ? t("oafBots.completeProfile.loading") : t("oafBots.completeProfile.action")}
-              </Button>
-              <Button
-                type="button"
-                variant={activeStep === "test" ? "default" : "outline"}
-                onClick={activeStep === "test" ? testGenerate : goTestStep}
-                disabled={generating || !canTestBot}
-                className="w-full sm:w-auto"
-              >
-                <Sparkles className="size-4" />
-                {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
-              </Button>
-              <Button
-                type="button"
-                onClick={save}
-                disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
-                className="w-full sm:w-auto"
-              >
-                <Save className="size-4" />
-                {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
-              </Button>
+                <div className="grid grid-cols-2 gap-1 rounded-full border border-[#2f3336] bg-black p-1">
+                  {profileAssistModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={profileAssistMode === mode}
+                      onClick={() => setProfileAssistMode(mode)}
+                      className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                        profileAssistMode === mode ? "bg-[#1d9bf0] text-white" : "text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+                      }`}
+                      title={t(`oafBots.completeProfile.mode.${mode}.helper`)}
+                    >
+                      {t(`oafBots.completeProfile.mode.${mode}`)}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={completeProfile}
+                  disabled={completingProfile || saving || generating}
+                  className="w-full sm:w-auto"
+                >
+                  <Sparkles className="size-4" />
+                  {completingProfile ? t("oafBots.completeProfile.loading") : t("oafBots.completeProfile.action")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeStep === "test" ? "default" : "outline"}
+                  onClick={activeStep === "test" ? testGenerate : goTestStep}
+                  disabled={generating || !canTestBot}
+                  className="w-full sm:w-auto"
+                >
+                  <Sparkles className="size-4" />
+                  {generating ? t("oafBots.actions.generating") : t("oafBots.actions.testBot")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={save}
+                  disabled={saving || Boolean(selectedAccountConflict) || (!selectedID && !canCreate)}
+                  className="w-full sm:w-auto"
+                >
+                  <Save className="size-4" />
+                  {saving ? t("oafBots.actions.saving") : t("oafBots.actions.save")}
+                </Button>
               </div>
             </div>
           </SectionCard>
@@ -1265,6 +1729,10 @@ export default function OAFBotsPage() {
               bot={selectedBot}
               account={selectedAccount}
               automationStates={selectedAutomationStates}
+              autoPostPlan={selectedPostPlan}
+              activeContentCount={selectedActiveContentItems.length}
+              totalContentCount={selectedCompatibleContentItems.length}
+              autoPostReadiness={selectedAutoPostReadiness}
               queueItems={selectedQueueItems}
               queueSummary={selectedQueueSummary}
               loading={relationshipLoading}
@@ -1275,6 +1743,7 @@ export default function OAFBotsPage() {
               account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
               completion={personaCompleteness}
               checklist={personaChecklist}
+              qualityDiagnostics={qualityDiagnostics}
               selectedID={selectedID}
               formChanged={formChanged}
               generating={generating}
@@ -1334,6 +1803,55 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     primary_language: bot.primary_language || defaultPrimaryLanguage,
     language_strategy: bot.language_strategy || "follow_context",
   };
+}
+
+function mergeFeedbackSuggestionProfile(current: OAFBotPayload, suggestion: OAFBotPayload): OAFBotPayload {
+  return {
+    ...current,
+    ...suggestion,
+    name: current.name || suggestion.name,
+    twitter_account_id: current.twitter_account_id || suggestion.twitter_account_id,
+  };
+}
+
+function getFeedbackSuggestionDiffs(current: OAFBotPayload, suggestion: OAFBotPayload): ProfileDiffItem[] {
+  const merged = mergeFeedbackSuggestionProfile(current, suggestion);
+  return feedbackSuggestionDiffKeys
+    .filter((key) => !profileValuesEqual(current[key], merged[key]))
+    .map((key) => ({
+      key,
+      before: current[key],
+      after: merged[key],
+    }));
+}
+
+function profileValuesEqual(left: OAFBotPayload[keyof OAFBotPayload], right: OAFBotPayload[keyof OAFBotPayload]) {
+  return normalizeProfileValue(left) === normalizeProfileValue(right);
+}
+
+function normalizeProfileValue(value: OAFBotPayload[keyof OAFBotPayload]) {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((item) => String(item).trim()).filter(Boolean));
+  }
+  if (typeof value === "number") return String(value || "");
+  return String(value || "").trim();
+}
+
+function formatProfileValue(value: OAFBotPayload[keyof OAFBotPayload], t: (key: string, params?: Record<string, string | number>) => string) {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : t("oafBots.feedbackSuggestion.emptyValue");
+  if (typeof value === "number") return value > 0 ? String(value) : t("oafBots.feedbackSuggestion.emptyValue");
+  return value?.trim() || t("oafBots.feedbackSuggestion.emptyValue");
+}
+
+function fieldLabel(key: keyof OAFBotPayload, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (key === "twitter_account_id") return t("oafBots.fields.twitterAccount");
+  const labelKey = `oafBots.fields.${snakeToCamel(String(key))}`;
+  const label = t(labelKey);
+  return label === labelKey ? String(key) : label;
+}
+
+function snakeToCamel(value: string) {
+  return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
 function isUnconfiguredDraft(form: OAFBotPayload) {
@@ -1433,6 +1951,31 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
   };
 }
 
+function getPersonaQualityDiagnostics(form: OAFBotPayload, t: (key: string) => string) {
+  const diagnostics: Array<{ tone: "warning" | "info"; message: string }> = [];
+  const weakSummary = form.identity_summary.trim().length > 0 && form.identity_summary.trim().length < 40;
+  const weakGoal = form.growth_goal.trim().length > 0 && form.growth_goal.trim().length < 30;
+  const broadTopics = form.topics.length > 6;
+  const missingProductContext = !form.project_one_liner.trim() && !form.core_value_props.trim() && !form.product_features.trim();
+  const missingAudience = !form.target_audience.trim();
+  const missingGuardrails = form.forbidden_topics.length === 0 && form.avoid_claims.length === 0 && !form.compliance_notes.trim();
+  const missingVoice = form.personality_tags.length === 0 && !form.voice_tone.trim();
+  const strongCTA = /(buy now|moon|guarantee|guaranteed|airdrop|claim|暴富|稳赚|空投|领取|立即购买)/i.test(form.preferred_cta);
+
+  if (!form.identity_summary.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingSummary") });
+  else if (weakSummary) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakSummary") });
+  if (!form.growth_goal.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGoal") });
+  else if (weakGoal) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakGoal") });
+  if (missingProductContext) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingProductContext") });
+  if (missingAudience) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingAudience") });
+  if (missingVoice) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingVoice") });
+  if (broadTopics) diagnostics.push({ tone: "info", message: t("oafBots.quality.tooManyTopics") });
+  if (missingGuardrails) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGuardrails") });
+  if (strongCTA) diagnostics.push({ tone: "warning", message: t("oafBots.quality.strongCTA") });
+
+  return diagnostics.slice(0, 5);
+}
+
 function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string) {
   if (!form.name.trim()) return t("oafBots.test.needName");
   if (form.topics.length === 0) return t("oafBots.test.needTopic");
@@ -1476,6 +2019,13 @@ function summarizeQueue(items: ReviewQueueItemApi[]): QueueSummary {
     },
     { total: 0, pendingReview: 0, readyToPublish: 0, failed: 0, published: 0 },
   );
+}
+
+function contentItemMatchesBot(item: ContentLibraryItemApi, bot: OAFBot) {
+  const accountID = bot.twitter_account_id || 0;
+  if (item.twitter_account_id && item.twitter_account_id !== accountID) return false;
+  if (item.bot_id && item.bot_id !== bot.id) return false;
+  return true;
 }
 
 function automationHref(type: BotAutomationType) {
@@ -1522,11 +2072,205 @@ function BotStatusPill({ tone, label }: { tone: "success" | "warning" | "neutral
   return <span className={`rounded-full border px-2.5 py-1 text-[11px] leading-none ${toneClass}`}>{label}</span>;
 }
 
+function BotMatrixPanel({
+  t,
+  rows,
+  allRowsCount,
+  summary,
+  inspectionItems,
+  activeFilter,
+  onFilterChange,
+  loading,
+  enabled,
+  selectedID,
+  onSelect,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  rows: BotMatrixRow[];
+  allRowsCount: number;
+  summary: { bound: number; ready: number; review: number; usage: number; negativeFeedback: number };
+  inspectionItems: MatrixInspectionItem[];
+  activeFilter: MatrixFilterKey;
+  onFilterChange: (filter: MatrixFilterKey) => void;
+  loading: boolean;
+  enabled: boolean;
+  selectedID: number | null;
+  onSelect: (bot: OAFBot) => void;
+}) {
+  return (
+    <SectionCard title={t("oafBots.matrix.title")} description={t("oafBots.matrix.description")} className="bg-black p-4 md:p-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
+            <MatrixMetric label={t("oafBots.matrix.totalBots")} value={allRowsCount} />
+            <MatrixMetric label={t("oafBots.matrix.boundBots")} value={summary.bound} />
+            <MatrixMetric label={t("oafBots.matrix.readyBots")} value={summary.ready} />
+            <MatrixMetric label={t("oafBots.matrix.pendingReview")} value={summary.review} />
+            <MatrixMetric label={t("oafBots.matrix.aiUsage")} value={summary.usage} />
+          </div>
+          <div className={`rounded-2xl border p-3 text-sm leading-6 ${enabled ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : "border-amber-300/20 bg-amber-400/10 text-amber-100"}`}>
+            <div className="flex items-start gap-2">
+              {enabled ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <Lock className="mt-0.5 size-4 shrink-0" />}
+              <div>
+                <p className="font-semibold">{enabled ? t("oafBots.matrix.enabledTitle") : t("oafBots.matrix.lockedTitle")}</p>
+                <p className="text-xs opacity-80">{enabled ? t("oafBots.matrix.enabledDescription") : t("oafBots.matrix.lockedDescription")}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.matrix.inspectionTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.matrix.inspectionDescription")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {matrixFilters.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => onFilterChange(filter)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    activeFilter === filter
+                      ? "border-[#1d9bf0] bg-[#1d9bf0]/15 text-[#8ecdf8]"
+                      : "border-[#2f3336] bg-black text-[#b6bec5] hover:bg-[#16181c]"
+                  }`}
+                >
+                  {t(`oafBots.matrix.filters.${filter}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
+            {inspectionItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onFilterChange(item.key)}
+                className={`rounded-xl border p-3 text-left transition hover:bg-black ${
+                  activeFilter === item.key
+                    ? "border-[#1d9bf0] bg-[#1d9bf0]/10"
+                    : item.tone === "danger"
+                      ? "border-rose-300/25 bg-rose-400/8"
+                      : item.tone === "warning"
+                        ? "border-amber-300/25 bg-amber-400/8"
+                        : "border-[#2f3336] bg-black"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-[#e7e9ea]">{t(`oafBots.matrix.inspection.${item.key}.title`)}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.count > 0 ? "bg-[#1d9bf0]/15 text-[#8ecdf8]" : "bg-[#202327] text-[#71767b]"}`}>
+                    {item.count}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[#71767b]">{t(`oafBots.matrix.inspection.${item.key}.description`)}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? <p className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-sm text-[#71767b]">{t("oafBots.matrix.loading")}</p> : null}
+
+        {allRowsCount === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-[#0f1419] p-5 text-sm leading-6 text-[#71767b]">
+            {t("oafBots.matrix.empty")}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-[#0f1419] p-5 text-sm leading-6 text-[#71767b]">
+            {t("oafBots.matrix.filteredEmpty")}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-[#2f3336]">
+            <div className="border-b border-[#2f3336] bg-[#0f1419] px-4 py-3 text-xs text-[#71767b]">
+              {t("oafBots.matrix.filteredCount", { count: rows.length, total: allRowsCount })}
+            </div>
+            <table className="min-w-[980px] w-full text-left text-sm">
+              <thead className="bg-[#0f1419] text-xs uppercase text-[#71767b]">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.bot")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.account")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.persona")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.autoPost")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.queue")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.signals")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.action")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#2f3336]">
+                {rows.map((row) => {
+                  const selected = selectedID === row.bot.id;
+                  return (
+                    <tr key={row.bot.id} className={selected ? "bg-[#1d9bf0]/8" : "bg-black"}>
+                      <td className="px-4 py-3 align-top">
+                        <p className="max-w-56 truncate font-semibold text-[#e7e9ea]">{row.bot.name || t("oafBots.preview.unnamed")}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{row.bot.primary_language || "zh-CN"} · {row.bot.language_strategy || "follow_context"}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {row.account ? (
+                          <BotStatusPill tone="success" label={`@${row.account.username}`} />
+                        ) : (
+                          <BotStatusPill tone="warning" label={t("oafBots.matrix.unbound")} />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-[#2f3336]">
+                            <div className={`h-full ${row.completion >= 80 ? "bg-emerald-300" : row.completion >= 60 ? "bg-[#1d9bf0]" : "bg-amber-300"}`} style={{ width: `${row.completion}%` }} />
+                          </div>
+                          <span className="text-xs text-[#e7e9ea]">{row.completion}%</span>
+                        </div>
+                        <p className="mt-1 max-w-48 truncate text-xs text-[#71767b]">{row.bot.topics.slice(0, 3).join(" / ") || t("oafBots.matrix.noTopics")}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <BotStatusPill tone={row.autoPostReady ? "success" : "warning"} label={row.autoPostReady ? t("oafBots.matrix.ready") : t("oafBots.matrix.needsSetup")} />
+                        <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.matrix.contentCount", { count: row.activeContentCount })}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <p className="text-xs text-[#e7e9ea]">{t("oafBots.matrix.queueValue", { review: row.queueSummary.pendingReview, ready: row.queueSummary.readyToPublish })}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.matrix.failedValue", { count: row.queueSummary.failed })}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <p className="text-xs text-[#e7e9ea]">{t("oafBots.matrix.usageValue", { count: row.monthlyUsage })}</p>
+                        <p className={`mt-1 text-xs ${row.negativeFeedback > 0 ? "text-amber-100" : "text-[#71767b]"}`}>
+                          {t("oafBots.matrix.negativeFeedback", { count: row.negativeFeedback })}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <button type="button" onClick={() => onSelect(row.bot)} className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                          {selected ? t("oafBots.matrix.selected") : t("oafBots.matrix.inspect")}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function MatrixMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 text-lg font-bold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
 function BotRelationshipCard({
   t,
   bot,
   account,
   automationStates,
+  autoPostPlan,
+  activeContentCount,
+  totalContentCount,
+  autoPostReadiness,
   queueItems,
   queueSummary,
   loading,
@@ -1535,12 +2279,17 @@ function BotRelationshipCard({
   bot: OAFBot | null;
   account?: AccountListItem;
   automationStates: BotAutomationState[];
+  autoPostPlan?: AutoPostPlanApi;
+  activeContentCount: number;
+  totalContentCount: number;
+  autoPostReadiness: AutoPostReadinessStep[];
   queueItems: ReviewQueueItemApi[];
   queueSummary: QueueSummary;
   loading: boolean;
 }) {
   const recentItems = queueItems.slice(0, 3);
   const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
+  const autoPostReady = autoPostReadiness.length > 0 && autoPostReadiness.every((item) => item.ready);
 
   return (
     <SectionCard title={t("oafBots.relationship.title")} description={t("oafBots.relationship.description")} className="bg-black p-4 md:p-5">
@@ -1604,6 +2353,52 @@ function BotRelationshipCard({
                 {t("oafBots.relationship.accountStatus", { status: t(accountStatusKey(account.status)) })}
               </div>
             ) : null}
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#e7e9ea]">
+                  {autoPostReady ? t("oafBots.relationship.autoPostReadyTitle") : t("oafBots.relationship.autoPostNeedsSetupTitle")}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                  {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                </p>
+              </div>
+              <Link href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                {t("oafBots.relationship.openAutoPost")}
+              </Link>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.account")}
+                description={account ? `@${account.username}` : t("oafBots.relationship.readiness.accountMissing")}
+                ready={Boolean(account)}
+                href="/accounts"
+                action={account ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.content")}
+                description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
+                ready={activeContentCount > 0}
+                href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.planner")}
+                description={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
+                ready={Boolean(autoPostPlan?.enabled)}
+                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                action={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.autopilot")}
+                description={t(`executionQueue.executionMode.${autoPostPlan?.execution_mode || "review"}`)}
+                ready={autoPostPlan?.execution_mode === "autopilot"}
+                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                action={autoPostPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
@@ -1679,6 +2474,37 @@ function RelationshipMetric({
         <span className="truncate">{label}</span>
       </div>
       <p className="truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function AutoPostReadinessTile({
+  title,
+  description,
+  ready,
+  href,
+  action,
+}: {
+  title: string;
+  description: string;
+  ready: boolean;
+  href: string;
+  action: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {ready ? <CheckCircle2 className="size-4 shrink-0 text-emerald-300" /> : <AlertTriangle className="size-4 shrink-0 text-amber-300" />}
+            <p className="truncate text-sm font-semibold text-[#e7e9ea]">{title}</p>
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
+        </div>
+        <Link href={href} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {action}
+        </Link>
+      </div>
     </div>
   );
 }
@@ -1921,6 +2747,160 @@ function SelectField({
         ))}
       </select>
     </FieldShell>
+  );
+}
+
+function SafetyRulesPanel({
+  t,
+  safetyMode,
+  forbiddenTopics,
+  avoidClaims,
+  complianceNotes,
+  safetyOptions,
+  forbiddenTopicOptions,
+  avoidClaimOptions,
+  onSafetyModeChange,
+  onForbiddenTopicsChange,
+  onAvoidClaimsChange,
+  onComplianceNotesChange,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  safetyMode: string;
+  forbiddenTopics: string[];
+  avoidClaims: string[];
+  complianceNotes: string;
+  safetyOptions: SelectOption[];
+  forbiddenTopicOptions: ChipOption[];
+  avoidClaimOptions: ChipOption[];
+  onSafetyModeChange: (value: string) => void;
+  onForbiddenTopicsChange: (values: string[]) => void;
+  onAvoidClaimsChange: (values: string[]) => void;
+  onComplianceNotesChange: (value: string) => void;
+}) {
+  const selectedSafety = safetyOptions.find((option) => option.value === safetyMode)?.label || safetyMode || t("oafBots.safety.balanced");
+  const complianceRuleCount = complianceNotes
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean).length;
+  const configuredCount = Number(Boolean(safetyMode)) + Number(forbiddenTopics.length > 0) + Number(avoidClaims.length > 0) + Number(complianceRuleCount > 0);
+
+  return (
+    <div className="mt-4 space-y-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.safetyRules.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("oafBots.safetyRules.description")}</p>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 gap-2 text-center sm:min-w-80">
+          <SafetyRuleMetric label={t("oafBots.safetyRules.metricMode")} value={selectedSafety} />
+          <SafetyRuleMetric label={t("oafBots.safetyRules.metricHardBlocks")} value={forbiddenTopics.length + avoidClaims.length} />
+          <SafetyRuleMetric label={t("oafBots.safetyRules.metricConfigured")} value={`${configuredCount}/4`} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-4">
+          <SelectField
+            label={t("oafBots.fields.safetyMode")}
+            value={safetyMode}
+            onChange={onSafetyModeChange}
+            options={safetyOptions}
+            helper={t("oafBots.helpers.safetyMode")}
+          />
+          <div className="grid gap-2">
+            {["conservative", "balanced", "autopilot"].map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onSafetyModeChange(mode)}
+                className={`rounded-xl border p-3 text-left transition ${
+                  safetyMode === mode ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black hover:bg-[#16181c]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-[#e7e9ea]">{t(`oafBots.safetyRules.mode.${mode}.title`)}</span>
+                  {safetyMode === mode ? <CheckCircle2 className="size-4 text-[#1d9bf0]" /> : null}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`oafBots.safetyRules.mode.${mode}.description`)}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <TagPicker
+            label={t("oafBots.fields.forbiddenTopics")}
+            values={forbiddenTopics}
+            options={forbiddenTopicOptions}
+            onChange={onForbiddenTopicsChange}
+            helper={t("oafBots.helpers.forbiddenTopics")}
+            placeholder={t("oafBots.placeholders.tagInput")}
+          />
+          <TagPicker
+            label={t("oafBots.fields.avoidClaims")}
+            values={avoidClaims}
+            options={avoidClaimOptions}
+            onChange={onAvoidClaimsChange}
+            helper={t("oafBots.helpers.avoidClaims")}
+            placeholder={t("oafBots.placeholders.tagInput")}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <TextArea
+          label={t("oafBots.fields.complianceNotes")}
+          value={complianceNotes}
+          onChange={onComplianceNotesChange}
+          placeholder={t("oafBots.placeholders.complianceNotesStructured")}
+          helper={t("oafBots.helpers.complianceNotesStructured")}
+        />
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Lock className="size-4 text-amber-300" />
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.safetyRules.previewTitle")}</p>
+          </div>
+          <div className="space-y-3">
+            <SafetyRulePreviewRow
+              ready={forbiddenTopics.length > 0}
+              title={t("oafBots.safetyRules.previewForbiddenTitle")}
+              description={forbiddenTopics.length > 0 ? forbiddenTopics.map((item) => getChipLabel(item, forbiddenTopicOptions)).join(" / ") : t("oafBots.safetyRules.previewEmpty")}
+            />
+            <SafetyRulePreviewRow
+              ready={avoidClaims.length > 0}
+              title={t("oafBots.safetyRules.previewClaimsTitle")}
+              description={avoidClaims.length > 0 ? avoidClaims.map((item) => getChipLabel(item, avoidClaimOptions)).join(" / ") : t("oafBots.safetyRules.previewEmpty")}
+            />
+            <SafetyRulePreviewRow
+              ready={complianceRuleCount > 0}
+              title={t("oafBots.safetyRules.previewComplianceTitle")}
+              description={t("oafBots.safetyRules.previewComplianceValue", { count: complianceRuleCount })}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SafetyRuleMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="truncate text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function SafetyRulePreviewRow({ ready, title, description }: { ready: boolean; title: string; description: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex items-center gap-2">
+        {ready ? <CheckCircle2 className="size-4 shrink-0 text-emerald-300" /> : <AlertTriangle className="size-4 shrink-0 text-amber-300" />}
+        <p className="text-sm font-semibold text-[#e7e9ea]">{title}</p>
+      </div>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
+    </div>
   );
 }
 
@@ -2175,12 +3155,20 @@ function getSelectLabel(value: string, options: SelectOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
+function formatFeedbackDate(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
 function BotPreview({
   t,
   form,
   account,
   completion,
   checklist,
+  qualityDiagnostics,
   selectedID,
   formChanged,
   generating,
@@ -2202,6 +3190,7 @@ function BotPreview({
     missing: string[];
     nextSuggestion: string;
   };
+  qualityDiagnostics: Array<{ tone: "warning" | "info"; message: string }>;
   selectedID: number | null;
   formChanged: boolean;
   generating: boolean;
@@ -2300,6 +3289,7 @@ function BotPreview({
             <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
+          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics} empty={t("oafBots.quality.empty")} />
           <Button type="button" onClick={onTest} disabled={!canTest || generating} className="w-full disabled:opacity-50">
             {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {testButtonLabel}
@@ -2341,6 +3331,30 @@ function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: st
   );
 }
 
+function QualityDiagnosticsBlock({ title, items, empty }: { title: string; items: Array<{ tone: "warning" | "info"; message: string }>; empty: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs text-[#71767b]">{title}</p>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm leading-relaxed text-emerald-100/85">{empty}</p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.message}
+              className={`rounded-xl border px-3 py-2 text-xs leading-relaxed ${
+                item.tone === "warning" ? "border-amber-300/15 bg-amber-400/10 text-amber-100" : "border-blue-300/15 bg-blue-400/10 text-blue-100"
+              }`}
+            >
+              {item.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
@@ -2355,8 +3369,14 @@ function SamplePanel({
   samples,
   scene,
   onSceneChange,
+  sampleContext,
+  onSampleContextChange,
   generating,
+  rewritingSafety,
+  safetyRewriteMode,
   onGenerate,
+  onSafetyRewriteModeChange,
+  onRewriteSafety,
   selectedID,
   formChanged,
   previewDisabled,
@@ -2367,13 +3387,34 @@ function SamplePanel({
   safetyOptions,
   languageOptions,
   languageStrategyOptions,
+  feedbackItems,
+  feedbackLoading,
+  feedbackDraft,
+  feedbackSaving,
+  feedbackSuggestionLoading,
+  feedbackSuggestionPreview,
+  safetyRewritePreview,
+  feedbackIssueOptions,
+  onFeedbackDraftChange,
+  onFeedbackSubmit,
+  onFeedbackProfileSuggestion,
+  onApplyFeedbackSuggestion,
+  onDismissFeedbackSuggestion,
+  onApplySafetyRewrite,
+  onDismissSafetyRewrite,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
   scene: SampleScene;
   onSceneChange: (scene: SampleScene) => void;
+  sampleContext: string;
+  onSampleContextChange: (value: string) => void;
   generating: boolean;
+  rewritingSafety: boolean;
+  safetyRewriteMode: SafetyRewriteMode;
   onGenerate: () => void;
+  onSafetyRewriteModeChange: (mode: SafetyRewriteMode) => void;
+  onRewriteSafety: () => void;
   selectedID: number | null;
   formChanged: boolean;
   previewDisabled: boolean;
@@ -2384,6 +3425,21 @@ function SamplePanel({
   safetyOptions: SelectOption[];
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
+  feedbackItems: OAFBotGenerationFeedback[];
+  feedbackLoading: boolean;
+  feedbackDraft: FeedbackDraft;
+  feedbackSaving: boolean;
+  feedbackSuggestionLoading: boolean;
+  feedbackSuggestionPreview: OAFBotFeedbackProfileSuggestionResult | null;
+  safetyRewritePreview: SafetyRewritePreview | null;
+  feedbackIssueOptions: ChipOption[];
+  onFeedbackDraftChange: (draft: FeedbackDraft) => void;
+  onFeedbackSubmit: () => void;
+  onFeedbackProfileSuggestion: () => void;
+  onApplyFeedbackSuggestion: () => void;
+  onDismissFeedbackSuggestion: () => void;
+  onApplySafetyRewrite: () => void;
+  onDismissSafetyRewrite: () => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -2395,6 +3451,10 @@ function SamplePanel({
   const selectedSceneItem = sceneItems.find((item) => item.id === scene) ?? sceneItems[0];
   const selectedContent = useMemo(() => normalizeSampleContent(samples, scene), [samples, scene]);
   const providerLabel = samples?.provider ? providerSourceLabel(samples.provider, t) : "";
+  const suggestionDiffs = useMemo(
+    () => (feedbackSuggestionPreview ? getFeedbackSuggestionDiffs(form, feedbackSuggestionPreview.profile) : []),
+    [feedbackSuggestionPreview, form],
+  );
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 text-sm leading-relaxed text-[#e7e9ea]">
@@ -2438,6 +3498,16 @@ function SamplePanel({
         <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.disabledHint")}</p>
       ) : null}
 
+      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <TextArea
+          label={t(`oafBots.test.context.${scene}.label`)}
+          value={sampleContext}
+          onChange={onSampleContextChange}
+          placeholder={t(`oafBots.test.context.${scene}.placeholder`)}
+          helper={t(`oafBots.test.context.${scene}.helper`)}
+        />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <div>
           <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.test.panelTitle")}</p>
@@ -2461,6 +3531,50 @@ function SamplePanel({
               t={t}
             />
           </div>
+          <SampleSafetyExplanation
+            t={t}
+            evaluation={samples.safety_evaluation}
+            rewriting={rewritingSafety}
+            rewriteMode={safetyRewriteMode}
+            onRewriteModeChange={onSafetyRewriteModeChange}
+            onRewrite={onRewriteSafety}
+          />
+          <SafetyRewritePreviewPanel
+            t={t}
+            preview={safetyRewritePreview}
+            sceneTitle={selectedSceneItem.title}
+            onApply={onApplySafetyRewrite}
+            onDismiss={onDismissSafetyRewrite}
+          />
+          <GenerationFeedbackPanel
+            t={t}
+            draft={feedbackDraft}
+            saving={feedbackSaving}
+            issueOptions={feedbackIssueOptions}
+            onChange={onFeedbackDraftChange}
+            onSubmit={onFeedbackSubmit}
+          />
+          <GenerationFeedbackHistory
+            t={t}
+            items={feedbackItems}
+            loading={feedbackLoading}
+            issueOptions={feedbackIssueOptions}
+            suggestionLoading={feedbackSuggestionLoading}
+            onSuggestProfile={onFeedbackProfileSuggestion}
+          />
+          <ProfileDiffPreview
+            t={t}
+            visible={Boolean(feedbackSuggestionPreview)}
+            title={t("oafBots.feedbackSuggestion.previewTitle")}
+            description={suggestionDiffs.length > 0 ? t("oafBots.feedbackSuggestion.previewDescription", { count: suggestionDiffs.length }) : t("oafBots.feedbackSuggestion.noDiffDescription")}
+            meta={feedbackSuggestionPreview ? t("oafBots.feedbackSuggestion.feedbackCount", { count: feedbackSuggestionPreview.feedback_count || 0 }) : ""}
+            diffs={suggestionDiffs}
+            noDiff={t("oafBots.feedbackSuggestion.noDiff")}
+            dismissLabel={t("oafBots.feedbackSuggestion.dismiss")}
+            applyLabel={t("oafBots.feedbackSuggestion.apply")}
+            onApply={onApplyFeedbackSuggestion}
+            onDismiss={onDismissFeedbackSuggestion}
+          />
           <PersonaBasisCard title={t("oafBots.test.personaBasis")} rows={personaRows} empty={t("oafBots.test.personaBasisEmpty")} />
         </div>
       ) : (
@@ -2537,6 +3651,418 @@ function SampleCard({
           {t("oafBots.samples.saveDraft")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function SampleSafetyExplanation({
+  t,
+  evaluation,
+  rewriting,
+  rewriteMode,
+  onRewriteModeChange,
+  onRewrite,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  evaluation?: OAFBotTestGenerateResult["safety_evaluation"];
+  rewriting: boolean;
+  rewriteMode: SafetyRewriteMode;
+  onRewriteModeChange: (mode: SafetyRewriteMode) => void;
+  onRewrite: () => void;
+}) {
+  if (!evaluation) return null;
+  const canRewrite = evaluation.action === "avoid" || evaluation.action === "review" || (evaluation.matched_hits?.length ?? 0) > 0;
+  const tone =
+    evaluation.action === "avoid"
+      ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+      : evaluation.action === "review"
+        ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+        : "border-emerald-300/20 bg-emerald-400/10 text-emerald-100";
+  const icon = evaluation.action === "allow" ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />;
+  const actionKey = `oafBots.safetyExplanation.action.${evaluation.action}`;
+  const categoryKey = `oafBots.safetyExplanation.category.${evaluation.category}`;
+  const reasonKey = `oafBots.safetyExplanation.reason.${evaluation.category}`;
+  const actionLabel = t(actionKey) === actionKey ? evaluation.action : t(actionKey);
+  const categoryLabel = t(categoryKey) === categoryKey ? evaluation.category : t(categoryKey);
+  const reason = t(reasonKey) === reasonKey ? evaluation.reason : t(reasonKey);
+  return (
+    <div className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 shrink-0">{icon}</span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold">{t("oafBots.safetyExplanation.title")}</p>
+            <p className="mt-1 text-xs leading-5 opacity-80">{reason}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <span className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs">{actionLabel}</span>
+          <span className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs">{categoryLabel}</span>
+        </div>
+      </div>
+      {evaluation.matched_hits?.length ? (
+        <div className="mt-3">
+          <p className="text-xs font-semibold opacity-80">{t("oafBots.safetyExplanation.hits")}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {evaluation.matched_hits.map((hit, index) => (
+              <span key={`${hit.source}-${hit.term}-${index}`} className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-xs">
+                {t(`oafBots.safetyExplanation.source.${hit.source}`) === `oafBots.safetyExplanation.source.${hit.source}` ? hit.source : t(`oafBots.safetyExplanation.source.${hit.source}`)}: {hit.term}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs leading-5 opacity-75">{t("oafBots.safetyExplanation.noHits")}</p>
+      )}
+      {canRewrite ? (
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/15 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 opacity-85">{t("oafBots.safetyRewrite.hint")}</p>
+            <Button type="button" size="sm" variant="outline" onClick={onRewrite} disabled={rewriting} className="shrink-0 border-white/15 bg-black/20 text-current hover:bg-black/35">
+              {rewriting ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {rewriting ? t("oafBots.safetyRewrite.loading") : t("oafBots.safetyRewrite.action")}
+            </Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {safetyRewriteModes.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onRewriteModeChange(mode)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                  rewriteMode === mode ? "border-white/20 bg-white/15 text-current" : "border-white/10 bg-black/15 opacity-75 hover:opacity-100"
+                }`}
+              >
+                {t(`oafBots.safetyRewrite.mode.${mode}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SafetyRewritePreviewPanel({
+  t,
+  preview,
+  sceneTitle,
+  onApply,
+  onDismiss,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  preview: SafetyRewritePreview | null;
+  sceneTitle: string;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  if (!preview) return null;
+  const after = normalizeSampleContent(preview.result, preview.result.scene);
+  const evaluation = preview.result.safety_evaluation;
+  const actionLabel = evaluation ? t(`oafBots.safetyExplanation.action.${evaluation.action}`) : "";
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.safetyRewrite.previewTitle")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.safetyRewrite.previewDescription")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <span className="rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">{sceneTitle}</span>
+          {evaluation ? (
+            <span className="rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
+              {actionLabel === `oafBots.safetyExplanation.action.${evaluation.action}` ? evaluation.action : actionLabel}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
+        <RewriteValueBox label={t("oafBots.diff.before")} value={preview.before} tone="before" />
+        <div className="hidden items-center justify-center text-[#71767b] lg:flex">
+          <ArrowRight className="size-4" />
+        </div>
+        <RewriteValueBox label={t("oafBots.diff.after")} value={after || t("oafBots.samples.empty")} tone="after" />
+      </div>
+
+      {evaluation?.matched_hits?.length ? (
+        <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+          <p>{t("oafBots.safetyRewrite.remainingHits", { count: evaluation.matched_hits.length })}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {evaluation.matched_hits.map((hit, index) => (
+              <span key={`${hit.source}-${hit.term}-${index}`} className="rounded-full border border-amber-100/10 bg-black/20 px-2 py-0.5">
+                {t(`oafBots.safetyExplanation.source.${hit.source}`) === `oafBots.safetyExplanation.source.${hit.source}` ? hit.source : t(`oafBots.safetyExplanation.source.${hit.source}`)}: {hit.term}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100">
+          {t("oafBots.safetyRewrite.noRemainingHits")}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+          {t("oafBots.safetyRewrite.dismiss")}
+        </Button>
+        <Button type="button" size="sm" onClick={onApply}>
+          <CheckCircle2 className="size-4" />
+          {t("oafBots.safetyRewrite.apply")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RewriteValueBox({ label, value, tone }: { label: string; value: string; tone: "before" | "after" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-3 ${tone === "after" ? "border-emerald-300/20 bg-emerald-400/8" : "border-rose-300/15 bg-rose-400/6"}`}>
+      <p className="text-[11px] font-semibold uppercase text-[#71767b]">{label}</p>
+      <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea] [overflow-wrap:anywhere]">{value}</p>
+    </div>
+  );
+}
+
+function GenerationFeedbackPanel({
+  t,
+  draft,
+  saving,
+  issueOptions,
+  onChange,
+  onSubmit,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  draft: FeedbackDraft;
+  saving: boolean;
+  issueOptions: ChipOption[];
+  onChange: (draft: FeedbackDraft) => void;
+  onSubmit: () => void;
+}) {
+  const toggleIssue = (value: string) => {
+    const exists = draft.issueTags.includes(value);
+    onChange({ ...draft, issueTags: exists ? draft.issueTags.filter((item) => item !== value) : [...draft.issueTags, value] });
+  };
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedback.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.feedback.description")}</p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ ...draft, rating: "positive", issueTags: [] })}
+            className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold ${
+              draft.rating === "positive" ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+            }`}
+          >
+            <ThumbsUp className="size-4" />
+            {t("oafBots.feedback.positive")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ ...draft, rating: "negative" })}
+            className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold ${
+              draft.rating === "negative" ? "border-amber-300/30 bg-amber-400/15 text-amber-100" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+            }`}
+          >
+            <ThumbsDown className="size-4" />
+            {t("oafBots.feedback.negative")}
+          </button>
+        </div>
+      </div>
+
+      {draft.rating === "negative" ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold text-[#e7e9ea]">{t("oafBots.feedback.issueTitle")}</p>
+          <div className="flex flex-wrap gap-2">
+            {issueOptions.map((option) => {
+              const selected = draft.issueTags.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleIssue(option.value)}
+                  className={`rounded-full border px-3 py-1 text-xs ${
+                    selected ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/12 text-[#8ecdf8]" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4">
+        <textarea
+          className="form-input min-h-24 resize-y leading-relaxed"
+          value={draft.comment}
+          placeholder={draft.rating === "positive" ? t("oafBots.feedback.commentPositivePlaceholder") : t("oafBots.feedback.commentPlaceholder")}
+          onChange={(event) => onChange({ ...draft, comment: event.target.value })}
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs leading-5 text-[#71767b]">{t("oafBots.feedback.loopHint")}</p>
+        <Button type="button" size="sm" onClick={onSubmit} disabled={saving || !draft.rating}>
+          {saving ? <RefreshCw className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+          {saving ? t("oafBots.feedback.saving") : t("oafBots.feedback.submit")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function GenerationFeedbackHistory({
+  t,
+  items,
+  loading,
+  issueOptions,
+  suggestionLoading,
+  onSuggestProfile,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  items: OAFBotGenerationFeedback[];
+  loading: boolean;
+  issueOptions: ChipOption[];
+  suggestionLoading: boolean;
+  onSuggestProfile: () => void;
+}) {
+  const negativeCount = items.filter((item) => item.rating === "negative").length;
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{t("oafBots.feedback.historyTitle")}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.feedback.historyDescription")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+            {t("oafBots.feedback.historyCount", { count: items.length })}
+          </span>
+          <Button type="button" size="sm" variant="outline" onClick={onSuggestProfile} disabled={suggestionLoading || negativeCount === 0}>
+            {suggestionLoading ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {suggestionLoading ? t("oafBots.feedbackSuggestion.loading") : t("oafBots.feedbackSuggestion.action")}
+          </Button>
+        </div>
+      </div>
+      <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#71767b]">
+        {negativeCount > 0 ? t("oafBots.feedbackSuggestion.hint", { count: negativeCount }) : t("oafBots.feedbackSuggestion.emptyHint")}
+      </p>
+      {loading ? (
+        <p className="mt-4 text-sm text-[#71767b]">{t("oafBots.feedback.loading")}</p>
+      ) : items.length === 0 ? (
+        <p className="mt-4 text-sm leading-6 text-[#71767b]">{t("oafBots.feedback.empty")}</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {items.slice(0, 5).map((item) => (
+            <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+                <span className={`rounded-full border px-2 py-0.5 ${item.rating === "positive" ? "border-emerald-300/20 text-emerald-100" : "border-amber-300/20 text-amber-100"}`}>
+                  {t(`oafBots.feedback.rating.${item.rating}`)}
+                </span>
+                <span>{t(`oafBots.samples.${item.scene}`)}</span>
+                <span>{formatFeedbackDate(item.created_at)}</span>
+              </div>
+              {item.issue_tags.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {item.issue_tags.map((tag) => (
+                    <span key={tag} className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#8ecdf8]">
+                      {getChipLabel(tag, issueOptions)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {item.comment ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#e7e9ea]/75">{item.comment}</p> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProfileDiffPreview({
+  t,
+  visible,
+  title,
+  description,
+  meta,
+  diffs,
+  noDiff,
+  dismissLabel,
+  applyLabel,
+  onApply,
+  onDismiss,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  visible: boolean;
+  title: string;
+  description: string;
+  meta?: string;
+  diffs: ProfileDiffItem[];
+  noDiff: string;
+  dismissLabel: string;
+  applyLabel: string;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-[#e7e9ea]">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{description}</p>
+        </div>
+        {meta ? (
+          <span className="shrink-0 rounded-full border border-[#2f3336] bg-black/50 px-2.5 py-1 text-xs text-[#8ecdf8]">
+            {meta}
+          </span>
+        ) : null}
+      </div>
+
+      {diffs.length > 0 ? (
+        <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {diffs.map((diff) => (
+            <div key={String(diff.key)} className="rounded-xl border border-[#2f3336] bg-black p-3">
+              <p className="text-xs font-semibold text-[#e7e9ea]">{fieldLabel(diff.key, t)}</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
+                <DiffValueBox label={t("oafBots.diff.before")} value={formatProfileValue(diff.before, t)} tone="before" />
+                <div className="hidden items-center justify-center text-[#71767b] md:flex">
+                  <ArrowRight className="size-4" />
+                </div>
+                <DiffValueBox label={t("oafBots.diff.after")} value={formatProfileValue(diff.after, t)} tone="after" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-[#2f3336] bg-black p-3 text-sm leading-6 text-[#71767b]">{noDiff}</p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+          {dismissLabel}
+        </Button>
+        <Button type="button" size="sm" onClick={onApply} disabled={diffs.length === 0}>
+          <CheckCircle2 className="size-4" />
+          {applyLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DiffValueBox({ label, value, tone }: { label: string; value: string; tone: "before" | "after" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-3 ${tone === "after" ? "border-emerald-300/20 bg-emerald-400/8" : "border-rose-300/15 bg-rose-400/6"}`}>
+      <p className="text-[11px] font-semibold uppercase text-[#71767b]">{label}</p>
+      <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-[#e7e9ea] [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

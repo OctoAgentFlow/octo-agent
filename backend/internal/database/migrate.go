@@ -47,6 +47,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Post{},
 		&model.Agent{},
 		&model.OAFBot{},
+		&model.OAFBotGenerationFeedback{},
 		&model.AIGenerationUsage{},
 		&model.Task{},
 		&model.BillingOrder{},
@@ -65,6 +66,12 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := BackfillAutomationDefaultsDisabled(db); err != nil {
+		return err
+	}
+	if err := BackfillAutomationPackageQuotaOnly(db); err != nil {
+		return err
+	}
+	if err := BackfillAutoPostPlanPackageQuotaOnly(db); err != nil {
 		return err
 	}
 	if err := SeedDefaultPointActivities(db); err != nil {
@@ -228,6 +235,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.Post{}, "帖子内容与发布状态"},
 		{&model.Agent{}, "Agent定义"},
 		{&model.OAFBot{}, "OAF Bot社交人格机器人配置"},
+		{&model.OAFBotGenerationFeedback{}, "OAF Bot生成质量反馈记录"},
 		{&model.AIGenerationUsage{}, "AI生成次数月度用量记录"},
 		{&model.Task{}, "任务执行记录"},
 		{&model.BillingOrder{}, "订阅支付订单"},
@@ -289,6 +297,26 @@ SET ac.enabled = false,
     ac.next_run_at = NULL
 WHERE ta.id IS NULL
   AND ac.enabled = true
+`).Error
+}
+
+// BackfillAutomationPackageQuotaOnly removes legacy per-day and per-hour automation throttles.
+func BackfillAutomationPackageQuotaOnly(db *gorm.DB) error {
+	return db.Exec(`
+UPDATE automation_configs
+SET frequency_daily_limit = 0,
+    safety_max_per_hour = 0
+WHERE frequency_daily_limit <> 0
+   OR safety_max_per_hour <> 0
+`).Error
+}
+
+// BackfillAutoPostPlanPackageQuotaOnly removes legacy per-day Auto Post Planner limits.
+func BackfillAutoPostPlanPackageQuotaOnly(db *gorm.DB) error {
+	return db.Exec(`
+UPDATE auto_post_plans
+SET daily_limit = 0
+WHERE daily_limit <> 0
 `).Error
 }
 

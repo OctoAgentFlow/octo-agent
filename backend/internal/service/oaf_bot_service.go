@@ -19,16 +19,27 @@ import (
 var ErrOAFBotLimitExceeded = errors.New("oaf bot limit exceeded for current plan")
 var ErrOAFBotTwitterAccountAlreadyBound = errors.New("twitter_account_id is already bound to another active OAF Bot; unbind it first or choose another X account")
 
+const (
+	oafBotProfileAssistModeFillMissing = "fill_missing_only"
+	oafBotProfileAssistModeImproveAll  = "improve_all"
+)
+
 type OAFBotService struct {
-	botRepo     *repository.OAFBotRepository
-	accountRepo *repository.TwitterAccountRepository
-	userRepo    *repository.UserRepository
-	usageRepo   *repository.AIGenerationUsageRepository
-	ai          *AIService
+	botRepo         *repository.OAFBotRepository
+	accountRepo     *repository.TwitterAccountRepository
+	userRepo        *repository.UserRepository
+	usageRepo       *repository.AIGenerationUsageRepository
+	feedbackRepo    *repository.OAFBotGenerationFeedbackRepository
+	planRepo        *repository.AutoPostPlanRepository
+	contentRepo     *repository.ContentLibraryRepository
+	postDraftRepo   *repository.AutoPostDraftRepository
+	replyDraftRepo  *repository.AutoReplyDraftRepository
+	commentTaskRepo *repository.AutoCommentTaskRepository
+	ai              *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, postDraftRepo *repository.AutoPostDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, planRepo: planRepo, contentRepo: contentRepo, postDraftRepo: postDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -112,39 +123,12 @@ func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dt
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, completeOAFBotProfileInput(req.Draft))
+	mode := normalizeOAFBotProfileAssistMode(req.Mode)
+	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, completeOAFBotProfileInput(req.Draft, mode))
 	if err != nil {
 		return nil, err
 	}
-	profile.Name = limitString(firstNonEmpty(req.Draft.Name, profile.Name), 96)
-	profile.TwitterAccountID = req.Draft.TwitterAccountID
-	profile.AgeRange = limitString(firstNonEmpty(req.Draft.AgeRange, profile.AgeRange), 64)
-	profile.Gender = limitString(firstNonEmpty(req.Draft.Gender, profile.Gender), 64)
-	profile.Education = limitString(firstNonEmpty(req.Draft.Education, profile.Education), 128)
-	profile.MBTI = strings.ToUpper(limitString(firstNonEmpty(req.Draft.MBTI, profile.MBTI), 32))
-	profile.SafetyMode = normalizeSafetyMode(firstNonEmpty(profile.SafetyMode, req.Draft.SafetyMode))
-	profile.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(firstNonEmpty(profile.PrimaryLanguage, req.Draft.PrimaryLanguage))
-	profile.LanguageStrategy = normalizeOAFBotLanguageStrategy(firstNonEmpty(profile.LanguageStrategy, req.Draft.LanguageStrategy))
-	profile.Occupation = limitString(firstNonEmpty(profile.Occupation, req.Draft.Occupation), 128)
-	profile.Industry = limitString(firstNonEmpty(profile.Industry, req.Draft.Industry), 128)
-	profile.IdentitySummary = limitString(firstNonEmpty(profile.IdentitySummary, req.Draft.IdentitySummary), 2000)
-	profile.VoiceTone = limitString(firstNonEmpty(profile.VoiceTone, req.Draft.VoiceTone), 128)
-	profile.GrowthGoal = limitString(firstNonEmpty(profile.GrowthGoal, req.Draft.GrowthGoal), 2000)
-	profile.ProjectOneLiner = limitString(firstNonEmpty(profile.ProjectOneLiner, req.Draft.ProjectOneLiner), 1000)
-	profile.TargetAudience = limitString(firstNonEmpty(profile.TargetAudience, req.Draft.TargetAudience), 2000)
-	profile.CoreValueProps = limitString(firstNonEmpty(profile.CoreValueProps, req.Draft.CoreValueProps), 2000)
-	profile.ProductFeatures = limitString(firstNonEmpty(profile.ProductFeatures, req.Draft.ProductFeatures), 3000)
-	profile.Differentiators = limitString(firstNonEmpty(profile.Differentiators, req.Draft.Differentiators), 2000)
-	profile.ContentObjectives = limitString(firstNonEmpty(profile.ContentObjectives, req.Draft.ContentObjectives), 2000)
-	profile.PreferredCTA = limitString(firstNonEmpty(profile.PreferredCTA, req.Draft.PreferredCTA), 1000)
-	profile.ComplianceNotes = limitString(firstNonEmpty(profile.ComplianceNotes, req.Draft.ComplianceNotes), 2000)
-	profile.PersonalityTags = firstNonEmptyList(profile.PersonalityTags, req.Draft.PersonalityTags)
-	profile.Topics = firstNonEmptyList(profile.Topics, req.Draft.Topics)
-	profile.ForbiddenTopics = firstNonEmptyList(profile.ForbiddenTopics, req.Draft.ForbiddenTopics)
-	profile.ContentPillars = firstNonEmptyList(profile.ContentPillars, req.Draft.ContentPillars)
-	profile.Hashtags = firstNonEmptyList(profile.Hashtags, req.Draft.Hashtags)
-	profile.Keywords = firstNonEmptyList(profile.Keywords, req.Draft.Keywords)
-	profile.AvoidClaims = firstNonEmptyList(profile.AvoidClaims, req.Draft.AvoidClaims)
+	profile = mergeCompletedOAFBotProfile(req.Draft, profile, mode)
 	if err := recordAIGenerationUsage(s.usageRepo, userID, 0, repository.AIGenerationSceneOAFBotProfileAssist, now, usage); err != nil {
 		return nil, err
 	}
@@ -156,7 +140,43 @@ func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dt
 	}, nil
 }
 
-func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string) (*dto.OAFBotTestGenerateResponse, error) {
+func (s *OAFBotService) SuggestProfileFromFeedback(ctx context.Context, userID, id uint) (*dto.OAFBotFeedbackProfileSuggestionResponse, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	feedbackRows, err := s.feedbackRepo.ListRecentNegativeByUserBot(userID, id, 8)
+	if err != nil {
+		return nil, err
+	}
+	if len(feedbackRows) == 0 {
+		return nil, fmt.Errorf("no negative feedback available for this OAF Bot")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	draft := oafBotToUpsertRequest(*bot)
+	input := completeOAFBotProfileInput(draft, oafBotProfileAssistModeImproveAll)
+	input.FeedbackSignals = feedbackSignalsFromRows(feedbackRows)
+	profile, raw, usage, err := s.ai.CompleteOAFBotProfile(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	profile = mergeCompletedOAFBotProfile(draft, profile, oafBotProfileAssistModeImproveAll)
+	if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneOAFBotProfileAssist, now, usage); err != nil {
+		return nil, err
+	}
+	return &dto.OAFBotFeedbackProfileSuggestionResponse{
+		Profile:       profile,
+		Provider:      s.ai.providerSource(),
+		UsageConsumed: 1,
+		FeedbackCount: len(feedbackRows),
+		RawResult:     raw,
+	}, nil
+}
+
+func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string, sampleContext string) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -169,37 +189,7 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
-		Scene:             scene,
-		Name:              bot.Name,
-		Occupation:        bot.Occupation,
-		Industry:          bot.Industry,
-		AgeRange:          bot.AgeRange,
-		Gender:            bot.Gender,
-		Education:         bot.Education,
-		MBTI:              bot.MBTI,
-		PersonalityTags:   decodeStringList(bot.PersonalityTags),
-		IdentitySummary:   bot.IdentitySummary,
-		VoiceTone:         bot.VoiceTone,
-		Topics:            decodeStringList(bot.Topics),
-		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
-		GrowthGoal:        bot.GrowthGoal,
-		ProjectOneLiner:   bot.ProjectOneLiner,
-		TargetAudience:    bot.TargetAudience,
-		CoreValueProps:    bot.CoreValueProps,
-		ProductFeatures:   bot.ProductFeatures,
-		Differentiators:   bot.Differentiators,
-		ContentPillars:    decodeStringList(bot.ContentPillars),
-		ContentObjectives: bot.ContentObjectives,
-		PreferredCTA:      bot.PreferredCTA,
-		Hashtags:          decodeStringList(bot.Hashtags),
-		Keywords:          decodeStringList(bot.Keywords),
-		ComplianceNotes:   bot.ComplianceNotes,
-		AvoidClaims:       decodeStringList(bot.AvoidClaims),
-		SafetyMode:        bot.SafetyMode,
-		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
-		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
-	})
+	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, oafBotSampleInput(bot, scene, sampleContext))
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +198,41 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	}
 	out.BotID = bot.ID
 	out.UsageConsumed = 1
+	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
+	return out, nil
+}
+
+func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id uint, req dto.OAFBotRewriteSafetyRequest) (*dto.OAFBotTestGenerateResponse, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	scene := normalizeOAFBotSampleScene(req.Scene)
+	if scene == "" {
+		return nil, fmt.Errorf("invalid sample scene")
+	}
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	input := oafBotSampleInput(bot, scene, req.SampleContext)
+	input.UnsafeContent = content
+	input.RewriteMode = normalizeSafetyRewriteMode(req.RewriteMode)
+	input.SafetyHits = req.MatchedHits
+	out, usage, err := s.ai.RewriteOAFBotSampleForSafety(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneOAFBotTestGenerate, now, usage); err != nil {
+		return nil, err
+	}
+	out.BotID = bot.ID
+	out.UsageConsumed = 1
+	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
 	return out, nil
 }
 
@@ -221,15 +246,264 @@ func (s *OAFBotService) GenerationUsages(userID, id uint) (*dto.OAFBotGeneration
 	}
 	items := make([]dto.OAFBotGenerationUsageItem, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, dto.OAFBotGenerationUsageItem{
-			BotID:     row.BotID,
-			Scene:     row.Scene,
-			Month:     row.Month,
-			Count:     row.Count,
-			UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
-		})
+		items = append(items, oafBotGenerationUsageToDTO(row))
 	}
 	return &dto.OAFBotGenerationUsageResponse{Items: items}, nil
+}
+
+func (s *OAFBotService) MatrixSignals(userID uint) (*dto.OAFBotMatrixSignalsResponse, error) {
+	bots, err := s.botRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	botIDs := make([]uint, 0, len(bots))
+	for _, bot := range bots {
+		botIDs = append(botIDs, bot.ID)
+	}
+	usageRows, err := s.usageRepo.ListByUserBotsMonth(userID, botIDs, repository.UsageMonth(time.Now().UTC()))
+	if err != nil {
+		return nil, err
+	}
+	feedbackRows, err := s.feedbackRepo.ListRecentByUserBots(userID, botIDs, 10)
+	if err != nil {
+		return nil, err
+	}
+	inspectionByBot, summary, err := s.matrixInspectionByBot(userID, bots, feedbackRows)
+	if err != nil {
+		return nil, err
+	}
+	usageByBot := make(map[uint][]dto.OAFBotGenerationUsageItem, len(botIDs))
+	for _, row := range usageRows {
+		usageByBot[row.BotID] = append(usageByBot[row.BotID], oafBotGenerationUsageToDTO(row))
+	}
+	feedbackByBot := make(map[uint][]dto.OAFBotGenerationFeedbackItem, len(botIDs))
+	for _, row := range feedbackRows {
+		if len(feedbackByBot[row.BotID]) >= 10 {
+			continue
+		}
+		feedbackByBot[row.BotID] = append(feedbackByBot[row.BotID], oafBotGenerationFeedbackToDTO(row))
+	}
+	items := make([]dto.OAFBotMatrixSignalItem, 0, len(botIDs))
+	for _, id := range botIDs {
+		inspection := inspectionByBot[id]
+		items = append(items, dto.OAFBotMatrixSignalItem{
+			BotID:             id,
+			Usages:            usageByBot[id],
+			Feedback:          feedbackByBot[id],
+			InspectionFlags:   inspection.Flags,
+			InspectionMetrics: inspection.Metrics,
+		})
+	}
+	return &dto.OAFBotMatrixSignalsResponse{Items: items, Summary: summary}, nil
+}
+
+type oafBotMatrixInspection struct {
+	Flags   []string
+	Metrics dto.OAFBotMatrixInspectionMetrics
+}
+
+func (s *OAFBotService) matrixInspectionByBot(userID uint, bots []model.OAFBot, feedbackRows []model.OAFBotGenerationFeedback) (map[uint]oafBotMatrixInspection, dto.OAFBotMatrixInspectionSummary, error) {
+	botIDs := make([]uint, 0, len(bots))
+	for _, bot := range bots {
+		botIDs = append(botIDs, bot.ID)
+	}
+	summary := dto.OAFBotMatrixInspectionSummary{}
+	accountByID := map[uint]bool{}
+	accounts, err := s.accountRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, summary, err
+	}
+	for _, account := range accounts {
+		accountByID[account.ID] = true
+	}
+	planByBot, planByAccount, err := s.matrixPlansByBot(userID)
+	if err != nil {
+		return nil, summary, err
+	}
+	activeContentCounts, err := s.matrixActiveContentCounts(userID, bots)
+	if err != nil {
+		return nil, summary, err
+	}
+	negativeFeedbackByBot := map[uint]int{}
+	for _, row := range feedbackRows {
+		if row.Rating == "negative" {
+			negativeFeedbackByBot[row.BotID]++
+		}
+	}
+	pendingReviewByBot, err := s.pendingReviewCountsByBot(userID, botIDs)
+	if err != nil {
+		return nil, summary, err
+	}
+	out := make(map[uint]oafBotMatrixInspection, len(bots))
+	for _, bot := range bots {
+		flags := []string{}
+		if bot.TwitterAccountID == 0 {
+			flags = append(flags, "unbound")
+			summary.UnboundCount++
+		}
+		plan, ok := planByBot[bot.ID]
+		if !ok && bot.TwitterAccountID > 0 {
+			plan, ok = planByAccount[bot.TwitterAccountID]
+		}
+		autoPostReady := bot.TwitterAccountID > 0 &&
+			accountByID[bot.TwitterAccountID] &&
+			ok &&
+			plan.Enabled &&
+			plan.ExecutionMode == "autopilot" &&
+			activeContentCounts[bot.ID] > 0
+		if !autoPostReady {
+			flags = append(flags, "auto_post_not_ready")
+			summary.AutoPostNotReadyCount++
+		}
+		if negativeFeedbackByBot[bot.ID] >= 3 {
+			flags = append(flags, "negative_feedback")
+			summary.NegativeFeedbackCount++
+		}
+		if pendingReviewByBot[bot.ID] >= 5 {
+			flags = append(flags, "review_backlog")
+			summary.ReviewBacklogCount++
+		}
+		out[bot.ID] = oafBotMatrixInspection{
+			Flags: flags,
+			Metrics: dto.OAFBotMatrixInspectionMetrics{
+				ActiveContentCount: activeContentCounts[bot.ID],
+				NegativeFeedback:   negativeFeedbackByBot[bot.ID],
+				PendingReview:      pendingReviewByBot[bot.ID],
+			},
+		}
+	}
+	return out, summary, nil
+}
+
+func (s *OAFBotService) matrixPlansByBot(userID uint) (map[uint]model.AutoPostPlan, map[uint]model.AutoPostPlan, error) {
+	planByBot := map[uint]model.AutoPostPlan{}
+	planByAccount := map[uint]model.AutoPostPlan{}
+	if s.planRepo == nil {
+		return planByBot, planByAccount, nil
+	}
+	plans, err := s.planRepo.ListByUser(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, plan := range plans {
+		if plan.BotID > 0 {
+			planByBot[plan.BotID] = plan
+		}
+		if plan.XAccountID > 0 {
+			planByAccount[plan.XAccountID] = plan
+		}
+	}
+	return planByBot, planByAccount, nil
+}
+
+func (s *OAFBotService) matrixActiveContentCounts(userID uint, bots []model.OAFBot) (map[uint]int, error) {
+	activeContentCounts := map[uint]int{}
+	if s.contentRepo == nil {
+		return activeContentCounts, nil
+	}
+	contentItems, err := s.contentRepo.ListActiveByUser(userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, bot := range bots {
+		for _, item := range contentItems {
+			if contentItemMatchesOAFBot(item, bot) {
+				activeContentCounts[bot.ID]++
+			}
+		}
+	}
+	return activeContentCounts, nil
+}
+
+func (s *OAFBotService) pendingReviewCountsByBot(userID uint, botIDs []uint) (map[uint]int, error) {
+	out := map[uint]int{}
+	if len(botIDs) == 0 {
+		return out, nil
+	}
+	if s.postDraftRepo != nil {
+		counts, err := s.postDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	if s.replyDraftRepo != nil {
+		counts, err := s.replyDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	if s.commentTaskRepo != nil {
+		counts, err := s.commentTaskRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+		if err != nil {
+			return out, err
+		}
+		addBotCounts(out, counts)
+	}
+	return out, nil
+}
+
+func addBotCounts(dst map[uint]int, src map[uint]int) {
+	for id, count := range src {
+		dst[id] += count
+	}
+}
+
+func contentItemMatchesOAFBot(item model.ContentLibraryItem, bot model.OAFBot) bool {
+	if item.TwitterAccountID != nil && *item.TwitterAccountID != bot.TwitterAccountID {
+		return false
+	}
+	if item.BotID != nil && *item.BotID != bot.ID {
+		return false
+	}
+	return true
+}
+
+func (s *OAFBotService) CreateGenerationFeedback(userID, id uint, req dto.OAFBotGenerationFeedbackRequest) (*dto.OAFBotGenerationFeedbackItem, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	scene := normalizeOAFBotSampleScene(req.Scene)
+	if scene == "" {
+		return nil, fmt.Errorf("invalid sample scene")
+	}
+	rating := normalizeOAFBotFeedbackRating(req.Rating)
+	if rating == "" {
+		return nil, fmt.Errorf("invalid feedback rating")
+	}
+	row := &model.OAFBotGenerationFeedback{
+		UserID:           userID,
+		BotID:            bot.ID,
+		Scene:            scene,
+		Rating:           rating,
+		IssueTags:        encodeStringList(req.IssueTags),
+		Comment:          limitString(req.Comment, 1200),
+		SampleContext:    limitString(req.SampleContext, 2000),
+		GeneratedContent: limitString(req.GeneratedContent, 4000),
+		Provider:         limitString(req.Provider, 64),
+	}
+	if err := s.feedbackRepo.Create(row); err != nil {
+		return nil, err
+	}
+	item := oafBotGenerationFeedbackToDTO(*row)
+	return &item, nil
+}
+
+func (s *OAFBotService) GenerationFeedback(userID, id uint) (*dto.OAFBotGenerationFeedbackResponse, error) {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return nil, err
+	}
+	rows, err := s.feedbackRepo.ListRecentByUserBot(userID, id, 10)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.OAFBotGenerationFeedbackItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, oafBotGenerationFeedbackToDTO(row))
+	}
+	return &dto.OAFBotGenerationFeedbackResponse{Items: items}, nil
 }
 
 func (s *OAFBotService) assertTwitterAccountBinding(userID uint, currentBotID uint, accountID uint) error {
@@ -290,8 +564,47 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	bot.LanguageStrategy = normalizeOAFBotLanguageStrategy(req.LanguageStrategy)
 }
 
-func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest) CompleteOAFBotProfileInput {
+func oafBotSampleInput(bot *model.OAFBot, scene string, sampleContext string) GenerateOAFBotSamplesInput {
+	if bot == nil {
+		return GenerateOAFBotSamplesInput{Scene: scene, SampleContext: sampleContext}
+	}
+	return GenerateOAFBotSamplesInput{
+		Scene:             scene,
+		SampleContext:     sampleContext,
+		Name:              bot.Name,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
+	}
+}
+
+func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest, mode string) CompleteOAFBotProfileInput {
 	return CompleteOAFBotProfileInput{
+		Mode:              mode,
 		Name:              req.Name,
 		Occupation:        req.Occupation,
 		Industry:          req.Industry,
@@ -323,6 +636,117 @@ func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest) CompleteOAFBotProfi
 	}
 }
 
+func feedbackSignalsFromRows(rows []model.OAFBotGenerationFeedback) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		parts := []string{
+			"scene=" + row.Scene,
+			"issue_tags=" + strings.Join(decodeStringList(row.IssueTags), ", "),
+		}
+		if strings.TrimSpace(row.Comment) != "" {
+			parts = append(parts, "comment="+strings.TrimSpace(row.Comment))
+		}
+		if strings.TrimSpace(row.SampleContext) != "" {
+			parts = append(parts, "sample_context="+limitString(row.SampleContext, 280))
+		}
+		if strings.TrimSpace(row.GeneratedContent) != "" {
+			parts = append(parts, "generated_content="+limitString(row.GeneratedContent, 360))
+		}
+		out = append(out, strings.Join(parts, " | "))
+	}
+	return out
+}
+
+func evaluateOAFBotSampleSafety(content string, bot *model.OAFBot) dto.OAFBotSafetyEvaluationResult {
+	text := strings.ToLower(strings.TrimSpace(content))
+	if text == "" {
+		return dto.OAFBotSafetyEvaluationResult{
+			Level:    "high",
+			Action:   "avoid",
+			Category: "empty_content",
+			Reason:   "Generated content is empty, so it should not be published.",
+		}
+	}
+	if bot != nil {
+		if hits := safetyHits(text, decodeStringList(bot.ForbiddenTopics), "forbidden_topic"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "high",
+				Action:      "avoid",
+				Category:    "forbidden_topic",
+				Reason:      "Generated content matched configured forbidden topics.",
+				MatchedHits: hits,
+			}
+		}
+		if hits := safetyHits(text, decodeStringList(bot.AvoidClaims), "avoid_claim"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "high",
+				Action:      "avoid",
+				Category:    "avoid_claim",
+				Reason:      "Generated content matched claims this Bot should avoid.",
+				MatchedHits: hits,
+			}
+		}
+	}
+	if hits := safetyHits(text, defaultHighRiskSafetyTerms(), "platform_policy"); len(hits) > 0 {
+		return dto.OAFBotSafetyEvaluationResult{
+			Level:       "high",
+			Action:      "avoid",
+			Category:    "platform_policy",
+			Reason:      "Generated content matched a high-risk safety rule.",
+			MatchedHits: hits,
+		}
+	}
+	if bot != nil && strings.TrimSpace(bot.SafetyMode) == "conservative" {
+		if hits := safetyHits(text, conservativeReviewTerms(), "conservative_review"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "medium",
+				Action:      "review",
+				Category:    "conservative_review",
+				Reason:      "Conservative safety mode recommends human review for this wording.",
+				MatchedHits: hits,
+			}
+		}
+	}
+	return dto.OAFBotSafetyEvaluationResult{
+		Level:    "low",
+		Action:   "allow",
+		Category: "clear",
+		Reason:   "No configured forbidden topics, avoid-claims, or high-risk safety terms were detected.",
+	}
+}
+
+func safetyHits(text string, terms []string, source string) []dto.OAFBotSafetyHit {
+	hits := []dto.OAFBotSafetyHit{}
+	seen := map[string]bool{}
+	for _, term := range terms {
+		t := strings.TrimSpace(term)
+		key := strings.ToLower(t)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if strings.Contains(text, key) {
+			hits = append(hits, dto.OAFBotSafetyHit{Source: source, Term: t})
+		}
+	}
+	return hits
+}
+
+func defaultHighRiskSafetyTerms() []string {
+	return []string{
+		"guaranteed return", "guaranteed profit", "risk-free", "100x", "pump", "airdrop",
+		"seed phrase", "private key", "connect wallet", "official support",
+		"稳赚", "保本", "收益保证", "私钥", "助记词", "连接钱包", "官方客服",
+	}
+}
+
+func conservativeReviewTerms() []string {
+	return []string{
+		"buy", "claim", "limited time", "exclusive", "profit", "yield", "token", "wallet",
+		"购买", "领取", "限时", "独家", "收益", "回报", "代币", "钱包",
+	}
+}
+
 func normalizeSafetyMode(value string) string {
 	switch strings.TrimSpace(value) {
 	case "conservative", "balanced", "autopilot":
@@ -330,6 +754,71 @@ func normalizeSafetyMode(value string) string {
 	default:
 		return "balanced"
 	}
+}
+
+func normalizeOAFBotFeedbackRating(value string) string {
+	switch strings.TrimSpace(value) {
+	case "positive", "negative":
+		return strings.TrimSpace(value)
+	default:
+		return ""
+	}
+}
+
+func normalizeOAFBotProfileAssistMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case oafBotProfileAssistModeImproveAll:
+		return oafBotProfileAssistModeImproveAll
+	default:
+		return oafBotProfileAssistModeFillMissing
+	}
+}
+
+func mergeCompletedOAFBotProfile(draft, generated dto.OAFBotUpsertRequest, mode string) dto.OAFBotUpsertRequest {
+	pickString := func(primary, fallback string) string {
+		return firstNonEmpty(primary, fallback)
+	}
+	pickList := firstNonEmptyList
+	if normalizeOAFBotProfileAssistMode(mode) == oafBotProfileAssistModeFillMissing {
+		pickString = func(primary, fallback string) string {
+			return firstNonEmpty(fallback, primary)
+		}
+		pickList = func(primary, fallback []string) []string {
+			return firstNonEmptyList(fallback, primary)
+		}
+	}
+
+	out := generated
+	out.Name = limitString(firstNonEmpty(draft.Name, generated.Name), 96)
+	out.TwitterAccountID = draft.TwitterAccountID
+	out.AgeRange = limitString(pickString(generated.AgeRange, draft.AgeRange), 64)
+	out.Gender = limitString(pickString(generated.Gender, draft.Gender), 64)
+	out.Education = limitString(pickString(generated.Education, draft.Education), 128)
+	out.MBTI = strings.ToUpper(limitString(pickString(generated.MBTI, draft.MBTI), 32))
+	out.SafetyMode = normalizeSafetyMode(pickString(generated.SafetyMode, draft.SafetyMode))
+	out.PrimaryLanguage = normalizeOAFBotPrimaryLanguage(pickString(generated.PrimaryLanguage, draft.PrimaryLanguage))
+	out.LanguageStrategy = normalizeOAFBotLanguageStrategy(pickString(generated.LanguageStrategy, draft.LanguageStrategy))
+	out.Occupation = limitString(pickString(generated.Occupation, draft.Occupation), 128)
+	out.Industry = limitString(pickString(generated.Industry, draft.Industry), 128)
+	out.IdentitySummary = limitString(pickString(generated.IdentitySummary, draft.IdentitySummary), 2000)
+	out.VoiceTone = limitString(pickString(generated.VoiceTone, draft.VoiceTone), 128)
+	out.GrowthGoal = limitString(pickString(generated.GrowthGoal, draft.GrowthGoal), 2000)
+	out.ProjectOneLiner = limitString(pickString(generated.ProjectOneLiner, draft.ProjectOneLiner), 1000)
+	out.TargetAudience = limitString(pickString(generated.TargetAudience, draft.TargetAudience), 2000)
+	out.CoreValueProps = limitString(pickString(generated.CoreValueProps, draft.CoreValueProps), 2000)
+	out.ProductFeatures = limitString(pickString(generated.ProductFeatures, draft.ProductFeatures), 3000)
+	out.Differentiators = limitString(pickString(generated.Differentiators, draft.Differentiators), 2000)
+	out.ContentObjectives = limitString(pickString(generated.ContentObjectives, draft.ContentObjectives), 2000)
+	out.PreferredCTA = limitString(pickString(generated.PreferredCTA, draft.PreferredCTA), 1000)
+	out.ComplianceNotes = limitString(pickString(generated.ComplianceNotes, draft.ComplianceNotes), 2000)
+	out.PersonalityTags = pickList(generated.PersonalityTags, draft.PersonalityTags)
+	out.Topics = pickList(generated.Topics, draft.Topics)
+	out.ForbiddenTopics = pickList(generated.ForbiddenTopics, draft.ForbiddenTopics)
+	out.ContentPillars = pickList(generated.ContentPillars, draft.ContentPillars)
+	out.Hashtags = pickList(generated.Hashtags, draft.Hashtags)
+	out.Keywords = pickList(generated.Keywords, draft.Keywords)
+	out.AvoidClaims = pickList(generated.AvoidClaims, draft.AvoidClaims)
+	return out
 }
 
 func firstNonEmptyList(primary, fallback []string) []string {
@@ -376,6 +865,65 @@ func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 	}
 }
 
+func oafBotToUpsertRequest(bot model.OAFBot) dto.OAFBotUpsertRequest {
+	return dto.OAFBotUpsertRequest{
+		Name:              bot.Name,
+		TwitterAccountID:  bot.TwitterAccountID,
+		Occupation:        bot.Occupation,
+		Industry:          bot.Industry,
+		AgeRange:          bot.AgeRange,
+		Gender:            bot.Gender,
+		Education:         bot.Education,
+		MBTI:              bot.MBTI,
+		PersonalityTags:   decodeStringList(bot.PersonalityTags),
+		IdentitySummary:   bot.IdentitySummary,
+		VoiceTone:         bot.VoiceTone,
+		Topics:            decodeStringList(bot.Topics),
+		ForbiddenTopics:   decodeStringList(bot.ForbiddenTopics),
+		GrowthGoal:        bot.GrowthGoal,
+		ProjectOneLiner:   bot.ProjectOneLiner,
+		TargetAudience:    bot.TargetAudience,
+		CoreValueProps:    bot.CoreValueProps,
+		ProductFeatures:   bot.ProductFeatures,
+		Differentiators:   bot.Differentiators,
+		ContentPillars:    decodeStringList(bot.ContentPillars),
+		ContentObjectives: bot.ContentObjectives,
+		PreferredCTA:      bot.PreferredCTA,
+		Hashtags:          decodeStringList(bot.Hashtags),
+		Keywords:          decodeStringList(bot.Keywords),
+		ComplianceNotes:   bot.ComplianceNotes,
+		AvoidClaims:       decodeStringList(bot.AvoidClaims),
+		SafetyMode:        bot.SafetyMode,
+		PrimaryLanguage:   normalizeOAFBotPrimaryLanguage(bot.PrimaryLanguage),
+		LanguageStrategy:  normalizeOAFBotLanguageStrategy(bot.LanguageStrategy),
+	}
+}
+
+func oafBotGenerationFeedbackToDTO(row model.OAFBotGenerationFeedback) dto.OAFBotGenerationFeedbackItem {
+	return dto.OAFBotGenerationFeedbackItem{
+		ID:               row.ID,
+		BotID:            row.BotID,
+		Scene:            row.Scene,
+		Rating:           row.Rating,
+		IssueTags:        decodeStringList(row.IssueTags),
+		Comment:          row.Comment,
+		SampleContext:    row.SampleContext,
+		GeneratedContent: row.GeneratedContent,
+		Provider:         row.Provider,
+		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func oafBotGenerationUsageToDTO(row model.AIGenerationUsage) dto.OAFBotGenerationUsageItem {
+	return dto.OAFBotGenerationUsageItem{
+		BotID:     row.BotID,
+		Scene:     row.Scene,
+		Month:     row.Month,
+		Count:     row.Count,
+		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
 func normalizeOAFBotPrimaryLanguage(value string) string {
 	v := strings.TrimSpace(value)
 	switch v {
@@ -393,6 +941,15 @@ func normalizeOAFBotLanguageStrategy(value string) string {
 		return v
 	default:
 		return "follow_context"
+	}
+}
+
+func normalizeSafetyRewriteMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case "conservative", "shorter":
+		return strings.TrimSpace(value)
+	default:
+		return "natural"
 	}
 }
 

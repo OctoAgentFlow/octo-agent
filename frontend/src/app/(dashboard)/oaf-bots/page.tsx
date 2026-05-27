@@ -1566,7 +1566,7 @@ export default function OAFBotsPage() {
 
             {activeStep === "goals" ? (
               <WizardPanel title={t("oafBots.section.goals")} description={t("oafBots.section.goalsDesc")}>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
                   <TextArea
                     label={t("oafBots.fields.identitySummary")}
                     value={form.identity_summary}
@@ -2621,7 +2621,7 @@ function formatCompactDate(value: string, timeZone: string) {
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
       <div className="mb-4">
         <h2 className="text-lg font-bold text-[#e7e9ea]">{title}</h2>
         <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{description}</p>
@@ -2643,7 +2643,7 @@ function FieldShell({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5 text-sm text-[#e7e9ea]/78">
+    <label className="block min-w-0 space-y-1.5 text-sm text-[#e7e9ea]/78">
       <span className="flex items-center gap-2">
         {label}
         {recommended ? (
@@ -2771,7 +2771,7 @@ function TextArea({
 }) {
   return (
     <FieldShell label={label} helper={helper} recommended={recommended}>
-      <textarea className="form-input min-h-32 resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <textarea className="form-input min-h-32 max-w-full resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </FieldShell>
   );
 }
@@ -2837,20 +2837,20 @@ function SafetyRulesPanel({
   const configuredCount = Number(Boolean(safetyMode)) + Number(forbiddenTopics.length > 0) + Number(avoidClaims.length > 0) + Number(complianceRuleCount > 0);
 
   return (
-    <div className="mt-4 space-y-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="mt-4 min-w-0 space-y-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.safetyRules.title")}</p>
           <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("oafBots.safetyRules.description")}</p>
         </div>
-        <div className="grid shrink-0 grid-cols-3 gap-2 text-center sm:min-w-80">
+        <div className="grid min-w-0 grid-cols-3 gap-2 text-center xl:w-80 xl:shrink-0">
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricMode")} value={selectedSafety} />
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricHardBlocks")} value={forbiddenTopics.length + avoidClaims.length} />
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricConfigured")} value={`${configuredCount}/4`} />
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-4">
           <SelectField
             label={t("oafBots.fields.safetyMode")}
@@ -2899,7 +2899,7 @@ function SafetyRulesPanel({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <TextArea
           label={t("oafBots.fields.complianceNotes")}
           value={complianceNotes}
@@ -3101,13 +3101,13 @@ function TagPicker({
       <FieldShell label={label} helper={helper} recommended={recommended}>
         <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
           <div className="flex flex-wrap gap-2">
-            {values.length === 0 ? <span className="text-sm text-[#71767b]">{placeholder}</span> : null}
+            {values.length === 0 ? <span className="min-w-0 text-sm leading-relaxed text-[#71767b] [overflow-wrap:anywhere]">{placeholder}</span> : null}
             {values.map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => removeValue(value)}
-                className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18"
+                className="max-w-full rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-left text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18 [overflow-wrap:anywhere]"
               >
                 {getChipLabel(value, options)} ×
               </button>

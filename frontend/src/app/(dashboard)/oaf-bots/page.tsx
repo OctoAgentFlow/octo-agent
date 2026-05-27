@@ -85,6 +85,10 @@ type FeedbackDraft = {
   issueTags: string[];
   comment: string;
 };
+type PendingAppliedFormChange = {
+  source: "complete_profile" | "feedback_suggestion";
+  count: number;
+};
 type ProfileDiffItem = {
   key: keyof OAFBotPayload;
   before: OAFBotPayload[keyof OAFBotPayload];
@@ -397,6 +401,7 @@ export default function OAFBotsPage() {
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
   const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
   const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
+  const [pendingAppliedFormChange, setPendingAppliedFormChange] = useState<PendingAppliedFormChange | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -841,6 +846,7 @@ export default function OAFBotsPage() {
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
+    setPendingAppliedFormChange(null);
   };
 
   const startCreate = () => {
@@ -854,6 +860,7 @@ export default function OAFBotsPage() {
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
+    setPendingAppliedFormChange(null);
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -876,6 +883,7 @@ export default function OAFBotsPage() {
       setBots((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
       setSelectedID(saved.id);
       setForm(botToPayload(saved, defaultPrimaryLanguage));
+      setPendingAppliedFormChange(null);
       setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
       pushToast(t("oafBots.toast.saved"));
     } catch (error) {
@@ -915,9 +923,11 @@ export default function OAFBotsPage() {
 
   const applyCompleteProfilePreview = () => {
     if (!completeProfilePreview) return;
+    const changedCount = getFeedbackSuggestionDiffs(form, completeProfilePreview.profile).length;
     setForm((prev) => mergeFeedbackSuggestionProfile(prev, completeProfilePreview.profile));
     setSamples(null);
     setCompleteProfilePreview(null);
+    setPendingAppliedFormChange({ source: "complete_profile", count: changedCount });
     pushToast(t("oafBots.completeProfile.success"));
   };
 
@@ -1065,10 +1075,12 @@ export default function OAFBotsPage() {
 
   const applyFeedbackProfileSuggestion = () => {
     if (!feedbackSuggestionPreview) return;
+    const changedCount = getFeedbackSuggestionDiffs(form, feedbackSuggestionPreview.profile).length;
     setForm((prev) => mergeFeedbackSuggestionProfile(prev, feedbackSuggestionPreview.profile));
     setActiveStep("goals");
     setSamples(null);
     setFeedbackSuggestionPreview(null);
+    setPendingAppliedFormChange({ source: "feedback_suggestion", count: changedCount });
     pushToast(t("oafBots.feedbackSuggestion.applied", { count: feedbackSuggestionPreview.feedback_count || 0 }));
   };
 
@@ -1572,7 +1584,17 @@ export default function OAFBotsPage() {
               <div className="mt-5 rounded-xl border border-blue-300/20 bg-blue-400/10 p-4 text-sm leading-relaxed text-blue-100">
                 <div className="flex gap-2">
                   <Info className="mt-0.5 size-4 shrink-0" />
-                  <p>{t("oafBots.test.unsavedHint")}</p>
+                  <div>
+                    <p>{t("oafBots.test.unsavedHint")}</p>
+                    {pendingAppliedFormChange ? (
+                      <p className="mt-1 text-xs text-blue-100/80">
+                        {t("oafBots.pendingAppliedChange.summary", {
+                          source: t(`oafBots.pendingAppliedChange.source.${pendingAppliedFormChange.source}`),
+                          count: pendingAppliedFormChange.count,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}

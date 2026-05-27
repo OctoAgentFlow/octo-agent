@@ -38,6 +38,7 @@ import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
+import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
@@ -59,6 +60,11 @@ type QueueSummary = {
   readyToPublish: number;
   failed: number;
   published: number;
+};
+type AutoPostReadinessStep = {
+  key: "account" | "content" | "planner" | "autopilot";
+  ready: boolean;
+  href: string;
 };
 
 type SelectOption = {
@@ -297,6 +303,7 @@ export default function OAFBotsPage() {
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
   const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
   const [relationshipLoading, setRelationshipLoading] = useState(true);
   const [limits, setLimits] = useState<PlanLimits>(emptyLimits);
@@ -354,6 +361,23 @@ export default function OAFBotsPage() {
     if (!selectedBot) return undefined;
     return autoPostPlans.find((plan) => plan.bot_id === selectedBot.id || plan.x_account_id === selectedBot.twitter_account_id);
   }, [autoPostPlans, selectedBot]);
+  const selectedCompatibleContentItems = useMemo(() => {
+    if (!selectedBot) return [];
+    return contentItems.filter((item) => contentItemMatchesBot(item, selectedBot));
+  }, [contentItems, selectedBot]);
+  const selectedActiveContentItems = useMemo(
+    () => selectedCompatibleContentItems.filter((item) => item.status === "active"),
+    [selectedCompatibleContentItems],
+  );
+  const selectedAutoPostReadiness = useMemo<AutoPostReadinessStep[]>(() => {
+    const accountID = selectedBot?.twitter_account_id || 0;
+    return [
+      { key: "account", ready: Boolean(selectedAccount), href: "/accounts" },
+      { key: "content", ready: selectedActiveContentItems.length > 0, href: accountID ? `/auto-post?panel=content&account=${accountID}` : "/auto-post?panel=content" },
+      { key: "planner", ready: Boolean(selectedPostPlan?.enabled), href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
+      { key: "autopilot", ready: selectedPostPlan?.execution_mode === "autopilot", href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
+    ];
+  }, [selectedAccount, selectedActiveContentItems.length, selectedBot, selectedPostPlan]);
 
   const selectedQueueItems = useMemo(() => {
     if (!selectedID) return [];
@@ -545,18 +569,21 @@ export default function OAFBotsPage() {
   const loadRelationshipContext = useCallback(async () => {
     setRelationshipLoading(true);
     try {
-      const [automationData, planData, queueData] = await Promise.all([
+      const [automationData, planData, queueData, contentData] = await Promise.all([
         automationService.list(),
         autoPostService.plans(),
         reviewQueueService.list({ pageSize: 100 }),
+        contentLibraryService.list({ limit: 100 }),
       ]);
       setAutomationModules(automationData.modules);
       setAutoPostPlans(planData.items);
       setQueueItems(queueData.items);
+      setContentItems(contentData.items);
     } catch {
       setAutomationModules([]);
       setAutoPostPlans([]);
       setQueueItems([]);
+      setContentItems([]);
     } finally {
       setRelationshipLoading(false);
     }
@@ -1297,6 +1324,10 @@ export default function OAFBotsPage() {
               bot={selectedBot}
               account={selectedAccount}
               automationStates={selectedAutomationStates}
+              autoPostPlan={selectedPostPlan}
+              activeContentCount={selectedActiveContentItems.length}
+              totalContentCount={selectedCompatibleContentItems.length}
+              autoPostReadiness={selectedAutoPostReadiness}
               queueItems={selectedQueueItems}
               queueSummary={selectedQueueSummary}
               loading={relationshipLoading}
@@ -1536,6 +1567,13 @@ function summarizeQueue(items: ReviewQueueItemApi[]): QueueSummary {
   );
 }
 
+function contentItemMatchesBot(item: ContentLibraryItemApi, bot: OAFBot) {
+  const accountID = bot.twitter_account_id || 0;
+  if (item.twitter_account_id && item.twitter_account_id !== accountID) return false;
+  if (item.bot_id && item.bot_id !== bot.id) return false;
+  return true;
+}
+
 function automationHref(type: BotAutomationType) {
   if (type === "post") return "/auto-post";
   if (type === "reply") return "/auto-replies";
@@ -1585,6 +1623,10 @@ function BotRelationshipCard({
   bot,
   account,
   automationStates,
+  autoPostPlan,
+  activeContentCount,
+  totalContentCount,
+  autoPostReadiness,
   queueItems,
   queueSummary,
   loading,
@@ -1593,12 +1635,17 @@ function BotRelationshipCard({
   bot: OAFBot | null;
   account?: AccountListItem;
   automationStates: BotAutomationState[];
+  autoPostPlan?: AutoPostPlanApi;
+  activeContentCount: number;
+  totalContentCount: number;
+  autoPostReadiness: AutoPostReadinessStep[];
   queueItems: ReviewQueueItemApi[];
   queueSummary: QueueSummary;
   loading: boolean;
 }) {
   const recentItems = queueItems.slice(0, 3);
   const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
+  const autoPostReady = autoPostReadiness.length > 0 && autoPostReadiness.every((item) => item.ready);
 
   return (
     <SectionCard title={t("oafBots.relationship.title")} description={t("oafBots.relationship.description")} className="bg-black p-4 md:p-5">
@@ -1662,6 +1709,52 @@ function BotRelationshipCard({
                 {t("oafBots.relationship.accountStatus", { status: t(accountStatusKey(account.status)) })}
               </div>
             ) : null}
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#e7e9ea]">
+                  {autoPostReady ? t("oafBots.relationship.autoPostReadyTitle") : t("oafBots.relationship.autoPostNeedsSetupTitle")}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                  {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                </p>
+              </div>
+              <Link href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                {t("oafBots.relationship.openAutoPost")}
+              </Link>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.account")}
+                description={account ? `@${account.username}` : t("oafBots.relationship.readiness.accountMissing")}
+                ready={Boolean(account)}
+                href="/accounts"
+                action={account ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.content")}
+                description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
+                ready={activeContentCount > 0}
+                href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.planner")}
+                description={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
+                ready={Boolean(autoPostPlan?.enabled)}
+                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                action={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.autopilot")}
+                description={t(`executionQueue.executionMode.${autoPostPlan?.execution_mode || "review"}`)}
+                ready={autoPostPlan?.execution_mode === "autopilot"}
+                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                action={autoPostPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
@@ -1737,6 +1830,37 @@ function RelationshipMetric({
         <span className="truncate">{label}</span>
       </div>
       <p className="truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function AutoPostReadinessTile({
+  title,
+  description,
+  ready,
+  href,
+  action,
+}: {
+  title: string;
+  description: string;
+  ready: boolean;
+  href: string;
+  action: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {ready ? <CheckCircle2 className="size-4 shrink-0 text-emerald-300" /> : <AlertTriangle className="size-4 shrink-0 text-amber-300" />}
+            <p className="truncate text-sm font-semibold text-[#e7e9ea]">{title}</p>
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
+        </div>
+        <Link href={href} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {action}
+        </Link>
+      </div>
     </div>
   );
 }

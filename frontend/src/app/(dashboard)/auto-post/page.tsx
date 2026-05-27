@@ -158,6 +158,11 @@ function readRunPage(value: string | null) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
 }
 
+function readAccountID(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const router = useRouter();
@@ -172,7 +177,7 @@ export default function AutoPostPage() {
   const [runs, setRuns] = useState<AutoPostGenerationRunApi[]>([]);
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
-  const [selectedAccountID, setSelectedAccountID] = useState(0);
+  const [selectedAccountID, setSelectedAccountID] = useState(() => readAccountID(searchParams.get("account")));
   const [selectedContentItemID, setSelectedContentItemID] = useState(0);
   const [form, setForm] = useState<PlannerForm>(() => defaultForm());
   const [libraryForm, setLibraryForm] = useState<LibraryForm>(() => defaultLibraryForm());
@@ -216,7 +221,7 @@ export default function AutoPostPage() {
       setContentItems(libraryData.items);
       setSubscription(subscriptionData);
       setQuotaUpgradeVisible(false);
-      const firstAccountID = selectedAccountID || connected[0]?.id || 0;
+      const firstAccountID = selectedAccountID || readAccountID(searchParams.get("account")) || connected[0]?.id || 0;
       setSelectedAccountID(firstAccountID);
       const currentPlan = planData.items.find((item) => item.x_account_id === firstAccountID);
       setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm());
@@ -225,7 +230,7 @@ export default function AutoPostPage() {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.load") : t("autoPost.errors.load"));
       setLoadState("error");
     }
-  }, [pushToast, selectedAccountID, t]);
+  }, [pushToast, searchParams, selectedAccountID, t]);
 
   useEffect(() => {
     void load();
@@ -280,10 +285,15 @@ export default function AutoPostPage() {
     setRunAccountScope(readRunAccountScope(searchParams.get("account_scope")));
     setRunRangeFilter(readRunRange(searchParams.get("run_range")));
     setRunPage(readRunPage(searchParams.get("run_page")));
+    const accountID = readAccountID(searchParams.get("account"));
+    if (accountID) {
+      setSelectedAccountID((current) => (current === accountID ? current : accountID));
+    }
   }, [searchParams]);
 
   useEffect(() => {
     const next = new URLSearchParams();
+    if (selectedAccountID > 0) next.set("account", String(selectedAccountID));
     if (activePanel !== "generate") next.set("panel", activePanel);
     if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
     if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
@@ -294,7 +304,7 @@ export default function AutoPostPage() {
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams]);
+  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams, selectedAccountID]);
 
   const fetchRuns = useCallback(async () => {
     if (runAccountScope === "selected" && !selectedAccountID) {

@@ -83,6 +83,17 @@ type FeedbackDraft = {
   issueTags: string[];
   comment: string;
 };
+type BotMatrixRow = {
+  bot: OAFBot;
+  account?: AccountListItem;
+  completion: number;
+  activeContentCount: number;
+  queueSummary: QueueSummary;
+  plan?: AutoPostPlanApi;
+  autoPostReady: boolean;
+  monthlyUsage: number;
+  negativeFeedback: number;
+};
 
 type SelectOption = {
   value: string;
@@ -333,6 +344,9 @@ export default function OAFBotsPage() {
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
+  const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
+  const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
+  const [matrixLoading, setMatrixLoading] = useState(false);
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
@@ -420,6 +434,42 @@ export default function OAFBotsPage() {
       };
     });
   }, [automationModules, selectedPostPlan]);
+  const matrixRows = useMemo<BotMatrixRow[]>(() => {
+    return bots.map((bot) => {
+      const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : undefined;
+      const plan = autoPostPlans.find((item) => item.bot_id === bot.id || item.x_account_id === bot.twitter_account_id);
+      const compatibleContent = contentItems.filter((item) => contentItemMatchesBot(item, bot));
+      const activeContentCount = compatibleContent.filter((item) => item.status === "active").length;
+      const botQueueItems = queueItems.filter((item) => item.bot_id === bot.id);
+      const usageByScene = aggregateMonthlyUsage(matrixUsageByBot[bot.id] || [], currentMonth);
+      const monthlyUsage = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
+      const feedback = matrixFeedbackByBot[bot.id] || [];
+      return {
+        bot,
+        account,
+        completion: calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage)),
+        activeContentCount,
+        queueSummary: summarizeQueue(botQueueItems),
+        plan,
+        autoPostReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
+        monthlyUsage,
+        negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
+      };
+    });
+  }, [accountByID, autoPostPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixUsageByBot, queueItems]);
+  const matrixSummary = useMemo(() => {
+    return matrixRows.reduce(
+      (summary, row) => {
+        summary.bound += row.account ? 1 : 0;
+        summary.ready += row.autoPostReady ? 1 : 0;
+        summary.review += row.queueSummary.pendingReview;
+        summary.usage += row.monthlyUsage;
+        summary.negativeFeedback += row.negativeFeedback;
+        return summary;
+      },
+      { bound: 0, ready: 0, review: 0, usage: 0, negativeFeedback: 0 },
+    );
+  }, [matrixRows]);
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
@@ -669,6 +719,34 @@ export default function OAFBotsPage() {
     void loadGenerationFeedback(selectedID);
   }, [loadGenerationFeedback, selectedID]);
 
+  const loadMatrixSignals = useCallback(async (items: OAFBot[]) => {
+    if (items.length === 0) {
+      setMatrixUsageByBot({});
+      setMatrixFeedbackByBot({});
+      return;
+    }
+    setMatrixLoading(true);
+    try {
+      const pairs = await Promise.all(
+        items.map(async (bot) => {
+          const [usageData, feedbackData] = await Promise.all([
+            oafBotService.generationUsages(bot.id).catch(() => ({ items: [] as OAFBotGenerationUsage[] })),
+            oafBotService.generationFeedback(bot.id).catch(() => ({ items: [] as OAFBotGenerationFeedback[] })),
+          ]);
+          return [bot.id, usageData.items, feedbackData.items] as const;
+        }),
+      );
+      setMatrixUsageByBot(Object.fromEntries(pairs.map(([id, usageItems]) => [id, usageItems])));
+      setMatrixFeedbackByBot(Object.fromEntries(pairs.map(([id, , feedbackItems]) => [id, feedbackItems])));
+    } finally {
+      setMatrixLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMatrixSignals(bots);
+  }, [bots, loadMatrixSignals]);
+
   const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -776,6 +854,7 @@ export default function OAFBotsPage() {
       setSamples(result);
       setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       await loadGenerationUsages(selectedID);
+      void loadMatrixSignals(bots);
       void loadRelationshipContext();
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
       pushToast(t("oafBots.test.success"));
@@ -831,6 +910,7 @@ export default function OAFBotsPage() {
         provider: samples.provider || "",
       });
       setGenerationFeedback((items) => [saved, ...items].slice(0, 10));
+      setMatrixFeedbackByBot((prev) => ({ ...prev, [selectedID]: [saved, ...(prev[selectedID] || [])].slice(0, 10) }));
       setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       pushToast(t("oafBots.feedback.saved"));
     } catch (error) {
@@ -881,6 +961,16 @@ export default function OAFBotsPage() {
           <ArrowRight className="size-4" />
         </Link>
       </div>
+
+      <BotMatrixPanel
+        t={t}
+        rows={matrixRows}
+        summary={matrixSummary}
+        loading={matrixLoading || relationshipLoading}
+        enabled={limits.multiBotMatrix}
+        selectedID={selectedID}
+        onSelect={selectBot}
+      />
 
       {!canCreate ? (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -1683,6 +1773,130 @@ function BotStatusPill({ tone, label }: { tone: "success" | "warning" | "neutral
         ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
         : "border-[#2f3336] bg-black text-[#71767b]";
   return <span className={`rounded-full border px-2.5 py-1 text-[11px] leading-none ${toneClass}`}>{label}</span>;
+}
+
+function BotMatrixPanel({
+  t,
+  rows,
+  summary,
+  loading,
+  enabled,
+  selectedID,
+  onSelect,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  rows: BotMatrixRow[];
+  summary: { bound: number; ready: number; review: number; usage: number; negativeFeedback: number };
+  loading: boolean;
+  enabled: boolean;
+  selectedID: number | null;
+  onSelect: (bot: OAFBot) => void;
+}) {
+  return (
+    <SectionCard title={t("oafBots.matrix.title")} description={t("oafBots.matrix.description")} className="bg-black p-4 md:p-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="grid gap-2 sm:grid-cols-5 lg:min-w-[720px]">
+            <MatrixMetric label={t("oafBots.matrix.totalBots")} value={rows.length} />
+            <MatrixMetric label={t("oafBots.matrix.boundBots")} value={summary.bound} />
+            <MatrixMetric label={t("oafBots.matrix.readyBots")} value={summary.ready} />
+            <MatrixMetric label={t("oafBots.matrix.pendingReview")} value={summary.review} />
+            <MatrixMetric label={t("oafBots.matrix.aiUsage")} value={summary.usage} />
+          </div>
+          <div className={`rounded-2xl border p-3 text-sm leading-6 ${enabled ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : "border-amber-300/20 bg-amber-400/10 text-amber-100"}`}>
+            <div className="flex items-start gap-2">
+              {enabled ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <Lock className="mt-0.5 size-4 shrink-0" />}
+              <div>
+                <p className="font-semibold">{enabled ? t("oafBots.matrix.enabledTitle") : t("oafBots.matrix.lockedTitle")}</p>
+                <p className="text-xs opacity-80">{enabled ? t("oafBots.matrix.enabledDescription") : t("oafBots.matrix.lockedDescription")}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {loading ? <p className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-sm text-[#71767b]">{t("oafBots.matrix.loading")}</p> : null}
+
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-[#0f1419] p-5 text-sm leading-6 text-[#71767b]">
+            {t("oafBots.matrix.empty")}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-[#2f3336]">
+            <table className="min-w-[980px] w-full text-left text-sm">
+              <thead className="bg-[#0f1419] text-xs uppercase text-[#71767b]">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.bot")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.account")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.persona")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.autoPost")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.queue")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.signals")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.action")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#2f3336]">
+                {rows.map((row) => {
+                  const selected = selectedID === row.bot.id;
+                  return (
+                    <tr key={row.bot.id} className={selected ? "bg-[#1d9bf0]/8" : "bg-black"}>
+                      <td className="px-4 py-3 align-top">
+                        <p className="max-w-56 truncate font-semibold text-[#e7e9ea]">{row.bot.name || t("oafBots.preview.unnamed")}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{row.bot.primary_language || "zh-CN"} · {row.bot.language_strategy || "follow_context"}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {row.account ? (
+                          <BotStatusPill tone="success" label={`@${row.account.username}`} />
+                        ) : (
+                          <BotStatusPill tone="warning" label={t("oafBots.matrix.unbound")} />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-[#2f3336]">
+                            <div className={`h-full ${row.completion >= 80 ? "bg-emerald-300" : row.completion >= 60 ? "bg-[#1d9bf0]" : "bg-amber-300"}`} style={{ width: `${row.completion}%` }} />
+                          </div>
+                          <span className="text-xs text-[#e7e9ea]">{row.completion}%</span>
+                        </div>
+                        <p className="mt-1 max-w-48 truncate text-xs text-[#71767b]">{row.bot.topics.slice(0, 3).join(" / ") || t("oafBots.matrix.noTopics")}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <BotStatusPill tone={row.autoPostReady ? "success" : "warning"} label={row.autoPostReady ? t("oafBots.matrix.ready") : t("oafBots.matrix.needsSetup")} />
+                        <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.matrix.contentCount", { count: row.activeContentCount })}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <p className="text-xs text-[#e7e9ea]">{t("oafBots.matrix.queueValue", { review: row.queueSummary.pendingReview, ready: row.queueSummary.readyToPublish })}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.matrix.failedValue", { count: row.queueSummary.failed })}</p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <p className="text-xs text-[#e7e9ea]">{t("oafBots.matrix.usageValue", { count: row.monthlyUsage })}</p>
+                        <p className={`mt-1 text-xs ${row.negativeFeedback > 0 ? "text-amber-100" : "text-[#71767b]"}`}>
+                          {t("oafBots.matrix.negativeFeedback", { count: row.negativeFeedback })}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <button type="button" onClick={() => onSelect(row.bot)} className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                          {selected ? t("oafBots.matrix.selected") : t("oafBots.matrix.inspect")}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function MatrixMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-xs text-[#71767b]">{label}</p>
+      <p className="mt-1 text-lg font-bold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
 }
 
 function BotRelationshipCard({

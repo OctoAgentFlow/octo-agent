@@ -51,6 +51,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 type LoadState = "loading" | "ready" | "error";
 type WorkbenchPanel = "generate" | "planner" | "content" | "history";
 type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
+type RunAccountScope = "selected" | "all";
 
 type PlannerForm = {
   enabled: boolean;
@@ -73,6 +74,7 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
   { id: "history", labelKey: "autoPost.tabs.history", descriptionKey: "autoPost.tabs.historyDesc" },
 ];
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
+const runAccountScopes: RunAccountScope[] = ["selected", "all"];
 
 type LibraryForm = {
   title: string;
@@ -141,6 +143,10 @@ function readRunStatus(value: string | null): RunStatusFilter {
   return value === "completed" || value === "skipped" || value === "failed" ? value : "all";
 }
 
+function readRunAccountScope(value: string | null): RunAccountScope {
+  return value === "all" ? "all" : "selected";
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const router = useRouter();
@@ -170,6 +176,7 @@ export default function AutoPostPage() {
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
+  const [runAccountScope, setRunAccountScope] = useState<RunAccountScope>(() => readRunAccountScope(searchParams.get("account_scope")));
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
@@ -231,9 +238,10 @@ export default function AutoPostPage() {
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
   const accountRunsAll = useMemo(() => runs.filter((run) => run.x_account_id === selectedAccountID), [runs, selectedAccountID]);
+  const visibleRunsSource = useMemo(() => (runAccountScope === "all" ? runs : accountRunsAll), [accountRunsAll, runAccountScope, runs]);
   const accountRuns = useMemo(
-    () => accountRunsAll.filter((run) => runStatusFilter === "all" || run.status === runStatusFilter).slice(0, 8),
-    [accountRunsAll, runStatusFilter]
+    () => visibleRunsSource.filter((run) => runStatusFilter === "all" || run.status === runStatusFilter).slice(0, 12),
+    [runStatusFilter, visibleRunsSource]
   );
   const activeContentCount = useMemo(() => availableContentItems.filter((item) => item.status === "active").length, [availableContentItems]);
   const queuedDraftCount = useMemo(
@@ -248,7 +256,7 @@ export default function AutoPostPage() {
   const aiUsed = subscription?.usage.ai_generations_month || 0;
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
-  const latestRun = accountRuns[0];
+  const latestRun = accountRunsAll[0];
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
@@ -260,18 +268,20 @@ export default function AutoPostPage() {
   useEffect(() => {
     setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
     setRunStatusFilter(readRunStatus(searchParams.get("run_status")));
+    setRunAccountScope(readRunAccountScope(searchParams.get("account_scope")));
   }, [searchParams]);
 
   useEffect(() => {
     const next = new URLSearchParams();
     if (activePanel !== "generate") next.set("panel", activePanel);
     if (runStatusFilter !== "all") next.set("run_status", runStatusFilter);
+    if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
     const nextQuery = next.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [activePanel, pathname, router, runStatusFilter, searchParams]);
+  }, [activePanel, pathname, router, runAccountScope, runStatusFilter, searchParams]);
 
   const openPanel = useCallback((panel: WorkbenchPanel) => {
     setActivePanel(panel);
@@ -1180,17 +1190,31 @@ export default function AutoPostPage() {
                   title={t("autoPost.runs.title")}
                   description={t("autoPost.runs.description")}
                   right={
-                    <select
-                      value={runStatusFilter}
-                      onChange={(event) => setRunStatusFilter(event.target.value as RunStatusFilter)}
-                      className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
-                    >
-                      {runStatusFilters.map((status) => (
-                        <option key={status} value={status}>
-                          {t(`autoPost.runs.filter.${status}`)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="grid gap-2 sm:flex">
+                      <select
+                        value={runAccountScope}
+                        onChange={(event) => setRunAccountScope(event.target.value as RunAccountScope)}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                        aria-label={t("autoPost.runs.scopeLabel")}
+                      >
+                        {runAccountScopes.map((scope) => (
+                          <option key={scope} value={scope}>
+                            {t(`autoPost.runs.scope.${scope}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={runStatusFilter}
+                        onChange={(event) => setRunStatusFilter(event.target.value as RunStatusFilter)}
+                        className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+                      >
+                        {runStatusFilters.map((status) => (
+                          <option key={status} value={status}>
+                            {t(`autoPost.runs.filter.${status}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   }
                 />
                 {accountRuns.length === 0 ? (
@@ -1205,6 +1229,11 @@ export default function AutoPostPage() {
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${runTone(run.status)}`}>
                             {t(`autoPost.runs.status.${run.status}`)}
                           </span>
+                          {runAccountScope === "all" ? (
+                            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
+                              {run.account_handle ? `@${run.account_handle}` : t("autoPost.runs.accountFallback", { id: run.x_account_id })}
+                            </span>
+                          ) : null}
                           {run.content_title ? (
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                               {run.content_title}

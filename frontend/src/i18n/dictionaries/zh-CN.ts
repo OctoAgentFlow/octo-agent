@@ -1167,6 +1167,7 @@ export const dict: I18nDict = {
   "dashboard.loading.title": "正在加载仪表板...",
   "dashboard.loading.description": "正在获取最新概览数据。",
   "dashboard.error.title": "仪表板概览加载失败",
+  "dashboard.refreshingInline": "正在同步最新数据",
   "dashboard.automation.autoPost.name": "自动发推",
   "dashboard.automation.autoReply.name": "自动回复",
   "dashboard.automation.autoDm.name": "自动私信",

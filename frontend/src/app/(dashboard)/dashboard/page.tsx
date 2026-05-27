@@ -174,9 +174,10 @@ export default function DashboardPage() {
   const [pointsDashboard, setPointsDashboard] = useState<PointsDashboardData | null>(null);
   const [pointsDashboardLoading, setPointsDashboardLoading] = useState(true);
   const [pointsDashboardError, setPointsDashboardError] = useState<string | null>(null);
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
 
-  const fetchOverview = useCallback(async () => {
-    setLoadState("loading");
+  const fetchOverview = useCallback(async (preserveData = false) => {
+    if (!preserveData) setLoadState("loading");
     setErrorMessage(null);
     try {
       const data = await dashboardService.overview();
@@ -189,12 +190,12 @@ export default function DashboardPage() {
       } else {
         setErrorMessage(t("dashboard.errors.loadOverview"));
       }
-      setLoadState("error");
+      setLoadState((prev) => (preserveData && prev === "ready" ? prev : "error"));
     }
   }, [t]);
 
-  const fetchAutomations = useCallback(async () => {
-    setAutomationLoading(true);
+  const fetchAutomations = useCallback(async (preserveData = false) => {
+    if (!preserveData) setAutomationLoading(true);
     setAutomationError(null);
     try {
       const data = await automationService.list();
@@ -206,12 +207,12 @@ export default function DashboardPage() {
         setAutomationError(t("dashboard.errors.loadAutomations"));
       }
     } finally {
-      setAutomationLoading(false);
+      if (!preserveData) setAutomationLoading(false);
     }
   }, [t, timeZone]);
 
-  const fetchRecentActivities = useCallback(async () => {
-    setRecentLoading(true);
+  const fetchRecentActivities = useCallback(async (preserveData = false) => {
+    if (!preserveData) setRecentLoading(true);
     setRecentError(null);
     try {
       const data = await activityService.list({ page: 1, page_size: 5 });
@@ -239,12 +240,12 @@ export default function DashboardPage() {
         setRecentError(t("dashboard.errors.loadRecentActivity"));
       }
     } finally {
-      setRecentLoading(false);
+      if (!preserveData) setRecentLoading(false);
     }
   }, [t]);
 
-  const fetchOAFBotDashboard = useCallback(async () => {
-    setOAFBotDashboardLoading(true);
+  const fetchOAFBotDashboard = useCallback(async (preserveData = false) => {
+    if (!preserveData) setOAFBotDashboardLoading(true);
     setOAFBotDashboardError(null);
     try {
       const [botData, matrixData, queueData] = await Promise.all([
@@ -265,15 +266,17 @@ export default function DashboardPage() {
       } else {
         setOAFBotDashboardError(t("dashboard.errors.loadOAFBots"));
       }
-      setOAFBotDashboard(null);
-      setReviewStats(null);
+      if (!preserveData) {
+        setOAFBotDashboard(null);
+        setReviewStats(null);
+      }
     } finally {
-      setOAFBotDashboardLoading(false);
+      if (!preserveData) setOAFBotDashboardLoading(false);
     }
   }, [t]);
 
-  const fetchPointsDashboard = useCallback(async () => {
-    setPointsDashboardLoading(true);
+  const fetchPointsDashboard = useCallback(async (preserveData = false) => {
+    if (!preserveData) setPointsDashboardLoading(true);
     setPointsDashboardError(null);
     try {
       const [points, referral] = await Promise.all([
@@ -287,9 +290,9 @@ export default function DashboardPage() {
       } else {
         setPointsDashboardError(t("dashboard.points.loadFailed"));
       }
-      setPointsDashboard(null);
+      if (!preserveData) setPointsDashboard(null);
     } finally {
-      setPointsDashboardLoading(false);
+      if (!preserveData) setPointsDashboardLoading(false);
     }
   }, [t]);
 
@@ -388,11 +391,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     return subscribeDashboardRefresh(() => {
-      void fetchOverview();
-      void fetchAutomations();
-      void fetchRecentActivities();
-      void fetchOAFBotDashboard();
-      void fetchPointsDashboard();
+      void fetchOverview(true);
+      void fetchAutomations(true);
+      void fetchRecentActivities(true);
+      void fetchOAFBotDashboard(true);
+      void fetchPointsDashboard(true);
     });
   }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPointsDashboard, fetchRecentActivities]);
 
@@ -407,78 +410,23 @@ export default function DashboardPage() {
   useEffect(() => {
     return subscribePageRefreshRequest(() => {
       void (async () => {
-        let overviewOk = false;
         try {
-          const data = await dashboardService.overview();
-          setOverview(data);
-          setLoadState("ready");
-          setErrorMessage(null);
-          overviewOk = true;
-        } catch (error) {
-          if (axios.isAxiosError(error)) {
-            setErrorMessage(error.response?.data?.message || t("dashboard.errors.loadOverview"));
-          } else {
-            setErrorMessage(t("dashboard.errors.loadOverview"));
-          }
-          setLoadState((prev) => (prev === "loading" ? "error" : prev));
-        }
-
-        setAutomationLoading(true);
-        setAutomationError(null);
-        try {
-          const data = await automationService.list();
-          setAutomations(data.modules.map((item) => mapAutomation(item, timeZone)));
-        } catch (error) {
-          if (axios.isAxiosError(error)) {
-            setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
-          } else {
-            setAutomationError(t("dashboard.errors.loadAutomations"));
-          }
-        } finally {
-          setAutomationLoading(false);
-        }
-
-        setRecentLoading(true);
-        setRecentError(null);
-        try {
-          const data = await activityService.list({ page: 1, page_size: 5 });
-          setRecentRecords(
-            data.items.map((item) => ({
-              id: String(item.id),
-              type: item.type,
-              status: item.status,
-              previewKey: item.preview_key,
-              accountHandle: item.account_handle,
-              sourceModule: item.source_module,
-              executedAt: item.executed_at,
-              errorMessage: item.error_message,
-              failureCategory: item.failure_category,
-              replyCommentTweetId: item.reply_comment_tweet_id,
-              replyToUsername: item.reply_to_username,
-              replyToTextPreview: item.reply_to_text_preview,
-              replyTextPreview: item.reply_text_preview,
-            }))
-          );
-        } catch (error) {
-          if (axios.isAxiosError(error)) {
-            setRecentError(error.response?.data?.message || t("dashboard.errors.loadRecentActivity"));
-          } else {
-            setRecentError(t("dashboard.errors.loadRecentActivity"));
-          }
-        } finally {
-          setRecentLoading(false);
-        }
-
-        await fetchOAFBotDashboard();
-        await fetchPointsDashboard();
-
-        if (overviewOk) {
+          setDashboardRefreshing(true);
+          await Promise.all([
+            fetchOverview(true),
+            fetchAutomations(true),
+            fetchRecentActivities(true),
+            fetchOAFBotDashboard(true),
+            fetchPointsDashboard(true),
+          ]);
           broadcastDataSynced(Date.now());
+        } finally {
+          setDashboardRefreshing(false);
+          broadcastPageRefreshComplete();
         }
-        broadcastPageRefreshComplete();
       })();
     });
-  }, [fetchOAFBotDashboard, fetchPointsDashboard, t, timeZone]);
+  }, [fetchAutomations, fetchOAFBotDashboard, fetchOverview, fetchPointsDashboard, fetchRecentActivities]);
 
   const copyInviteLink = useCallback(async () => {
     const link = pointsDashboard?.referral?.invite_link;
@@ -553,6 +501,15 @@ export default function DashboardPage() {
             <Button onClick={() => void fetchOverview()}>{t("common.retry")}</Button>
           </div>
         </Card>
+      ) : null}
+
+      {dashboardRefreshing ? (
+        <div className="flex justify-end">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-3 py-1.5 text-xs font-semibold text-[#8ecdf8]">
+            <span className="size-1.5 animate-pulse rounded-full bg-[#1d9bf0]" />
+            {t("dashboard.refreshingInline")}
+          </span>
+        </div>
       ) : null}
 
       <StatusOverviewCards overview={overview} loading={loadState === "loading"} />

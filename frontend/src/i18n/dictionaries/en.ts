@@ -1194,6 +1194,7 @@ export const dict: I18nDict = {
   "dashboard.loading.title": "Loading dashboard...",
   "dashboard.loading.description": "Fetching latest overview data.",
   "dashboard.error.title": "Failed to load dashboard overview",
+  "dashboard.refreshingInline": "Syncing latest data",
   "dashboard.automation.autoPost.name": "Auto Post",
   "dashboard.automation.autoReply.name": "Auto Reply",
   "dashboard.automation.autoDm.name": "Auto DM",

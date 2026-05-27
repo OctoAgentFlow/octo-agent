@@ -224,6 +224,7 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	}
 	out.BotID = bot.ID
 	out.UsageConsumed = 1
+	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
 	return out, nil
 }
 
@@ -405,6 +406,96 @@ func feedbackSignalsFromRows(rows []model.OAFBotGenerationFeedback) []string {
 		out = append(out, strings.Join(parts, " | "))
 	}
 	return out
+}
+
+func evaluateOAFBotSampleSafety(content string, bot *model.OAFBot) dto.OAFBotSafetyEvaluationResult {
+	text := strings.ToLower(strings.TrimSpace(content))
+	if text == "" {
+		return dto.OAFBotSafetyEvaluationResult{
+			Level:    "high",
+			Action:   "avoid",
+			Category: "empty_content",
+			Reason:   "Generated content is empty, so it should not be published.",
+		}
+	}
+	if bot != nil {
+		if hits := safetyHits(text, decodeStringList(bot.ForbiddenTopics), "forbidden_topic"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "high",
+				Action:      "avoid",
+				Category:    "forbidden_topic",
+				Reason:      "Generated content matched configured forbidden topics.",
+				MatchedHits: hits,
+			}
+		}
+		if hits := safetyHits(text, decodeStringList(bot.AvoidClaims), "avoid_claim"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "high",
+				Action:      "avoid",
+				Category:    "avoid_claim",
+				Reason:      "Generated content matched claims this Bot should avoid.",
+				MatchedHits: hits,
+			}
+		}
+	}
+	if hits := safetyHits(text, defaultHighRiskSafetyTerms(), "platform_policy"); len(hits) > 0 {
+		return dto.OAFBotSafetyEvaluationResult{
+			Level:       "high",
+			Action:      "avoid",
+			Category:    "platform_policy",
+			Reason:      "Generated content matched a high-risk safety rule.",
+			MatchedHits: hits,
+		}
+	}
+	if bot != nil && strings.TrimSpace(bot.SafetyMode) == "conservative" {
+		if hits := safetyHits(text, conservativeReviewTerms(), "conservative_review"); len(hits) > 0 {
+			return dto.OAFBotSafetyEvaluationResult{
+				Level:       "medium",
+				Action:      "review",
+				Category:    "conservative_review",
+				Reason:      "Conservative safety mode recommends human review for this wording.",
+				MatchedHits: hits,
+			}
+		}
+	}
+	return dto.OAFBotSafetyEvaluationResult{
+		Level:    "low",
+		Action:   "allow",
+		Category: "clear",
+		Reason:   "No configured forbidden topics, avoid-claims, or high-risk safety terms were detected.",
+	}
+}
+
+func safetyHits(text string, terms []string, source string) []dto.OAFBotSafetyHit {
+	hits := []dto.OAFBotSafetyHit{}
+	seen := map[string]bool{}
+	for _, term := range terms {
+		t := strings.TrimSpace(term)
+		key := strings.ToLower(t)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if strings.Contains(text, key) {
+			hits = append(hits, dto.OAFBotSafetyHit{Source: source, Term: t})
+		}
+	}
+	return hits
+}
+
+func defaultHighRiskSafetyTerms() []string {
+	return []string{
+		"guaranteed return", "guaranteed profit", "risk-free", "100x", "pump", "airdrop",
+		"seed phrase", "private key", "connect wallet", "official support",
+		"稳赚", "保本", "收益保证", "私钥", "助记词", "连接钱包", "官方客服",
+	}
+}
+
+func conservativeReviewTerms() []string {
+	return []string{
+		"buy", "claim", "limited time", "exclusive", "profit", "yield", "token", "wallet",
+		"购买", "领取", "限时", "独家", "收益", "回报", "代币", "钱包",
+	}
 }
 
 func normalizeSafetyMode(value string) string {

@@ -54,12 +54,26 @@ export type OAFBotSamples = {
   dm: string;
 };
 
+export type OAFBotSafetyHit = {
+  source: "forbidden_topic" | "avoid_claim" | "platform_policy" | "conservative_review" | string;
+  term: string;
+};
+
+export type OAFBotSafetyEvaluation = {
+  level: "low" | "medium" | "high" | string;
+  action: "allow" | "review" | "avoid" | string;
+  category: string;
+  reason: string;
+  matched_hits: OAFBotSafetyHit[];
+};
+
 export type OAFBotTestGenerateResult = Partial<OAFBotSamples> & {
   scene: OAFBotSampleScene;
   content: string;
   provider: string;
   usage_consumed: number;
   raw_result?: string;
+  safety_evaluation?: OAFBotSafetyEvaluation;
 };
 
 export type OAFBotCompleteProfileResult = {

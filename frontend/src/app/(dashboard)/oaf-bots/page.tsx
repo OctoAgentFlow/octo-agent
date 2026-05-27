@@ -3178,6 +3178,7 @@ function SamplePanel({
               t={t}
             />
           </div>
+          <SampleSafetyExplanation t={t} evaluation={samples.safety_evaluation} />
           <GenerationFeedbackPanel
             t={t}
             draft={feedbackDraft}
@@ -3270,6 +3271,60 @@ function SampleCard({
           {t("oafBots.samples.saveDraft")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function SampleSafetyExplanation({
+  t,
+  evaluation,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  evaluation?: OAFBotTestGenerateResult["safety_evaluation"];
+}) {
+  if (!evaluation) return null;
+  const tone =
+    evaluation.action === "avoid"
+      ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+      : evaluation.action === "review"
+        ? "border-amber-300/20 bg-amber-400/10 text-amber-100"
+        : "border-emerald-300/20 bg-emerald-400/10 text-emerald-100";
+  const icon = evaluation.action === "allow" ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />;
+  const actionKey = `oafBots.safetyExplanation.action.${evaluation.action}`;
+  const categoryKey = `oafBots.safetyExplanation.category.${evaluation.category}`;
+  const reasonKey = `oafBots.safetyExplanation.reason.${evaluation.category}`;
+  const actionLabel = t(actionKey) === actionKey ? evaluation.action : t(actionKey);
+  const categoryLabel = t(categoryKey) === categoryKey ? evaluation.category : t(categoryKey);
+  const reason = t(reasonKey) === reasonKey ? evaluation.reason : t(reasonKey);
+  return (
+    <div className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 shrink-0">{icon}</span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold">{t("oafBots.safetyExplanation.title")}</p>
+            <p className="mt-1 text-xs leading-5 opacity-80">{reason}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <span className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs">{actionLabel}</span>
+          <span className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs">{categoryLabel}</span>
+        </div>
+      </div>
+      {evaluation.matched_hits?.length ? (
+        <div className="mt-3">
+          <p className="text-xs font-semibold opacity-80">{t("oafBots.safetyExplanation.hits")}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {evaluation.matched_hits.map((hit, index) => (
+              <span key={`${hit.source}-${hit.term}-${index}`} className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-xs">
+                {t(`oafBots.safetyExplanation.source.${hit.source}`) === `oafBots.safetyExplanation.source.${hit.source}` ? hit.source : t(`oafBots.safetyExplanation.source.${hit.source}`)}: {hit.term}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs leading-5 opacity-75">{t("oafBots.safetyExplanation.noHits")}</p>
+      )}
     </div>
   );
 }

@@ -99,16 +99,30 @@ type OAFBotTestGenerateRequest struct {
 }
 
 type OAFBotTestGenerateResponse struct {
-	BotID         uint   `json:"bot_id"`
-	Scene         string `json:"scene"`
-	Content       string `json:"content"`
-	Provider      string `json:"provider"`
-	UsageConsumed int    `json:"usage_consumed"`
-	RawResult     string `json:"raw_result,omitempty"`
-	Tweet         string `json:"tweet"`
-	Reply         string `json:"reply"`
-	Comment       string `json:"comment"`
-	DM            string `json:"dm"`
+	BotID            uint                         `json:"bot_id"`
+	Scene            string                       `json:"scene"`
+	Content          string                       `json:"content"`
+	Provider         string                       `json:"provider"`
+	UsageConsumed    int                          `json:"usage_consumed"`
+	RawResult        string                       `json:"raw_result,omitempty"`
+	SafetyEvaluation OAFBotSafetyEvaluationResult `json:"safety_evaluation"`
+	Tweet            string                       `json:"tweet"`
+	Reply            string                       `json:"reply"`
+	Comment          string                       `json:"comment"`
+	DM               string                       `json:"dm"`
+}
+
+type OAFBotSafetyHit struct {
+	Source string `json:"source"`
+	Term   string `json:"term"`
+}
+
+type OAFBotSafetyEvaluationResult struct {
+	Level       string            `json:"level"`
+	Action      string            `json:"action"`
+	Category    string            `json:"category"`
+	Reason      string            `json:"reason"`
+	MatchedHits []OAFBotSafetyHit `json:"matched_hits"`
 }
 
 type OAFBotGenerationUsageItem struct {

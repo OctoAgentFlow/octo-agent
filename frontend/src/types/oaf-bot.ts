@@ -44,6 +44,7 @@ export type OAFBotListData = {
 };
 
 export type OAFBotSampleScene = "tweet" | "reply" | "comment" | "dm";
+export type OAFBotSampleContext = Partial<Record<OAFBotSampleScene, string>>;
 
 export type OAFBotSamples = {
   tweet: string;

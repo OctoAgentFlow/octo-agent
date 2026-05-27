@@ -85,7 +85,8 @@ type OAFBotCompleteProfileResponse struct {
 }
 
 type OAFBotTestGenerateRequest struct {
-	Scene string `json:"scene"`
+	Scene         string `json:"scene"`
+	SampleContext string `json:"sample_context"`
 }
 
 type OAFBotTestGenerateResponse struct {

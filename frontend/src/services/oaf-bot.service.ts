@@ -122,8 +122,8 @@ export const oafBotService = {
     const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft });
     return res.data.data;
   },
-  async testGenerate(id: number, scene: OAFBotSampleScene) {
-    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene });
+  async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene, sample_context: sampleContext });
     return res.data.data;
   },
   async generationUsages(id: number) {

@@ -156,7 +156,7 @@ func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dt
 	}, nil
 }
 
-func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string) (*dto.OAFBotTestGenerateResponse, error) {
+func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string, sampleContext string) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -171,6 +171,7 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	}
 	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, GenerateOAFBotSamplesInput{
 		Scene:             scene,
+		SampleContext:     sampleContext,
 		Name:              bot.Name,
 		Occupation:        bot.Occupation,
 		Industry:          bot.Industry,

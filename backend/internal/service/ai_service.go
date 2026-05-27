@@ -94,6 +94,7 @@ type GenerateAutoReplyInput struct {
 
 type GenerateOAFBotSamplesInput struct {
 	Scene             string
+	SampleContext     string
 	Name              string
 	Occupation        string
 	Industry          string
@@ -414,6 +415,13 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	var user strings.Builder
 	user.WriteString("Requested scene: " + scene + "\n")
 	user.WriteString(sceneInstruction + "\n")
+	if context := strings.TrimSpace(in.SampleContext); context != "" {
+		user.WriteString("External sample context:\n")
+		user.WriteString(truncateRunes(context, 1200))
+		user.WriteString("\n")
+	} else {
+		user.WriteString("External sample context: not provided.\n")
+	}
 	user.WriteString("Internal bot name: " + name + "\n")
 	user.WriteString("Important: The internal bot name is only for dashboard identification. Do not mention the bot name in generated content unless the user's persona fields explicitly instruct self-introduction with that exact name.\n")
 	user.WriteString("Occupation: " + strings.TrimSpace(in.Occupation) + "\n")
@@ -444,7 +452,11 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	})
 	user.WriteString("Safety mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
-	user.WriteString("No external input context is provided for this sample. If language_strategy is follow_context, use primary_language for this sample.\n")
+	if strings.TrimSpace(in.SampleContext) == "" {
+		user.WriteString("If language_strategy is follow_context, use primary_language for this sample.\n")
+	} else {
+		user.WriteString("Use the external sample context as the immediate situation for the requested scene. If language_strategy is follow_context, match the context language when it is clear.\n")
+	}
 	user.WriteString("Rules:\n")
 	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
 	user.WriteString("- Generate only the requested scene and no other scene.\n")

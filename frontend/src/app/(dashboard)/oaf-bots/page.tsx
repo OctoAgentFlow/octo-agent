@@ -41,7 +41,7 @@ import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.serv
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
-import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
+import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload, OAFBotSampleContext, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
 type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
@@ -304,6 +304,7 @@ export default function OAFBotsPage() {
   const [form, setForm] = useState<OAFBotPayload>(() => createEmptyForm(defaultPrimaryLanguage));
   const [activeStep, setActiveStep] = useState<WizardStep>("identity");
   const [sampleScene, setSampleScene] = useState<SampleScene>("tweet");
+  const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
@@ -379,6 +380,7 @@ export default function OAFBotsPage() {
     (form.primary_language || defaultPrimaryLanguage) === defaultPrimaryLanguage && (form.language_strategy || "follow_context") === "follow_context";
   const activeStepIndex = wizardStepOrder.indexOf(activeStep);
   const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
+  const qualityDiagnostics = useMemo(() => getPersonaQualityDiagnostics(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
   const canTestBot = personaCompleteness >= 40;
 
@@ -601,6 +603,7 @@ export default function OAFBotsPage() {
     setForm(botToPayload(bot, defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
+    setSampleContexts({});
   };
 
   const startCreate = () => {
@@ -609,6 +612,7 @@ export default function OAFBotsPage() {
     setActiveStep("identity");
     setSamples(null);
     setGenerationUsages([]);
+    setSampleContexts({});
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -690,7 +694,7 @@ export default function OAFBotsPage() {
     }
     setGenerating(true);
     try {
-      const result = await oafBotService.testGenerate(selectedID, sampleScene);
+      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene]);
       setSamples(result);
       await loadGenerationUsages(selectedID);
       void loadRelationshipContext();
@@ -1188,6 +1192,8 @@ export default function OAFBotsPage() {
                   samples={samples}
                   scene={sampleScene}
                   onSceneChange={handleSampleSceneChange}
+                  sampleContext={sampleContexts[sampleScene] || ""}
+                  onSampleContextChange={(value) => setSampleContexts((prev) => ({ ...prev, [sampleScene]: value }))}
                   generating={generating}
                   onGenerate={testGenerate}
                   selectedID={selectedID}
@@ -1283,6 +1289,7 @@ export default function OAFBotsPage() {
               account={form.twitter_account_id ? accountByID.get(form.twitter_account_id) : undefined}
               completion={personaCompleteness}
               checklist={personaChecklist}
+              qualityDiagnostics={qualityDiagnostics}
               selectedID={selectedID}
               formChanged={formChanged}
               generating={generating}
@@ -1439,6 +1446,31 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
     missing,
     nextSuggestion: t(`oafBots.preview.next.${nextKey}`),
   };
+}
+
+function getPersonaQualityDiagnostics(form: OAFBotPayload, t: (key: string) => string) {
+  const diagnostics: Array<{ tone: "warning" | "info"; message: string }> = [];
+  const weakSummary = form.identity_summary.trim().length > 0 && form.identity_summary.trim().length < 40;
+  const weakGoal = form.growth_goal.trim().length > 0 && form.growth_goal.trim().length < 30;
+  const broadTopics = form.topics.length > 6;
+  const missingProductContext = !form.project_one_liner.trim() && !form.core_value_props.trim() && !form.product_features.trim();
+  const missingAudience = !form.target_audience.trim();
+  const missingGuardrails = form.forbidden_topics.length === 0 && form.avoid_claims.length === 0 && !form.compliance_notes.trim();
+  const missingVoice = form.personality_tags.length === 0 && !form.voice_tone.trim();
+  const strongCTA = /(buy now|moon|guarantee|guaranteed|airdrop|claim|暴富|稳赚|空投|领取|立即购买)/i.test(form.preferred_cta);
+
+  if (!form.identity_summary.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingSummary") });
+  else if (weakSummary) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakSummary") });
+  if (!form.growth_goal.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGoal") });
+  else if (weakGoal) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakGoal") });
+  if (missingProductContext) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingProductContext") });
+  if (missingAudience) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingAudience") });
+  if (missingVoice) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingVoice") });
+  if (broadTopics) diagnostics.push({ tone: "info", message: t("oafBots.quality.tooManyTopics") });
+  if (missingGuardrails) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGuardrails") });
+  if (strongCTA) diagnostics.push({ tone: "warning", message: t("oafBots.quality.strongCTA") });
+
+  return diagnostics.slice(0, 5);
 }
 
 function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string) {
@@ -2189,6 +2221,7 @@ function BotPreview({
   account,
   completion,
   checklist,
+  qualityDiagnostics,
   selectedID,
   formChanged,
   generating,
@@ -2210,6 +2243,7 @@ function BotPreview({
     missing: string[];
     nextSuggestion: string;
   };
+  qualityDiagnostics: Array<{ tone: "warning" | "info"; message: string }>;
   selectedID: number | null;
   formChanged: boolean;
   generating: boolean;
@@ -2308,6 +2342,7 @@ function BotPreview({
             <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
+          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics} empty={t("oafBots.quality.empty")} />
           <Button type="button" onClick={onTest} disabled={!canTest || generating} className="w-full disabled:opacity-50">
             {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {testButtonLabel}
@@ -2349,6 +2384,30 @@ function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: st
   );
 }
 
+function QualityDiagnosticsBlock({ title, items, empty }: { title: string; items: Array<{ tone: "warning" | "info"; message: string }>; empty: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs text-[#71767b]">{title}</p>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm leading-relaxed text-emerald-100/85">{empty}</p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.message}
+              className={`rounded-xl border px-3 py-2 text-xs leading-relaxed ${
+                item.tone === "warning" ? "border-amber-300/15 bg-amber-400/10 text-amber-100" : "border-blue-300/15 bg-blue-400/10 text-blue-100"
+              }`}
+            >
+              {item.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
@@ -2363,6 +2422,8 @@ function SamplePanel({
   samples,
   scene,
   onSceneChange,
+  sampleContext,
+  onSampleContextChange,
   generating,
   onGenerate,
   selectedID,
@@ -2380,6 +2441,8 @@ function SamplePanel({
   samples: OAFBotTestGenerateResult | null;
   scene: SampleScene;
   onSceneChange: (scene: SampleScene) => void;
+  sampleContext: string;
+  onSampleContextChange: (value: string) => void;
   generating: boolean;
   onGenerate: () => void;
   selectedID: number | null;
@@ -2445,6 +2508,16 @@ function SamplePanel({
       ) : previewDisabled ? (
         <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.disabledHint")}</p>
       ) : null}
+
+      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <TextArea
+          label={t(`oafBots.test.context.${scene}.label`)}
+          value={sampleContext}
+          onChange={onSampleContextChange}
+          placeholder={t(`oafBots.test.context.${scene}.placeholder`)}
+          helper={t(`oafBots.test.context.${scene}.helper`)}
+        />
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <div>

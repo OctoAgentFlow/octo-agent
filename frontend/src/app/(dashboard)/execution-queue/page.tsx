@@ -128,6 +128,11 @@ function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
   return value && modeOptions.includes(value as ReviewQueueExecutionMode) ? (value as ReviewQueueExecutionMode) : "all";
 }
 
+function canEditQueueItem(item: ReviewQueueItemApi) {
+  if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return false;
+  return item.status === "pending_review" || item.status === "draft" || item.status === "approved";
+}
+
 export default function ExecutionQueuePage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -247,6 +252,12 @@ export default function ExecutionQueuePage() {
 
   const saveEdit = async (item: ReviewQueueItemApi) => {
     if (!editingContent.trim() || (item.type !== "comment" && item.type !== "reply" && item.type !== "post")) return;
+    if (!canEditQueueItem(item)) {
+      setEditingKey(null);
+      setEditingContent("");
+      pushToast(t("executionQueue.errors.save"));
+      return;
+    }
     setBusyID(item.id);
     try {
       if (item.type === "comment") {
@@ -460,6 +471,7 @@ export default function ExecutionQueuePage() {
               const itemKey = `${item.type}-${item.id}`;
               const editing = editingKey === itemKey;
               const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
+              const canEdit = canEditQueueItem(item);
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
               const publishStatusLabel = t(publishStatusKey(item.publish_status));
@@ -577,7 +589,7 @@ export default function ExecutionQueuePage() {
                         </>
                       ) : (
                         <>
-                          {manageable ? (
+                          {canEdit ? (
                             <Button
                               size="sm"
                               className="w-full sm:w-auto"

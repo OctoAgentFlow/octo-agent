@@ -55,6 +55,10 @@ function statusKey(status: string) {
   return `autoReply.status.${status}`;
 }
 
+function canEditReplyDraft(status: string) {
+  return status === "review" || status === "pending_review" || status === "draft" || status === "approved";
+}
+
 export default function AutoRepliesPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -204,12 +208,23 @@ export default function AutoRepliesPage() {
   };
 
   const startEdit = (draft: AutoReplyDraftApi) => {
+    if (!canEditReplyDraft(draft.status)) {
+      pushToast(t("autoReply.errors.save"));
+      return;
+    }
     setEditingDraftID(draft.id);
     setEditingContent(draft.generated_reply || "");
   };
 
   const saveDraft = async () => {
     if (!editingDraftID || !editingContent.trim()) return;
+    const current = drafts.find((draft) => draft.id === editingDraftID);
+    if (current && !canEditReplyDraft(current.status)) {
+      setEditingDraftID(null);
+      setEditingContent("");
+      pushToast(t("autoReply.errors.save"));
+      return;
+    }
     try {
       const updated = await automationService.updateReplyDraft(editingDraftID, editingContent.trim());
       setDrafts((items) => items.map((item) => (item.id === editingDraftID ? updated : item)));
@@ -477,6 +492,7 @@ export default function AutoRepliesPage() {
             ) : (
               drafts.slice(0, 12).map((draft) => {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
+                const canEditDraft = canEditReplyDraft(draft.status);
                 const canRetryReply = Boolean(draft.comment_tweet_id && (draft.status === "sent" || draft.status === "published" || draft.status === "failed"));
                 const editing = editingDraftID === draft.id;
                 return (
@@ -522,10 +538,12 @@ export default function AutoRepliesPage() {
                           </>
                         ) : (
                           <>
-                            <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
-                              <Pencil className="size-4" />
-                              {t("autoReply.review.edit")}
-                            </Button>
+                            {canEditDraft ? (
+                              <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
+                                <Pencil className="size-4" />
+                                {t("autoReply.review.edit")}
+                              </Button>
+                            ) : null}
                             {canReview ? (
                               <Button size="sm" onClick={() => void approveDraft(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
                                 <CheckCircle2 className="size-4" />

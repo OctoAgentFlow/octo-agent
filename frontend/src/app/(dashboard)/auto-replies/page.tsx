@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -62,6 +63,7 @@ function canEditReplyDraft(status: string) {
 export default function AutoRepliesPage() {
   const { t } = useT();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -190,7 +192,11 @@ export default function AutoRepliesPage() {
       pushToast(t("autoReply.errors.retryMissingTarget"));
       return;
     }
-    if (!window.confirm(t("autoReply.review.retryConfirm"))) return;
+    const confirmed = await confirm({
+      description: t("autoReply.review.retryConfirm"),
+      confirmLabel: t("autoReply.retry"),
+    });
+    if (!confirmed) return;
     setRetryingDraftID(draft.id);
     try {
       const updated = await automationService.retryReplyDraft(draft.id);

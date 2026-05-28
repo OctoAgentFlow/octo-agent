@@ -7,6 +7,8 @@ export const dict: I18nDict = {
   "common.dashboard": "대시보드",
   "common.logout": "로그아웃",
   "common.cancel": "취소",
+  "confirm.defaultTitle": "Confirm action",
+  "confirm.defaultConfirm": "Confirm",
   "logout.confirm.title": "로그아웃할까요?",
   "logout.confirm.description": "계속 콘솔을 사용하려면 다시 로그인해야 합니다.",
   "logout.confirm.confirm": "로그아웃",

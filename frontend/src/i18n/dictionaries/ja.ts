@@ -7,6 +7,8 @@ export const dict: I18nDict = {
   "common.dashboard": "ダッシュボード",
   "common.logout": "ログアウト",
   "common.cancel": "キャンセル",
+  "confirm.defaultTitle": "Confirm action",
+  "confirm.defaultConfirm": "Confirm",
   "logout.confirm.title": "ログアウトしますか？",
   "logout.confirm.description": "続けてコンソールを使うには再ログインが必要です。",
   "logout.confirm.confirm": "ログアウト",

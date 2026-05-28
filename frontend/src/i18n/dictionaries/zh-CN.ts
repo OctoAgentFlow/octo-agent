@@ -12,6 +12,8 @@ export const dict: I18nDict = {
   "common.loading": "加载中...",
   "common.previous": "上一页",
   "common.next": "下一页",
+  "confirm.defaultTitle": "请确认操作",
+  "confirm.defaultConfirm": "确认",
   "logout.confirm.title": "确认退出登录？",
   "logout.confirm.description": "退出后需要重新登录才能继续使用控制台。",
   "logout.confirm.confirm": "确认退出",

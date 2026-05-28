@@ -7,6 +7,8 @@ export const dict: I18nDict = {
   "common.dashboard": "儀表板",
   "common.logout": "登出",
   "common.cancel": "取消",
+  "confirm.defaultTitle": "請確認操作",
+  "confirm.defaultConfirm": "確認",
   "logout.confirm.title": "確認登出？",
   "logout.confirm.description": "登出後需要重新登入才能繼續使用控制台。",
   "logout.confirm.confirm": "確認登出",

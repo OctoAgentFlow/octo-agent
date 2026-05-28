@@ -7,6 +7,7 @@ import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, 
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -167,6 +168,7 @@ export default function ExecutionQueuePage() {
     };
   }, [searchKey]);
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [items, setItems] = useState<ReviewQueueItemApi[]>([]);
   const [stats, setStats] = useState({ pending_review: 0, ready_to_publish: 0, approved: 0, rejected: 0, failed: 0 });
@@ -376,7 +378,12 @@ export default function ExecutionQueuePage() {
   const realPublish = async (item: ReviewQueueItemApi) => {
     if (!item.publish_job_id) return;
     const confirmKey = publisherStatus?.dry_run ? "executionQueue.confirm.dryRunPublish" : "executionQueue.confirm.realPublish";
-    if (!window.confirm(t(confirmKey))) return;
+    const confirmed = await confirm({
+      description: t(confirmKey),
+      confirmLabel: t(publisherStatus?.dry_run ? "executionQueue.actions.dryRunPublish" : "executionQueue.actions.realPublish"),
+      tone: publisherStatus?.dry_run ? "default" : "destructive",
+    });
+    if (!confirmed) return;
     setBusyID(item.id);
     try {
       const updated = await publishingService.publishNow(item.publish_job_id);

@@ -8,6 +8,7 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { defaultScheduledPostTimezone, isoToZonedDateTimeValue, ScheduledDateTimePicker, zonedDateTimeValueToISO } from "@/components/posts/scheduled-date-time-picker";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
   const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [post, setPost] = useState<PostItem | null>(null);
@@ -127,7 +129,12 @@ export function PostDetailClient({ postId }: { postId: number }) {
 
   const remove = async () => {
     if (!post) return;
-    if (!window.confirm(t("posts.detail.deleteConfirm"))) return;
+    const confirmed = await confirm({
+      description: t("posts.detail.deleteConfirm"),
+      confirmLabel: t("autoComment.review.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await postService.remove(post.id);
       pushToast(t("posts.detail.deleteSuccess"));

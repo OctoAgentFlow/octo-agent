@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -95,6 +96,7 @@ function generatedLabelKey(draft: AutoCommentTaskApi) {
 export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -291,7 +293,12 @@ export default function AutoCommentsPage() {
   };
 
   const deleteDraft = async (id: number) => {
-    if (!window.confirm(t("autoComment.review.deleteConfirm"))) return;
+    const confirmed = await confirm({
+      description: t("autoComment.review.deleteConfirm"),
+      confirmLabel: t("autoComment.review.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await automationService.deleteCommentDraft(id);
       setDrafts((items) => items.filter((item) => item.id !== id));
@@ -317,7 +324,12 @@ export default function AutoCommentsPage() {
   };
 
   const deleteTarget = async (id: number) => {
-    if (!window.confirm(t("autoComment.targets.deleteConfirm"))) return;
+    const confirmed = await confirm({
+      description: t("autoComment.targets.deleteConfirm"),
+      confirmLabel: t("autoComment.targets.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await automationService.deleteCommentTarget(id);
       setTargets((items) => items.filter((item) => item.id !== id));

@@ -3,6 +3,7 @@ import "./globals.css";
 import { I18nProvider } from "@/i18n/context";
 import { Web3Provider } from "@/components/providers/web3-provider";
 import { ToastProvider } from "@/components/providers/toast-provider";
+import { ConfirmProvider } from "@/components/providers/confirm-provider";
 
 export const metadata: Metadata = {
   title: "Octo-Agent Flow | AI Social Operations",
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Web3Provider>
           <ToastProvider>
-            <I18nProvider>{children}</I18nProvider>
+            <I18nProvider>
+              <ConfirmProvider>{children}</ConfirmProvider>
+            </I18nProvider>
           </ToastProvider>
         </Web3Provider>
       </body>

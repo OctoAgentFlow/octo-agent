@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
@@ -247,6 +248,7 @@ export default function AutoPostPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -650,7 +652,12 @@ export default function AutoPostPage() {
   };
 
   const deleteLibraryItem = async (item: ContentLibraryItemApi) => {
-    if (!window.confirm(t("autoPost.contentLibrary.confirmDelete"))) return;
+    const confirmed = await confirm({
+      description: t("autoPost.contentLibrary.confirmDelete"),
+      confirmLabel: t("autoComment.review.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await contentLibraryService.delete(item.id);
       setContentItems((current) => current.filter((row) => row.id !== item.id));
@@ -712,7 +719,11 @@ export default function AutoPostPage() {
       pushToast(t("autoPost.runNow.needPlanner"));
       return;
     }
-    if (!window.confirm(t("autoPost.runNow.confirm"))) return;
+    const confirmed = await confirm({
+      description: t("autoPost.runNow.confirm"),
+      confirmLabel: t("autoPost.runNow.button"),
+    });
+    if (!confirmed) return;
     setRunningPlanner(true);
     try {
       const run = await autoPostService.runNow(selectedPlan.id);

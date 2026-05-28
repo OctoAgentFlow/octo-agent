@@ -13,6 +13,8 @@ export const dict: I18nDict = {
   "common.loading": "Loading...",
   "common.previous": "Previous",
   "common.next": "Next",
+  "confirm.defaultTitle": "Confirm action",
+  "confirm.defaultConfirm": "Confirm",
   "logout.confirm.title": "Log out?",
   "logout.confirm.description": "You will need to log in again before using the console.",
   "logout.confirm.confirm": "Log out",

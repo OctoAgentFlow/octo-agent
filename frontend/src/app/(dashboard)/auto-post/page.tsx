@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  Clock3,
   Database,
   ListChecks,
   Loader2,
@@ -78,6 +79,14 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 const runAccountScopes: RunAccountScope[] = ["selected", "all"];
 const runRangeFilters: RunRangeFilter[] = ["all", "24h", "7d", "30d"];
+const postingWindowHours = Array.from({ length: 24 }, (_, hour) => hour);
+const postingWindowPresets = [
+  { key: "business", hours: [9, 10, 11, 12, 13, 14, 15, 16, 17] },
+  { key: "morning", hours: [8, 9, 10, 11] },
+  { key: "afternoon", hours: [13, 14, 15, 16, 17] },
+  { key: "evening", hours: [18, 19, 20, 21] },
+  { key: "allDay", hours: postingWindowHours },
+];
 
 type LibraryForm = {
   title: string;
@@ -145,6 +154,66 @@ function readRunAccountScope(value: string | null): RunAccountScope {
 
 function readRunRange(value: string | null): RunRangeFilter {
   return value === "24h" || value === "7d" || value === "30d" ? value : "all";
+}
+
+function hourLabel(hour: number) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function parseClockMinutes(value: string) {
+  const parts = value.trim().split(":");
+  if (parts.length !== 2) return null;
+  const hour = Number.parseInt(parts[0], 10);
+  const minute = Number.parseInt(parts[1], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function parsePostingWindowHours(value: string) {
+  const selected = new Set<number>();
+  value
+    .replaceAll("，", ",")
+    .replaceAll(";", ",")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [startRaw, endRaw] = part.split("-").map((item) => item.trim());
+      const start = parseClockMinutes(startRaw || "");
+      const end = parseClockMinutes(endRaw || "");
+      if (start === null || end === null) return;
+      const addRange = (from: number, to: number) => {
+        for (let hour = Math.floor(from / 60); hour <= Math.floor(to / 60); hour += 1) {
+          if (hour >= 0 && hour <= 23) selected.add(hour);
+        }
+      };
+      if (start <= end) {
+        addRange(start, end);
+      } else {
+        addRange(start, 23 * 60 + 59);
+        addRange(0, end);
+      }
+    });
+  return selected;
+}
+
+function formatPostingWindowHours(hours: Set<number>) {
+  const sorted = Array.from(hours)
+    .filter((hour) => hour >= 0 && hour <= 23)
+    .sort((a, b) => a - b);
+  if (sorted.length === 0) return "";
+  const ranges: Array<{ start: number; end: number }> = [];
+  sorted.forEach((hour) => {
+    const last = ranges[ranges.length - 1];
+    if (last && hour === last.end + 1) {
+      last.end = hour;
+      return;
+    }
+    ranges.push({ start: hour, end: hour });
+  });
+  return ranges
+    .map((range) => `${hourLabel(range.start)}-${String(range.end).padStart(2, "0")}:59`)
+    .join(", ");
 }
 
 function readRunPage(value: string | null) {
@@ -269,6 +338,7 @@ export default function AutoPostPage() {
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
+  const selectedPostingWindowHours = useMemo(() => parsePostingWindowHours(form.postingWindows), [form.postingWindows]);
   const modulePaused = moduleEnabled === false;
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
@@ -358,6 +428,24 @@ export default function AutoPostPage() {
       workbenchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   }, []);
+
+  const updatePostingWindowHours = useCallback((hours: Set<number>) => {
+    setForm((current) => ({ ...current, postingWindows: formatPostingWindowHours(hours) }));
+  }, []);
+
+  const togglePostingWindowHour = useCallback((hour: number) => {
+    const next = new Set(selectedPostingWindowHours);
+    if (next.has(hour)) {
+      next.delete(hour);
+    } else {
+      next.add(hour);
+    }
+    updatePostingWindowHours(next);
+  }, [selectedPostingWindowHours, updatePostingWindowHours]);
+
+  const applyPostingWindowPreset = useCallback((hours: number[]) => {
+    updatePostingWindowHours(new Set(hours));
+  }, [updatePostingWindowHours]);
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
@@ -873,16 +961,13 @@ export default function AutoPostPage() {
                   />
                 </div>
 
-                <label className="block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.postingWindows")}</span>
-                  <input
-                    value={form.postingWindows}
-                    onChange={(event) => setForm((current) => ({ ...current, postingWindows: event.target.value }))}
-                    placeholder={t("autoPost.fields.postingWindowsPlaceholder")}
-                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
-                  />
-                  <span className="text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</span>
-                </label>
+                <PostingWindowPicker
+                  value={form.postingWindows}
+                  selectedHours={selectedPostingWindowHours}
+                  onToggleHour={togglePostingWindowHour}
+                  onApplyPreset={applyPostingWindowPreset}
+                  onClear={() => updatePostingWindowHours(new Set())}
+                />
 
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.timezone")}</span>
@@ -1619,6 +1704,77 @@ function DraftRouteStep({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
       <p className="text-[11px] text-[#71767b]">{label}</p>
       <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function PostingWindowPicker({
+  value,
+  selectedHours,
+  onToggleHour,
+  onApplyPreset,
+  onClear,
+}: {
+  value: string;
+  selectedHours: Set<number>;
+  onToggleHour: (hour: number) => void;
+  onApplyPreset: (hours: number[]) => void;
+  onClear: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="space-y-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Clock3 className="size-4 text-[#1d9bf0]" />
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.postingWindows")}</p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</p>
+        </div>
+        <button type="button" onClick={onClear} className="text-xs font-semibold text-[#1d9bf0] hover:underline">
+          {t("autoPost.fields.postingWindowsClear")}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {postingWindowPresets.map((preset) => (
+          <button
+            key={preset.key}
+            type="button"
+            onClick={() => onApplyPreset(preset.hours)}
+            className="rounded-full border border-[#2f3336] bg-black px-3 py-1.5 text-xs font-semibold text-[#e7e9ea] transition hover:border-[#1d9bf0]/55 hover:bg-[#1d9bf0]/10"
+          >
+            {t(`autoPost.postingWindowPreset.${preset.key}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+        {postingWindowHours.map((hour) => {
+          const selected = selectedHours.has(hour);
+          return (
+            <button
+              key={hour}
+              type="button"
+              onClick={() => onToggleHour(hour)}
+              className={`h-10 rounded-xl border text-xs font-semibold transition ${
+                selected
+                  ? "border-[#1d9bf0]/70 bg-[#1d9bf0]/18 text-white"
+                  : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+              }`}
+              aria-pressed={selected}
+            >
+              {hourLabel(hour)}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+        <p className="text-[11px] uppercase tracking-wide text-[#71767b]">{t("autoPost.fields.postingWindowsSelected")}</p>
+        <p className="mt-1 break-words text-sm text-[#e7e9ea]">{value || t("autoPost.fields.postingWindowsNoLimit")}</p>
+      </div>
     </div>
   );
 }

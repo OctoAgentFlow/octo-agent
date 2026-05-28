@@ -9,6 +9,7 @@ import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
 import { postService } from "@/services/post.service";
@@ -38,13 +39,6 @@ function sourceDescriptionKey(post: PostItem) {
   return "posts.source.manualDraftDesc";
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 function statusTone(status: PostStatus) {
   if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   if (status === "scheduled") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
@@ -55,6 +49,7 @@ function statusTone(status: PostStatus) {
 
 export function PostsClient() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [items, setItems] = useState<PostItem[]>([]);
@@ -247,11 +242,11 @@ export function PostsClient() {
                         </span>
                       </span>
                       <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#71767b]">
-                        {t("posts.list.col.updated")}: {formatDateTime(post.updated_at)}
+                        {t("posts.list.col.updated")}: {formatDateTimeForZone(post.updated_at, timeZone)}
                       </span>
                       {post.scheduled_at ? (
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#71767b]">
-                          {t("posts.list.col.scheduled")}: {formatDateTime(post.scheduled_at)}
+                          {t("posts.list.col.scheduled")}: {formatDateTimeForZone(post.scheduled_at, timeZone)}
                         </span>
                       ) : null}
                     </div>

@@ -7,9 +7,11 @@ import { ArrowRight, Bot, CheckCircle2, Clock, FileText, MessageCircle, Pencil, 
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { automationService } from "@/services/automation.service";
 import { autoPostService } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
@@ -27,13 +29,6 @@ type ModuleType = "post" | "comment" | "reply" | "dm";
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
 const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review", "autopilot"];
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
 
 function statusTone(status: string) {
   if (status === "ready_to_publish") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
@@ -65,11 +60,24 @@ function sourceLabelKey(type: string) {
   return "executionQueue.source.autoDm";
 }
 
+function deliveryLabelKey(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.delivery.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.delivery.manualComment";
+  if (item.type === "comment" && item.delivery_mode === "auto_comment") return "executionQueue.delivery.autoComment";
+  return "";
+}
+
 function sourceDescriptionKey(type: string) {
   if (type === "post") return "executionQueue.sourceDesc.post";
   if (type === "comment") return "executionQueue.sourceDesc.comment";
   if (type === "reply") return "executionQueue.sourceDesc.reply";
   return "executionQueue.sourceDesc.dm";
+}
+
+function sourceDescriptionForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.sourceDesc.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.sourceDesc.manualComment";
+  return sourceDescriptionKey(item.type);
 }
 
 function canManualPublish(item: ReviewQueueItemApi) {
@@ -83,6 +91,11 @@ function targetLabelKey(type: string) {
   if (type === "comment") return "executionQueue.item.targetTweet";
   if (type === "reply") return "executionQueue.item.replyTarget";
   return "executionQueue.item.target";
+}
+
+function targetLabelForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.item.quoteTarget";
+  return targetLabelKey(item.type);
 }
 
 function normalizeTargetSummary(type: string, value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
@@ -134,8 +147,14 @@ function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
   return value && modeOptions.includes(value as ReviewQueueExecutionMode) ? (value as ReviewQueueExecutionMode) : "all";
 }
 
+function canEditQueueItem(item: ReviewQueueItemApi) {
+  if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return false;
+  return item.status === "pending_review" || item.status === "draft" || item.status === "approved";
+}
+
 export default function ExecutionQueuePage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -149,6 +168,7 @@ export default function ExecutionQueuePage() {
     };
   }, [searchKey]);
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [items, setItems] = useState<ReviewQueueItemApi[]>([]);
   const [stats, setStats] = useState({ pending_review: 0, ready_to_publish: 0, approved: 0, rejected: 0, failed: 0 });
@@ -252,6 +272,12 @@ export default function ExecutionQueuePage() {
 
   const saveEdit = async (item: ReviewQueueItemApi) => {
     if (!editingContent.trim() || (item.type !== "comment" && item.type !== "reply" && item.type !== "post")) return;
+    if (!canEditQueueItem(item)) {
+      setEditingKey(null);
+      setEditingContent("");
+      pushToast(t("executionQueue.errors.save"));
+      return;
+    }
     setBusyID(item.id);
     try {
       if (item.type === "comment") {
@@ -352,7 +378,12 @@ export default function ExecutionQueuePage() {
   const realPublish = async (item: ReviewQueueItemApi) => {
     if (!item.publish_job_id) return;
     const confirmKey = publisherStatus?.dry_run ? "executionQueue.confirm.dryRunPublish" : "executionQueue.confirm.realPublish";
-    if (!window.confirm(t(confirmKey))) return;
+    const confirmed = await confirm({
+      description: t(confirmKey),
+      confirmLabel: t(publisherStatus?.dry_run ? "executionQueue.actions.dryRunPublish" : "executionQueue.actions.realPublish"),
+      tone: publisherStatus?.dry_run ? "default" : "destructive",
+    });
+    if (!confirmed) return;
     setBusyID(item.id);
     try {
       const updated = await publishingService.publishNow(item.publish_job_id);
@@ -465,6 +496,7 @@ export default function ExecutionQueuePage() {
               const itemKey = `${item.type}-${item.id}`;
               const editing = editingKey === itemKey;
               const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
+              const canEdit = canEditQueueItem(item);
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
               const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
               const publishStatusLabel = t(publishStatusKey(item.publish_status));
@@ -481,6 +513,11 @@ export default function ExecutionQueuePage() {
                           <Icon className="size-3.5" />
                           {t(sourceLabelKey(item.type))}
                         </span>
+                        {deliveryLabelKey(item) ? (
+                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
+                            {t(deliveryLabelKey(item))}
+                          </span>
+                        ) : null}
                         <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(item.status)}`}>{t(`executionQueue.status.${item.status}`)}</span>
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-xs text-[#71767b]">
                           {t(`executionQueue.executionMode.${item.execution_mode}`)}
@@ -496,8 +533,8 @@ export default function ExecutionQueuePage() {
                         <QueueInfoCard
                           icon={Sparkles}
                           label={t("executionQueue.item.source")}
-                          title={t(sourceLabelKey(item.type))}
-                          description={t(sourceDescriptionKey(item.type))}
+                          title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKey(item.type))}
+                          description={t(sourceDescriptionForItem(item))}
                           tone={sourceTone(item.type)}
                         />
                         <QueueInfoCard
@@ -538,8 +575,8 @@ export default function ExecutionQueuePage() {
                       <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
                         <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
                         <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
-                        <MetaLine className="md:col-span-2" label={t(targetLabelKey(item.type))} value={displayTarget} />
-                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDate(item.created_at)} />
+                        <MetaLine className="md:col-span-2" label={t(targetLabelForItem(item))} value={displayTarget} />
+                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
                         <MetaLine
                           label={t("executionQueue.item.risk")}
                           value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
@@ -582,7 +619,7 @@ export default function ExecutionQueuePage() {
                         </>
                       ) : (
                         <>
-                          {manageable ? (
+                          {canEdit ? (
                             <Button
                               size="sm"
                               className="w-full sm:w-auto"

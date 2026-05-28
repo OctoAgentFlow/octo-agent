@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { activityNarrativeLine } from "@/lib/activity-narrative";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 
 function statusVariant(status: ActivityRecord["status"]) {
   if (status === "success") return "success";
@@ -68,6 +69,7 @@ function relativeTime(iso: string, t: (key: string, params?: Record<string, stri
 
 export function ActivityItem({ record }: { record: ActivityRecord }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const meta = typeMeta(record.type);
@@ -112,7 +114,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             ) : null}
             <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
               <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{record.accountHandle || t("activity.detail.noAccount")}</span>
-              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{new Date(record.executedAt).toLocaleString()}</span>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1">{formatDateTime(record.executedAt, timeZone)}</span>
             </div>
           </div>
         </div>
@@ -155,7 +157,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             ) : null}
             <DetailField label={t("activity.detail.fields.type")} value={t(meta.labelKey)} />
             <DetailField label={t("activity.detail.fields.status")} value={t(`activity.status.${record.status}`)} />
-            <DetailField label={t("activity.detail.fields.executedAt")} value={new Date(record.executedAt).toLocaleString()} />
+            <DetailField label={t("activity.detail.fields.executedAt")} value={formatDateTime(record.executedAt, timeZone)} />
             {record.xAccountId ? (
               <DetailField label={t("activity.detail.fields.accountId")} value={String(record.xAccountId)} />
             ) : null}

@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
@@ -157,6 +158,11 @@ const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
   "content_pillars",
   "content_objectives",
   "preferred_cta",
+  "website_url",
+  "telegram_url",
+  "discord_url",
+  "docs_url",
+  "cta_policy",
   "hashtags",
   "keywords",
   "compliance_notes",
@@ -238,6 +244,11 @@ function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
     content_pillars: [],
     content_objectives: "",
     preferred_cta: "",
+    website_url: "",
+    telegram_url: "",
+    discord_url: "",
+    docs_url: "",
+    cta_policy: "",
     hashtags: [],
     keywords: [],
     compliance_notes: "",
@@ -406,7 +417,6 @@ export default function OAFBotsPage() {
   const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
-  const [generationUsagesLoading, setGenerationUsagesLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
@@ -777,15 +787,12 @@ export default function OAFBotsPage() {
   }, [defaultPrimaryLanguage, selectedID]);
 
   const loadGenerationUsages = useCallback(async (botID: number) => {
-    setGenerationUsagesLoading(true);
     try {
       const data = await oafBotService.generationUsages(botID);
       setGenerationUsages(data.items);
     } catch (error) {
       pushToast(errorMessage(error, t("oafBots.usages.loadFailed")));
       setGenerationUsages([]);
-    } finally {
-      setGenerationUsagesLoading(false);
     }
   }, [pushToast, t]);
 
@@ -1437,6 +1444,51 @@ export default function OAFBotsPage() {
                       helper={t("oafBots.helpers.differentiators")}
                     />
                   </div>
+                  <div className="md:col-span-2 rounded-[8px] border border-[#2f3336] bg-black/25 p-4">
+                    <div className="mb-4 flex flex-col gap-1">
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.promotion.title")}</p>
+                      <p className="text-xs leading-relaxed text-[#71767b]">{t("oafBots.promotion.description")}</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TextField
+                        label={t("oafBots.fields.websiteUrl")}
+                        value={form.website_url}
+                        onChange={(value) => updateForm("website_url", value)}
+                        placeholder={t("oafBots.placeholders.websiteUrl")}
+                        helper={t("oafBots.helpers.websiteUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.telegramUrl")}
+                        value={form.telegram_url}
+                        onChange={(value) => updateForm("telegram_url", value)}
+                        placeholder={t("oafBots.placeholders.telegramUrl")}
+                        helper={t("oafBots.helpers.telegramUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.discordUrl")}
+                        value={form.discord_url}
+                        onChange={(value) => updateForm("discord_url", value)}
+                        placeholder={t("oafBots.placeholders.discordUrl")}
+                        helper={t("oafBots.helpers.discordUrl")}
+                      />
+                      <TextField
+                        label={t("oafBots.fields.docsUrl")}
+                        value={form.docs_url}
+                        onChange={(value) => updateForm("docs_url", value)}
+                        placeholder={t("oafBots.placeholders.docsUrl")}
+                        helper={t("oafBots.helpers.docsUrl")}
+                      />
+                      <div className="md:col-span-2">
+                        <TextArea
+                          label={t("oafBots.fields.ctaPolicy")}
+                          value={form.cta_policy}
+                          onChange={(value) => updateForm("cta_policy", value)}
+                          placeholder={t("oafBots.placeholders.ctaPolicy")}
+                          helper={t("oafBots.helpers.ctaPolicy")}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </WizardPanel>
             ) : null}
@@ -1514,7 +1566,7 @@ export default function OAFBotsPage() {
 
             {activeStep === "goals" ? (
               <WizardPanel title={t("oafBots.section.goals")} description={t("oafBots.section.goalsDesc")}>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
                   <TextArea
                     label={t("oafBots.fields.identitySummary")}
                     value={form.identity_summary}
@@ -1749,20 +1801,10 @@ export default function OAFBotsPage() {
               generating={generating}
               onTest={handlePreviewTest}
               canTest={canTestBot}
-              occupationOptions={occupationOptions}
-              industryOptions={industryOptions}
               languageOptions={languageOptions}
               languageStrategyOptions={languageStrategyOptions}
               defaultPrimaryLanguage={defaultPrimaryLanguage}
               isDefaultLanguageConfig={isDefaultLanguageConfig}
-            />
-            <GenerationUsageCard
-              t={t}
-              selectedID={selectedID}
-              generationUsages={generationUsages}
-              loading={generationUsagesLoading}
-              usage={usage}
-              limits={limits}
             />
           </div>
         </div>
@@ -1795,6 +1837,11 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     content_pillars: bot.content_pillars || [],
     content_objectives: bot.content_objectives || "",
     preferred_cta: bot.preferred_cta || "",
+    website_url: bot.website_url || "",
+    telegram_url: bot.telegram_url || "",
+    discord_url: bot.discord_url || "",
+    docs_url: bot.docs_url || "",
+    cta_policy: bot.cta_policy || "",
     hashtags: bot.hashtags || [],
     keywords: bot.keywords || [],
     compliance_notes: bot.compliance_notes || "",
@@ -1878,6 +1925,11 @@ function isUnconfiguredDraft(form: OAFBotPayload) {
     form.content_pillars.length === 0 &&
     !form.content_objectives.trim() &&
     !form.preferred_cta.trim() &&
+    !form.website_url.trim() &&
+    !form.telegram_url.trim() &&
+    !form.discord_url.trim() &&
+    !form.docs_url.trim() &&
+    !form.cta_policy.trim() &&
     form.hashtags.length === 0 &&
     form.keywords.length === 0 &&
     !form.compliance_notes.trim() &&
@@ -1900,6 +1952,7 @@ function calculatePersonaCompleteness(form: OAFBotPayload) {
   if (form.occupation.trim() || form.industry.trim()) score += 10;
   if (form.project_one_liner.trim()) score += 10;
   if (form.target_audience.trim() || form.core_value_props.trim()) score += 10;
+  if (form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) score += 4;
   if (form.primary_language.trim() && form.language_strategy.trim()) score += 8;
   if (form.personality_tags.length > 0) score += 8;
   if (form.topics.length > 0) score += 10;
@@ -1926,7 +1979,7 @@ function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
   if (form.name.trim()) completed.add("name");
   if (form.twitter_account_id) completed.add("account");
   if (form.occupation.trim() || form.industry.trim()) completed.add("role");
-  if (form.project_one_liner.trim() || form.core_value_props.trim()) completed.add("brand");
+  if (form.project_one_liner.trim() || form.core_value_props.trim() || form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) completed.add("brand");
   if (form.target_audience.trim()) completed.add("audience");
   if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
   if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
@@ -2540,6 +2593,7 @@ function QueueMiniMetric({ label, value, tone = "default" }: { label: string; va
 }
 
 function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: string, params?: Record<string, string | number>) => string }) {
+  const timeZone = usePreferredTimeZone();
   return (
     <Link href={`/execution-queue?type=${item.type}`} className="block rounded-xl border border-[#2f3336] bg-black p-3 transition-colors hover:border-[#1d9bf0]/45">
       <div className="flex items-center justify-between gap-3">
@@ -2549,7 +2603,7 @@ function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: stri
       <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.target_summary || item.content}</p>
       <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#71767b]">
         <Clock3 className="size-3" />
-        {formatCompactDate(item.created_at)}
+        {formatCompactDate(item.created_at, timeZone)}
       </p>
     </Link>
   );
@@ -2561,15 +2615,13 @@ function accountStatusKey(status: AccountListItem["status"]) {
   return "accounts.status.disconnected";
 }
 
-function formatCompactDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatCompactDate(value: string, timeZone: string) {
+  return formatDateTime(value, timeZone, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function WizardPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
       <div className="mb-4">
         <h2 className="text-lg font-bold text-[#e7e9ea]">{title}</h2>
         <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{description}</p>
@@ -2591,7 +2643,7 @@ function FieldShell({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5 text-sm text-[#e7e9ea]/78">
+    <label className="block min-w-0 space-y-1.5 text-sm text-[#e7e9ea]/78">
       <span className="flex items-center gap-2">
         {label}
         {recommended ? (
@@ -2719,7 +2771,7 @@ function TextArea({
 }) {
   return (
     <FieldShell label={label} helper={helper} recommended={recommended}>
-      <textarea className="form-input min-h-32 resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <textarea className="form-input min-h-32 max-w-full resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </FieldShell>
   );
 }
@@ -2785,20 +2837,20 @@ function SafetyRulesPanel({
   const configuredCount = Number(Boolean(safetyMode)) + Number(forbiddenTopics.length > 0) + Number(avoidClaims.length > 0) + Number(complianceRuleCount > 0);
 
   return (
-    <div className="mt-4 space-y-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="mt-4 min-w-0 space-y-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.safetyRules.title")}</p>
           <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("oafBots.safetyRules.description")}</p>
         </div>
-        <div className="grid shrink-0 grid-cols-3 gap-2 text-center sm:min-w-80">
+        <div className="grid min-w-0 grid-cols-3 gap-2 text-center xl:w-80 xl:shrink-0">
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricMode")} value={selectedSafety} />
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricHardBlocks")} value={forbiddenTopics.length + avoidClaims.length} />
           <SafetyRuleMetric label={t("oafBots.safetyRules.metricConfigured")} value={`${configuredCount}/4`} />
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-4">
           <SelectField
             label={t("oafBots.fields.safetyMode")}
@@ -2847,7 +2899,7 @@ function SafetyRulesPanel({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <TextArea
           label={t("oafBots.fields.complianceNotes")}
           value={complianceNotes}
@@ -3049,13 +3101,13 @@ function TagPicker({
       <FieldShell label={label} helper={helper} recommended={recommended}>
         <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
           <div className="flex flex-wrap gap-2">
-            {values.length === 0 ? <span className="text-sm text-[#71767b]">{placeholder}</span> : null}
+            {values.length === 0 ? <span className="min-w-0 text-sm leading-relaxed text-[#71767b] [overflow-wrap:anywhere]">{placeholder}</span> : null}
             {values.map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => removeValue(value)}
-                className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18"
+                className="max-w-full rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-left text-xs text-[#8ecdf8] hover:bg-[#1d9bf0]/18 [overflow-wrap:anywhere]"
               >
                 {getChipLabel(value, options)} ×
               </button>
@@ -3155,11 +3207,9 @@ function getSelectLabel(value: string, options: SelectOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function formatFeedbackDate(value: string) {
+function formatFeedbackDate(value: string, timeZone: string) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(value, timeZone);
 }
 
 function BotPreview({
@@ -3174,8 +3224,6 @@ function BotPreview({
   generating,
   onTest,
   canTest,
-  occupationOptions,
-  industryOptions,
   languageOptions,
   languageStrategyOptions,
   defaultPrimaryLanguage,
@@ -3196,8 +3244,6 @@ function BotPreview({
   generating: boolean;
   onTest: () => void;
   canTest: boolean;
-  occupationOptions: ChipOption[];
-  industryOptions: ChipOption[];
   languageOptions: SelectOption[];
   languageStrategyOptions: SelectOption[];
   defaultPrimaryLanguage: string;
@@ -3227,24 +3273,11 @@ function BotPreview({
     { label: t("oafBots.fields.primaryLanguage"), value: `${getSelectLabel(currentPrimaryLanguage, languageOptions)}${defaultBadge}` },
     { label: t("oafBots.fields.languageStrategy"), value: `${getSelectLabel(currentLanguageStrategy, languageStrategyOptions)}${defaultBadge}` },
   ];
-  const previewRows = [
-    { label: t("oafBots.fields.occupation"), value: getChipLabel(form.occupation, occupationOptions) },
-    { label: t("oafBots.fields.industry"), value: splitMultiValue(form.industry).map((item) => getChipLabel(item, industryOptions)).join(" / ") },
-    { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
-    { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
-    { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
-    { label: t("oafBots.fields.personalityTags"), value: form.personality_tags.join(" / ") },
-    { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
-    { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
-    { label: t("oafBots.fields.preferredCTA"), value: form.preferred_cta },
-    { label: t("oafBots.fields.safetyMode"), value: form.safety_mode },
-    { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
-  ].filter((row) => row.value.trim());
   return (
     <SectionCard title={t("oafBots.preview.title")} description={t("oafBots.preview.description")} className="bg-black p-4 md:p-5">
-      <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[#1d9bf0]">
+      <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[#1d9bf0]">
             <Bot className="size-5" />
           </div>
           <div className="min-w-0">
@@ -3253,12 +3286,7 @@ function BotPreview({
           </div>
         </div>
 
-        <div className={`mt-4 rounded-xl border p-3 ${modeClass}`}>
-          <p className="text-xs opacity-75">{t(`oafBots.preview.mode.${modeTone}.title`)}</p>
-          <p className="mt-1 text-sm leading-relaxed text-white/78">{t(`oafBots.preview.mode.${modeTone}.description`)}</p>
-        </div>
-
-        <div className="mt-5">
+        <div className="mt-4">
           <div className="flex items-center justify-between text-xs text-[#71767b]">
             <span>{t("oafBots.preview.completeness")}</span>
             <span className="text-[#e7e9ea]">{completion}%</span>
@@ -3274,22 +3302,34 @@ function BotPreview({
           </p>
         </div>
 
-        <div className="mt-4 grid gap-3">
+        <div className={`mt-4 rounded-xl border p-3 ${modeClass}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs opacity-75">{t(`oafBots.preview.mode.${modeTone}.title`)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/78">{t(`oafBots.preview.mode.${modeTone}.description`)}</p>
+            </div>
+            <span className="shrink-0 rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/70">
+              {readyCompletion ? t("oafBots.preview.readyBadge") : t("oafBots.preview.setupBadge")}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
           {languageSummaryRows.map((row) => (
             <PreviewRow key={row.label} label={row.label} value={row.value} />
           ))}
         </div>
 
-        <div className="mt-5 grid gap-3">
+        <div className="mt-4 grid gap-3">
+          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={5} compact />
           {showDetails ? (
-            <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" />
+            <ChecklistBlock title={t("oafBots.preview.configured")} items={checklist.configured} empty={t("oafBots.preview.noneConfigured")} tone="success" maxItems={4} compact />
           ) : null}
-          <ChecklistBlock title={t("oafBots.preview.missing")} items={checklist.missing} empty={t("oafBots.preview.noMissing")} tone="warning" maxItems={4} />
           <div className="rounded-xl border border-blue-300/15 bg-blue-400/10 p-3">
             <p className="text-xs text-[#8ecdf8]">{t("oafBots.preview.nextSuggestion")}</p>
             <p className="mt-1 text-sm leading-relaxed text-[#e7e9ea]/78">{checklist.nextSuggestion}</p>
           </div>
-          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics} empty={t("oafBots.quality.empty")} />
+          <QualityDiagnosticsBlock title={t("oafBots.quality.title")} items={qualityDiagnostics.slice(0, 2)} empty={t("oafBots.quality.empty")} />
           <Button type="button" onClick={onTest} disabled={!canTest || generating} className="w-full disabled:opacity-50">
             {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {testButtonLabel}
@@ -3298,21 +3338,28 @@ function BotPreview({
             {!canTest ? t("oafBots.test.disabledHint") : selectedID && !formChanged ? t("oafBots.preview.testReadyHint") : t("oafBots.preview.testNeedsSaveHint")}
           </p>
         </div>
-
-        {showDetails && previewRows.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            {previewRows.map((row) => (
-              <PreviewRow key={row.label} label={row.label} value={row.value} />
-            ))}
-          </div>
-        ) : null}
       </div>
     </SectionCard>
   );
 }
 
-function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: string; items: string[]; empty: string; tone: "success" | "warning"; maxItems?: number }) {
+function ChecklistBlock({
+  title,
+  items,
+  empty,
+  tone,
+  maxItems = 5,
+  compact = false,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+  tone: "success" | "warning";
+  maxItems?: number;
+  compact?: boolean;
+}) {
   const toneClass = tone === "success" ? "border-emerald-300/15 bg-emerald-400/10 text-emerald-100" : "border-amber-300/15 bg-amber-400/10 text-amber-100";
+  const hiddenCount = Math.max(items.length - maxItems, 0);
   return (
     <div className={`rounded-xl border p-3 ${toneClass}`}>
       <p className="text-xs opacity-75">{title}</p>
@@ -3321,10 +3368,15 @@ function ChecklistBlock({ title, items, empty, tone, maxItems = 5 }: { title: st
       ) : (
         <div className="mt-2 flex flex-wrap gap-2">
           {items.slice(0, maxItems).map((item) => (
-            <span key={item} className="rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs text-white/78">
+            <span key={item} className={`rounded-full border border-white/10 bg-black/15 text-xs text-white/78 ${compact ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
               {item}
             </span>
           ))}
+          {hiddenCount > 0 ? (
+            <span className={`rounded-full border border-white/10 bg-black/15 text-xs text-white/60 ${compact ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
+              +{hiddenCount}
+            </span>
+          ) : null}
         </div>
       )}
     </div>
@@ -3932,6 +3984,7 @@ function GenerationFeedbackHistory({
   suggestionLoading: boolean;
   onSuggestProfile: () => void;
 }) {
+  const timeZone = usePreferredTimeZone();
   const negativeCount = items.filter((item) => item.rating === "negative").length;
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
@@ -3966,7 +4019,7 @@ function GenerationFeedbackHistory({
                   {t(`oafBots.feedback.rating.${item.rating}`)}
                 </span>
                 <span>{t(`oafBots.samples.${item.scene}`)}</span>
-                <span>{formatFeedbackDate(item.created_at)}</span>
+                <span>{formatFeedbackDate(item.created_at, timeZone)}</span>
               </div>
               {item.issue_tags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -4176,6 +4229,11 @@ function getSamplePersonaRows(
     { label: t("oafBots.fields.projectOneLiner"), value: form.project_one_liner },
     { label: t("oafBots.fields.targetAudience"), value: form.target_audience },
     { label: t("oafBots.fields.coreValueProps"), value: form.core_value_props },
+    { label: t("oafBots.fields.websiteUrl"), value: form.website_url },
+    { label: t("oafBots.fields.telegramUrl"), value: form.telegram_url },
+    { label: t("oafBots.fields.discordUrl"), value: form.discord_url },
+    { label: t("oafBots.fields.docsUrl"), value: form.docs_url },
+    { label: t("oafBots.fields.ctaPolicy"), value: form.cta_policy },
     { label: t("oafBots.fields.voiceTone"), value: form.voice_tone },
     { label: t("oafBots.fields.topics"), value: form.topics.join(" / ") },
     { label: t("oafBots.fields.contentPillars"), value: form.content_pillars.join(" / ") },
@@ -4183,84 +4241,6 @@ function getSamplePersonaRows(
     { label: t("oafBots.fields.growthGoal"), value: form.growth_goal },
     { label: t("oafBots.fields.safetyMode"), value: safetyOptions.find((option) => option.value === form.safety_mode)?.label || form.safety_mode },
   ].filter((row) => row.value.trim());
-}
-
-function GenerationUsageCard({
-  t,
-  selectedID,
-  generationUsages,
-  loading,
-  usage,
-  limits,
-}: {
-  t: (key: string, params?: Record<string, string | number>) => string;
-  selectedID: number | null;
-  generationUsages: OAFBotGenerationUsage[];
-  loading: boolean;
-  usage: PlanUsage;
-  limits: PlanLimits;
-}) {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const usageByScene = useMemo(() => aggregateMonthlyUsage(generationUsages, currentMonth), [currentMonth, generationUsages]);
-  const total = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
-  const planLimit = limits.aiGenerationsMonthly;
-  const planUsed = usage.aiGenerationsMonth;
-  const planRemaining = Math.max(planLimit - planUsed, 0);
-  return (
-    <SectionCard title={t("oafBots.usages.title")} description={t("oafBots.usages.description")}>
-      {!selectedID ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.selectBot")}
-        </p>
-      ) : loading ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.loading")}
-        </p>
-      ) : total === 0 ? (
-        <p className="rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#71767b]">
-          {t("oafBots.usages.empty")}
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="space-y-2 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-[#8ecdf8]">{t("oafBots.usages.botMonthlyTotal")}</span>
-              <span className="font-semibold text-[#e7e9ea]">{t("oafBots.usages.countWithUnit", { count: total })}</span>
-            </div>
-            <p className="text-xs leading-relaxed text-[#e7e9ea]/68">
-              {t("oafBots.usages.sharedQuotaHint", {
-                limit: planLimit,
-                used: planUsed,
-                remaining: planRemaining,
-              })}
-            </p>
-          </div>
-          {usageSceneOrder.map((scene) => {
-            const item = usageByScene.get(scene);
-            const count = item?.count ?? 0;
-            const ratio = total > 0 ? Math.round((count / total) * 100) : 0;
-            return (
-              <div key={scene} className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4 text-sm text-[#e7e9ea]/72">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-[#e7e9ea]">{usageSceneLabel(scene, t)}</p>
-                    <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.usages.latestMonth", { month: item?.month ?? currentMonth })}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1 text-xs text-[#71767b]">
-                    {t("oafBots.usages.countWithUnit", { count })}
-                  </span>
-                </div>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
-                  <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${ratio}%` }} />
-                </div>
-                <p className="mt-2 text-xs text-[#71767b]">{t("oafBots.usages.sceneShare", { percent: ratio })}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </SectionCard>
-  );
 }
 
 function normalizeUsageScene(scene: string) {
@@ -4280,10 +4260,4 @@ function aggregateMonthlyUsage(items: OAFBotGenerationUsage[], currentMonth: str
     });
   });
   return usageByScene;
-}
-
-function usageSceneLabel(scene: string, t: (key: string, params?: Record<string, string | number>) => string) {
-  const key = `oafBots.usages.scene.${scene}`;
-  const label = t(key);
-  return label === key ? scene : label;
 }

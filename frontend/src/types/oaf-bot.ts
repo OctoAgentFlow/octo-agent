@@ -24,6 +24,11 @@ export type OAFBot = {
   content_pillars: string[];
   content_objectives: string;
   preferred_cta: string;
+  website_url: string;
+  telegram_url: string;
+  discord_url: string;
+  docs_url: string;
+  cta_policy: string;
   hashtags: string[];
   keywords: string[];
   compliance_notes: string;

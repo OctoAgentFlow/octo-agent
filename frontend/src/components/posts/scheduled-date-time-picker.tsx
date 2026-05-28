@@ -154,7 +154,7 @@ export function ScheduledDateTimePicker({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  const displayValue = selectedDate ? selectedDate.toLocaleString() : "";
+  const displayValue = selectedDate ? `${value.replace("T", " ")} ${timeZone}` : "";
   const year = visibleMonth.getFullYear();
   const month = visibleMonth.getMonth();
   const daysInMonth = getDaysInMonth(year, month);

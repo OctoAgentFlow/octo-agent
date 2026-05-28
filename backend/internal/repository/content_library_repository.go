@@ -98,3 +98,19 @@ func (r *ContentLibraryRepository) PickActiveForAutoPost(userID, xAccountID, bot
 	}
 	return &row, nil
 }
+
+func (r *ContentLibraryRepository) ListActiveForGenerationContext(userID, xAccountID, botID uint, limit int) ([]model.ContentLibraryItem, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	q := r.DB.Where("user_id = ? AND status = ?", userID, "active").
+		Where("(twitter_account_id IS NULL OR twitter_account_id = ?)", xAccountID)
+	if botID > 0 {
+		q = q.Where("(bot_id IS NULL OR bot_id = ?)", botID)
+	} else {
+		q = q.Where("bot_id IS NULL")
+	}
+	var rows []model.ContentLibraryItem
+	err := q.Order("priority DESC, updated_at DESC, id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}

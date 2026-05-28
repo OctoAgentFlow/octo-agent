@@ -17,8 +17,9 @@ var defaultHTTP = &http.Client{Timeout: 60 * time.Second}
 const tweetsEndpoint = "https://api.x.com/2/tweets"
 
 type createTweetBody struct {
-	Text  string            `json:"text"`
-	Reply *createTweetReply `json:"reply,omitempty"`
+	Text         string            `json:"text"`
+	Reply        *createTweetReply `json:"reply,omitempty"`
+	QuoteTweetID string            `json:"quote_tweet_id,omitempty"`
 }
 
 type createTweetReply struct {
@@ -123,6 +124,59 @@ func CreateReplyTweetWithClient(ctx context.Context, client *http.Client, access
 		Reply: &createTweetReply{
 			InReplyToTweetID: parent,
 		},
+	})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tweetsEndpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		var out createTweetResp
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return "", fmt.Errorf("decode success body: %w", err)
+		}
+		if out.Data.ID == "" {
+			return "", fmt.Errorf("empty tweet id in response")
+		}
+		return out.Data.ID, nil
+	}
+
+	return "", newPublishError(resp, raw)
+}
+
+// CreateQuoteTweet posts a quote post for an existing tweet (X API v2).
+func CreateQuoteTweet(ctx context.Context, accessToken, text, quoteTweetID string) (tweetID string, err error) {
+	return CreateQuoteTweetWithClient(ctx, defaultHTTP, accessToken, text, quoteTweetID)
+}
+
+// CreateQuoteTweetWithClient allows injecting an HTTP client (tests).
+func CreateQuoteTweetWithClient(ctx context.Context, client *http.Client, accessToken, text, quoteTweetID string) (tweetID string, err error) {
+	token := strings.TrimSpace(accessToken)
+	if token == "" {
+		return "", fmt.Errorf("missing access token")
+	}
+	quote := strings.TrimSpace(quoteTweetID)
+	if quote == "" {
+		return "", fmt.Errorf("missing quote_tweet_id")
+	}
+	if client == nil {
+		client = defaultHTTP
+	}
+	body, err := json.Marshal(createTweetBody{
+		Text:         strings.TrimSpace(text),
+		QuoteTweetID: quote,
 	})
 	if err != nil {
 		return "", err

@@ -53,7 +53,7 @@ email:
 app:
   frontend_base_url: "https://octo-agent.com"
   official_x_url: "https://x.com/octo_agent_flow"
-  telegram_url: "https://t.me/+cR9tg6PTpPRmNjQ1"
+  telegram_url: "https://t.me/+79oSyfuh6C80NDU1"
 
 jwt:
   # Production requires a stable random secret shared by API and Admin API.

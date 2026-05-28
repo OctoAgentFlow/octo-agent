@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced, subscribePageRefreshRequest } from "@/lib/app-page-refresh";
 import { mapPaymentMethods } from "@/lib/billing-payment-methods";
+import { formatDateOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import type { DashboardOverview } from "@/services/dashboard.service";
@@ -55,11 +56,9 @@ function recommendationKey(plan: PlanCode) {
   return "dashboard.subscription.highestPlan";
 }
 
-function formatDate(raw?: string) {
+function formatDate(raw: string | undefined, timeZone: string) {
   if (!raw) return "";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+  return formatDateOnly(raw, timeZone, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function formatNumber(value: number, locale: string) {
@@ -71,19 +70,60 @@ function usagePct(used: number, limit: number) {
   return Math.min(100, Math.round((used / limit) * 100));
 }
 
-function UsageRow({ label, used, limit, locale }: { label: string; used: number; limit: number; locale: string }) {
+function quotaTone(used: number, limit: number) {
+  const pct = usagePct(used, limit);
+  if (pct >= 100) return "blocked";
+  if (pct >= 80) return "warning";
+  return "healthy";
+}
+
+function UsageRow({
+  label,
+  used,
+  limit,
+  locale,
+  remainingLabel,
+  compact = false,
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  locale: string;
+  remainingLabel: (remaining: string) => string;
+  compact?: boolean;
+}) {
+  const remaining = Math.max(0, limit - used);
+  const pct = usagePct(used, limit);
+  const tone = quotaTone(used, limit);
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-black px-3 py-2.5">
-      <span className="text-sm text-[#71767b]">{label}</span>
-      <span className="shrink-0 text-sm font-semibold text-[#e7e9ea]">
-        {formatNumber(used, locale)} / {formatNumber(limit, locale)}
-      </span>
+    <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-[#71767b]">{label}</span>
+        <span className="shrink-0 text-sm font-semibold text-[#e7e9ea]">
+          {formatNumber(used, locale)} / {formatNumber(limit, locale)}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#2f3336]">
+        <span
+          className={cn(
+            "block h-full rounded-full",
+            tone === "blocked" ? "bg-red-300" : tone === "warning" ? "bg-amber-300" : "bg-[#1d9bf0]"
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {!compact ? (
+        <p className="mt-1 text-xs text-[#71767b]">
+          {remainingLabel(formatNumber(remaining, locale))}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const { t, lang } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const { pushToast } = useToast();
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
@@ -131,6 +171,30 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const aiBlocked = aiPct >= 100;
   const aiWarning = aiPct >= 80;
   const remainingAI = Math.max(0, maxAI - usedAI);
+  const automationItems = [
+    {
+      label: t("dashboard.subscription.autoPosts"),
+      used: subscription?.usage.auto_posts_month ?? 0,
+      limit: subscription?.limits.monthly_auto_posts ?? 0,
+    },
+    {
+      label: t("dashboard.subscription.autoReplies"),
+      used: subscription?.usage.auto_replies_month ?? 0,
+      limit: subscription?.limits.monthly_auto_replies ?? 0,
+    },
+    {
+      label: t("dashboard.subscription.autoComments"),
+      used: subscription?.usage.auto_comments_month ?? 0,
+      limit: subscription?.limits.monthly_auto_comments ?? 0,
+    },
+    {
+      label: t("dashboard.subscription.autoDMs"),
+      used: subscription?.usage.auto_dms_month ?? 0,
+      limit: subscription?.limits.monthly_auto_dms ?? 0,
+    },
+  ];
+  const automationBlocked = automationItems.some((item) => item.limit > 0 && item.used >= item.limit);
+  const automationWarning = automationItems.some((item) => usagePct(item.used, item.limit) >= 80);
   const cycleKey = subscription?.billing_cycle === "yearly" ? "dashboard.subscription.yearly" : "dashboard.subscription.monthly";
   const trialDaysLeft = subscription?.trial_days_left ?? overview?.trial_days_left ?? 0;
 
@@ -164,10 +228,10 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
     if (plan === "free_trial") {
       return `${t("dashboard.subscription.trial")} · ${t("dashboard.subscription.daysLeft", { days: trialDaysLeft })}`;
     }
-    const expiry = formatDate(subscription?.expiration_date);
+    const expiry = formatDate(subscription?.expiration_date, timeZone);
     const suffix = expiry ? ` · ${t("dashboard.subscription.expiresAt", { date: expiry })}` : "";
     return `${t("dashboard.subscription.currentPlan")}: ${t(planLabel(plan))} · ${t(cycleKey)}${suffix}`;
-  }, [cycleKey, plan, subscription?.expiration_date, t, trialDaysLeft]);
+  }, [cycleKey, plan, subscription?.expiration_date, t, timeZone, trialDaysLeft]);
 
   return (
     <SectionCard title={t("dashboard.subscription.title")} description={t("dashboard.subscription.subtitle")}>
@@ -193,10 +257,13 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
           </Button>
         </div>
 
-        <div className="mt-4 space-y-2">
-          <UsageRow label={t("dashboard.subscription.oafBots")} used={usedBots} limit={maxBots} locale={lang} />
-          <UsageRow label={t("dashboard.subscription.xAccounts")} used={usedAccounts} limit={maxAccounts} locale={lang} />
-          <UsageRow label={t("dashboard.subscription.aiGenerations")} used={usedAI} limit={maxAI} locale={lang} />
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dashboard.subscription.coreQuotaTitle")}</p>
+          <div className="mt-2 space-y-2">
+            <UsageRow label={t("dashboard.subscription.oafBots")} used={usedBots} limit={maxBots} locale={lang} remainingLabel={(count) => t("dashboard.subscription.remaining", { count })} compact />
+            <UsageRow label={t("dashboard.subscription.xAccounts")} used={usedAccounts} limit={maxAccounts} locale={lang} remainingLabel={(count) => t("dashboard.subscription.remaining", { count })} compact />
+            <UsageRow label={t("dashboard.subscription.aiGenerations")} used={usedAI} limit={maxAI} locale={lang} remainingLabel={(count) => t("dashboard.subscription.remaining", { count })} compact />
+          </div>
         </div>
 
         <div className="mt-4">
@@ -228,6 +295,29 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
             <span>{t(aiBlocked ? "dashboard.subscription.quotaExceeded" : "dashboard.subscription.usageWarning")}</span>
           </div>
         ) : null}
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dashboard.subscription.automationQuotaTitle")}</p>
+            <span
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs",
+                automationBlocked
+                  ? "border-red-300/25 bg-red-500/10 text-red-100"
+                  : automationWarning
+                    ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
+                    : "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+              )}
+            >
+              {t(automationBlocked ? "dashboard.subscription.automationBlocked" : automationWarning ? "dashboard.subscription.automationWarning" : "dashboard.subscription.automationHealthy")}
+            </span>
+          </div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {automationItems.map((item) => (
+              <UsageRow key={item.label} label={item.label} used={item.used} limit={item.limit} locale={lang} remainingLabel={(count) => t("dashboard.subscription.remaining", { count })} />
+            ))}
+          </div>
+        </div>
 
         <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
           <p className="text-sm font-semibold text-[#e7e9ea]">

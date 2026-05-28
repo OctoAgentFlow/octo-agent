@@ -213,6 +213,11 @@ func applyPublishJobToReviewQueueItem(item *dto.ReviewQueueItem, job model.Publi
 func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string, accountName string) dto.ReviewQueueItem {
 	status := normalizeReviewQueueStatus(task.Status)
 	mode := inferReviewQueueExecutionMode(task.CapabilityStatus)
+	deliveryMode := firstNonEmpty(task.DeliveryMode, "manual_comment")
+	content := task.GeneratedComment
+	if deliveryMode == "quote_post" && strings.TrimSpace(task.QuotePostCandidate) != "" {
+		content = task.QuotePostCandidate
+	}
 	reasons := make([]string, 0, 2)
 	if strings.TrimSpace(task.FailureCategory) != "" {
 		reasons = append(reasons, task.FailureCategory)
@@ -227,7 +232,8 @@ func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string
 	return dto.ReviewQueueItem{
 		ID:                 task.ID,
 		Type:               "comment",
-		Content:            task.GeneratedComment,
+		DeliveryMode:       deliveryMode,
+		Content:            content,
 		Status:             status,
 		ExecutionMode:      mode,
 		BotID:              task.BotID,
@@ -316,9 +322,9 @@ func autoPostDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, a
 
 func inferReviewQueueExecutionMode(capabilityStatus string) string {
 	switch capabilityStatus {
-	case "manual_suggestion":
+	case "manual_suggestion", "manual_comment_suggested":
 		return ExecutionModeManual
-	case "autopilot_prepared":
+	case "autopilot_prepared", "quote_post_ready":
 		return ExecutionModeAutopilot
 	default:
 		return ExecutionModeReview

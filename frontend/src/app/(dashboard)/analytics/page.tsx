@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { activityNarrativeLine } from "@/lib/activity-narrative";
+import { formatDateOnly, formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
 import {
   broadcastDataSynced,
   broadcastPageRefreshComplete,
@@ -35,22 +36,12 @@ const automationIcon = {
 
 const analyticsRanges: AnalyticsRange[] = ["7d", "30d"];
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+function formatDate(value: string, timeZone: string) {
+  return formatDateOnly(value, timeZone, { year: undefined, month: "short", day: "numeric" });
 }
 
-function formatDateTime(value?: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatDateTime(value: string | undefined, timeZone: string) {
+  return formatDateTimeForZone(value, timeZone, { year: undefined });
 }
 
 function compactText(value: string, max = 130) {
@@ -164,6 +155,7 @@ function MetricCard({
 
 export default function AnalyticsPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -312,7 +304,7 @@ export default function AnalyticsPage() {
             ))}
           </div>
           <p className="text-sm text-[#71767b]">
-            {t("analytics.generatedAt", { time: formatDateTime(overview.generated_at) })}
+            {t("analytics.generatedAt", { time: formatDateTime(overview.generated_at, timeZone) })}
           </p>
         </div>
       </section>
@@ -346,7 +338,7 @@ export default function AnalyticsPage() {
         />
         <MetricCard
           label={t("analytics.metric.lastActivity")}
-          value={formatDateTime(overview.activity_summary.last_activity_at)}
+          value={formatDateTime(overview.activity_summary.last_activity_at, timeZone)}
           detail={t("analytics.metric.lastActivityDetail")}
           icon={Clock3}
         />
@@ -368,13 +360,13 @@ export default function AnalyticsPage() {
                 return (
                   <div key={item.date} className="min-w-0">
                     <div className="flex h-36 items-end rounded-xl border border-[#2f3336] bg-black px-1.5 py-2">
-                      <div className="flex w-full flex-col justify-end overflow-hidden rounded-sm" style={{ height }} title={`${formatDate(item.date)}: ${item.total}`}>
+                      <div className="flex w-full flex-col justify-end overflow-hidden rounded-sm" style={{ height }} title={`${formatDate(item.date, timeZone)}: ${item.total}`}>
                         <div className="bg-[#00ba7c]" style={{ height: `${percent(item.success, item.total)}%` }} />
                         <div className="bg-[#ffd400]" style={{ height: `${percent(item.review, item.total)}%` }} />
                         <div className="bg-[#f4212e]" style={{ height: `${percent(item.failed, item.total)}%` }} />
                       </div>
                     </div>
-                    <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date)}</p>
+                    <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date, timeZone)}</p>
                     <p className="text-center text-xs font-semibold text-white">{item.total}</p>
                   </div>
                 );
@@ -453,11 +445,11 @@ export default function AnalyticsPage() {
                   return (
                     <div key={item.date} className="min-w-0">
                       <div className="flex h-32 items-end gap-0.5 rounded-xl border border-[#2f3336] bg-[#0f1419] px-1 py-2">
-                        <div className="w-full rounded-sm bg-[#00ba7c]" style={{ height: item.published ? publishedHeight : 0 }} title={`${formatDate(item.date)} published: ${item.published}`} />
-                        <div className="w-full rounded-sm bg-[#1d9bf0]" style={{ height: item.scheduled ? scheduledHeight : 0 }} title={`${formatDate(item.date)} scheduled: ${item.scheduled}`} />
-                        <div className="w-full rounded-sm bg-[#f4212e]" style={{ height: item.failed ? failedHeight : 0 }} title={`${formatDate(item.date)} failed: ${item.failed}`} />
+                        <div className="w-full rounded-sm bg-[#00ba7c]" style={{ height: item.published ? publishedHeight : 0 }} title={`${formatDate(item.date, timeZone)} published: ${item.published}`} />
+                        <div className="w-full rounded-sm bg-[#1d9bf0]" style={{ height: item.scheduled ? scheduledHeight : 0 }} title={`${formatDate(item.date, timeZone)} scheduled: ${item.scheduled}`} />
+                        <div className="w-full rounded-sm bg-[#f4212e]" style={{ height: item.failed ? failedHeight : 0 }} title={`${formatDate(item.date, timeZone)} failed: ${item.failed}`} />
                       </div>
-                      <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date)}</p>
+                      <p className="mt-2 truncate text-center text-xs text-[#71767b]">{formatDate(item.date, timeZone)}</p>
                       <p className="text-center text-xs font-semibold text-white">{item.total}</p>
                     </div>
                   );
@@ -503,7 +495,7 @@ export default function AnalyticsPage() {
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-[#71767b]">
-                    {t("analytics.contentEffect.updatedAt", { time: formatDateTime(post.updated_at) })}
+                    {t("analytics.contentEffect.updatedAt", { time: formatDateTime(post.updated_at, timeZone) })}
                   </p>
                 </Link>
               ))}
@@ -636,7 +628,7 @@ export default function AnalyticsPage() {
                   <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
                     <div className="min-w-0">
                       <p className="break-words text-sm font-medium text-white">{item.category || t("analytics.failureReasons.unknown")}</p>
-                      {item.last_at ? <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.last_at)}</p> : null}
+                      {item.last_at ? <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.last_at, timeZone)}</p> : null}
                     </div>
                     <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">{item.count}</span>
                   </div>
@@ -655,7 +647,7 @@ export default function AnalyticsPage() {
                   <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
-                      <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at)}</span>
+                      <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at, timeZone)}</span>
                     </div>
                     <p className="mt-1 line-clamp-2 break-words text-xs text-[#71767b]">{item.message || item.account_handle || "—"}</p>
                   </div>
@@ -671,7 +663,7 @@ export default function AnalyticsPage() {
             <div className="space-y-2">
               {overview.auto_dm_operations.imports.recent_errors.map((item) => (
                 <div key={item.id} className="text-xs text-[#f6d96b]">
-                  {formatDateTime(item.imported_at)} · {compactText(item.errors.join(" · "), 180)}
+                  {formatDateTime(item.imported_at, timeZone)} · {compactText(item.errors.join(" · "), 180)}
                 </div>
               ))}
             </div>
@@ -719,7 +711,7 @@ export default function AnalyticsPage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-[#71767b]">
-                    {t("analytics.accounts.lastActivity", { time: formatDateTime(account.last_activity_at) })}
+                    {t("analytics.accounts.lastActivity", { time: formatDateTime(account.last_activity_at, timeZone) })}
                   </p>
                   <Link
                     className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
@@ -770,7 +762,7 @@ export default function AnalyticsPage() {
                     </div>
                     {item.last_at ? (
                       <p className="mt-2 text-xs text-[#71767b]">
-                        {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at) })}
+                        {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at, timeZone) })}
                       </p>
                     ) : null}
                     <div className="mt-3 flex justify-end">
@@ -835,7 +827,7 @@ export default function AnalyticsPage() {
                         ) : null}
                         <div className="flex flex-wrap gap-3 text-xs text-[#71767b]">
                           <span>{item.account_handle}</span>
-                          <span>{formatDateTime(item.executed_at)}</span>
+                          <span>{formatDateTime(item.executed_at, timeZone)}</span>
                         </div>
                       </div>
                       <Link

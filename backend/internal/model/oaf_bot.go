@@ -25,6 +25,11 @@ type OAFBot struct {
 	ContentPillars    string `gorm:"type:text;comment:内容支柱JSON" json:"content_pillars,omitempty"`
 	ContentObjectives string `gorm:"type:text;comment:内容目标" json:"content_objectives,omitempty"`
 	PreferredCTA      string `gorm:"type:text;comment:偏好CTA" json:"preferred_cta,omitempty"`
+	WebsiteURL        string `gorm:"size:512;comment:官网/产品入口URL" json:"website_url,omitempty"`
+	TelegramURL       string `gorm:"size:512;comment:Telegram社群URL" json:"telegram_url,omitempty"`
+	DiscordURL        string `gorm:"size:512;comment:Discord社群URL" json:"discord_url,omitempty"`
+	DocsURL           string `gorm:"size:512;comment:文档/白皮书URL" json:"docs_url,omitempty"`
+	CTAPolicy         string `gorm:"type:text;comment:推广入口使用规则" json:"cta_policy,omitempty"`
 	Hashtags          string `gorm:"type:text;comment:偏好标签JSON" json:"hashtags,omitempty"`
 	Keywords          string `gorm:"type:text;comment:关键词JSON" json:"keywords,omitempty"`
 	ComplianceNotes   string `gorm:"type:text;comment:合规说明" json:"compliance_notes,omitempty"`

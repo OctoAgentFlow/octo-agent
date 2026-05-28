@@ -8,11 +8,15 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Bell,
+  CheckCircle2,
+  Clock3,
   CreditCard,
+  Globe2,
   KeyRound,
   Languages,
   type LucideIcon,
   Mail,
+  Search,
   ShieldCheck,
   UserCog,
   Wallet,
@@ -20,6 +24,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
 import { languages } from "@/i18n/types";
@@ -30,10 +35,28 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { signOut } from "@/lib/auth-session";
+import { formatDateTime, setPreferredTimeZone, supportedTimeZones, timeZoneLabel, usePreferredTimeZone } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 import { authService, type MeData, type NotificationSettingsData } from "@/services/auth.service";
 
 type LoadState = "loading" | "ready" | "error";
+
+type TimeZoneOption = {
+  value: string;
+  regionKey: string;
+  cityKey: string;
+  offset: string;
+};
+
+const timeZoneOptions: TimeZoneOption[] = supportedTimeZones.map((value) => {
+  const [region] = value.split("/");
+  return {
+    value,
+    regionKey: `settings.timezone.region.${region}`,
+    cityKey: `settings.timezone.city.${value.replaceAll("/", "_")}`,
+    offset: timeZoneOffsetLabel(value),
+  };
+});
 
 const defaultNotificationSettings: NotificationSettingsData = {
   email_enabled: true,
@@ -72,9 +95,33 @@ function roleLabelKey(role?: string) {
   return "settings.accountRole.user";
 }
 
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function timeZoneOffsetLabel(timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(new Date());
+    return parts.find((part) => part.type === "timeZoneName")?.value?.replace("GMT", "UTC") || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { lang, setLang, t } = useT();
+  const preferredTimeZone = usePreferredTimeZone();
+  const detectedTimeZone = useMemo(() => browserTimeZone(), []);
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [saving, setSaving] = useState(false);
@@ -90,6 +137,8 @@ export default function SettingsPage() {
     confirmPassword: "",
   });
   const [changingPassword, setChangingPassword] = useState(false);
+  const [timeZoneDialogOpen, setTimeZoneDialogOpen] = useState(false);
+  const [timeZoneSearch, setTimeZoneSearch] = useState("");
 
   const fetchMe = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -145,6 +194,40 @@ export default function SettingsPage() {
   const notificationsDirty = useMemo(() => {
     return JSON.stringify(notifications) !== JSON.stringify(savedNotifications);
   }, [notifications, savedNotifications]);
+
+  const visibleTimeZones = useMemo(() => {
+    const needle = timeZoneSearch.trim().toLowerCase();
+    if (!needle) return timeZoneOptions;
+    return timeZoneOptions.filter((option) => {
+      return [
+        option.value,
+        option.offset,
+        t(option.regionKey),
+        t(option.cityKey),
+        timeZoneLabel(option.value),
+      ].some((value) => value.toLowerCase().includes(needle));
+    });
+  }, [t, timeZoneSearch]);
+
+  const groupedTimeZones = useMemo(() => {
+    const groups: Array<{ regionKey: string; items: TimeZoneOption[] }> = [];
+    for (const option of visibleTimeZones) {
+      const latest = groups[groups.length - 1];
+      if (latest?.regionKey === option.regionKey) {
+        latest.items.push(option);
+      } else {
+        groups.push({ regionKey: option.regionKey, items: [option] });
+      }
+    }
+    return groups;
+  }, [visibleTimeZones]);
+
+  const chooseTimeZone = (zone: string) => {
+    setPreferredTimeZone(zone);
+    setTimeZoneDialogOpen(false);
+    setTimeZoneSearch("");
+    pushToast(t("settings.timezone.saved"));
+  };
 
   const setNotificationValue = (key: keyof NotificationSettingsData, value: boolean) => {
     setNotifications((current) => ({ ...current, [key]: value }));
@@ -487,6 +570,108 @@ export default function SettingsPage() {
           })}
         </div>
       </Card>
+
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("settings.timezone.title")}
+          description={t("settings.timezone.description")}
+          right={<Globe2 className="h-5 w-5 text-[#00ba7c]" />}
+        />
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-center gap-2 text-xs text-[#71767b]">
+                <Globe2 className="size-3.5" />
+                {t("settings.timezone.current")}
+              </div>
+              <p className="mt-2 text-base font-semibold text-white">{timeZoneLabel(preferredTimeZone)}</p>
+              <p className="mt-1 text-xs text-[#71767b]">{timeZoneOffsetLabel(preferredTimeZone)}</p>
+            </div>
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-center gap-2 text-xs text-[#71767b]">
+                <Clock3 className="size-3.5" />
+                {t("settings.timezone.preview")}
+              </div>
+              <p className="mt-2 text-base font-semibold text-white">{formatDateTime(new Date(), preferredTimeZone)}</p>
+              <p className="mt-1 text-xs text-[#71767b]">{t("settings.timezone.previewHint")}</p>
+            </div>
+          </div>
+          <Button type="button" className="w-full lg:w-auto" onClick={() => setTimeZoneDialogOpen(true)}>
+            <Globe2 className="size-4" />
+            {t("settings.timezone.change")}
+          </Button>
+        </div>
+      </Card>
+
+      <Dialog
+        open={timeZoneDialogOpen}
+        onOpenChange={setTimeZoneDialogOpen}
+        title={t("settings.timezone.dialogTitle")}
+        description={t("settings.timezone.dialogDescription")}
+        className="max-w-2xl"
+        closeLabel={t("common.cancel")}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-[#1d9bf0]/20 bg-[#1d9bf0]/8 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-[#8ecdf8]">{t("settings.timezone.detected")}</p>
+                <p className="mt-1 text-sm font-semibold text-white">{timeZoneLabel(detectedTimeZone)}</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => chooseTimeZone(detectedTimeZone)}>
+                {t("settings.timezone.useDetected")}
+              </Button>
+            </div>
+          </div>
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-3 size-4 text-[#71767b]" />
+            <Input
+              value={timeZoneSearch}
+              onChange={(event) => setTimeZoneSearch(event.target.value)}
+              placeholder={t("settings.timezone.searchPlaceholder")}
+              className="pl-9"
+            />
+          </label>
+          <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-[#2f3336] bg-black">
+            {groupedTimeZones.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-[#71767b]">{t("settings.timezone.empty")}</p>
+            ) : (
+              groupedTimeZones.map((group) => (
+                <div key={group.regionKey} className="border-b border-[#2f3336] last:border-b-0">
+                  <div className="sticky top-0 z-10 border-b border-[#2f3336] bg-[#0f1419] px-4 py-2 text-xs font-semibold uppercase text-[#71767b]">
+                    {t(group.regionKey)}
+                  </div>
+                  <div className="divide-y divide-[#2f3336]">
+                    {group.items.map((option) => {
+                      const active = option.value === preferredTimeZone;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => chooseTimeZone(option.value)}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors",
+                            active ? "bg-[#1d9bf0]/10" : "hover:bg-[#16181c]"
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-white">{t(option.cityKey)}</span>
+                            <span className="mt-0.5 block truncate text-xs text-[#71767b]">{option.value}</span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2 text-xs text-[#71767b]">
+                            {option.offset}
+                            {active ? <CheckCircle2 className="size-4 text-[#1d9bf0]" /> : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

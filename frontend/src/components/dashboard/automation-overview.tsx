@@ -12,9 +12,10 @@ type AutomationOverviewProps = {
   loading?: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
+  monthlyUsage?: Partial<Record<AutomationModule["type"], { used: number; limit: number }>>;
 };
 
-export function AutomationOverview({ modules = [], loading = false, errorMessage, onRetry }: AutomationOverviewProps) {
+export function AutomationOverview({ modules = [], loading = false, errorMessage, onRetry, monthlyUsage = {} }: AutomationOverviewProps) {
   const { t } = useT();
   const iconByType = {
     post: Bot,
@@ -28,7 +29,25 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
       title={t("dashboard.automation.section.title")}
       description={t("dashboard.automation.section.description")}
     >
-      {loading ? <p className="text-sm text-[#71767b]">{t("dashboard.automation.loading")}</p> : null}
+      {loading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <article key={index} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="size-8 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+                  <span className="h-4 w-24 animate-pulse rounded-full bg-[#2f3336]" />
+                </div>
+                <span className="h-6 w-16 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+              <div className="mt-5 space-y-2">
+                <span className="block h-4 w-32 animate-pulse rounded-full bg-[#2f3336]" />
+                <span className="block h-4 w-40 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {errorMessage ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-300/25 bg-rose-500/10 p-3">
           <p className="text-sm text-rose-100">{errorMessage}</p>
@@ -37,9 +56,10 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
           </button>
         </div>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {!loading && !errorMessage ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {modules.map((module) => {
           const ModuleIcon = iconByType[module.type];
+          const quota = monthlyUsage[module.type];
           return (
             <article key={module.type} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 transition-colors hover:bg-[#16181c]">
             <div className="flex items-center justify-between">
@@ -54,13 +74,17 @@ export function AutomationOverview({ modules = [], loading = false, errorMessage
               </span>
             </div>
             <div className="mt-4 space-y-1 text-sm text-[#71767b]">
-              <p>{t("dashboard.automation.labels.executedToday", { count: module.executedToday })}</p>
+              <p>
+                {quota
+                  ? t("dashboard.automation.labels.executedMonth", { used: quota.used, limit: quota.limit })
+                  : t("dashboard.automation.labels.executedMonthFallback", { count: module.executedToday })}
+              </p>
               <p>{t("dashboard.automation.labels.nextRun", { time: t(module.nextRunKey, module.nextRunParams) })}</p>
             </div>
           </article>
           );
         })}
-      </div>
+      </div> : null}
     </SectionCard>
   );
 }

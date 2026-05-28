@@ -1,11 +1,13 @@
 "use client";
 
-import { Bot, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
+import Link from "next/link";
+import { Bot, ChevronRight, ClipboardList, MessageCircle, MessageCircleReply, Send, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import type { ActivityRecord } from "@/types/activity";
 import { activityNarrativeLine } from "@/lib/activity-narrative";
+import { formatTimeOnly, usePreferredTimeZone } from "@/lib/timezone";
 
 import { SectionCard } from "./section-card";
 
@@ -51,14 +53,9 @@ function failureCategoryLabelKey(category: ActivityRecord["failureCategory"]) {
   return "";
 }
 
-function formatClock(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 export function RecentActivityList({ records, loading, errorMessage, onRetry }: RecentActivityListProps) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
 
   return (
     <SectionCard
@@ -66,7 +63,22 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
       description={t("dashboard.activity.section.description")}
     >
       {loading ? (
-        <p className="text-sm text-white/60">{t("dashboard.activity.loading")}</p>
+        <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article key={index} className="grid gap-2 px-5 py-4 md:grid-cols-[76px_1fr_96px] md:px-6">
+              <span className="h-4 w-14 animate-pulse rounded-full bg-[#2f3336]" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-4 w-20 animate-pulse rounded-full bg-[#2f3336]" />
+                  <span className="h-5 w-16 animate-pulse rounded-full bg-[#1d9bf0]/10" />
+                </div>
+                <span className="mt-3 block h-3 w-full max-w-md animate-pulse rounded-full bg-[#2f3336]" />
+                <span className="mt-2 block h-3 w-40 animate-pulse rounded-full bg-[#2f3336]" />
+              </div>
+              <span className="ml-auto h-4 w-16 animate-pulse rounded-full bg-[#2f3336]" />
+            </article>
+          ))}
+        </div>
       ) : errorMessage ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-red-200/90">{errorMessage}</p>
@@ -77,7 +89,27 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
           ) : null}
         </div>
       ) : records.length === 0 ? (
-        <p className="text-sm text-[#71767b]">{t("dashboard.activity.empty")}</p>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <div className="flex gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+              <ClipboardList className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-[#e7e9ea]">{t("dashboard.activity.emptyTitle")}</p>
+              <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("dashboard.activity.empty")}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/automations" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+                  {t("dashboard.activity.emptyAutomationCta")}
+                  <ChevronRight className="size-4" />
+                </Link>
+                <Link href="/execution-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+                  {t("dashboard.activity.emptyQueueCta")}
+                  <ChevronRight className="size-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
           {records.map((activity) => {
@@ -89,7 +121,7 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
               >
                 <span className="flex items-center gap-2 text-[#71767b]">
                   <Icon className="size-3.5 shrink-0 text-[#1d9bf0]" />
-                  {formatClock(activity.executedAt)}
+                    {formatTimeOnly(activity.executedAt, timeZone)}
                 </span>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

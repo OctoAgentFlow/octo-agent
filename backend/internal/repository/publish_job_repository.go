@@ -126,6 +126,13 @@ func (r *PublishJobRepository) Save(job *model.PublishJob) error {
 	return r.DB.Save(job).Error
 }
 
+func (r *PublishJobRepository) DeleteNonPublishedBySource(userID uint, sourceType string, sourceID uint) error {
+	return r.DB.
+		Where("user_id = ? AND source_type = ? AND source_id = ?", userID, sourceType, sourceID).
+		Where("status <> ?", PublishStatusPublished).
+		Delete(&model.PublishJob{}).Error
+}
+
 func (r *PublishJobRepository) RecordXPublishCost(job *model.PublishJob, occurredAt time.Time) error {
 	if job == nil || strings.TrimSpace(job.ExternalID) == "" {
 		return nil

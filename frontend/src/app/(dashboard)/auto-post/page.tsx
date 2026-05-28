@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  Clock3,
   Database,
   ListChecks,
   Loader2,
@@ -25,9 +26,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
   autoPostService,
@@ -67,7 +70,21 @@ const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
 const xSubscriptionTiers: XSubscriptionTier[] = ["unknown", "free", "premium", "premium_plus"];
 const autoPostLengthModes: AutoPostLengthMode[] = ["standard", "long"];
-const contentItemTypes: ContentLibraryItemType[] = ["idea", "product_update", "faq", "case_study", "announcement", "link", "thread_seed"];
+const contentItemTypes: ContentLibraryItemType[] = [
+  "idea",
+  "feature_highlight",
+  "pain_point",
+  "product_update",
+  "faq",
+  "case_study",
+  "comparison",
+  "tutorial",
+  "data_insight",
+  "announcement",
+  "campaign",
+  "link",
+  "thread_seed",
+];
 const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; descriptionKey: string }> = [
   { id: "generate", labelKey: "autoPost.tabs.generate", descriptionKey: "autoPost.tabs.generateDesc" },
   { id: "planner", labelKey: "autoPost.tabs.planner", descriptionKey: "autoPost.tabs.plannerDesc" },
@@ -77,6 +94,14 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 const runAccountScopes: RunAccountScope[] = ["selected", "all"];
 const runRangeFilters: RunRangeFilter[] = ["all", "24h", "7d", "30d"];
+const postingWindowHours = Array.from({ length: 24 }, (_, hour) => hour);
+const postingWindowPresets = [
+  { key: "business", hours: [9, 10, 11, 12, 13, 14, 15, 16, 17] },
+  { key: "morning", hours: [8, 9, 10, 11] },
+  { key: "afternoon", hours: [13, 14, 15, 16, 17] },
+  { key: "evening", hours: [18, 19, 20, 21] },
+  { key: "allDay", hours: postingWindowHours },
+];
 
 type LibraryForm = {
   title: string;
@@ -115,13 +140,6 @@ function defaultLibraryForm(): LibraryForm {
   };
 }
 
-function formatDate(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
 function statusTone(status: string) {
   if (status === "ready_to_publish") return "border-emerald-300/25 bg-emerald-500/10 text-emerald-100";
   if (status === "pending_review" || status === "draft") return "border-amber-300/25 bg-amber-500/10 text-amber-100";
@@ -153,6 +171,66 @@ function readRunRange(value: string | null): RunRangeFilter {
   return value === "24h" || value === "7d" || value === "30d" ? value : "all";
 }
 
+function hourLabel(hour: number) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function parseClockMinutes(value: string) {
+  const parts = value.trim().split(":");
+  if (parts.length !== 2) return null;
+  const hour = Number.parseInt(parts[0], 10);
+  const minute = Number.parseInt(parts[1], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function parsePostingWindowHours(value: string) {
+  const selected = new Set<number>();
+  value
+    .replaceAll("，", ",")
+    .replaceAll(";", ",")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [startRaw, endRaw] = part.split("-").map((item) => item.trim());
+      const start = parseClockMinutes(startRaw || "");
+      const end = parseClockMinutes(endRaw || "");
+      if (start === null || end === null) return;
+      const addRange = (from: number, to: number) => {
+        for (let hour = Math.floor(from / 60); hour <= Math.floor(to / 60); hour += 1) {
+          if (hour >= 0 && hour <= 23) selected.add(hour);
+        }
+      };
+      if (start <= end) {
+        addRange(start, end);
+      } else {
+        addRange(start, 23 * 60 + 59);
+        addRange(0, end);
+      }
+    });
+  return selected;
+}
+
+function formatPostingWindowHours(hours: Set<number>) {
+  const sorted = Array.from(hours)
+    .filter((hour) => hour >= 0 && hour <= 23)
+    .sort((a, b) => a - b);
+  if (sorted.length === 0) return "";
+  const ranges: Array<{ start: number; end: number }> = [];
+  sorted.forEach((hour) => {
+    const last = ranges[ranges.length - 1];
+    if (last && hour === last.end + 1) {
+      last.end = hour;
+      return;
+    }
+    ranges.push({ start: hour, end: hour });
+  });
+  return ranges
+    .map((range) => `${hourLabel(range.start)}-${String(range.end).padStart(2, "0")}:59`)
+    .join(", ");
+}
+
 function readRunPage(value: string | null) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
@@ -165,10 +243,12 @@ function readAccountID(value: string | null) {
 
 export default function AutoPostPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -274,6 +354,7 @@ export default function AutoPostPage() {
   const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
+  const selectedPostingWindowHours = useMemo(() => parsePostingWindowHours(form.postingWindows), [form.postingWindows]);
   const modulePaused = moduleEnabled === false;
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
@@ -363,6 +444,24 @@ export default function AutoPostPage() {
       workbenchPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   }, []);
+
+  const updatePostingWindowHours = useCallback((hours: Set<number>) => {
+    setForm((current) => ({ ...current, postingWindows: formatPostingWindowHours(hours) }));
+  }, []);
+
+  const togglePostingWindowHour = useCallback((hour: number) => {
+    const next = new Set(selectedPostingWindowHours);
+    if (next.has(hour)) {
+      next.delete(hour);
+    } else {
+      next.add(hour);
+    }
+    updatePostingWindowHours(next);
+  }, [selectedPostingWindowHours, updatePostingWindowHours]);
+
+  const applyPostingWindowPreset = useCallback((hours: number[]) => {
+    updatePostingWindowHours(new Set(hours));
+  }, [updatePostingWindowHours]);
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
@@ -470,6 +569,12 @@ export default function AutoPostPage() {
     setLibraryOpen(false);
   };
 
+  const startCreateLibraryItem = () => {
+    setEditingLibraryID(null);
+    setLibraryForm(defaultLibraryForm());
+    setLibraryOpen(true);
+  };
+
   const editLibraryItem = (item: ContentLibraryItemApi) => {
     setEditingLibraryID(item.id);
     setLibraryForm({
@@ -547,7 +652,12 @@ export default function AutoPostPage() {
   };
 
   const deleteLibraryItem = async (item: ContentLibraryItemApi) => {
-    if (!window.confirm(t("autoPost.contentLibrary.confirmDelete"))) return;
+    const confirmed = await confirm({
+      description: t("autoPost.contentLibrary.confirmDelete"),
+      confirmLabel: t("autoComment.review.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await contentLibraryService.delete(item.id);
       setContentItems((current) => current.filter((row) => row.id !== item.id));
@@ -609,7 +719,11 @@ export default function AutoPostPage() {
       pushToast(t("autoPost.runNow.needPlanner"));
       return;
     }
-    if (!window.confirm(t("autoPost.runNow.confirm"))) return;
+    const confirmed = await confirm({
+      description: t("autoPost.runNow.confirm"),
+      confirmLabel: t("autoPost.runNow.button"),
+    });
+    if (!confirmed) return;
     setRunningPlanner(true);
     try {
       const run = await autoPostService.runNow(selectedPlan.id);
@@ -777,8 +891,8 @@ export default function AutoPostPage() {
                 <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
                 <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
                 <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
-                <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDate(selectedPlan.last_run_at) : t("autoPost.common.emptyValue")} />
-                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDate(selectedPlan.next_run_at) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDateTime(selectedPlan.last_run_at, timeZone) : t("autoPost.common.emptyValue")} />
+                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("autoPost.common.emptyValue")} />
                 <StatusRow label={t("autoPost.status.activeContent")} value={t("autoPost.status.activeContentValue", { count: activeContentCount })} />
                 <StatusRow
                   label={t("autoPost.status.lastRunResult")}
@@ -878,16 +992,13 @@ export default function AutoPostPage() {
                   />
                 </div>
 
-                <label className="block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.postingWindows")}</span>
-                  <input
-                    value={form.postingWindows}
-                    onChange={(event) => setForm((current) => ({ ...current, postingWindows: event.target.value }))}
-                    placeholder={t("autoPost.fields.postingWindowsPlaceholder")}
-                    className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
-                  />
-                  <span className="text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</span>
-                </label>
+                <PostingWindowPicker
+                  value={form.postingWindows}
+                  selectedHours={selectedPostingWindowHours}
+                  onToggleHour={togglePostingWindowHour}
+                  onApplyPreset={applyPostingWindowPreset}
+                  onClear={() => updatePostingWindowHours(new Set())}
+                />
 
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.timezone")}</span>
@@ -948,7 +1059,7 @@ export default function AutoPostPage() {
                   title={t("autoPost.contentLibrary.title")}
                   description={t("autoPost.contentLibrary.description")}
                   right={
-                    <Button size="sm" variant="outline" onClick={() => setLibraryOpen((open) => !open)}>
+                    <Button size="sm" variant="outline" onClick={libraryOpen ? resetLibraryForm : startCreateLibraryItem}>
                       {libraryOpen ? t("autoPost.contentLibrary.closeForm") : t("autoPost.contentLibrary.add")}
                     </Button>
                   }
@@ -1065,7 +1176,7 @@ export default function AutoPostPage() {
                 {availableContentItems.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
                     <p>{t("autoPost.contentLibrary.empty")}</p>
-                    <Button type="button" className="mt-4" size="sm" onClick={() => setLibraryOpen(true)}>
+                    <Button type="button" className="mt-4" size="sm" onClick={startCreateLibraryItem}>
                       {t("autoPost.contentLibrary.addFirst")}
                     </Button>
                   </div>
@@ -1115,7 +1226,7 @@ export default function AutoPostPage() {
                               <span key={topic} className="rounded-full bg-[#0f1419] px-2 py-0.5">{topic}</span>
                             ))}
                             <span>{t("autoPost.contentLibrary.usageCount", { count: item.usage_count })}</span>
-                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDate(item.last_used_at) })}</span> : null}
+                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDateTime(item.last_used_at, timeZone) })}</span> : null}
                           </div>
                         </button>
                         <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
@@ -1247,7 +1358,7 @@ export default function AutoPostPage() {
                           <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                             {t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
                           </span>
-                          <span className="text-xs text-[#71767b]">{formatDate(draft.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDateTime(draft.created_at, timeZone)}</span>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
@@ -1342,7 +1453,7 @@ export default function AutoPostPage() {
                               {run.content_title}
                             </span>
                           ) : null}
-                          <span className="text-xs text-[#71767b]">{formatDate(run.created_at)}</span>
+                          <span className="text-xs text-[#71767b]">{formatDateTime(run.created_at, timeZone)}</span>
                         </div>
                         {run.skip_reason ? (
                           <p className="mt-2 text-sm leading-6 text-[#71767b]">
@@ -1624,6 +1735,77 @@ function DraftRouteStep({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
       <p className="text-[11px] text-[#71767b]">{label}</p>
       <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function PostingWindowPicker({
+  value,
+  selectedHours,
+  onToggleHour,
+  onApplyPreset,
+  onClear,
+}: {
+  value: string;
+  selectedHours: Set<number>;
+  onToggleHour: (hour: number) => void;
+  onApplyPreset: (hours: number[]) => void;
+  onClear: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="space-y-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Clock3 className="size-4 text-[#1d9bf0]" />
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.postingWindows")}</p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</p>
+        </div>
+        <button type="button" onClick={onClear} className="text-xs font-semibold text-[#1d9bf0] hover:underline">
+          {t("autoPost.fields.postingWindowsClear")}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {postingWindowPresets.map((preset) => (
+          <button
+            key={preset.key}
+            type="button"
+            onClick={() => onApplyPreset(preset.hours)}
+            className="rounded-full border border-[#2f3336] bg-black px-3 py-1.5 text-xs font-semibold text-[#e7e9ea] transition hover:border-[#1d9bf0]/55 hover:bg-[#1d9bf0]/10"
+          >
+            {t(`autoPost.postingWindowPreset.${preset.key}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+        {postingWindowHours.map((hour) => {
+          const selected = selectedHours.has(hour);
+          return (
+            <button
+              key={hour}
+              type="button"
+              onClick={() => onToggleHour(hour)}
+              className={`h-10 rounded-xl border text-xs font-semibold transition ${
+                selected
+                  ? "border-[#1d9bf0]/70 bg-[#1d9bf0]/18 text-white"
+                  : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+              }`}
+              aria-pressed={selected}
+            >
+              {hourLabel(hour)}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+        <p className="text-[11px] uppercase tracking-wide text-[#71767b]">{t("autoPost.fields.postingWindowsSelected")}</p>
+        <p className="mt-1 break-words text-sm text-[#e7e9ea]">{value || t("autoPost.fields.postingWindowsNoLimit")}</p>
+      </div>
     </div>
   );
 }

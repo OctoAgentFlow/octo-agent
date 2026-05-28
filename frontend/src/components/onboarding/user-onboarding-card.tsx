@@ -11,8 +11,11 @@ import { cn } from "@/lib/utils";
 type UserOnboardingCardProps = {
   accountConnected: boolean;
   automationEnabled: boolean;
-  postCreated: boolean;
-  activityObserved: boolean;
+  postCreated?: boolean;
+  activityObserved?: boolean;
+  oafBotCreated?: boolean;
+  autoPostConfigured?: boolean;
+  executionQueueChecked?: boolean;
   onConnectAccount?: () => void;
   onConfigureAutomation?: () => void;
 };
@@ -29,12 +32,18 @@ type Step = {
 export function UserOnboardingCard({
   accountConnected,
   automationEnabled,
-  postCreated,
-  activityObserved,
+  postCreated = false,
+  activityObserved = false,
+  oafBotCreated,
+  autoPostConfigured,
+  executionQueueChecked,
   onConnectAccount,
   onConfigureAutomation,
 }: UserOnboardingCardProps) {
   const { t } = useT();
+  const hasOAFBot = oafBotCreated ?? postCreated;
+  const hasAutoPostConfigured = autoPostConfigured ?? postCreated;
+  const hasCheckedQueue = executionQueueChecked ?? activityObserved;
   const steps: Step[] = [
     {
       done: accountConnected,
@@ -45,6 +54,20 @@ export function UserOnboardingCard({
       onClick: onConnectAccount,
     },
     {
+      done: hasOAFBot,
+      titleKey: "onboarding.step.oafBot.title",
+      descriptionKey: "onboarding.step.oafBot.description",
+      ctaKey: "onboarding.step.oafBot.cta",
+      href: "/oaf-bots",
+    },
+    {
+      done: hasAutoPostConfigured,
+      titleKey: "onboarding.step.autoPost.title",
+      descriptionKey: "onboarding.step.autoPost.description",
+      ctaKey: "onboarding.step.autoPost.cta",
+      href: "/auto-post",
+    },
+    {
       done: automationEnabled,
       titleKey: "onboarding.step.automation.title",
       descriptionKey: "onboarding.step.automation.description",
@@ -53,18 +76,11 @@ export function UserOnboardingCard({
       onClick: onConfigureAutomation,
     },
     {
-      done: postCreated,
-      titleKey: "onboarding.step.post.title",
-      descriptionKey: "onboarding.step.post.description",
-      ctaKey: "onboarding.step.post.cta",
-      href: "/posts/create?source=auto_post",
-    },
-    {
-      done: activityObserved,
-      titleKey: "onboarding.step.activity.title",
-      descriptionKey: "onboarding.step.activity.description",
-      ctaKey: "onboarding.step.activity.cta",
-      href: "/activity",
+      done: hasCheckedQueue,
+      titleKey: "onboarding.step.executionQueue.title",
+      descriptionKey: "onboarding.step.executionQueue.description",
+      ctaKey: "onboarding.step.executionQueue.cta",
+      href: "/execution-queue",
     },
   ];
   const completed = steps.filter((step) => step.done).length;
@@ -78,7 +94,7 @@ export function UserOnboardingCard({
         title={t("onboarding.title")}
         description={t("onboarding.description", { completed, total: steps.length })}
       />
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {steps.map((step, index) => {
           const StepIcon = step.done ? CheckCircle2 : Circle;
           const active = step === nextStep;

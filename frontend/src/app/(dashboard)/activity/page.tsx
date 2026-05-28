@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 
 import { ActivityFilters } from "@/components/activity/activity-filters";
 import { ActivityList } from "@/components/activity/activity-list";
@@ -75,6 +76,7 @@ function readFailureCategory(value: string | null): Filters["failureCategory"] {
 
 export default function ActivityPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -241,7 +243,7 @@ export default function ActivityPage() {
           icon={<AlertTriangle className="size-4" />}
           label={t("activity.summary.failed")}
           value={String(pageFailedCount)}
-          description={latestRecord ? t("activity.summary.latest", { time: new Date(latestRecord.executedAt).toLocaleString() }) : t("activity.summary.noLatest")}
+          description={latestRecord ? t("activity.summary.latest", { time: formatDateTime(latestRecord.executedAt, timeZone) }) : t("activity.summary.noLatest")}
           tone={pageFailedCount > 0 ? "danger" : "default"}
         />
       </div>

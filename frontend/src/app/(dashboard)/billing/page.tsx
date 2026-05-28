@@ -13,6 +13,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { mapPaymentMethods } from "@/lib/billing-payment-methods";
+import { formatDateOnly, usePreferredTimeZone } from "@/lib/timezone";
 import { billingService, type BillingOrderListItemApi } from "@/services/billing.service";
 import { useT } from "@/i18n/use-t";
 import type { BillingPlanApi, BillingSubscriptionApi, PlanLimitsApi, PlanUsageApi } from "@/services/billing.service";
@@ -83,18 +84,16 @@ function orderQueryFromFilters(filters: BillingOrderFilterState) {
   };
 }
 
-function formatOrderDate(order: BillingOrderListItemApi) {
+function formatOrderDate(order: BillingOrderListItemApi, timeZone: string) {
   const raw = order.paid_at || order.created_at;
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw || "—";
-  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+  return formatDateOnly(raw, timeZone);
 }
 
-function mapPaymentRecord(order: BillingOrderListItemApi): PaymentRecord {
+function mapPaymentRecord(order: BillingOrderListItemApi, timeZone: string): PaymentRecord {
   return {
     id: order.order_id,
     userId: order.user_id,
-    date: formatOrderDate(order),
+    date: formatOrderDate(order, timeZone),
     planKey: mapPlanKey(order.plan_code),
     amount: `${order.payable_amount || order.amount} ${order.currency}`,
     originalAmount: order.original_amount || "",
@@ -224,6 +223,7 @@ const emptyOpsSummary: BillingOpsSummary = {
 
 export default function BillingPage() {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -256,7 +256,7 @@ export default function BillingPage() {
         setSubscription(mapSubscription(subscriptionData));
         setPlans(plansData.items.map(mapPlan));
         setPaymentMethods(mapPaymentMethods(methodsData.items));
-        setPaymentRecords(ordersData.items.map(mapPaymentRecord));
+        setPaymentRecords(ordersData.items.map((item) => mapPaymentRecord(item, timeZone)));
         setOpsSummary(ordersData.ops_summary || emptyOpsSummary);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
@@ -272,7 +272,7 @@ export default function BillingPage() {
         }
       }
     },
-    [paymentFilters, pushToast, t]
+    [paymentFilters, pushToast, t, timeZone]
   );
 
   useEffect(() => {

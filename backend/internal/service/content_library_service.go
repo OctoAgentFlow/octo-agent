@@ -148,7 +148,7 @@ func contentLibraryItemToDTO(row model.ContentLibraryItem) dto.ContentLibraryIte
 
 func normalizeContentLibraryType(value string) string {
 	switch strings.TrimSpace(value) {
-	case "product_update", "faq", "case_study", "announcement", "link", "thread_seed":
+	case "product_update", "feature_highlight", "pain_point", "faq", "case_study", "comparison", "tutorial", "data_insight", "announcement", "campaign", "link", "thread_seed":
 		return strings.TrimSpace(value)
 	default:
 		return "idea"

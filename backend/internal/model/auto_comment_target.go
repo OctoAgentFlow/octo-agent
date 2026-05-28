@@ -13,6 +13,9 @@ type AutoCommentTarget struct {
 	TargetTweetURL     string     `gorm:"size:512;comment:手动录入的目标推文URL" json:"target_tweet_url,omitempty"`
 	TargetAuthorHandle string     `gorm:"size:128;comment:手动录入的目标推文作者Handle" json:"target_author_handle,omitempty"`
 	TargetText         string     `gorm:"type:text;comment:手动录入的目标推文正文" json:"target_text,omitempty"`
+	TargetCategory     string     `gorm:"size:64;index;not null;default:kol;comment:目标分类（kol/founder/project/competitor/customer/media/analyst/investor/developer/community/ecosystem/partner/other）" json:"target_category"`
+	Priority           int        `gorm:"not null;default:3;comment:目标优先级（1-5）" json:"priority"`
+	Notes              string     `gorm:"size:512;comment:运营备注" json:"notes,omitempty"`
 	Status             string     `gorm:"size:32;index;not null;default:active;comment:目标状态（active/paused）" json:"status"`
 	LastSeenTweetID    string     `gorm:"size:64;index;comment:最近已发现目标推文ID" json:"last_seen_tweet_id,omitempty"`
 	LastSeenTweetAt    *time.Time `gorm:"index;comment:最近已发现目标推文时间" json:"last_seen_tweet_at,omitempty"`

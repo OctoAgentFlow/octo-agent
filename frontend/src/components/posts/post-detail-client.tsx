@@ -8,9 +8,11 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { defaultScheduledPostTimezone, isoToZonedDateTimeValue, ScheduledDateTimePicker, zonedDateTimeValueToISO } from "@/components/posts/scheduled-date-time-picker";
 import { cn } from "@/lib/utils";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { useT } from "@/i18n/use-t";
 import { postService } from "@/services/post.service";
 import type { PostItem, PostStatus } from "@/types/post";
@@ -24,8 +26,10 @@ function scheduledDatetimeToISO(local: string, timeZone: string): string | null 
 
 export function PostDetailClient({ postId }: { postId: number }) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   const router = useRouter();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [post, setPost] = useState<PostItem | null>(null);
@@ -125,7 +129,12 @@ export function PostDetailClient({ postId }: { postId: number }) {
 
   const remove = async () => {
     if (!post) return;
-    if (!window.confirm(t("posts.detail.deleteConfirm"))) return;
+    const confirmed = await confirm({
+      description: t("posts.detail.deleteConfirm"),
+      confirmLabel: t("autoComment.review.delete"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await postService.remove(post.id);
       pushToast(t("posts.detail.deleteSuccess"));
@@ -184,7 +193,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
                   <p className="mt-1 break-words text-xs leading-5 text-[#ffb6bb]">{post.last_error_message}</p>
                   {post.last_attempt_at ? (
                     <p className="mt-1 text-xs text-[#ff8a91]">
-                      {t("posts.detail.lastAttemptAt")}: {new Date(post.last_attempt_at).toLocaleString()}
+                      {t("posts.detail.lastAttemptAt")}: {formatDateTime(post.last_attempt_at, timeZone)}
                     </p>
                   ) : null}
                 </div>
@@ -248,7 +257,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
             ) : null}
             {post.published_at ? (
               <p className="text-xs text-[#71767b]">
-                {t("posts.detail.publishedAt")}: {new Date(post.published_at).toLocaleString()}
+                {t("posts.detail.publishedAt")}: {formatDateTime(post.published_at, timeZone)}
               </p>
             ) : null}
             {(post.status === "draft" || post.status === "scheduled" || post.status === "failed") ? (

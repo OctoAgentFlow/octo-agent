@@ -23,7 +23,7 @@ func normalizeXUsername(v string) string {
 
 func (r *AutoCommentTargetRepository) ListByUser(userID uint) ([]model.AutoCommentTarget, error) {
 	var rows []model.AutoCommentTarget
-	err := r.DB.Where("user_id = ?", userID).Order("status ASC, updated_at DESC, id DESC").Find(&rows).Error
+	err := r.DB.Where("user_id = ?", userID).Order("status ASC, priority DESC, updated_at DESC, id DESC").Find(&rows).Error
 	return rows, err
 }
 
@@ -80,7 +80,7 @@ func (r *AutoCommentTargetRepository) ListDueActiveTargets(limit int, now time.T
 			"active", now).
 		Where("auto_comment_targets.status = ?", "active").
 		Where("(auto_comment_targets.last_checked_at IS NULL OR auto_comment_targets.last_checked_at <= ?)", now.Add(-2*time.Minute)).
-		Order("auto_comment_targets.last_checked_at ASC, auto_comment_targets.id ASC").
+		Order("auto_comment_targets.priority DESC, auto_comment_targets.last_checked_at ASC, auto_comment_targets.id ASC").
 		Limit(limit).
 		Find(&rows).Error
 	return rows, err

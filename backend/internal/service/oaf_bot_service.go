@@ -552,6 +552,11 @@ func applyOAFBotRequest(bot *model.OAFBot, req dto.OAFBotUpsertRequest) {
 	bot.ContentPillars = encodeStringList(req.ContentPillars)
 	bot.ContentObjectives = limitString(req.ContentObjectives, 2000)
 	bot.PreferredCTA = limitString(req.PreferredCTA, 1000)
+	bot.WebsiteURL = limitString(req.WebsiteURL, 512)
+	bot.TelegramURL = limitString(req.TelegramURL, 512)
+	bot.DiscordURL = limitString(req.DiscordURL, 512)
+	bot.DocsURL = limitString(req.DocsURL, 512)
+	bot.CTAPolicy = limitString(req.CTAPolicy, 1600)
 	bot.Hashtags = encodeStringList(req.Hashtags)
 	bot.Keywords = encodeStringList(req.Keywords)
 	bot.ComplianceNotes = limitString(req.ComplianceNotes, 2000)
@@ -592,6 +597,11 @@ func oafBotSampleInput(bot *model.OAFBot, scene string, sampleContext string) Ge
 		ContentPillars:    decodeStringList(bot.ContentPillars),
 		ContentObjectives: bot.ContentObjectives,
 		PreferredCTA:      bot.PreferredCTA,
+		WebsiteURL:        bot.WebsiteURL,
+		TelegramURL:       bot.TelegramURL,
+		DiscordURL:        bot.DiscordURL,
+		DocsURL:           bot.DocsURL,
+		CTAPolicy:         bot.CTAPolicy,
 		Hashtags:          decodeStringList(bot.Hashtags),
 		Keywords:          decodeStringList(bot.Keywords),
 		ComplianceNotes:   bot.ComplianceNotes,
@@ -626,6 +636,11 @@ func completeOAFBotProfileInput(req dto.OAFBotUpsertRequest, mode string) Comple
 		ContentPillars:    req.ContentPillars,
 		ContentObjectives: req.ContentObjectives,
 		PreferredCTA:      req.PreferredCTA,
+		WebsiteURL:        req.WebsiteURL,
+		TelegramURL:       req.TelegramURL,
+		DiscordURL:        req.DiscordURL,
+		DocsURL:           req.DocsURL,
+		CTAPolicy:         req.CTAPolicy,
 		Hashtags:          req.Hashtags,
 		Keywords:          req.Keywords,
 		ComplianceNotes:   req.ComplianceNotes,
@@ -810,6 +825,11 @@ func mergeCompletedOAFBotProfile(draft, generated dto.OAFBotUpsertRequest, mode 
 	out.Differentiators = limitString(pickString(generated.Differentiators, draft.Differentiators), 2000)
 	out.ContentObjectives = limitString(pickString(generated.ContentObjectives, draft.ContentObjectives), 2000)
 	out.PreferredCTA = limitString(pickString(generated.PreferredCTA, draft.PreferredCTA), 1000)
+	out.WebsiteURL = limitString(pickString(generated.WebsiteURL, draft.WebsiteURL), 512)
+	out.TelegramURL = limitString(pickString(generated.TelegramURL, draft.TelegramURL), 512)
+	out.DiscordURL = limitString(pickString(generated.DiscordURL, draft.DiscordURL), 512)
+	out.DocsURL = limitString(pickString(generated.DocsURL, draft.DocsURL), 512)
+	out.CTAPolicy = limitString(pickString(generated.CTAPolicy, draft.CTAPolicy), 1600)
 	out.ComplianceNotes = limitString(pickString(generated.ComplianceNotes, draft.ComplianceNotes), 2000)
 	out.PersonalityTags = pickList(generated.PersonalityTags, draft.PersonalityTags)
 	out.Topics = pickList(generated.Topics, draft.Topics)
@@ -853,6 +873,11 @@ func oafBotToDTO(bot model.OAFBot) dto.OAFBotItem {
 		ContentPillars:    decodeStringList(bot.ContentPillars),
 		ContentObjectives: bot.ContentObjectives,
 		PreferredCTA:      bot.PreferredCTA,
+		WebsiteURL:        bot.WebsiteURL,
+		TelegramURL:       bot.TelegramURL,
+		DiscordURL:        bot.DiscordURL,
+		DocsURL:           bot.DocsURL,
+		CTAPolicy:         bot.CTAPolicy,
 		Hashtags:          decodeStringList(bot.Hashtags),
 		Keywords:          decodeStringList(bot.Keywords),
 		ComplianceNotes:   bot.ComplianceNotes,
@@ -889,6 +914,11 @@ func oafBotToUpsertRequest(bot model.OAFBot) dto.OAFBotUpsertRequest {
 		ContentPillars:    decodeStringList(bot.ContentPillars),
 		ContentObjectives: bot.ContentObjectives,
 		PreferredCTA:      bot.PreferredCTA,
+		WebsiteURL:        bot.WebsiteURL,
+		TelegramURL:       bot.TelegramURL,
+		DiscordURL:        bot.DiscordURL,
+		DocsURL:           bot.DocsURL,
+		CTAPolicy:         bot.CTAPolicy,
 		Hashtags:          decodeStringList(bot.Hashtags),
 		Keywords:          decodeStringList(bot.Keywords),
 		ComplianceNotes:   bot.ComplianceNotes,

@@ -553,6 +553,12 @@ export default function AutoPostPage() {
     setLibraryOpen(false);
   };
 
+  const startCreateLibraryItem = () => {
+    setEditingLibraryID(null);
+    setLibraryForm(defaultLibraryForm());
+    setLibraryOpen(true);
+  };
+
   const editLibraryItem = (item: ContentLibraryItemApi) => {
     setEditingLibraryID(item.id);
     setLibraryForm({
@@ -1028,7 +1034,7 @@ export default function AutoPostPage() {
                   title={t("autoPost.contentLibrary.title")}
                   description={t("autoPost.contentLibrary.description")}
                   right={
-                    <Button size="sm" variant="outline" onClick={() => setLibraryOpen((open) => !open)}>
+                    <Button size="sm" variant="outline" onClick={libraryOpen ? resetLibraryForm : startCreateLibraryItem}>
                       {libraryOpen ? t("autoPost.contentLibrary.closeForm") : t("autoPost.contentLibrary.add")}
                     </Button>
                   }
@@ -1145,7 +1151,7 @@ export default function AutoPostPage() {
                 {availableContentItems.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
                     <p>{t("autoPost.contentLibrary.empty")}</p>
-                    <Button type="button" className="mt-4" size="sm" onClick={() => setLibraryOpen(true)}>
+                    <Button type="button" className="mt-4" size="sm" onClick={startCreateLibraryItem}>
                       {t("autoPost.contentLibrary.addFirst")}
                     </Button>
                   </div>

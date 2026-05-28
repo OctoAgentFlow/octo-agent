@@ -983,14 +983,18 @@ func autoReplyInputFromValues(author, rootTweet, comment, tone string, blocked [
 }
 
 func (s *AutoReplyService) contentContextForReply(userID, xAccountID, botID uint, rootTweet, comment string, bot *model.OAFBot) []GenerationContentContextItem {
-	if s.contentRepo == nil {
+	return contentContextForGeneration(s.contentRepo, userID, xAccountID, botID, rootTweet, comment, bot)
+}
+
+func contentContextForGeneration(repo *repository.ContentLibraryRepository, userID, xAccountID, botID uint, primary, secondary string, bot *model.OAFBot) []GenerationContentContextItem {
+	if repo == nil {
 		return nil
 	}
-	rows, err := s.contentRepo.ListActiveForGenerationContext(userID, xAccountID, botID, 30)
+	rows, err := repo.ListActiveForGenerationContext(userID, xAccountID, botID, 30)
 	if err != nil || len(rows) == 0 {
 		return nil
 	}
-	query := strings.Join([]string{rootTweet, comment}, " ")
+	query := strings.Join([]string{primary, secondary}, " ")
 	if bot != nil {
 		query += " " + strings.Join(decodeStringList(bot.Keywords), " ")
 		query += " " + strings.Join(decodeStringList(bot.Topics), " ")

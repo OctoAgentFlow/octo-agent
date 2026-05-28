@@ -31,6 +31,7 @@ type AutoCommentService struct {
 	activityRepo   *repository.ActivityRepository
 	userRepo       *repository.UserRepository
 	oafBotRepo     *repository.OAFBotRepository
+	contentRepo    *repository.ContentLibraryRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
 	publishing     *PublishingService
@@ -44,6 +45,7 @@ func NewAutoCommentService(
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
 	oafBotRepo *repository.OAFBotRepository,
+	contentRepo *repository.ContentLibraryRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
 	publishing *PublishingService,
@@ -56,6 +58,7 @@ func NewAutoCommentService(
 		activityRepo:   activityRepo,
 		userRepo:       userRepo,
 		oafBotRepo:     oafBotRepo,
+		contentRepo:    contentRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
 		publishing:     publishing,
@@ -208,7 +211,9 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		}
 	}
 	blocked := blockedWordsFromConfig(cfg)
-	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromBot(target, bot, blocked))
+	input := autoCommentInputFromBot(target, bot, blocked)
+	input.ContentContext = contentContextForGeneration(s.contentRepo, userID, target.XAccountID, botIDForUsage(bot), target.TargetText, target.TargetUsername, bot)
+	generated, err := s.ai.GenerateAutoComment(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +381,9 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, task.UserID, now); err != nil {
 		return err
 	}
-	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(task.TargetUsername, task.TargetTweetText, cfg.Tone, blocked, bot))
+	input := autoCommentInputFromValues(task.TargetUsername, task.TargetTweetText, cfg.Tone, blocked, bot)
+	input.ContentContext = contentContextForGeneration(s.contentRepo, task.UserID, task.XAccountID, botIDForUsage(bot), task.TargetTweetText, task.TargetUsername, bot)
+	generated, err := s.ai.GenerateAutoComment(ctx, input)
 	if err != nil {
 		task.FailureCategory = "llm_error"
 		task.FailureReason = truncateErrMsg(err.Error())
@@ -512,7 +519,9 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 			return nil, err
 		}
 	}
-	generated, err := s.ai.GenerateAutoComment(ctx, autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot))
+	input := autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot)
+	input.ContentContext = contentContextForGeneration(s.contentRepo, target.UserID, target.XAccountID, botIDForUsage(bot), tw.Text, target.TargetUsername, bot)
+	generated, err := s.ai.GenerateAutoComment(ctx, input)
 	comment := generated.Text
 	risk := evaluateAutoCommentRisk(comment, bot, blocked)
 	status, capability, approvalRequired, approvedAt := autoCommentInitialState(mode, risk, now)

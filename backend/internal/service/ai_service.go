@@ -68,6 +68,7 @@ type GenerateAutoCommentInput struct {
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
+	ContentContext    []GenerationContentContextItem
 }
 
 type GenerateAutoReplyInput struct {
@@ -108,6 +109,37 @@ type GenerateAutoReplyInput struct {
 	ComplianceNotes   string
 	AvoidClaims       []string
 	SafetyMode        string
+	PrimaryLanguage   string
+	LanguageStrategy  string
+	ContentContext    []GenerationContentContextItem
+}
+
+type GenerateAutoDMInput struct {
+	RecipientUsername string
+	RecentInteraction string
+	Tone              string
+	HasBot            bool
+	Name              string
+	Occupation        string
+	Industry          string
+	IdentitySummary   string
+	VoiceTone         string
+	Topics            []string
+	GrowthGoal        string
+	ProjectOneLiner   string
+	TargetAudience    string
+	CoreValueProps    string
+	ProductFeatures   string
+	Differentiators   string
+	PreferredCTA      string
+	WebsiteURL        string
+	TelegramURL       string
+	DiscordURL        string
+	DocsURL           string
+	CTAPolicy         string
+	Keywords          []string
+	ComplianceNotes   string
+	AvoidClaims       []string
 	PrimaryLanguage   string
 	LanguageStrategy  string
 	ContentContext    []GenerationContentContextItem
@@ -424,10 +456,12 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		user.WriteString(strings.Join(in.BlockedWords, ", "))
 		user.WriteString("\n")
 	}
+	writeGenerationContentContext(&user, in.ContentContext, 700)
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
 	user.WriteString("- Prefer short, natural sentences suitable for X comments.\n")
 	user.WriteString("- Add a concrete point of view or a light question when useful.\n")
+	user.WriteString("- Use content library context only when it is relevant to the target tweet. Do not force unrelated product promotion.\n")
 	user.WriteString("- Do not repeat the target tweet verbatim.\n")
 	user.WriteString("- Do not sound like an ad and do not over-direct traffic.\n")
 	user.WriteString("- Do not use hashtags unless they are already central to the target tweet.\n")
@@ -445,6 +479,73 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		return AIGeneratedText{}, err
 	}
 	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
+}
+
+func (s *AIService) GenerateAutoDM(ctx context.Context, in GenerateAutoDMInput) (AIGeneratedText, error) {
+	recipient := strings.TrimPrefix(strings.TrimSpace(in.RecipientUsername), "@")
+	if recipient == "" {
+		recipient = "there"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's Auto DM assistant.",
+		"Write one short, polite X/Twitter DM draft for a user who already engaged with the account.",
+		"The DM must feel opt-in, useful, and non-pushy.",
+		"Output only the DM text.",
+	}, " ")
+	var user strings.Builder
+	user.WriteString("Recipient: @" + recipient + "\n")
+	if strings.TrimSpace(in.RecentInteraction) != "" {
+		user.WriteString("Recent interaction context:\n")
+		user.WriteString(truncateRunes(in.RecentInteraction, 600))
+		user.WriteString("\n")
+	}
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("occupation: " + strings.TrimSpace(in.Occupation) + "\n")
+		user.WriteString("industry: " + strings.TrimSpace(in.Industry) + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner: in.ProjectOneLiner,
+			TargetAudience:  in.TargetAudience,
+			CoreValueProps:  in.CoreValueProps,
+			ProductFeatures: in.ProductFeatures,
+			Differentiators: in.Differentiators,
+			PreferredCTA:    in.PreferredCTA,
+			WebsiteURL:      in.WebsiteURL,
+			TelegramURL:     in.TelegramURL,
+			DiscordURL:      in.DiscordURL,
+			DocsURL:         in.DocsURL,
+			CTAPolicy:       in.CTAPolicy,
+			Keywords:        in.Keywords,
+			ComplianceNotes: in.ComplianceNotes,
+			AvoidClaims:     in.AvoidClaims,
+		})
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	} else {
+		user.WriteString("Tone: " + firstNonEmpty(in.Tone, "friendly and practical") + "\n")
+	}
+	writeGenerationContentContext(&user, in.ContentContext, 700)
+	user.WriteString("Hard rules:\n")
+	user.WriteString("- Maximum 240 characters.\n")
+	user.WriteString("- Mention the recent engagement only lightly.\n")
+	user.WriteString("- Use content library context only when it makes the DM more useful.\n")
+	user.WriteString("- Do not pretend the user requested help if they did not.\n")
+	user.WriteString("- Do not ask for follows, likes, wallet connections, private keys, seed phrases, airdrops, or giveaways.\n")
+	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
+	user.WriteString("- Include at most one link, and only if the CTA policy or content context makes it useful.\n")
+	user.WriteString("- Make it easy to ignore. Do not pressure the recipient.\n")
+	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	})
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 240), Usage: result.Usage}, nil
 }
 
 func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {

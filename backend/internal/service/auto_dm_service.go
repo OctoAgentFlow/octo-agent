@@ -40,6 +40,10 @@ type AutoDMService struct {
 	ruleRepo        *repository.AutoDMRecipientRuleRepository
 	importRepo      *repository.AutoDMRecipientImportRepository
 	userRepo        *repository.UserRepository
+	oafBotRepo      *repository.OAFBotRepository
+	contentRepo     *repository.ContentLibraryRepository
+	usageRepo       *repository.AIGenerationUsageRepository
+	ai              *AIService
 	frontendBaseURL string
 }
 
@@ -51,6 +55,10 @@ func NewAutoDMService(
 	ruleRepo *repository.AutoDMRecipientRuleRepository,
 	importRepo *repository.AutoDMRecipientImportRepository,
 	userRepo *repository.UserRepository,
+	oafBotRepo *repository.OAFBotRepository,
+	contentRepo *repository.ContentLibraryRepository,
+	usageRepo *repository.AIGenerationUsageRepository,
+	ai *AIService,
 	frontendBaseURL string,
 ) *AutoDMService {
 	return &AutoDMService{
@@ -61,6 +69,10 @@ func NewAutoDMService(
 		ruleRepo:        ruleRepo,
 		importRepo:      importRepo,
 		userRepo:        userRepo,
+		oafBotRepo:      oafBotRepo,
+		contentRepo:     contentRepo,
+		usageRepo:       usageRepo,
+		ai:              ai,
 		frontendBaseURL: strings.TrimRight(strings.TrimSpace(frontendBaseURL), "/"),
 	}
 }
@@ -301,10 +313,11 @@ func (s *AutoDMService) findAutoDMCandidate(ctx context.Context, userID uint, ac
 			if !decision.Allowed {
 				continue
 			}
+			message := s.generateAutoDMMessage(ctx, userID, account.ID, reply.AuthorUsername, reply.Text)
 			return &autoDMCandidate{
 				UserID:   reply.AuthorID,
 				Username: replyAuthorDisplay(reply.AuthorUsername),
-				Message:  autoDMMessageForCandidate(reply.AuthorUsername),
+				Message:  message,
 			}, nil
 		}
 	}
@@ -1063,6 +1076,76 @@ func missingDMSendScopes(scopes string) []string {
 func autoDMMessageForCandidate(username string) string {
 	name := replyAuthorDisplay(username)
 	return "Thanks for engaging with our post, " + name + " — appreciate it. If this is not useful, feel free to ignore."
+}
+
+func (s *AutoDMService) generateAutoDMMessage(ctx context.Context, userID, xAccountID uint, username, recentInteraction string) string {
+	fallback := autoDMMessageForCandidate(username)
+	if s == nil || s.ai == nil {
+		return fallback
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return fallback
+	}
+	bot, _ := s.botForAccount(userID, xAccountID)
+	botID := botIDForUsage(bot)
+	input := autoDMInputFromBot(username, recentInteraction, bot)
+	input.ContentContext = contentContextForGeneration(s.contentRepo, userID, xAccountID, botID, recentInteraction, username, bot)
+	generated, err := s.ai.GenerateAutoDM(ctx, input)
+	if err != nil || strings.TrimSpace(generated.Text) == "" {
+		return fallback
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, botID, "dm", now, generated.Usage); err != nil {
+		zap.L().Warn("auto dm: record ai usage failed", zap.Uint("user_id", userID), zap.Error(err))
+	}
+	return generated.Text
+}
+
+func (s *AutoDMService) botForAccount(userID, xAccountID uint) (*model.OAFBot, error) {
+	if s.oafBotRepo == nil {
+		return nil, nil
+	}
+	bot, err := s.oafBotRepo.GetByUserAndTwitterAccountID(userID, xAccountID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return bot, err
+}
+
+func autoDMInputFromBot(username, recentInteraction string, bot *model.OAFBot) GenerateAutoDMInput {
+	in := GenerateAutoDMInput{
+		RecipientUsername: username,
+		RecentInteraction: recentInteraction,
+		Tone:              "friendly and useful",
+	}
+	if bot == nil {
+		return in
+	}
+	in.HasBot = true
+	in.Name = bot.Name
+	in.Occupation = bot.Occupation
+	in.Industry = bot.Industry
+	in.IdentitySummary = bot.IdentitySummary
+	in.VoiceTone = bot.VoiceTone
+	in.Topics = decodeStringList(bot.Topics)
+	in.GrowthGoal = bot.GrowthGoal
+	in.ProjectOneLiner = bot.ProjectOneLiner
+	in.TargetAudience = bot.TargetAudience
+	in.CoreValueProps = bot.CoreValueProps
+	in.ProductFeatures = bot.ProductFeatures
+	in.Differentiators = bot.Differentiators
+	in.PreferredCTA = bot.PreferredCTA
+	in.WebsiteURL = bot.WebsiteURL
+	in.TelegramURL = bot.TelegramURL
+	in.DiscordURL = bot.DiscordURL
+	in.DocsURL = bot.DocsURL
+	in.CTAPolicy = bot.CTAPolicy
+	in.Keywords = decodeStringList(bot.Keywords)
+	in.ComplianceNotes = bot.ComplianceNotes
+	in.AvoidClaims = decodeStringList(bot.AvoidClaims)
+	in.PrimaryLanguage = bot.PrimaryLanguage
+	in.LanguageStrategy = bot.LanguageStrategy
+	return in
 }
 
 func autoDMMessagePreview(recipientSource string, candidate *autoDMCandidate) string {

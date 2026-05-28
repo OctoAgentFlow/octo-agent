@@ -30,6 +30,14 @@ const (
 	autoCommentDeliveryQuotePost     = "quote_post"
 	autoCommentDeliverySkip          = "skip"
 	autoCommentDeliveryInbound       = "inbound_handoff"
+
+	autoCommentMinimumOpportunityScore = 40
+)
+
+var (
+	ErrAutoCommentOpportunityTooLow   = errors.New("auto_comment_opportunity_too_low")
+	ErrAutoCommentTargetLimitExceeded = errors.New("auto_comment_target_limit_exceeded")
+	ErrAutoCommentScanLimitExceeded   = errors.New("auto_comment_scan_limit_exceeded")
 )
 
 type autoCommentDeliveryDecision struct {
@@ -46,6 +54,7 @@ type AutoCommentService struct {
 	automationRepo *repository.AutomationRepository
 	targetRepo     *repository.AutoCommentTargetRepository
 	taskRepo       *repository.AutoCommentTaskRepository
+	scanRepo       *repository.AutoCommentScanLedgerRepository
 	activityRepo   *repository.ActivityRepository
 	userRepo       *repository.UserRepository
 	oafBotRepo     *repository.OAFBotRepository
@@ -61,6 +70,7 @@ func NewAutoCommentService(
 	automationRepo *repository.AutomationRepository,
 	targetRepo *repository.AutoCommentTargetRepository,
 	taskRepo *repository.AutoCommentTaskRepository,
+	scanRepo *repository.AutoCommentScanLedgerRepository,
 	activityRepo *repository.ActivityRepository,
 	userRepo *repository.UserRepository,
 	oafBotRepo *repository.OAFBotRepository,
@@ -75,6 +85,7 @@ func NewAutoCommentService(
 		automationRepo: automationRepo,
 		targetRepo:     targetRepo,
 		taskRepo:       taskRepo,
+		scanRepo:       scanRepo,
 		activityRepo:   activityRepo,
 		userRepo:       userRepo,
 		oafBotRepo:     oafBotRepo,
@@ -137,6 +148,9 @@ func (s *AutoCommentService) CreateTarget(userID uint, req dto.AutoCommentTarget
 			return nil, err
 		}
 	}
+	if err := s.assertAutoCommentTargetCapacity(userID, 1); err != nil {
+		return nil, err
+	}
 	target := &model.AutoCommentTarget{
 		UserID:             userID,
 		XAccountID:         xAccountID,
@@ -173,6 +187,10 @@ func (s *AutoCommentService) BulkImportTargets(userID uint, req dto.AutoCommentT
 	priority := normalizeAutoCommentTargetPriority(req.Priority)
 	notes := truncateRunes(strings.TrimSpace(req.Notes), 512)
 	resp := &dto.AutoCommentTargetBulkImportResponse{Items: []dto.AutoCommentTargetItem{}, Errors: []string{}}
+	remaining, err := s.autoCommentTargetRemaining(userID)
+	if err != nil {
+		return nil, err
+	}
 	for _, handle := range handles {
 		existing, err := s.targetRepo.GetByUserAccountAndUsername(userID, xAccountID, handle)
 		if err == nil {
@@ -197,6 +215,11 @@ func (s *AutoCommentService) BulkImportTargets(userID uint, req dto.AutoCommentT
 			resp.Skipped++
 			continue
 		}
+		if remaining <= 0 {
+			resp.Errors = append(resp.Errors, fmt.Sprintf("@%s: target limit exceeded for current plan", handle))
+			resp.Skipped++
+			continue
+		}
 		target := &model.AutoCommentTarget{
 			UserID:             userID,
 			XAccountID:         xAccountID,
@@ -215,6 +238,7 @@ func (s *AutoCommentService) BulkImportTargets(userID uint, req dto.AutoCommentT
 		item := toAutoCommentTargetItem(*target)
 		resp.Items = append(resp.Items, item)
 		resp.Imported++
+		remaining--
 	}
 	return resp, nil
 }
@@ -309,12 +333,27 @@ func (s *AutoCommentService) Analytics(userID uint) (*dto.AutoCommentAnalyticsRe
 	for _, target := range targets {
 		targetByID[target.ID] = target
 	}
+	now := time.Now().UTC()
 	resp := &dto.AutoCommentAnalyticsResponse{
 		ByCategory:      []dto.AutoCommentAnalyticsGroup{},
 		ByTarget:        []dto.AutoCommentAnalyticsGroup{},
 		RecentPublished: []dto.AutoCommentPublishedItem{},
 		RecentFailures:  []dto.AutoCommentFailureItem{},
 		Health:          []dto.AutoCommentHealthItem{},
+	}
+	if s.userRepo != nil {
+		if user, err := s.userRepo.GetByID(userID); err == nil {
+			limits := subscription.LimitsForUser(user)
+			monthStart := startOfUTCMonth(now)
+			resp.Summary.TargetCount = int64(len(targets))
+			resp.Summary.TargetLimit = limits.AutoCommentTargets
+			resp.Summary.MonthlyScanLimit = limits.MonthlyAutoCommentScans
+			resp.Summary.MonthlyCommentLimit = limits.MonthlyAutoComments
+			if s.scanRepo != nil {
+				resp.Summary.MonthlyScansUsed, _ = s.scanRepo.CountByUserBetween(userID, monthStart, now)
+			}
+			resp.Summary.MonthlyCommentsUsed, _ = s.taskRepo.CountCreatedBetween(userID, monthStart, now)
+		}
 	}
 	categoryGroups := map[string]*dto.AutoCommentAnalyticsGroup{}
 	targetGroups := map[string]*dto.AutoCommentAnalyticsGroup{}
@@ -428,6 +467,9 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(userID, botIDForUsage(bot))
 	opportunity := evaluateAutoCommentOpportunity(target.TargetText, target.TargetUsername, bot, contentContext, blocked)
+	if opportunity.Score < autoCommentMinimumOpportunityScore {
+		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
+	}
 	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
 	if err != nil {
 		return nil, err
@@ -773,8 +815,17 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 	if err := subscription.AssertUserMayProduceContent(u, now); err != nil {
 		return nil
 	}
+	if due, reason := autoCommentTargetDueForScan(target, u, now); !due {
+		if reason != "" {
+			zap.L().Debug("auto comment: target not due", zap.Uint("user_id", target.UserID), zap.Uint("target_id", target.ID), zap.String("reason", reason))
+		}
+		return nil
+	}
 	if hit, why := s.commentLimitsExceeded(target.UserID, cfg, now); hit {
 		return s.markTargetChecked(&target, now, "skip: "+why)
+	}
+	if err := s.assertAutoCommentMonthlyScanQuota(target.UserID, now); err != nil {
+		return s.markTargetChecked(&target, now, "skip: monthly auto comment scan quota exceeded")
 	}
 	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(target.UserID, target.XAccountID)
 	if err != nil {
@@ -796,6 +847,7 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 				}
 			}
 			if err != nil {
+				s.recordAutoCommentScan(target, now, "failed", 1, err.Error())
 				return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
 			}
 		}
@@ -819,9 +871,11 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 			}
 		}
 		if err != nil {
+			s.recordAutoCommentScan(target, now, "failed", 5, err.Error())
 			return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
 		}
 	}
+	s.recordAutoCommentScan(target, now, "scanned", len(tweets), "")
 	target.LastCheckedAt = &now
 	target.LastFailureReason = ""
 	bot, err := s.botForAccount(target.UserID, target.XAccountID)
@@ -834,6 +888,14 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 		return err
 	}
 	if !ok {
+		if candidate.Tweet.ID != "" {
+			target.LastSeenTweetID = candidate.Tweet.ID
+			if !candidate.Tweet.CreatedAt.IsZero() {
+				t := candidate.Tweet.CreatedAt
+				target.LastSeenTweetAt = &t
+			}
+			target.LastFailureReason = truncateErrMsg(fmt.Sprintf("skip: opportunity score %d below minimum %d", candidate.OpportunityScore, autoCommentMinimumOpportunityScore))
+		}
 		return s.targetRepo.Save(&target)
 	}
 	task, err := s.createTaskFromTweet(ctx, target, *cfg, candidate.Tweet)
@@ -862,6 +924,7 @@ type autoCommentTweetCandidate struct {
 
 func (s *AutoCommentService) bestAutoCommentTweetCandidate(target model.AutoCommentTarget, tweets []twitter.UserTweet, bot *model.OAFBot, blocked []string) (autoCommentTweetCandidate, bool, error) {
 	candidates := []autoCommentTweetCandidate{}
+	var skippedLow autoCommentTweetCandidate
 	for _, tw := range tweets {
 		if tw.ID == "" {
 			continue
@@ -878,6 +941,16 @@ func (s *AutoCommentService) bestAutoCommentTweetCandidate(target model.AutoComm
 		}
 		contentContext := contentContextForGeneration(s.contentRepo, target.UserID, target.XAccountID, botIDForUsage(bot), tw.Text, target.TargetUsername, bot)
 		opportunity := evaluateAutoCommentOpportunity(tw.Text, target.TargetUsername, bot, contentContext, blocked)
+		if opportunity.Score < autoCommentMinimumOpportunityScore {
+			if skippedLow.Tweet.ID == "" || tw.CreatedAt.After(skippedLow.Tweet.CreatedAt) {
+				skippedLow = autoCommentTweetCandidate{
+					Tweet:            tw,
+					OpportunityScore: opportunity.Score,
+					QueueScore:       autoCommentQueueScore(target.Priority, opportunity.Score),
+				}
+			}
+			continue
+		}
 		candidates = append(candidates, autoCommentTweetCandidate{
 			Tweet:            tw,
 			OpportunityScore: opportunity.Score,
@@ -885,7 +958,7 @@ func (s *AutoCommentService) bestAutoCommentTweetCandidate(target model.AutoComm
 		})
 	}
 	if len(candidates) == 0 {
-		return autoCommentTweetCandidate{}, false, nil
+		return skippedLow, false, nil
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].QueueScore != candidates[j].QueueScore {
@@ -985,7 +1058,7 @@ func buildAutoCommentHealthItems(targets []model.AutoCommentTarget, stats map[ui
 			items = append(items, item)
 			continue
 		}
-		if strings.TrimSpace(target.LastFailureReason) != "" {
+		if strings.TrimSpace(target.LastFailureReason) != "" && !strings.HasPrefix(reasonLower, "skip:") {
 			item := base
 			item.IssueType = "scan_failure"
 			item.Severity = "medium"
@@ -1111,6 +1184,9 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(target.UserID, botIDForUsage(bot))
 	opportunity := evaluateAutoCommentOpportunity(tw.Text, target.TargetUsername, bot, contentContext, blocked)
+	if opportunity.Score < autoCommentMinimumOpportunityScore {
+		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
+	}
 	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
 	comment := generated.Text
 	risk := evaluateAutoCommentRisk(comment, bot, blocked)
@@ -1268,6 +1344,158 @@ func (s *AutoCommentService) refreshXAccountAfterUnauthorized(ctx context.Contex
 
 func (s *AutoCommentService) commentLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
 	return false, ""
+}
+
+func autoCommentTargetDueForScan(target model.AutoCommentTarget, user *model.User, now time.Time) (bool, string) {
+	plan := subscription.PlanFreeTrial
+	if user != nil {
+		plan = subscription.NormalizePlanCode(user.SubscriptionPlanCode)
+	}
+	interval := autoCommentScanInterval(plan, normalizeAutoCommentTargetPriority(target.Priority))
+	if interval <= 0 {
+		return false, "priority disabled for current plan"
+	}
+	if target.LastCheckedAt == nil {
+		return true, ""
+	}
+	next := target.LastCheckedAt.Add(interval)
+	if now.Before(next) {
+		return false, "next scan at " + next.UTC().Format(time.RFC3339)
+	}
+	return true, ""
+}
+
+func autoCommentScanInterval(plan string, priority int) time.Duration {
+	p := normalizeAutoCommentTargetPriority(priority)
+	switch subscription.NormalizePlanCode(plan) {
+	case subscription.PlanProPlus:
+		switch {
+		case p >= 5:
+			return 6 * time.Hour
+		case p == 4:
+			return 12 * time.Hour
+		case p == 3:
+			return 24 * time.Hour
+		default:
+			return 72 * time.Hour
+		}
+	case subscription.PlanPro:
+		switch {
+		case p >= 5:
+			return 12 * time.Hour
+		case p == 4:
+			return 24 * time.Hour
+		case p == 3:
+			return 48 * time.Hour
+		default:
+			return 96 * time.Hour
+		}
+	case subscription.PlanPlus:
+		switch {
+		case p >= 5:
+			return 24 * time.Hour
+		case p == 4:
+			return 48 * time.Hour
+		case p == 3:
+			return 72 * time.Hour
+		default:
+			return 168 * time.Hour
+		}
+	case subscription.PlanBasic:
+		if p >= 5 {
+			return 96 * time.Hour
+		}
+		if p >= 3 {
+			return 168 * time.Hour
+		}
+		return 0
+	default:
+		if p >= 5 {
+			return 96 * time.Hour
+		}
+		if p >= 3 {
+			return 168 * time.Hour
+		}
+		return 0
+	}
+}
+
+func (s *AutoCommentService) assertAutoCommentMonthlyScanQuota(userID uint, now time.Time) error {
+	if s.scanRepo == nil || s.userRepo == nil {
+		return nil
+	}
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	limit := subscription.LimitsForUser(u).MonthlyAutoCommentScans
+	if limit <= 0 {
+		return ErrAutoCommentScanLimitExceeded
+	}
+	used, err := s.scanRepo.CountByUserBetween(userID, startOfUTCMonth(now), now)
+	if err != nil {
+		return err
+	}
+	if used >= limit {
+		return ErrAutoCommentScanLimitExceeded
+	}
+	return nil
+}
+
+func (s *AutoCommentService) recordAutoCommentScan(target model.AutoCommentTarget, at time.Time, status string, xReadUnits int, reason string) {
+	if s.scanRepo == nil {
+		return
+	}
+	if xReadUnits <= 0 {
+		xReadUnits = 1
+	}
+	row := &model.AutoCommentScanLedger{
+		UserID:                  target.UserID,
+		XAccountID:              target.XAccountID,
+		TargetID:                target.ID,
+		TargetUsername:          target.TargetUsername,
+		Status:                  firstNonEmpty(strings.TrimSpace(status), "scanned"),
+		XReadUnits:              xReadUnits,
+		EstimatedCostMilliCents: int64(xReadUnits) * 500,
+		SkipReason:              truncateRunes(strings.TrimSpace(reason), 512),
+		ScannedAt:               at,
+	}
+	if err := s.scanRepo.Create(row); err != nil {
+		zap.L().Warn("auto comment: record scan ledger failed", zap.Uint("user_id", target.UserID), zap.Uint("target_id", target.ID), zap.Error(err))
+	}
+}
+
+func (s *AutoCommentService) assertAutoCommentTargetCapacity(userID uint, incoming int64) error {
+	remaining, err := s.autoCommentTargetRemaining(userID)
+	if err != nil {
+		return err
+	}
+	if incoming > remaining {
+		if remaining < 0 {
+			remaining = 0
+		}
+		return fmt.Errorf("%w: current plan has %d target slots remaining", ErrAutoCommentTargetLimitExceeded, remaining)
+	}
+	return nil
+}
+
+func (s *AutoCommentService) autoCommentTargetRemaining(userID uint) (int64, error) {
+	if s.targetRepo == nil || s.userRepo == nil {
+		return 0, nil
+	}
+	u, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return 0, err
+	}
+	limit := subscription.LimitsForUser(u).AutoCommentTargets
+	if limit <= 0 {
+		return 0, nil
+	}
+	used, err := s.targetRepo.CountByUser(userID)
+	if err != nil {
+		return 0, err
+	}
+	return limit - used, nil
 }
 
 func (s *AutoCommentService) resolveExecutorAccountID(userID, preferred uint) (uint, error) {

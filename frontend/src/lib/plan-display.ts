@@ -53,6 +53,8 @@ export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Languag
     t("planBenefits.monthlyAutoPost", { count: count(limits.monthlyAutoPosts) }),
     t("planBenefits.monthlyAutoReply", { count: count(limits.monthlyAutoReplies) }),
     t("planBenefits.monthlyAutoComment", { count: count(limits.monthlyAutoComments) }),
+    t("planBenefits.autoCommentTargets", { count: count(limits.autoCommentTargets) }),
+    t("planBenefits.monthlyAutoCommentScans", { count: count(limits.monthlyAutoCommentScans) }),
     t("planBenefits.monthlyAutoDm", { count: count(limits.monthlyAutoDMs) }),
     t("planBenefits.analyticsDays", { days: count(limits.analyticsDays) }),
   ];

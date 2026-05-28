@@ -178,7 +178,29 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 
 func (s *BillingService) Plans() *dto.BillingPlansResponse {
 	catalog := subscription.Catalog()
-	items := make([]dto.BillingPlanData, 0, len(catalog))
+	items := make([]dto.BillingPlanData, 0, len(catalog)+1)
+	items = append(items, dto.BillingPlanData{
+		Code:         subscription.PlanFreeTrial,
+		Name:         "Free Trial",
+		Price:        "0 USDT",
+		Period:       "14 days",
+		MonthlyPrice: 0,
+		YearlyPrice:  0,
+		Currency:     "USDT",
+		Audience:     "14-day trial for new users",
+		Description:  "Try core automation with lower trial quotas before upgrading to Basic.",
+		Features: []string{
+			"14-day free trial",
+			"1 OAF Bot",
+			"1 X account",
+			"100 AI generations / month",
+			"10 real X writes / month",
+			"Auto Comment target authors 2, scans 20 / month",
+		},
+		FeatureFlags: []dto.PlanFeatureData{},
+		Limits:       planLimitsToDTO(subscription.FreeTrialLimits()),
+		Highlight:    false,
+	})
 	for _, p := range catalog {
 		if full, ok := subscription.FindPlan(p.Code); ok {
 			p = full

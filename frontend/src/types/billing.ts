@@ -22,6 +22,8 @@ export type PlanLimits = {
   monthlyAutoReplies: number;
   monthlyAutoComments: number;
   monthlyAutoDMs: number;
+  autoCommentTargets: number;
+  monthlyAutoCommentScans: number;
   dailyAutoPosts: number;
   dailyAutoReplies: number;
   dailyAutoComments: number;

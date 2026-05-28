@@ -532,6 +532,10 @@ func (ctl *AutomationController) CreateCommentTarget(c *gin.Context) {
 	}
 	data, err := ctl.autoCommentService.CreateTarget(userID, req)
 	if err != nil {
+		if errors.Is(err, service.ErrAutoCommentTargetLimitExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_comment_target_limit_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -662,6 +666,10 @@ func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		if errors.Is(err, service.ErrAutoCommentOpportunityTooLow) {
+			response.FailWithCode(c, http.StatusBadRequest, err.Error(), "auto_comment_opportunity_too_low")
 			return
 		}
 		if strings.Contains(err.Error(), "monthly auto comment quota exceeded") {

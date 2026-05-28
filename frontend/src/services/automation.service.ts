@@ -202,6 +202,12 @@ export type AutoCommentAnalyticsData = {
     quote_post_ready: number;
     restricted: number;
     average_opportunity: number;
+    target_count: number;
+    target_limit: number;
+    monthly_scans_used: number;
+    monthly_scan_limit: number;
+    monthly_comments_used: number;
+    monthly_comment_limit: number;
   };
   by_category: Array<{
     key: string;

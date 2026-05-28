@@ -452,15 +452,21 @@ type AutoCommentTasksResponse struct {
 }
 
 type AutoCommentAnalyticsSummary struct {
-	TotalTasks         int `json:"total_tasks"`
-	Published          int `json:"published"`
-	Failed             int `json:"failed"`
-	Pending            int `json:"pending"`
-	AutoCommentable    int `json:"auto_commentable"`
-	ManualSuggestions  int `json:"manual_suggestions"`
-	QuotePostReady     int `json:"quote_post_ready"`
-	Restricted         int `json:"restricted"`
-	AverageOpportunity int `json:"average_opportunity"`
+	TotalTasks          int   `json:"total_tasks"`
+	Published           int   `json:"published"`
+	Failed              int   `json:"failed"`
+	Pending             int   `json:"pending"`
+	AutoCommentable     int   `json:"auto_commentable"`
+	ManualSuggestions   int   `json:"manual_suggestions"`
+	QuotePostReady      int   `json:"quote_post_ready"`
+	Restricted          int   `json:"restricted"`
+	AverageOpportunity  int   `json:"average_opportunity"`
+	TargetCount         int64 `json:"target_count"`
+	TargetLimit         int64 `json:"target_limit"`
+	MonthlyScansUsed    int64 `json:"monthly_scans_used"`
+	MonthlyScanLimit    int64 `json:"monthly_scan_limit"`
+	MonthlyCommentsUsed int64 `json:"monthly_comments_used"`
+	MonthlyCommentLimit int64 `json:"monthly_comment_limit"`
 }
 
 type AutoCommentAnalyticsGroup struct {

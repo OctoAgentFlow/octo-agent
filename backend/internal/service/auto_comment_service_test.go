@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/model"
+	"octo-agent/backend/internal/pkg/subscription"
 )
 
 func TestEvaluateAutoCommentOpportunityScoresRelevantTweet(t *testing.T) {
@@ -87,6 +88,48 @@ func TestAutoCommentQueueScorePrioritizesTargetPriorityAndOpportunity(t *testing
 	averageOpportunity := autoCommentQueueScore(3, 50)
 	if bestOpportunity <= averageOpportunity {
 		t.Fatalf("expected higher opportunity score to win within same priority")
+	}
+}
+
+func TestAutoCommentScanIntervalUsesPlanAndPriority(t *testing.T) {
+	if got := autoCommentScanInterval(subscription.PlanFreeTrial, 5); got != 96*time.Hour {
+		t.Fatalf("free trial priority 5 interval = %s", got)
+	}
+	if got := autoCommentScanInterval(subscription.PlanBasic, 2); got != 0 {
+		t.Fatalf("basic priority 2 should be disabled, got %s", got)
+	}
+	if got := autoCommentScanInterval(subscription.PlanProPlus, 5); got != 6*time.Hour {
+		t.Fatalf("pro+ priority 5 interval = %s", got)
+	}
+}
+
+func TestAutoCommentPlanLimitsExposeTargetsAndScans(t *testing.T) {
+	trial := subscription.FreeTrialLimits()
+	if trial.AutoCommentTargets != 2 || trial.MonthlyAutoCommentScans != 20 {
+		t.Fatalf("unexpected free trial auto comment limits: targets=%d scans=%d", trial.AutoCommentTargets, trial.MonthlyAutoCommentScans)
+	}
+	basic := subscription.LimitsForPlan(subscription.PlanBasic)
+	if basic.AutoCommentTargets != 3 || basic.MonthlyAutoCommentScans != 30 {
+		t.Fatalf("unexpected basic auto comment limits: targets=%d scans=%d", basic.AutoCommentTargets, basic.MonthlyAutoCommentScans)
+	}
+	proPlus := subscription.LimitsForPlan(subscription.PlanProPlus)
+	if proPlus.AutoCommentTargets != 80 || proPlus.MonthlyAutoCommentScans != 2400 {
+		t.Fatalf("unexpected pro+ auto comment limits: targets=%d scans=%d", proPlus.AutoCommentTargets, proPlus.MonthlyAutoCommentScans)
+	}
+}
+
+func TestAutoCommentTargetDueForScan(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	user := &model.User{SubscriptionPlanCode: subscription.PlanPlus}
+	checked := now.Add(-23 * time.Hour)
+	target := model.AutoCommentTarget{Priority: 5, LastCheckedAt: &checked}
+	if due, _ := autoCommentTargetDueForScan(target, user, now); due {
+		t.Fatalf("plus priority 5 should wait 24h between scans")
+	}
+	checked = now.Add(-25 * time.Hour)
+	target.LastCheckedAt = &checked
+	if due, _ := autoCommentTargetDueForScan(target, user, now); !due {
+		t.Fatalf("plus priority 5 should be due after 24h")
 	}
 }
 

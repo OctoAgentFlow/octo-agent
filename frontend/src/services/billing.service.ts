@@ -45,6 +45,8 @@ export type PlanLimitsApi = {
   monthly_auto_replies: number;
   monthly_auto_comments: number;
   monthly_auto_dms: number;
+  auto_comment_targets: number;
+  monthly_auto_comment_scans: number;
   daily_auto_posts: number;
   daily_auto_replies: number;
   daily_auto_comments: number;

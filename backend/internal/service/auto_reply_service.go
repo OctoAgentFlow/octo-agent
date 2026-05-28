@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,6 +48,7 @@ type AutoReplyService struct {
 	replyDraftRepo *repository.AutoReplyDraftRepository
 	userRepo       *repository.UserRepository
 	oafBotRepo     *repository.OAFBotRepository
+	contentRepo    *repository.ContentLibraryRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
 	publishing     *PublishingService
@@ -60,6 +62,7 @@ func NewAutoReplyService(
 	userRepo *repository.UserRepository,
 	replyDraftRepo *repository.AutoReplyDraftRepository,
 	oafBotRepo *repository.OAFBotRepository,
+	contentRepo *repository.ContentLibraryRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
 	publishing *PublishingService,
@@ -72,6 +75,7 @@ func NewAutoReplyService(
 		replyDraftRepo: replyDraftRepo,
 		userRepo:       userRepo,
 		oafBotRepo:     oafBotRepo,
+		contentRepo:    contentRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
 		publishing:     publishing,
@@ -138,7 +142,9 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 		return nil, err
 	}
 	blocked := blockedWordsFromConfig(cfg)
-	generated, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(req.CommentAuthorHandle, req.RootTweetText, req.CommentText, cfg.Tone, blocked, bot))
+	input := autoReplyInputFromValues(req.CommentAuthorHandle, req.RootTweetText, req.CommentText, cfg.Tone, blocked, bot)
+	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), req.RootTweetText, req.CommentText, bot)
+	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +316,9 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 		return nil, err
 	}
 	blocked := blockedWordsFromConfig(cfg)
-	generated, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(draft.CommentAuthorHandle, draft.RootTweetText, draft.CommentText, cfg.Tone, blocked, bot))
+	input := autoReplyInputFromValues(draft.CommentAuthorHandle, draft.RootTweetText, draft.CommentText, cfg.Tone, blocked, bot)
+	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), draft.RootTweetText, draft.CommentText, bot)
+	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		if s.replyResRepo != nil {
 			_ = s.replyResRepo.Release(userID, commentTweetID)
@@ -756,7 +764,9 @@ func (s *AutoReplyService) generateAutopilotReply(ctx context.Context, userID ui
 		return "", nil, err
 	}
 	blocked := blockedWordsFromConfig(&cfg)
-	generated, err := s.ai.GenerateAutoReply(ctx, autoReplyInputFromValues(reply.AuthorUsername, rootTweet, reply.Text, cfg.Tone, blocked, bot))
+	input := autoReplyInputFromValues(reply.AuthorUsername, rootTweet, reply.Text, cfg.Tone, blocked, bot)
+	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), rootTweet, reply.Text, bot)
+	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		return "", nil, err
 	}
@@ -970,6 +980,88 @@ func autoReplyInputFromValues(author, rootTweet, comment, tone string, blocked [
 	in.PrimaryLanguage = bot.PrimaryLanguage
 	in.LanguageStrategy = bot.LanguageStrategy
 	return in
+}
+
+func (s *AutoReplyService) contentContextForReply(userID, xAccountID, botID uint, rootTweet, comment string, bot *model.OAFBot) []GenerationContentContextItem {
+	if s.contentRepo == nil {
+		return nil
+	}
+	rows, err := s.contentRepo.ListActiveForGenerationContext(userID, xAccountID, botID, 30)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	query := strings.Join([]string{rootTweet, comment}, " ")
+	if bot != nil {
+		query += " " + strings.Join(decodeStringList(bot.Keywords), " ")
+		query += " " + strings.Join(decodeStringList(bot.Topics), " ")
+	}
+	type scoredItem struct {
+		item  model.ContentLibraryItem
+		score int
+	}
+	scored := make([]scoredItem, 0, len(rows))
+	for _, row := range rows {
+		score := contentContextScore(row, query)
+		if score <= 0 {
+			score = row.Priority / 10
+		}
+		scored = append(scored, scoredItem{item: row, score: score})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		if scored[i].item.Priority != scored[j].item.Priority {
+			return scored[i].item.Priority > scored[j].item.Priority
+		}
+		return scored[i].item.UpdatedAt.After(scored[j].item.UpdatedAt)
+	})
+	limit := 3
+	out := make([]GenerationContentContextItem, 0, limit)
+	for _, entry := range scored {
+		if len(out) >= limit {
+			break
+		}
+		item := entry.item
+		out = append(out, GenerationContentContextItem{
+			Title:         item.Title,
+			ItemType:      item.ItemType,
+			Body:          item.Body,
+			SourceURL:     item.SourceURL,
+			Topics:        decodeStringList(item.Topics),
+			GrowthGoal:    item.GrowthGoal,
+			CTAPreference: item.CTAPreference,
+		})
+	}
+	return out
+}
+
+func contentContextScore(item model.ContentLibraryItem, query string) int {
+	query = strings.ToLower(query)
+	if strings.TrimSpace(query) == "" {
+		return 0
+	}
+	score := 0
+	fields := []string{item.Title, item.Body, item.ItemType, item.GrowthGoal, item.CTAPreference}
+	fields = append(fields, decodeStringList(item.Topics)...)
+	for _, field := range fields {
+		for _, token := range contentContextTokens(field) {
+			if len(token) < 3 {
+				continue
+			}
+			if strings.Contains(query, token) {
+				score += 2
+			}
+		}
+	}
+	return score
+}
+
+func contentContextTokens(value string) []string {
+	value = strings.ToLower(value)
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	})
 }
 
 func toAutoReplyDraftItem(row model.AutoReplyDraft) dto.AutoReplyDraftItem {

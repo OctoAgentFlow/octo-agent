@@ -19,6 +19,16 @@ type AIGeneratedText struct {
 	Usage openaiint.TextUsage
 }
 
+type GenerationContentContextItem struct {
+	Title         string
+	ItemType      string
+	Body          string
+	SourceURL     string
+	Topics        []string
+	GrowthGoal    string
+	CTAPreference string
+}
+
 type GenerateAutoCommentInput struct {
 	TargetUsername    string
 	TargetTweet       string
@@ -100,6 +110,7 @@ type GenerateAutoReplyInput struct {
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
+	ContentContext    []GenerationContentContextItem
 }
 
 type GenerateOAFBotSamplesInput struct {
@@ -315,9 +326,11 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 		user.WriteString(strings.Join(in.BlockedWords, ", "))
 		user.WriteString("\n")
 	}
+	writeGenerationContentContext(&user, in.ContentContext, 700)
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
 	user.WriteString("- Directly respond to the comment; do not answer a different question.\n")
+	user.WriteString("- Use content library context only when it helps answer the user's exact comment. Do not force unrelated product promotion.\n")
 	user.WriteString("- If the comment asks a question, answer that exact question using the original post and persona/product context. Do not use generic thanks-only replies.\n")
 	user.WriteString("- If the answer is not fully known from context, acknowledge briefly and offer the safest next step instead of inventing details.\n")
 	user.WriteString("- Language is mandatory: when language_strategy is follow_context, reply in the same language as the comment whenever the comment language is clear.\n")
@@ -1105,6 +1118,48 @@ func truncateRunes(s string, max int) string {
 		return strings.TrimSpace(s)
 	}
 	return string(r[:max])
+}
+
+func writeGenerationContentContext(user *strings.Builder, items []GenerationContentContextItem, bodyLimit int) {
+	if len(items) == 0 {
+		return
+	}
+	if bodyLimit <= 0 {
+		bodyLimit = 700
+	}
+	user.WriteString("Relevant content library context:\n")
+	for i, item := range items {
+		if i >= 3 {
+			break
+		}
+		title := strings.TrimSpace(item.Title)
+		body := truncateRunes(item.Body, bodyLimit)
+		if title == "" && body == "" {
+			continue
+		}
+		user.WriteString(fmt.Sprintf("item_%d:\n", i+1))
+		if title != "" {
+			user.WriteString("title: " + title + "\n")
+		}
+		if strings.TrimSpace(item.ItemType) != "" {
+			user.WriteString("type: " + strings.TrimSpace(item.ItemType) + "\n")
+		}
+		if body != "" {
+			user.WriteString("body: " + body + "\n")
+		}
+		if strings.TrimSpace(item.SourceURL) != "" {
+			user.WriteString("source_url: " + strings.TrimSpace(item.SourceURL) + "\n")
+		}
+		if len(item.Topics) > 0 {
+			user.WriteString("topics: " + strings.Join(item.Topics, ", ") + "\n")
+		}
+		if strings.TrimSpace(item.GrowthGoal) != "" {
+			user.WriteString("growth_goal: " + strings.TrimSpace(item.GrowthGoal) + "\n")
+		}
+		if strings.TrimSpace(item.CTAPreference) != "" {
+			user.WriteString("cta_preference: " + strings.TrimSpace(item.CTAPreference) + "\n")
+		}
+	}
 }
 
 func fitGeneratedTweet(s string, max int) string {

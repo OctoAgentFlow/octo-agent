@@ -7,6 +7,7 @@ import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListC
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useToast } from "@/components/providers/toast-provider";
@@ -113,6 +114,8 @@ export default function AutoCommentsPage() {
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<number, string>>({});
+  const [quotePreviewDraft, setQuotePreviewDraft] = useState<AutoCommentTaskApi | null>(null);
+  const [expandedDrafts, setExpandedDrafts] = useState<Record<number, boolean>>({});
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -158,6 +161,7 @@ export default function AutoCommentsPage() {
         .sort((a, b) => (b.priority || 0) - (a.priority || 0)),
     [targets, targetCategoryFilter, targetStatusFilter]
   );
+  const quotePreviewAccount = quotePreviewDraft ? accounts.find((account) => account.id === quotePreviewDraft.x_account_id) : null;
 
   const loadAll = useCallback(async () => {
     setLoadState("loading");
@@ -250,6 +254,7 @@ export default function AutoCommentsPage() {
     try {
       const updated = await automationService.queueCommentQuotePost(id);
       setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      setQuotePreviewDraft(null);
       pushToast(t("autoComment.toast.quoteQueued"));
     } catch (error) {
       pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoComment.errors.quotePost"));
@@ -412,6 +417,45 @@ export default function AutoCommentsPage() {
 
   return (
     <div className="space-y-5">
+      <Dialog
+        open={Boolean(quotePreviewDraft)}
+        onOpenChange={(open) => {
+          if (!open) setQuotePreviewDraft(null);
+        }}
+        title={t("autoComment.quoteConfirm.title")}
+        description={t("autoComment.quoteConfirm.description")}
+        className="max-w-2xl"
+        showCloseButton={false}
+      >
+        {quotePreviewDraft ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-xs text-[#71767b]">{t("autoComment.quoteConfirm.account")}</p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {quotePreviewAccount ? formatHandle(quotePreviewAccount.username || quotePreviewAccount.display_name) : `#${quotePreviewDraft.x_account_id}`}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-xs text-[#71767b]">{t("autoComment.quoteConfirm.target")}</p>
+              <p className="mt-1 line-clamp-4 break-words text-sm leading-6 text-[#b6bec5]">{quotePreviewDraft.target_tweet_text || quotePreviewDraft.target_tweet_id}</p>
+            </div>
+            <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
+              <p className="text-xs text-[#8ecdf8]">{t("autoComment.quoteConfirm.copy")}</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-7 text-white">{quotePreviewDraft.quote_post_candidate || quotePreviewDraft.generated_comment}</p>
+            </div>
+            <p className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
+              {t("autoComment.quoteConfirm.realPublishHint")}
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setQuotePreviewDraft(null)}>{t("common.cancel")}</Button>
+              <Button type="button" disabled={modulePaused} title={modulePausedActionTip} onClick={() => void queueQuotePost(quotePreviewDraft.id)}>
+                <Send className="size-4" />
+                {t("autoComment.quoteConfirm.confirm")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm text-[#1d9bf0]">{t("autoComment.kicker")}</p>
@@ -766,16 +810,30 @@ export default function AutoCommentsPage() {
           <div className="divide-y divide-[#2f3336]">
             {drafts.length === 0 ? (
               <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
-                {t("autoComment.review.empty")}
+                <p className="font-semibold text-white">{t("autoComment.review.emptyTitle")}</p>
+                <p className="mx-auto mt-2 max-w-xl leading-6">{t("autoComment.review.empty")}</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Button size="sm" onClick={() => void createTargetAndGenerate()} disabled={!canGenerate}>
+                    <Sparkles className="size-4" />
+                    {t("autoComment.review.emptyGenerate")}
+                  </Button>
+                  <Link href="/execution-queue?type=comment" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white hover:bg-[#16181c]">
+                    {t("autoComment.review.openQueue")}
+                  </Link>
+                </div>
               </div>
             ) : filteredDrafts.length === 0 ? (
               <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
-                {t("autoComment.review.emptyFiltered")}
+                <p>{t("autoComment.review.emptyFiltered")}</p>
+                <Button className="mt-4" size="sm" variant="outline" onClick={() => setDeliveryFilter("all")}>
+                  {t("autoComment.review.showAll")}
+                </Button>
               </div>
             ) : (
               filteredDrafts.slice(0, 12).map((draft) => {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
                 const editing = editingDraftID === draft.id;
+                const expanded = Boolean(expandedDrafts[draft.id]);
                 return (
                   <div key={draft.id} className="bg-black p-5 transition-colors hover:bg-[#080808]">
                     <div className="flex flex-col items-start justify-between gap-4 xl:flex-row">
@@ -824,15 +882,26 @@ export default function AutoCommentsPage() {
                                   {t("autoComment.manualAction.open")}
                                 </Button>
                                 {draft.quote_post_candidate ? (
-                                  <Button size="sm" onClick={() => void queueQuotePost(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
+                                  <Button size="sm" onClick={() => setQuotePreviewDraft(draft)} disabled={modulePaused} title={modulePausedActionTip}>
                                     <Send className="size-4" />
                                     {t("autoComment.manualAction.queueQuote")}
                                   </Button>
                                 ) : null}
                               </div>
                             ) : null}
+                            {draft.delivery_mode === "quote_post" ? (
+                              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                                <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
+                                  {t("autoComment.manualAction.quoteQueued")}
+                                </span>
+                                <Link href="/execution-queue?type=comment&mode=autopilot" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white hover:bg-[#16181c]">
+                                  {t("autoComment.manualAction.openQueue")}
+                                </Link>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
+                        {expanded ? (
                         <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
@@ -849,6 +918,7 @@ export default function AutoCommentsPage() {
                             <OpportunityList title={t("autoComment.opportunity.content")} items={draft.referenced_content || []} empty={t("autoComment.opportunity.noContent")} />
                           </div>
                         </div>
+                        ) : null}
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                           <p className="mb-2 text-xs text-[#1d9bf0]">{t("autoComment.review.generated")}</p>
                           {editing ? (
@@ -862,7 +932,7 @@ export default function AutoCommentsPage() {
                             <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{draft.generated_comment || "—"}</p>
                           )}
                         </div>
-                        {draft.comment_variants?.length ? (
+                        {expanded && draft.comment_variants?.length ? (
                           <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                             <div className="mb-3">
                               <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.variants.title")}</p>
@@ -891,6 +961,7 @@ export default function AutoCommentsPage() {
                             </div>
                           </div>
                         ) : null}
+                        {expanded ? (
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                           <div className="mb-3">
                             <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.feedback.title")}</p>
@@ -917,11 +988,14 @@ export default function AutoCommentsPage() {
                             })}
                           </div>
                         </div>
+                        ) : null}
+                        {expanded ? (
                         <div className="grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
                           <DraftRouteStep label={t("autoComment.pipeline.input")} value={formatHandle(draft.target_tweet_author || draft.target_username)} />
                           <DraftRouteStep label={t("autoComment.pipeline.queue")} value={t(statusKey(draft.status))} />
                           <DraftRouteStep label={t("autoComment.pipeline.publish")} value={draft.status === "published" || draft.status === "sent" ? t("autoComment.pipeline.published") : t("autoComment.pipeline.waiting")} />
                         </div>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 flex-wrap justify-end gap-2">
                         {editing ? (
@@ -931,6 +1005,13 @@ export default function AutoCommentsPage() {
                           </>
                         ) : (
                           <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setExpandedDrafts((current) => ({ ...current, [draft.id]: !expanded }))}
+                            >
+                              {expanded ? t("autoComment.review.hideDetails") : t("autoComment.review.showDetails")}
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
                               <Pencil className="size-4" />
                               {t("autoComment.review.edit")}
@@ -1236,9 +1317,10 @@ function AutoCommentAnalyticsPanel({ data }: { data: AutoCommentAnalyticsData })
   const { t } = useT();
   const stats = [
     { label: t("autoComment.analytics.total"), value: data.summary.total_tasks },
-    { label: t("autoComment.analytics.published"), value: data.summary.published },
-    { label: t("autoComment.analytics.pending"), value: data.summary.pending },
-    { label: t("autoComment.analytics.failed"), value: data.summary.failed },
+    { label: t("autoComment.analytics.autoCommentable"), value: data.summary.auto_commentable },
+    { label: t("autoComment.analytics.manualSuggestions"), value: data.summary.manual_suggestions },
+    { label: t("autoComment.analytics.quotePostReady"), value: data.summary.quote_post_ready },
+    { label: t("autoComment.analytics.restricted"), value: data.summary.restricted },
     { label: t("autoComment.analytics.avgOpportunity"), value: data.summary.average_opportunity },
   ];
   return (
@@ -1246,7 +1328,7 @@ function AutoCommentAnalyticsPanel({ data }: { data: AutoCommentAnalyticsData })
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <CardHeader title={t("autoComment.analytics.title")} description={t("autoComment.analytics.description")} />
       </div>
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         {stats.map((item) => (
           <div key={item.label} className="rounded-2xl border border-[#2f3336] bg-black p-3">
             <p className="text-xs text-[#71767b]">{item.label}</p>

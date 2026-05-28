@@ -13,6 +13,7 @@ export type ReviewQueueExecutionMode = "all" | "manual" | "review" | "autopilot"
 export type ReviewQueueItemApi = {
   id: number;
   type: "post" | "comment" | "reply" | "dm";
+  delivery_mode?: "auto_comment" | "manual_comment" | "quote_post" | "skip" | "inbound_handoff" | string;
   content: string;
   status: Exclude<ReviewQueueStatus, "all">;
   execution_mode: Exclude<ReviewQueueExecutionMode, "all">;

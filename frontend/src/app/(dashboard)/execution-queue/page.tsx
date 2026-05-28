@@ -59,11 +59,24 @@ function sourceLabelKey(type: string) {
   return "executionQueue.source.autoDm";
 }
 
+function deliveryLabelKey(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.delivery.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.delivery.manualComment";
+  if (item.type === "comment" && item.delivery_mode === "auto_comment") return "executionQueue.delivery.autoComment";
+  return "";
+}
+
 function sourceDescriptionKey(type: string) {
   if (type === "post") return "executionQueue.sourceDesc.post";
   if (type === "comment") return "executionQueue.sourceDesc.comment";
   if (type === "reply") return "executionQueue.sourceDesc.reply";
   return "executionQueue.sourceDesc.dm";
+}
+
+function sourceDescriptionForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.sourceDesc.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.sourceDesc.manualComment";
+  return sourceDescriptionKey(item.type);
 }
 
 function canManualPublish(item: ReviewQueueItemApi) {
@@ -77,6 +90,11 @@ function targetLabelKey(type: string) {
   if (type === "comment") return "executionQueue.item.targetTweet";
   if (type === "reply") return "executionQueue.item.replyTarget";
   return "executionQueue.item.target";
+}
+
+function targetLabelForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.item.quoteTarget";
+  return targetLabelKey(item.type);
 }
 
 function normalizeTargetSummary(type: string, value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
@@ -488,6 +506,11 @@ export default function ExecutionQueuePage() {
                           <Icon className="size-3.5" />
                           {t(sourceLabelKey(item.type))}
                         </span>
+                        {deliveryLabelKey(item) ? (
+                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
+                            {t(deliveryLabelKey(item))}
+                          </span>
+                        ) : null}
                         <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(item.status)}`}>{t(`executionQueue.status.${item.status}`)}</span>
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-xs text-[#71767b]">
                           {t(`executionQueue.executionMode.${item.execution_mode}`)}
@@ -503,8 +526,8 @@ export default function ExecutionQueuePage() {
                         <QueueInfoCard
                           icon={Sparkles}
                           label={t("executionQueue.item.source")}
-                          title={t(sourceLabelKey(item.type))}
-                          description={t(sourceDescriptionKey(item.type))}
+                          title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKey(item.type))}
+                          description={t(sourceDescriptionForItem(item))}
                           tone={sourceTone(item.type)}
                         />
                         <QueueInfoCard
@@ -545,7 +568,7 @@ export default function ExecutionQueuePage() {
                       <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
                         <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
                         <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
-                        <MetaLine className="md:col-span-2" label={t(targetLabelKey(item.type))} value={displayTarget} />
+                        <MetaLine className="md:col-span-2" label={t(targetLabelForItem(item))} value={displayTarget} />
                         <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
                         <MetaLine
                           label={t("executionQueue.item.risk")}

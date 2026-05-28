@@ -456,6 +456,10 @@ type AutoCommentAnalyticsSummary struct {
 	Published          int `json:"published"`
 	Failed             int `json:"failed"`
 	Pending            int `json:"pending"`
+	AutoCommentable    int `json:"auto_commentable"`
+	ManualSuggestions  int `json:"manual_suggestions"`
+	QuotePostReady     int `json:"quote_post_ready"`
+	Restricted         int `json:"restricted"`
 	AverageOpportunity int `json:"average_opportunity"`
 }
 
@@ -547,6 +551,7 @@ type ReviewQueueStats struct {
 type ReviewQueueItem struct {
 	ID                 uint     `json:"id"`
 	Type               string   `json:"type"`
+	DeliveryMode       string   `json:"delivery_mode,omitempty"`
 	Content            string   `json:"content"`
 	Status             string   `json:"status"`
 	ExecutionMode      string   `json:"execution_mode"`

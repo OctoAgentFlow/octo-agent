@@ -333,6 +333,17 @@ func (s *AutoCommentService) Analytics(userID uint) (*dto.AutoCommentAnalyticsRe
 		} else {
 			resp.Summary.Pending++
 		}
+		switch firstNonEmpty(task.DeliveryMode, autoCommentDeliveryManualComment) {
+		case autoCommentDeliveryAutoComment:
+			resp.Summary.AutoCommentable++
+		case autoCommentDeliveryQuotePost:
+			resp.Summary.QuotePostReady++
+		default:
+			resp.Summary.ManualSuggestions++
+		}
+		if task.Status == "failed" || task.Status == "blocked" || task.FailureCategory == "x_reply_restricted" || task.APIReplyBlockReason == "x_reply_restricted" {
+			resp.Summary.Restricted++
+		}
 		updateAutoCommentAnalyticsGroup(categoryGroups, category, category, task)
 		updateAutoCommentAnalyticsGroup(targetGroups, targetName, "@"+strings.TrimPrefix(targetName, "@"), task)
 		updateAutoCommentTargetHealthStats(targetStats, task)

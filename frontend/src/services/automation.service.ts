@@ -197,6 +197,10 @@ export type AutoCommentAnalyticsData = {
     published: number;
     failed: number;
     pending: number;
+    auto_commentable: number;
+    manual_suggestions: number;
+    quote_post_ready: number;
+    restricted: number;
     average_opportunity: number;
   };
   by_category: Array<{

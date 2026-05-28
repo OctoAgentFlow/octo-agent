@@ -407,6 +407,13 @@ func (s *PublishingService) CancelJob(userID, id uint) (*dto.PublishJobItem, err
 	return &item, nil
 }
 
+func (s *PublishingService) DeleteNonPublishedSourceJobs(userID uint, sourceType string, sourceID uint) error {
+	if s == nil || s.jobRepo == nil || sourceID == 0 {
+		return nil
+	}
+	return s.jobRepo.DeleteNonPublishedBySource(userID, sourceType, sourceID)
+}
+
 func (s *PublishingService) PublishNow(ctx context.Context, userID, id uint) (*dto.PublishJobItem, error) {
 	if ctx == nil {
 		ctx = context.Background()

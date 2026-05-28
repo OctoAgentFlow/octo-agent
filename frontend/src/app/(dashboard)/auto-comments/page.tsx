@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -287,6 +287,43 @@ export default function AutoCommentsPage() {
       pushToast(t("autoComment.toast.rejected"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.reject") : t("autoComment.errors.reject"));
+    }
+  };
+
+  const deleteDraft = async (id: number) => {
+    if (!window.confirm(t("autoComment.review.deleteConfirm"))) return;
+    try {
+      await automationService.deleteCommentDraft(id);
+      setDrafts((items) => items.filter((item) => item.id !== id));
+      setExpandedDrafts((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setExpandedDraftPanels((current) => {
+        const next = { ...current };
+        delete next[draftPanelKey(id, "target")];
+        delete next[draftPanelKey(id, "action")];
+        return next;
+      });
+      if (editingDraftID === id) {
+        setEditingDraftID(null);
+        setEditingContent("");
+      }
+      pushToast(t("autoComment.toast.deleted"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoComment.errors.delete"));
+    }
+  };
+
+  const deleteTarget = async (id: number) => {
+    if (!window.confirm(t("autoComment.targets.deleteConfirm"))) return;
+    try {
+      await automationService.deleteCommentTarget(id);
+      setTargets((items) => items.filter((item) => item.id !== id));
+      pushToast(t("autoComment.targets.deleted"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoComment.targets.deleteFailed"));
     }
   };
 
@@ -1065,6 +1102,10 @@ export default function AutoCommentsPage() {
                                 {t("autoComment.review.reject")}
                               </Button>
                             ) : null}
+                            <Button size="sm" variant="destructive" onClick={() => void deleteDraft(draft.id)}>
+                              <Trash2 className="size-4" />
+                              {t("autoComment.review.delete")}
+                            </Button>
                           </>
                         )}
                       </div>
@@ -1126,6 +1167,12 @@ export default function AutoCommentsPage() {
                 </div>
                 <p className="mt-2 line-clamp-3 break-words text-xs leading-5 text-[#71767b]">{target.target_text || target.target_tweet_url || target.target_username}</p>
                 {target.notes ? <p className="mt-2 line-clamp-2 break-words border-t border-[#2f3336] pt-2 text-xs leading-5 text-[#8b98a5]">{target.notes}</p> : null}
+                <div className="mt-3 flex justify-end border-t border-[#2f3336] pt-3">
+                  <Button size="sm" variant="destructive" onClick={() => void deleteTarget(target.id)}>
+                    <Trash2 className="size-4" />
+                    {t("autoComment.targets.delete")}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

@@ -494,11 +494,11 @@ export const automationService = {
     return res.data.data;
   },
   async updateCommentTargetStatus(id: number, status: AutoCommentTargetApi["status"]) {
-    const res = await request.patch<ApiResponse<AutoCommentTargetApi>>(`/auto-comment/targets/${id}`, { status });
+    const res = await request.patch<ApiResponse<AutoCommentTargetApi>>(`/auto-comments/targets/${id}`, { status });
     return res.data.data;
   },
   async deleteCommentTarget(id: number) {
-    await request.delete(`/auto-comment/targets/${id}`);
+    await request.delete(`/auto-comments/targets/${id}`);
   },
   async commentTasks() {
     const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comment/tasks");
@@ -525,6 +525,9 @@ export const automationService = {
       generated_comment: generatedComment,
     });
     return res.data.data;
+  },
+  async deleteCommentDraft(id: number) {
+    await request.delete(`/auto-comments/drafts/${id}`);
   },
   async createCommentFeedback(id: number, payload: AutoCommentFeedbackPayload) {
     const res = await request.post<ApiResponse<unknown>>(`/auto-comments/drafts/${id}/feedback`, payload);

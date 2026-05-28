@@ -571,6 +571,18 @@ func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.Au
 	return &item, nil
 }
 
+func (s *AutoCommentService) DeleteTask(userID, id uint) error {
+	if _, err := s.taskRepo.GetByUserAndID(userID, id); err != nil {
+		return err
+	}
+	if s.publishing != nil {
+		if err := s.publishing.DeleteNonPublishedSourceJobs(userID, repository.PublishSourceComment, id); err != nil {
+			return err
+		}
+	}
+	return s.taskRepo.DeleteByUserAndID(userID, id)
+}
+
 func (s *AutoCommentService) UpdateDraft(userID, id uint, content string) (*dto.AutoCommentTaskItem, error) {
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {

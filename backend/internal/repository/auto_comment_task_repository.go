@@ -70,6 +70,10 @@ func (r *AutoCommentTaskRepository) Save(task *model.AutoCommentTask) error {
 	return r.DB.Save(task).Error
 }
 
+func (r *AutoCommentTaskRepository) DeleteByUserAndID(userID, id uint) error {
+	return r.DB.Where("user_id = ? AND id = ?", userID, id).Delete(&model.AutoCommentTask{}).Error
+}
+
 func (r *AutoCommentTaskRepository) CountSuccessBetween(userID uint, from, to time.Time) (int64, error) {
 	var n int64
 	err := r.DB.Model(&model.AutoCommentTask{}).

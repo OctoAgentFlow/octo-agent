@@ -489,25 +489,50 @@ func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *
 	}
 	result, mode, previewKey, err := s.publishWithAdapterRetryingUnauthorized(ctx, job, account, targetTweetID)
 	if err != nil {
-		publishErr := &PublishingError{Code: "x_api_publish_failed", Message: "x_api_publish_failed: " + err.Error()}
-		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, true, "activity.preview.realPublishFailed")
-		alert.Notify(ctx, alert.Event{
-			Level:      alert.LevelError,
-			Category:   alert.CategoryPublishing,
-			Title:      "Auto Post X publish failed",
-			Message:    "Auto Post scheduler failed to publish to X.",
-			UserID:     job.UserID,
-			AccountID:  job.TwitterAccountID,
-			ResourceID: job.ID,
-			Error:      err,
-			Fields: map[string]any{
-				"source_type": job.SourceType,
-				"source_id":   job.SourceID,
-			},
-		})
+		category, retryable, alertable := classifyXPublishFailure(err, job.SourceType)
+		publishErr := &PublishingError{Code: category, Message: category + ": " + err.Error()}
+		_ = s.failJobWithPreview(job, publishErr.Code, publishErr.Message, retryable, "activity.preview.realPublishFailed")
+		if alertable {
+			alert.Notify(ctx, alert.Event{
+				Level:      alert.LevelError,
+				Category:   alert.CategoryPublishing,
+				Title:      autoPublishFailureAlertTitle(job.SourceType),
+				Message:    autoPublishFailureAlertMessage(job.SourceType),
+				UserID:     job.UserID,
+				AccountID:  job.TwitterAccountID,
+				ResourceID: job.ID,
+				Error:      err,
+				Fields: map[string]any{
+					"source_type": job.SourceType,
+					"source_id":   job.SourceID,
+				},
+			})
+		}
 		return publishErr
 	}
 	return s.completeJob(job, result, mode, previewKey)
+}
+
+func classifyXPublishFailure(err error, sourceType string) (category string, retryable bool, alertable bool) {
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if sourceType == repository.PublishSourceComment && strings.Contains(msg, "reply to this conversation is not allowed") {
+		return "x_reply_restricted", false, false
+	}
+	return "x_api_publish_failed", true, true
+}
+
+func autoPublishFailureAlertTitle(sourceType string) string {
+	if sourceType == repository.PublishSourceComment {
+		return "Auto Comment X publish failed"
+	}
+	return "Auto Post X publish failed"
+}
+
+func autoPublishFailureAlertMessage(sourceType string) string {
+	if sourceType == repository.PublishSourceComment {
+		return "Auto Comment scheduler failed to publish to X."
+	}
+	return "Auto Post scheduler failed to publish to X."
 }
 
 func shouldAutoPublishRealJob(job *model.PublishJob, cfg config.XPublisherConfig) bool {
@@ -1014,7 +1039,7 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		task.CapabilityStatus = "publish_failed"
 		task.FailureCategory = category
 		task.FailureReason = truncateErrMsg(reason)
-		task.Retryable = job.AttemptCount < job.MaxAttempts
+		task.Retryable = job.NextAttemptAt != nil
 		return s.commentRepo.Save(task)
 	case repository.PublishSourceReply:
 		draft, err := s.replyRepo.GetByUserAndID(job.UserID, job.SourceID)

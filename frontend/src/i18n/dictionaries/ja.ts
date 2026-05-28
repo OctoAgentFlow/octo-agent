@@ -888,6 +888,7 @@ export const dict: I18nDict = {
   "planFeatures.additionalCapability": "Additional advanced capability",
   "actions.startTrial": "Start Free Trial",
   "actions.trialIncluded": "Trial Included",
+  "actions.choosePlan": "Choose {plan}",
   "actions.upgradeTo": "Upgrade to {plan}",
   "actions.currentPlan": "Current Plan",
   "actions.upgrade": "Upgrade",

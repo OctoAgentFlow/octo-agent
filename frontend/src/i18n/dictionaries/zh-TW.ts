@@ -888,6 +888,7 @@ export const dict: I18nDict = {
   "planFeatures.additionalCapability": "更多進階能力",
   "actions.startTrial": "開始免費試用",
   "actions.trialIncluded": "註冊即含試用",
+  "actions.choosePlan": "選擇 {plan}",
   "actions.upgradeTo": "升級到 {plan}",
   "actions.currentPlan": "目前方案",
   "actions.upgrade": "升級",

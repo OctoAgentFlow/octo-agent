@@ -41,6 +41,7 @@ export function PricingSection() {
         {pricingPlans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
           const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });
+          const ctaLabel = plan.code === "free_trial" ? t("actions.startTrial") : t("actions.choosePlan", { plan: plan.name });
           return (
             <article
               key={plan.code}
@@ -76,7 +77,7 @@ export function PricingSection() {
                       : "bg-white/10 text-white hover:bg-white/15"
                   }`}
                 >
-                  {t("actions.startTrial")}
+                  {ctaLabel}
                 </Button>
               </div>
               <ul className="order-2 mt-4 flex-1 space-y-2 text-sm leading-relaxed text-white/75 sm:mt-5 sm:space-y-2.5">

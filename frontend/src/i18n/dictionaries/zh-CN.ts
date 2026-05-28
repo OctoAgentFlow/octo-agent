@@ -1730,6 +1730,7 @@ export const dict: I18nDict = {
   "planFeatures.additionalCapability": "更多高级能力",
   "actions.startTrial": "开始免费试用",
   "actions.trialIncluded": "注册即含试用",
+  "actions.choosePlan": "选择 {plan}",
   "actions.upgradeTo": "升级到 {plan}",
   "actions.currentPlan": "当前套餐",
   "actions.upgrade": "升级",

@@ -101,6 +101,7 @@ export default function AutoCommentsPage() {
   );
   const autopilotAvailable = canUseAutopilot(plan);
   const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccount?.id), [drafts, selectedAccount?.id]);
+  const accountTargets = useMemo(() => targets.filter((target) => target.x_account_id === selectedAccount?.id), [targets, selectedAccount?.id]);
   const queuedDraftCount = useMemo(
     () => accountDrafts.filter((draft) => ["draft", "review", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
     [accountDrafts]
@@ -319,7 +320,8 @@ export default function AutoCommentsPage() {
   };
 
   const canGenerate = Boolean(selectedAccount && tweetURL.trim() && authorHandle.trim() && targetText.trim() && !busy);
-  const hasTargetInput = Boolean(tweetURL.trim() && authorHandle.trim() && targetText.trim());
+  const hasManualTweetContext = Boolean(tweetURL.trim() && authorHandle.trim() && targetText.trim());
+  const hasTargetInput = Boolean(accountTargets.some((target) => target.status === "active") || hasManualTweetContext);
   const modulePaused = moduleEnabled === false;
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.comment.name") })
@@ -387,7 +389,7 @@ export default function AutoCommentsPage() {
           />
           <AutomationPipelineSummary
             baseKey="autoComment"
-            inputValue={targetText.trim() ? formatHandle(authorHandle) : t("autoComment.pipeline.inputValue", { count: targets.length })}
+            inputValue={hasManualTweetContext ? formatHandle(authorHandle) : t("autoComment.pipeline.inputValue", { count: accountTargets.length })}
             queueCount={queuedDraftCount}
             publishReadyCount={publishReadyCount}
             executionMode={executionMode}
@@ -405,7 +407,7 @@ export default function AutoCommentsPage() {
               <WorkbenchSignal
                 icon={Database}
                 label={t("autoComment.signal.input")}
-                title={targetText.trim() ? t("autoComment.signal.inputReady") : t("autoComment.signal.inputWaiting")}
+                title={hasTargetInput ? t("autoComment.signal.inputReady") : t("autoComment.signal.inputWaiting")}
                 description={t("autoComment.signal.inputDesc")}
                 tone="blue"
               />
@@ -507,34 +509,40 @@ export default function AutoCommentsPage() {
               ) : null}
             </div>
 
-            <label className="block space-y-2">
-              <span className={labelClass}>{t("autoComment.target.url")}</span>
-              <input
-                value={tweetURL}
-                onChange={(event) => setTweetURL(event.target.value)}
-                placeholder={t("autoComment.target.urlPlaceholder")}
-                className={inputClass}
-              />
-            </label>
-            <label className="block space-y-2">
-              <span className={labelClass}>{t("autoComment.target.author")}</span>
-              <input
-                value={authorHandle}
-                onChange={(event) => setAuthorHandle(event.target.value)}
-                placeholder={t("autoComment.target.authorPlaceholder")}
-                className={inputClass}
-              />
-            </label>
-            <label className="block space-y-2">
-              <span className={labelClass}>{t("autoComment.target.text")}</span>
-              <textarea
-                value={targetText}
-                onChange={(event) => setTargetText(event.target.value)}
-                rows={5}
-                placeholder={t("autoComment.target.textPlaceholder")}
-                className={`${inputClass} min-h-32 resize-y leading-6`}
-              />
-            </label>
+            <div className={panelClass}>
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-white">{t("autoComment.manual.title")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.manual.description")}</p>
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>{t("autoComment.target.url")}</span>
+                <input
+                  value={tweetURL}
+                  onChange={(event) => setTweetURL(event.target.value)}
+                  placeholder={t("autoComment.target.urlPlaceholder")}
+                  className={inputClass}
+                />
+              </label>
+              <label className="mt-3 block space-y-2">
+                <span className={labelClass}>{t("autoComment.target.author")}</span>
+                <input
+                  value={authorHandle}
+                  onChange={(event) => setAuthorHandle(event.target.value)}
+                  placeholder={t("autoComment.target.authorPlaceholder")}
+                  className={inputClass}
+                />
+              </label>
+              <label className="mt-3 block space-y-2">
+                <span className={labelClass}>{t("autoComment.target.text")}</span>
+                <textarea
+                  value={targetText}
+                  onChange={(event) => setTargetText(event.target.value)}
+                  rows={5}
+                  placeholder={t("autoComment.target.textPlaceholder")}
+                  className={`${inputClass} min-h-32 resize-y leading-6`}
+                />
+              </label>
+            </div>
             <div className="grid gap-3 md:grid-cols-[1fr_180px]">
               <label className="block space-y-2">
                 <span className={labelClass}>{t("autoComment.target.category")}</span>

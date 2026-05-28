@@ -614,7 +614,7 @@ func (s *AIService) GenerateAutoCommentTargetSuggestions(ctx context.Context, in
 	if len(in.ExistingTargets) > 0 {
 		user.WriteString("already monitored targets to avoid duplicating: " + strings.Join(in.ExistingTargets, ", ") + "\n")
 	}
-	user.WriteString("Suggest 8-12 candidate X handles across these categories: kol, media, competitor, partner, customer, other.\n")
+	user.WriteString("Suggest 8-12 candidate X handles across these categories: kol, founder, project, competitor, customer, media, analyst, investor, developer, community, ecosystem, partner, other.\n")
 	user.WriteString("Prefer accounts likely relevant to Web3, AI agents, SocialFi, social media growth, or the supplied product context.\n")
 	user.WriteString("Every item must include handle without @, category, priority 1-5, reason, and search_query for manual verification.\n")
 	user.WriteString("Return JSON shape: {\"items\":[{\"handle\":\"example\",\"display_name\":\"Example\",\"category\":\"kol\",\"priority\":4,\"reason\":\"why this account is worth monitoring\",\"search_query\":\"site:x.com example AI agents\"}]}\n")
@@ -691,7 +691,7 @@ func normalizeSuggestionHandle(value string) string {
 
 func normalizeSuggestionCategory(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "kol", "media", "competitor", "partner", "customer", "other":
+	case "kol", "founder", "project", "media", "competitor", "partner", "customer", "analyst", "investor", "developer", "community", "ecosystem", "other":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "kol"

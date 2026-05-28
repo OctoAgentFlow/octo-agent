@@ -1212,7 +1212,7 @@ func applyManualCommentTarget(target *model.AutoCommentTarget, req dto.AutoComme
 
 func normalizeAutoCommentTargetCategory(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "kol", "competitor", "customer", "media", "partner", "other":
+	case "kol", "founder", "project", "competitor", "customer", "media", "analyst", "investor", "developer", "community", "ecosystem", "partner", "other":
 		return strings.ToLower(strings.TrimSpace(v))
 	default:
 		return "kol"

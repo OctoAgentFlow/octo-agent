@@ -147,7 +147,7 @@ export type AutoCommentTargetApi = {
   target_tweet_url?: string;
   target_author_handle?: string;
   target_text?: string;
-  target_category: "kol" | "competitor" | "customer" | "media" | "partner" | "other" | string;
+  target_category: "kol" | "founder" | "project" | "competitor" | "customer" | "media" | "analyst" | "investor" | "developer" | "community" | "ecosystem" | "partner" | "other" | string;
   priority: number;
   notes?: string;
   status: "active" | "paused";

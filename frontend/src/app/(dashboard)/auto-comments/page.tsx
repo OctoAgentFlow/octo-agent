@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
@@ -32,7 +32,21 @@ type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_t
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
 const inputClass = "form-input";
 const labelClass = "text-xs font-medium text-[#71767b]";
-const targetCategories = ["kol", "competitor", "customer", "media", "partner", "other"] as const;
+const targetCategories = [
+  "kol",
+  "founder",
+  "project",
+  "competitor",
+  "customer",
+  "media",
+  "analyst",
+  "investor",
+  "developer",
+  "community",
+  "ecosystem",
+  "partner",
+  "other",
+] as const;
 const commentFeedbackTags: CommentFeedbackTag[] = ["too_generic", "too_salesy", "irrelevant", "wrong_tone", "good"];
 
 function extractTweetID(url: string) {
@@ -830,22 +844,31 @@ export default function AutoCommentsPage() {
       </div>
 
       <Card className="bg-[#0f1419]">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <CardHeader title={t("autoComment.targets.title")} description={t("autoComment.targets.description")} />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select value={targetCategoryFilter} onChange={(event) => setTargetCategoryFilter(event.target.value)} className={`${inputClass} h-9 min-w-40 py-0 text-sm`}>
-              <option value="all">{t("autoComment.targets.allCategories")}</option>
+        <div className="mb-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <CardHeader title={t("autoComment.targets.title")} description={t("autoComment.targets.description")} />
+            <span className="shrink-0 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs text-[#8b98a5]">
+              {t("autoComment.targets.resultCount", { count: filteredTargets.length })}
+            </span>
+          </div>
+          <div className="mt-4 space-y-3 rounded-2xl border border-[#2f3336] bg-black/40 p-3">
+            <FilterChipGroup label={t("autoComment.targets.categoryFilter")}>
+              <FilterChip active={targetCategoryFilter === "all"} onClick={() => setTargetCategoryFilter("all")}>
+                {t("autoComment.targets.allCategories")}
+              </FilterChip>
               {targetCategories.map((category) => (
-                <option key={category} value={category}>
+                <FilterChip key={category} active={targetCategoryFilter === category} onClick={() => setTargetCategoryFilter(category)}>
                   {t(`autoComment.targetCategory.${category}`)}
-                </option>
+                </FilterChip>
               ))}
-            </select>
-            <select value={targetStatusFilter} onChange={(event) => setTargetStatusFilter(event.target.value as TargetFilter)} className={`${inputClass} h-9 min-w-32 py-0 text-sm`}>
-              <option value="all">{t("autoComment.targets.allStatuses")}</option>
-              <option value="active">{t("autoComment.targetStatus.active")}</option>
-              <option value="paused">{t("autoComment.targetStatus.paused")}</option>
-            </select>
+            </FilterChipGroup>
+            <FilterChipGroup label={t("autoComment.targets.statusFilter")}>
+              {(["all", "active", "paused"] as TargetFilter[]).map((status) => (
+                <FilterChip key={status} active={targetStatusFilter === status} onClick={() => setTargetStatusFilter(status)}>
+                  {status === "all" ? t("autoComment.targets.allStatuses") : t(`autoComment.targetStatus.${status}`)}
+                </FilterChip>
+              ))}
+            </FilterChipGroup>
           </div>
         </div>
         {targets.length === 0 ? (
@@ -946,6 +969,32 @@ function AutomationSetupGuide({
         ))}
       </div>
     </Card>
+  );
+}
+
+function FilterChipGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-start">
+      <span className="w-20 shrink-0 pt-1 text-xs font-medium text-[#71767b]">{label}</span>
+      <div className="flex min-w-0 flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "min-h-8 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/15 text-[#8ecdf8]"
+          : "border-[#2f3336] bg-black text-[#8b98a5] hover:border-[#536471] hover:text-[#e7e9ea]",
+      ].join(" ")}
+    >
+      {children}
+    </button>
   );
 }
 

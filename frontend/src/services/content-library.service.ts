@@ -9,9 +9,15 @@ type ApiResponse<T> = {
 export type ContentLibraryItemType =
   | "idea"
   | "product_update"
+  | "feature_highlight"
+  | "pain_point"
   | "faq"
   | "case_study"
+  | "comparison"
+  | "tutorial"
+  | "data_insight"
   | "announcement"
+  | "campaign"
   | "link"
   | "thread_seed";
 

@@ -69,7 +69,21 @@ const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
 const xSubscriptionTiers: XSubscriptionTier[] = ["unknown", "free", "premium", "premium_plus"];
 const autoPostLengthModes: AutoPostLengthMode[] = ["standard", "long"];
-const contentItemTypes: ContentLibraryItemType[] = ["idea", "product_update", "faq", "case_study", "announcement", "link", "thread_seed"];
+const contentItemTypes: ContentLibraryItemType[] = [
+  "idea",
+  "feature_highlight",
+  "pain_point",
+  "product_update",
+  "faq",
+  "case_study",
+  "comparison",
+  "tutorial",
+  "data_insight",
+  "announcement",
+  "campaign",
+  "link",
+  "thread_seed",
+];
 const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; descriptionKey: string }> = [
   { id: "generate", labelKey: "autoPost.tabs.generate", descriptionKey: "autoPost.tabs.generateDesc" },
   { id: "planner", labelKey: "autoPost.tabs.planner", descriptionKey: "autoPost.tabs.plannerDesc" },

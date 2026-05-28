@@ -271,6 +271,12 @@ export type AutoCommentTaskApi = {
     label: string;
     comment: string;
   }>;
+  delivery_mode?: "auto_comment" | "manual_comment" | "quote_post" | "skip" | "inbound_handoff" | string;
+  delivery_reason?: string;
+  api_reply_eligible?: boolean;
+  api_reply_block_reason?: string;
+  manual_action_url?: string;
+  quote_post_candidate?: string;
   status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;

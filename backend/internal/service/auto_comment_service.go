@@ -24,6 +24,23 @@ import (
 
 const autoCommentPreviewRunes = 220
 
+const (
+	autoCommentDeliveryAutoComment   = "auto_comment"
+	autoCommentDeliveryManualComment = "manual_comment"
+	autoCommentDeliveryQuotePost     = "quote_post"
+	autoCommentDeliverySkip          = "skip"
+	autoCommentDeliveryInbound       = "inbound_handoff"
+)
+
+type autoCommentDeliveryDecision struct {
+	Mode           string
+	Reason         string
+	Eligible       bool
+	BlockReason    string
+	ManualURL      string
+	QuoteCandidate string
+}
+
 type AutoCommentService struct {
 	accountRepo    *repository.TwitterAccountRepository
 	automationRepo *repository.AutomationRepository
@@ -434,13 +451,14 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		GeneratedAt:       &now,
 		ApprovedAt:        approvedAt,
 	}
+	applyAutoCommentDelivery(task, decideAutoCommentDelivery(target.TargetText, displayCommentTargetHandle(*target), target.TargetTweetID, *acc, comment))
 	if err := s.taskRepo.Create(task); err != nil {
 		return nil, err
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
 	}
-	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
+	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" && task.DeliveryMode == autoCommentDeliveryAutoComment {
 		if err := s.createAutopilotPreparedActivity(task, acc.Username, now); err != nil {
 			return nil, err
 		}
@@ -1007,6 +1025,10 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if err != nil {
 		return nil, err
 	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(target.UserID, target.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
 	blocked := blockedWordsFromConfig(&cfg)
 	mode := s.effectiveCommentExecutionMode(target.UserID, &cfg)
 	if mode == ExecutionModeAutopilot {
@@ -1048,6 +1070,7 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 		DetectedAt:        now,
 		ApprovedAt:        approvedAt,
 	}
+	applyAutoCommentDelivery(task, decideAutoCommentDelivery(tw.Text, target.TargetUsername, tw.ID, *acc, comment))
 	if err != nil {
 		task.Status = "failed"
 		task.CapabilityStatus = "llm_failed"
@@ -1067,7 +1090,7 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	if err := recordAIGenerationUsage(s.usageRepo, target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
 	}
-	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" {
+	if mode == ExecutionModeAutopilot && task.Status == "ready_to_publish" && task.DeliveryMode == autoCommentDeliveryAutoComment {
 		if err := s.createAutopilotPreparedActivity(task, target.TargetUsername, now); err != nil {
 			return nil, err
 		}
@@ -1723,6 +1746,109 @@ func applyAutoCommentOpportunityGate(mode string, opportunity autoCommentOpportu
 	*approvedAt = nil
 }
 
+func decideAutoCommentDelivery(tweetText, targetUsername, targetTweetID string, account model.TwitterAccount, generatedComment string) autoCommentDeliveryDecision {
+	username := strings.TrimSpace(strings.TrimPrefix(account.Username, "@"))
+	manualURL := autoCommentManualActionURL(targetUsername, targetTweetID)
+	if username == "" {
+		return autoCommentDeliveryDecision{
+			Mode:        autoCommentDeliveryManualComment,
+			Reason:      "No executor X username is available, so this opportunity is kept as a manual comment suggestion.",
+			Eligible:    false,
+			BlockReason: "missing_executor_username",
+			ManualURL:   manualURL,
+		}
+	}
+	if tweetMentionsHandle(tweetText, username) {
+		return autoCommentDeliveryDecision{
+			Mode:           autoCommentDeliveryAutoComment,
+			Reason:         "The monitored post mentions the executor X account, so it is eligible for API reply publishing.",
+			Eligible:       true,
+			ManualURL:      manualURL,
+			QuoteCandidate: buildAutoCommentQuoteCandidate(generatedComment),
+		}
+	}
+	return autoCommentDeliveryDecision{
+		Mode:           autoCommentDeliveryManualComment,
+		Reason:         "X API may reject replies to target-author posts unless the executor account is mentioned or otherwise invited into the conversation. This opportunity is kept as a manual comment suggestion.",
+		Eligible:       false,
+		BlockReason:    "not_mentioned_or_engaged",
+		ManualURL:      manualURL,
+		QuoteCandidate: buildAutoCommentQuoteCandidate(generatedComment),
+	}
+}
+
+func tweetMentionsHandle(tweetText, username string) bool {
+	username = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(username, "@")))
+	if username == "" {
+		return false
+	}
+	re := regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_])@` + regexp.QuoteMeta(username) + `([^A-Za-z0-9_]|$)`)
+	return re.MatchString(tweetText)
+}
+
+func autoCommentManualActionURL(username, tweetID string) string {
+	username = strings.TrimSpace(strings.TrimPrefix(username, "@"))
+	tweetID = strings.TrimSpace(tweetID)
+	if username != "" && tweetID != "" {
+		return fmt.Sprintf("https://x.com/%s/status/%s", username, tweetID)
+	}
+	if tweetID != "" {
+		return fmt.Sprintf("https://x.com/i/web/status/%s", tweetID)
+	}
+	if username != "" {
+		return fmt.Sprintf("https://x.com/%s", username)
+	}
+	return "https://x.com"
+}
+
+func buildAutoCommentQuoteCandidate(comment string) string {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return ""
+	}
+	return truncateRunes(comment, autoCommentPreviewRunes)
+}
+
+func applyAutoCommentDelivery(task *model.AutoCommentTask, decision autoCommentDeliveryDecision) {
+	if task == nil {
+		return
+	}
+	task.DeliveryMode = firstNonEmpty(decision.Mode, autoCommentDeliveryManualComment)
+	task.DeliveryReason = truncateRunes(decision.Reason, 1000)
+	task.APIReplyEligible = decision.Eligible
+	task.APIReplyBlockReason = truncateRunes(decision.BlockReason, 500)
+	task.ManualActionURL = truncateRunes(decision.ManualURL, 500)
+	task.QuotePostCandidate = truncateRunes(decision.QuoteCandidate, autoCommentPreviewRunes)
+	if task.DeliveryMode == autoCommentDeliveryManualComment && task.Status == "ready_to_publish" {
+		task.Status = "pending_review"
+		task.CapabilityStatus = "manual_comment_suggested"
+		task.ApprovalRequired = true
+		task.ApprovedAt = nil
+	}
+}
+
+func convertRestrictedAutoCommentToManualSuggestion(task *model.AutoCommentTask, reason string) {
+	if task == nil {
+		return
+	}
+	task.Status = "pending_review"
+	task.CapabilityStatus = "manual_comment_suggested"
+	task.FailureCategory = "x_reply_restricted"
+	task.FailureReason = truncateErrMsg(reason)
+	task.Retryable = false
+	task.RetryAfterAt = nil
+	task.DeliveryMode = autoCommentDeliveryManualComment
+	task.DeliveryReason = "X rejected API reply publishing for this conversation. The generated comment is still available as a manual comment suggestion."
+	task.APIReplyEligible = false
+	task.APIReplyBlockReason = "x_reply_restricted"
+	if strings.TrimSpace(task.ManualActionURL) == "" {
+		task.ManualActionURL = autoCommentManualActionURL(task.TargetUsername, task.TargetTweetID)
+	}
+	if strings.TrimSpace(task.QuotePostCandidate) == "" {
+		task.QuotePostCandidate = buildAutoCommentQuoteCandidate(task.GeneratedComment)
+	}
+}
+
 func (s *AutoCommentService) createAutopilotPreparedActivity(task *model.AutoCommentTask, accountUsername string, now time.Time) error {
 	if s.activityRepo == nil || task == nil {
 		return nil
@@ -1836,32 +1962,38 @@ func toAutoCommentTargetItem(row model.AutoCommentTarget) dto.AutoCommentTargetI
 
 func toAutoCommentTaskItem(row model.AutoCommentTask) dto.AutoCommentTaskItem {
 	item := dto.AutoCommentTaskItem{
-		ID:                row.ID,
-		BotID:             row.BotID,
-		XAccountID:        row.XAccountID,
-		TargetID:          row.TargetID,
-		TargetUserID:      row.TargetUserID,
-		TargetUsername:    row.TargetUsername,
-		TargetTweetID:     row.TargetTweetID,
-		TargetTweetText:   row.TargetTweetText,
-		TargetTweetAuthor: row.TargetTweetAuthor,
-		GeneratedComment:  row.GeneratedComment,
-		OpportunityScore:  row.OpportunityScore,
-		GenerationReason:  row.GenerationReason,
-		MatchedKeywords:   decodeStringList(row.MatchedKeywords),
-		ReferencedContent: decodeStringList(row.ReferencedContent),
-		CommentVariants:   decodeAutoCommentVariants(row.CommentVariants),
-		Status:            row.Status,
-		RiskLevel:         row.RiskLevel,
-		CapabilityStatus:  row.CapabilityStatus,
-		FailureCategory:   row.FailureCategory,
-		FailureReason:     row.FailureReason,
-		Retryable:         row.Retryable,
-		AttemptCount:      row.AttemptCount,
-		ApprovalRequired:  row.ApprovalRequired,
-		ActivityLogID:     row.ActivityLogID,
-		CommentTweetID:    row.CommentTweetID,
-		DetectedAt:        row.DetectedAt.UTC().Format(time.RFC3339),
+		ID:                  row.ID,
+		BotID:               row.BotID,
+		XAccountID:          row.XAccountID,
+		TargetID:            row.TargetID,
+		TargetUserID:        row.TargetUserID,
+		TargetUsername:      row.TargetUsername,
+		TargetTweetID:       row.TargetTweetID,
+		TargetTweetText:     row.TargetTweetText,
+		TargetTweetAuthor:   row.TargetTweetAuthor,
+		GeneratedComment:    row.GeneratedComment,
+		OpportunityScore:    row.OpportunityScore,
+		GenerationReason:    row.GenerationReason,
+		MatchedKeywords:     decodeStringList(row.MatchedKeywords),
+		ReferencedContent:   decodeStringList(row.ReferencedContent),
+		CommentVariants:     decodeAutoCommentVariants(row.CommentVariants),
+		DeliveryMode:        firstNonEmpty(row.DeliveryMode, autoCommentDeliveryManualComment),
+		DeliveryReason:      row.DeliveryReason,
+		APIReplyEligible:    row.APIReplyEligible,
+		APIReplyBlockReason: row.APIReplyBlockReason,
+		ManualActionURL:     firstNonEmpty(row.ManualActionURL, autoCommentManualActionURL(row.TargetUsername, row.TargetTweetID)),
+		QuotePostCandidate:  row.QuotePostCandidate,
+		Status:              row.Status,
+		RiskLevel:           row.RiskLevel,
+		CapabilityStatus:    row.CapabilityStatus,
+		FailureCategory:     row.FailureCategory,
+		FailureReason:       row.FailureReason,
+		Retryable:           row.Retryable,
+		AttemptCount:        row.AttemptCount,
+		ApprovalRequired:    row.ApprovalRequired,
+		ActivityLogID:       row.ActivityLogID,
+		CommentTweetID:      row.CommentTweetID,
+		DetectedAt:          row.DetectedAt.UTC().Format(time.RFC3339),
 	}
 	if row.RetryAfterAt != nil {
 		item.RetryAfterAt = row.RetryAfterAt.UTC().Format(time.RFC3339)

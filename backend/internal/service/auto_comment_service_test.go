@@ -89,3 +89,45 @@ func TestAutoCommentQueueScorePrioritizesTargetPriorityAndOpportunity(t *testing
 		t.Fatalf("expected higher opportunity score to win within same priority")
 	}
 }
+
+func TestDecideAutoCommentDeliveryRequiresMentionForAPIReply(t *testing.T) {
+	account := model.TwitterAccount{Username: "octo_agent_flow"}
+
+	manual := decideAutoCommentDelivery("Great thread about SocialFi operations.", "target_kol", "123", account, "Useful lens.")
+	if manual.Mode != autoCommentDeliveryManualComment || manual.Eligible {
+		t.Fatalf("expected non-mentioned target tweet to become manual suggestion, got %#v", manual)
+	}
+	if manual.BlockReason != "not_mentioned_or_engaged" {
+		t.Fatalf("expected reply block reason, got %s", manual.BlockReason)
+	}
+	if manual.ManualURL != "https://x.com/target_kol/status/123" {
+		t.Fatalf("unexpected manual url: %s", manual.ManualURL)
+	}
+
+	auto := decideAutoCommentDelivery("Curious how @octo_agent_flow would handle this workflow.", "target_kol", "456", account, "We would start from queue quality.")
+	if auto.Mode != autoCommentDeliveryAutoComment || !auto.Eligible {
+		t.Fatalf("expected mentioned tweet to be API reply eligible, got %#v", auto)
+	}
+}
+
+func TestApplyAutoCommentDeliveryDowngradesAutopilotManualSuggestion(t *testing.T) {
+	now := time.Now().UTC()
+	task := &model.AutoCommentTask{
+		Status:           "ready_to_publish",
+		CapabilityStatus: "autopilot_prepared",
+		ApprovalRequired: false,
+		ApprovedAt:       &now,
+	}
+
+	applyAutoCommentDelivery(task, autoCommentDeliveryDecision{
+		Mode:        autoCommentDeliveryManualComment,
+		Reason:      "manual",
+		Eligible:    false,
+		BlockReason: "not_mentioned_or_engaged",
+		ManualURL:   "https://x.com/target/status/1",
+	})
+
+	if task.Status != "pending_review" || task.CapabilityStatus != "manual_comment_suggested" || !task.ApprovalRequired || task.ApprovedAt != nil {
+		t.Fatalf("expected manual delivery to downgrade autopilot task, got status=%s capability=%s approval=%v approved=%v", task.Status, task.CapabilityStatus, task.ApprovalRequired, task.ApprovedAt)
+	}
+}

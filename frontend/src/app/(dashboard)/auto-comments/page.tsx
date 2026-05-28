@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Database, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -28,6 +28,7 @@ type LoadState = "loading" | "ready" | "error";
 type ExecutionMode = "manual" | "review" | "autopilot";
 type TargetFilter = "all" | "active" | "paused";
 type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_tone" | "good";
+type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
 const inputClass = "form-input";
@@ -74,6 +75,10 @@ function statusKey(status: string) {
   return `autoComment.status.${status}`;
 }
 
+function deliveryKey(mode?: string) {
+  return `autoComment.delivery.${mode || "manual_comment"}`;
+}
+
 export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -101,6 +106,7 @@ export default function AutoCommentsPage() {
   const [targetSuggestions, setTargetSuggestions] = useState<AutoCommentTargetSuggestionData["items"]>([]);
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -123,6 +129,26 @@ export default function AutoCommentsPage() {
   const publishReadyCount = useMemo(
     () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
     [accountDrafts]
+  );
+  const filteredDrafts = useMemo(
+    () =>
+      drafts.filter((draft) => {
+        if (deliveryFilter === "all") return true;
+        if (deliveryFilter === "blocked") return draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted";
+        return (draft.delivery_mode || "manual_comment") === deliveryFilter;
+      }),
+    [deliveryFilter, drafts]
+  );
+  const deliveryFilterOptions = useMemo(
+    () =>
+      ([
+        ["all", drafts.length],
+        ["auto_comment", drafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
+        ["manual_comment", drafts.filter((draft) => (draft.delivery_mode || "manual_comment") === "manual_comment").length],
+        ["quote_post", drafts.filter((draft) => draft.delivery_mode === "quote_post").length],
+        ["blocked", drafts.filter((draft) => draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted").length],
+      ] as Array<[DeliveryFilter, number]>),
+    [drafts]
   );
   const filteredTargets = useMemo(
     () =>
@@ -274,6 +300,23 @@ export default function AutoCommentsPage() {
     } catch (error) {
       pushToast(apiErrorMessage(error) || t("autoComment.feedback.saveFailed"));
     }
+  };
+
+  const copyComment = async (draft: AutoCommentTaskApi) => {
+    const text = (draft.generated_comment || "").trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      pushToast(t("autoComment.manualAction.copied"));
+    } catch {
+      pushToast(t("autoComment.manualAction.copyFailed"));
+    }
+  };
+
+  const openTargetTweet = (draft: AutoCommentTaskApi) => {
+    const url = draft.manual_action_url || (draft.target_tweet_id ? `https://x.com/i/web/status/${draft.target_tweet_id}` : "");
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const importTargets = async () => {
@@ -691,14 +734,36 @@ export default function AutoCommentsPage() {
                 {modulePausedActionTip}
               </p>
             ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {deliveryFilterOptions.map(([filter, count]) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setDeliveryFilter(filter)}
+                  className={[
+                    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-all",
+                    deliveryFilter === filter
+                      ? "border-[#1d9bf0]/50 bg-[#1d9bf0]/15 text-[#8ecdf8]"
+                      : "border-[#2f3336] bg-black text-[#8b98a5] hover:border-[#1d9bf0]/40 hover:text-white",
+                  ].join(" ")}
+                >
+                  {t(`autoComment.deliveryFilter.${filter}`)}
+                  <span className="text-[#71767b]">{count}</span>
+                </button>
+              ))}
+            </div>
           </div>
           <div className="divide-y divide-[#2f3336]">
             {drafts.length === 0 ? (
               <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
                 {t("autoComment.review.empty")}
               </div>
+            ) : filteredDrafts.length === 0 ? (
+              <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
+                {t("autoComment.review.emptyFiltered")}
+              </div>
             ) : (
-              drafts.slice(0, 12).map((draft) => {
+              filteredDrafts.slice(0, 12).map((draft) => {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
                 const editing = editingDraftID === draft.id;
                 return (
@@ -708,14 +773,49 @@ export default function AutoCommentsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</span>
                           <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t(statusKey(draft.status))}</span>
+                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(deliveryKey(draft.delivery_mode))}</span>
                           <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t("autoComment.scene")}</span>
                           {draft.status === "ready_to_publish" ? <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-0.5 text-xs text-[#7ee0b5]">{t("autoComment.execution.autopilot.title")}</span> : null}
                           {draft.risk_level === "high" ? <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.review.riskIntercepted")}</span> : null}
                           {draft.bot_id ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("oafBots.botNumber", { id: draft.bot_id })}</span> : null}
                         </div>
-                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-                          <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
-                          <p className="line-clamp-3 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
+	                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+	                          <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
+	                          <p className="line-clamp-3 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
+	                        </div>
+                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
+                              <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                                {draft.delivery_reason || t("autoComment.delivery.defaultReason")}
+                              </p>
+                              {!draft.api_reply_eligible && draft.api_reply_block_reason ? (
+                                <p className="mt-2 text-xs leading-5 text-amber-100/80">
+                                  {t(`autoComment.deliveryBlock.${draft.api_reply_block_reason}`)}
+                                </p>
+                              ) : null}
+                              {draft.quote_post_candidate ? (
+                                <div className="mt-3 rounded-xl border border-[#2f3336] bg-black p-3">
+                                  <p className="text-xs text-[#71767b]">{t("autoComment.delivery.quoteCandidate")}</p>
+                                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#b6bec5]">{draft.quote_post_candidate}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                            {(draft.delivery_mode || "manual_comment") === "manual_comment" ? (
+                              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                                <Button size="sm" variant="outline" onClick={() => void copyComment(draft)} disabled={!draft.generated_comment}>
+                                  <Clipboard className="size-4" />
+                                  {t("autoComment.manualAction.copy")}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => openTargetTweet(draft)} disabled={!draft.manual_action_url && !draft.target_tweet_id}>
+                                  <ExternalLink className="size-4" />
+                                  {t("autoComment.manualAction.open")}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

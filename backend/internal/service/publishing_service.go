@@ -190,6 +190,9 @@ func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now ti
 	if task == nil || task.Status != "ready_to_publish" {
 		return nil, false, nil
 	}
+	if strings.TrimSpace(task.DeliveryMode) != "" && task.DeliveryMode != "auto_comment" {
+		return nil, false, nil
+	}
 	job := &model.PublishJob{
 		UserID:           task.UserID,
 		TwitterAccountID: task.XAccountID,
@@ -1034,6 +1037,10 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
+		}
+		if category == "x_reply_restricted" {
+			convertRestrictedAutoCommentToManualSuggestion(task, reason)
+			return s.commentRepo.Save(task)
 		}
 		task.Status = "failed"
 		task.CapabilityStatus = "publish_failed"

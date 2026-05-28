@@ -538,6 +538,45 @@ func (ctl *AutomationController) CreateCommentTarget(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) BulkImportCommentTargets(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoCommentTargetBulkImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.BulkImportTargets(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) SuggestCommentTargets(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoCommentTargetSuggestionRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoCommentService.SuggestTargets(c.Request.Context(), userID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) UpdateCommentTargetStatus(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -587,6 +626,20 @@ func (ctl *AutomationController) ListCommentTasks(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoCommentService.ListTasks(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) CommentAnalytics(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoCommentService.Analytics(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -681,6 +734,30 @@ func (ctl *AutomationController) UpdateCommentDraft(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoCommentService.UpdateDraft(userID, taskID, req.GeneratedComment)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) CreateCommentFeedback(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoCommentFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.CreateFeedback(userID, taskID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

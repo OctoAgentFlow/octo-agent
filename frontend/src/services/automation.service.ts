@@ -147,6 +147,9 @@ export type AutoCommentTargetApi = {
   target_tweet_url?: string;
   target_author_handle?: string;
   target_text?: string;
+  target_category: "kol" | "competitor" | "customer" | "media" | "partner" | "other" | string;
+  priority: number;
+  notes?: string;
   status: "active" | "paused";
   last_seen_tweet_id?: string;
   last_seen_tweet_at?: string;
@@ -160,6 +163,94 @@ export type AutoCommentTargetsData = {
   items: AutoCommentTargetApi[];
 };
 
+export type AutoCommentBulkImportData = {
+  imported: number;
+  updated: number;
+  skipped: number;
+  items: AutoCommentTargetApi[];
+  errors?: string[];
+};
+
+export type AutoCommentBulkImportPayload = {
+  x_account_id: number;
+  raw_handles: string;
+  target_category?: string;
+  priority?: number;
+  notes?: string;
+};
+
+export type AutoCommentTargetSuggestionData = {
+  items: Array<{
+    handle: string;
+    display_name?: string;
+    category: string;
+    priority: number;
+    reason: string;
+    search_query?: string;
+    needs_verify: boolean;
+  }>;
+};
+
+export type AutoCommentAnalyticsData = {
+  summary: {
+    total_tasks: number;
+    published: number;
+    failed: number;
+    pending: number;
+    average_opportunity: number;
+  };
+  by_category: Array<{
+    key: string;
+    label: string;
+    total: number;
+    published: number;
+    failed: number;
+    average_opportunity: number;
+  }>;
+  by_target: Array<{
+    key: string;
+    label: string;
+    total: number;
+    published: number;
+    failed: number;
+    average_opportunity: number;
+  }>;
+  recent_published: Array<{
+    id: number;
+    target_username: string;
+    target_category: string;
+    comment_tweet_id: string;
+    comment_url: string;
+    generated_comment: string;
+    sent_at?: string;
+  }>;
+  recent_failures: Array<{
+    id: number;
+    target_username: string;
+    target_category: string;
+    failure_category?: string;
+    failure_reason?: string;
+    updated_at?: string;
+  }>;
+  health: Array<{
+    target_id: number;
+    target_username: string;
+    target_category: string;
+    priority: number;
+    status: string;
+    issue_type: string;
+    severity: "high" | "medium" | "low" | string;
+    message: string;
+    suggested_action: string;
+    last_checked_at?: string;
+    last_seen_tweet_at?: string;
+    last_failure_reason?: string;
+    average_opportunity: number;
+    failed_count: number;
+    total_tasks: number;
+  }>;
+};
+
 export type AutoCommentTaskApi = {
   id: number;
   bot_id: number;
@@ -171,6 +262,15 @@ export type AutoCommentTaskApi = {
   target_tweet_text?: string;
   target_tweet_author?: string;
   generated_comment?: string;
+  opportunity_score: number;
+  generation_reason?: string;
+  matched_keywords?: string[];
+  referenced_content?: string[];
+  comment_variants?: Array<{
+    type: "professional_view" | "engagement_question" | "soft_cta" | string;
+    label: string;
+    comment: string;
+  }>;
   status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
@@ -188,6 +288,12 @@ export type AutoCommentTaskApi = {
   approved_at?: string;
   blocked_at?: string;
   sent_at?: string;
+};
+
+export type AutoCommentFeedbackPayload = {
+  rating: "positive" | "negative";
+  issue_tags: string[];
+  comment?: string;
 };
 
 export type AutoCommentTasksData = {
@@ -228,6 +334,9 @@ export type AutoCommentTargetPayload = {
   target_tweet_id?: string;
   target_author_handle: string;
   target_text: string;
+  target_category?: string;
+  priority?: number;
+  notes?: string;
 };
 
 export type AutoReplyDraftPayload = {
@@ -360,6 +469,16 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoCommentTargetApi>>("/auto-comments/targets", payload);
     return res.data.data;
   },
+  async bulkImportCommentTargets(payload: AutoCommentBulkImportPayload) {
+    const res = await request.post<ApiResponse<AutoCommentBulkImportData>>("/auto-comments/targets/bulk-import", payload);
+    return res.data.data;
+  },
+  async suggestCommentTargets(xAccountID: number) {
+    const res = await request.post<ApiResponse<AutoCommentTargetSuggestionData>>("/auto-comments/targets/suggest", {
+      x_account_id: xAccountID,
+    });
+    return res.data.data;
+  },
   async generateCommentDraft(targetID: number) {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/targets/${targetID}/generate`, {});
     return res.data.data;
@@ -379,6 +498,10 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comments/drafts");
     return res.data.data;
   },
+  async commentAnalytics() {
+    const res = await request.get<ApiResponse<AutoCommentAnalyticsData>>("/auto-comments/analytics");
+    return res.data.data;
+  },
   async approveCommentTask(id: number) {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/approve`);
     return res.data.data;
@@ -387,6 +510,10 @@ export const automationService = {
     const res = await request.patch<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}`, {
       generated_comment: generatedComment,
     });
+    return res.data.data;
+  },
+  async createCommentFeedback(id: number, payload: AutoCommentFeedbackPayload) {
+    const res = await request.post<ApiResponse<unknown>>(`/auto-comments/drafts/${id}/feedback`, payload);
     return res.data.data;
   },
   async rejectCommentDraft(id: number, reason: string) {

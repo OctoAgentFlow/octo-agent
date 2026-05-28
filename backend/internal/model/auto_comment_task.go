@@ -14,6 +14,11 @@ type AutoCommentTask struct {
 	TargetTweetText   string     `gorm:"type:text;comment:目标推文正文" json:"target_tweet_text,omitempty"`
 	TargetTweetAuthor string     `gorm:"size:128;comment:目标推文作者" json:"target_tweet_author,omitempty"`
 	GeneratedComment  string     `gorm:"size:512;comment:LLM生成的评论内容" json:"generated_comment,omitempty"`
+	OpportunityScore  int        `gorm:"not null;default:0;comment:评论机会评分（0-100）" json:"opportunity_score"`
+	GenerationReason  string     `gorm:"size:1024;comment:生成原因说明" json:"generation_reason,omitempty"`
+	MatchedKeywords   string     `gorm:"type:text;comment:命中的关键词JSON数组" json:"matched_keywords,omitempty"`
+	ReferencedContent string     `gorm:"type:text;comment:参考的内容池素材标题JSON数组" json:"referenced_content,omitempty"`
+	CommentVariants   string     `gorm:"type:text;comment:评论候选JSON数组" json:"comment_variants,omitempty"`
 	Status            string     `gorm:"size:32;index;not null;default:pending_review;comment:任务状态（draft/pending_review/approved/ready_to_publish/sending/blocked/failed/sent）" json:"status"`
 	RiskLevel         string     `gorm:"size:32;index;not null;default:low;comment:草稿风险等级" json:"risk_level"`
 	CapabilityStatus  string     `gorm:"size:64;index;not null;comment:发送能力状态" json:"capability_status"`

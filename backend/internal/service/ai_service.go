@@ -19,6 +19,47 @@ type AIGeneratedText struct {
 	Usage openaiint.TextUsage
 }
 
+type AutoCommentCandidate struct {
+	Type    string `json:"type"`
+	Label   string `json:"label"`
+	Comment string `json:"comment"`
+}
+
+type AIGeneratedAutoCommentCandidates struct {
+	Text       string
+	Candidates []AutoCommentCandidate
+	Usage      openaiint.TextUsage
+}
+
+type AutoCommentTargetSuggestion struct {
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name"`
+	Category    string `json:"category"`
+	Priority    int    `json:"priority"`
+	Reason      string `json:"reason"`
+	SearchQuery string `json:"search_query"`
+}
+
+type GenerateAutoCommentTargetSuggestionsInput struct {
+	BotName          string
+	ProjectOneLiner  string
+	TargetAudience   string
+	CoreValueProps   string
+	ProductFeatures  string
+	Differentiators  string
+	Topics           []string
+	Keywords         []string
+	ContentTitles    []string
+	ContentTopics    []string
+	ExistingTargets  []string
+	HighScoreTargets []string
+}
+
+type AIGeneratedAutoCommentTargetSuggestions struct {
+	Items []AutoCommentTargetSuggestion
+	Usage openaiint.TextUsage
+}
+
 type GenerationContentContextItem struct {
 	Title         string
 	ItemType      string
@@ -69,6 +110,7 @@ type GenerateAutoCommentInput struct {
 	PrimaryLanguage   string
 	LanguageStrategy  string
 	ContentContext    []GenerationContentContextItem
+	FeedbackSignals   []string
 }
 
 type GenerateAutoReplyInput struct {
@@ -386,9 +428,17 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 }
 
 func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoCommentInput) (AIGeneratedText, error) {
+	candidates, err := s.GenerateAutoCommentCandidates(ctx, in)
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	return AIGeneratedText{Text: candidates.Text, Usage: candidates.Usage}, nil
+}
+
+func (s *AIService) GenerateAutoCommentCandidates(ctx context.Context, in GenerateAutoCommentInput) (AIGeneratedAutoCommentCandidates, error) {
 	targetTweet := strings.TrimSpace(in.TargetTweet)
 	if targetTweet == "" {
-		return AIGeneratedText{}, fmt.Errorf("target tweet is required")
+		return AIGeneratedAutoCommentCandidates{}, fmt.Errorf("target tweet is required")
 	}
 	tone := strings.TrimSpace(in.Tone)
 	if tone == "" {
@@ -396,10 +446,10 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	}
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's social growth assistant.",
-		"Write one concise X/Twitter comment draft for a target tweet.",
+		"Write three concise X/Twitter comment drafts for a target tweet.",
 		"The goal is to join the conversation naturally and earn exposure, without sounding spammy, generic, or manipulative.",
 		"The comment will go into a human review queue before publishing.",
-		"Output only the comment text.",
+		"Return strict JSON only.",
 	}, " ")
 
 	var user strings.Builder
@@ -457,6 +507,11 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 		user.WriteString("\n")
 	}
 	writeGenerationContentContext(&user, in.ContentContext, 700)
+	writeAutoCommentFeedbackSignals(&user, in.FeedbackSignals)
+	user.WriteString("Candidate styles:\n")
+	user.WriteString("- professional_view: a concise expert point of view.\n")
+	user.WriteString("- engagement_question: a light question that invites discussion.\n")
+	user.WriteString("- soft_cta: a subtle product-relevant angle without sounding like an ad.\n")
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
 	user.WriteString("- Prefer short, natural sentences suitable for X comments.\n")
@@ -470,15 +525,215 @@ func (s *AIService) GenerateAutoComment(ctx context.Context, in GenerateAutoComm
 	user.WriteString("- Do not ask for follows, likes, airdrops, giveaways, seed phrases, private keys, or wallet connections.\n")
 	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
 	user.WriteString("- Do not include surrounding quotes.\n")
+	user.WriteString("Return JSON shape: {\"candidates\":[{\"type\":\"professional_view\",\"label\":\"Professional view\",\"comment\":\"...\"},{\"type\":\"engagement_question\",\"label\":\"Engagement question\",\"comment\":\"...\"},{\"type\":\"soft_cta\",\"label\":\"Soft CTA\",\"comment\":\"...\"}]}\n")
 
-	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
+	result, err := s.openai.GenerateTextWithUsageMaxTokens(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
-	})
+	}, 520)
 	if err != nil {
-		return AIGeneratedText{}, err
+		return AIGeneratedAutoCommentCandidates{}, err
 	}
-	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 220), Usage: result.Usage}, nil
+	candidates := parseAutoCommentCandidates(result.Text)
+	if len(candidates) == 0 {
+		return AIGeneratedAutoCommentCandidates{}, fmt.Errorf("auto comment candidates response is empty")
+	}
+	return AIGeneratedAutoCommentCandidates{Text: candidates[0].Comment, Candidates: candidates, Usage: result.Usage}, nil
+}
+
+func parseAutoCommentCandidates(raw string) []AutoCommentCandidate {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+	var payload struct {
+		Candidates []AutoCommentCandidate `json:"candidates"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		text := truncateRunes(strings.Trim(raw, "\"“”"), 220)
+		if text == "" {
+			return nil
+		}
+		return []AutoCommentCandidate{{Type: "professional_view", Label: "Professional view", Comment: text}}
+	}
+	out := make([]AutoCommentCandidate, 0, 3)
+	seen := map[string]bool{}
+	for _, item := range payload.Candidates {
+		comment := truncateRunes(strings.TrimSpace(item.Comment), 220)
+		if comment == "" || seen[strings.ToLower(comment)] {
+			continue
+		}
+		seen[strings.ToLower(comment)] = true
+		typ := normalizeAutoCommentCandidateType(item.Type)
+		out = append(out, AutoCommentCandidate{
+			Type:    typ,
+			Label:   firstNonEmpty(strings.TrimSpace(item.Label), defaultAutoCommentCandidateLabel(typ)),
+			Comment: comment,
+		})
+		if len(out) >= 3 {
+			break
+		}
+	}
+	return out
+}
+
+func (s *AIService) GenerateAutoCommentTargetSuggestions(ctx context.Context, in GenerateAutoCommentTargetSuggestionsInput) (AIGeneratedAutoCommentTargetSuggestions, error) {
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's X growth research assistant.",
+		"Suggest target X accounts for Auto Comment monitoring.",
+		"Return strict JSON only.",
+		"Do not claim accounts are verified or currently active. Suggestions may need user verification.",
+	}, " ")
+	var user strings.Builder
+	user.WriteString("Product / Bot context:\n")
+	user.WriteString("bot_name: " + strings.TrimSpace(in.BotName) + "\n")
+	user.WriteString("project_one_liner: " + strings.TrimSpace(in.ProjectOneLiner) + "\n")
+	user.WriteString("target_audience: " + strings.TrimSpace(in.TargetAudience) + "\n")
+	user.WriteString("core_value_props: " + strings.TrimSpace(in.CoreValueProps) + "\n")
+	user.WriteString("product_features: " + strings.TrimSpace(in.ProductFeatures) + "\n")
+	user.WriteString("differentiators: " + strings.TrimSpace(in.Differentiators) + "\n")
+	if len(in.Topics) > 0 {
+		user.WriteString("bot_topics: " + strings.Join(in.Topics, ", ") + "\n")
+	}
+	if len(in.Keywords) > 0 {
+		user.WriteString("bot_keywords: " + strings.Join(in.Keywords, ", ") + "\n")
+	}
+	if len(in.ContentTitles) > 0 || len(in.ContentTopics) > 0 {
+		user.WriteString("content_library_signals:\n")
+		if len(in.ContentTitles) > 0 {
+			user.WriteString("titles: " + strings.Join(in.ContentTitles, ", ") + "\n")
+		}
+		if len(in.ContentTopics) > 0 {
+			user.WriteString("topics: " + strings.Join(in.ContentTopics, ", ") + "\n")
+		}
+	}
+	if len(in.HighScoreTargets) > 0 {
+		user.WriteString("existing high-opportunity targets: " + strings.Join(in.HighScoreTargets, ", ") + "\n")
+	}
+	if len(in.ExistingTargets) > 0 {
+		user.WriteString("already monitored targets to avoid duplicating: " + strings.Join(in.ExistingTargets, ", ") + "\n")
+	}
+	user.WriteString("Suggest 8-12 candidate X handles across these categories: kol, media, competitor, partner, customer, other.\n")
+	user.WriteString("Prefer accounts likely relevant to Web3, AI agents, SocialFi, social media growth, or the supplied product context.\n")
+	user.WriteString("Every item must include handle without @, category, priority 1-5, reason, and search_query for manual verification.\n")
+	user.WriteString("Return JSON shape: {\"items\":[{\"handle\":\"example\",\"display_name\":\"Example\",\"category\":\"kol\",\"priority\":4,\"reason\":\"why this account is worth monitoring\",\"search_query\":\"site:x.com example AI agents\"}]}\n")
+
+	result, err := s.openai.GenerateTextWithUsageMaxTokens(ctx, []openaiint.ChatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: user.String()},
+	}, 900)
+	if err != nil {
+		return AIGeneratedAutoCommentTargetSuggestions{}, err
+	}
+	items := parseAutoCommentTargetSuggestions(result.Text, in.ExistingTargets)
+	if len(items) == 0 {
+		return AIGeneratedAutoCommentTargetSuggestions{}, fmt.Errorf("target suggestion response is empty")
+	}
+	return AIGeneratedAutoCommentTargetSuggestions{Items: items, Usage: result.Usage}, nil
+}
+
+func parseAutoCommentTargetSuggestions(raw string, existing []string) []AutoCommentTargetSuggestion {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+	var payload struct {
+		Items []AutoCommentTargetSuggestion `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	existingSet := map[string]bool{}
+	for _, item := range existing {
+		existingSet[normalizeSuggestionHandle(item)] = true
+	}
+	out := make([]AutoCommentTargetSuggestion, 0, len(payload.Items))
+	seen := map[string]bool{}
+	for _, item := range payload.Items {
+		handle := normalizeSuggestionHandle(item.Handle)
+		if handle == "" || existingSet[handle] || seen[handle] {
+			continue
+		}
+		seen[handle] = true
+		category := normalizeSuggestionCategory(item.Category)
+		priority := item.Priority
+		if priority < 1 || priority > 5 {
+			priority = 3
+		}
+		out = append(out, AutoCommentTargetSuggestion{
+			Handle:      handle,
+			DisplayName: truncateRunes(strings.TrimSpace(item.DisplayName), 80),
+			Category:    category,
+			Priority:    priority,
+			Reason:      truncateRunes(strings.TrimSpace(item.Reason), 300),
+			SearchQuery: truncateRunes(strings.TrimSpace(item.SearchQuery), 180),
+		})
+		if len(out) >= 12 {
+			break
+		}
+	}
+	return out
+}
+
+func normalizeSuggestionHandle(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.TrimPrefix(value, "@")
+	value = strings.TrimPrefix(value, "https://x.com/")
+	value = strings.TrimPrefix(value, "https://twitter.com/")
+	value = strings.Trim(value, "/")
+	if value == "" || strings.Contains(value, "/") || strings.Contains(value, " ") {
+		return ""
+	}
+	return value
+}
+
+func normalizeSuggestionCategory(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "kol", "media", "competitor", "partner", "customer", "other":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "kol"
+	}
+}
+
+func writeAutoCommentFeedbackSignals(user *strings.Builder, signals []string) {
+	if len(signals) == 0 {
+		return
+	}
+	user.WriteString("Recent Auto Comment feedback to fix:\n")
+	for i, signal := range signals {
+		if i >= 6 {
+			break
+		}
+		signal = strings.TrimSpace(signal)
+		if signal == "" {
+			continue
+		}
+		user.WriteString(fmt.Sprintf("- %s\n", truncateRunes(signal, 260)))
+	}
+	user.WriteString("Apply this feedback directly: avoid generic comments, hard-selling, off-topic replies, wrong tone, or unrelated promotion when these issues appear above.\n")
+}
+
+func normalizeAutoCommentCandidateType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "professional_view", "engagement_question", "soft_cta":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "professional_view"
+	}
+}
+
+func defaultAutoCommentCandidateLabel(v string) string {
+	switch v {
+	case "engagement_question":
+		return "Engagement question"
+	case "soft_cta":
+		return "Soft CTA"
+	default:
+		return "Professional view"
+	}
 }
 
 func (s *AIService) GenerateAutoDM(ctx context.Context, in GenerateAutoDMInput) (AIGeneratedText, error) {

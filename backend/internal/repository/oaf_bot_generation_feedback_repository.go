@@ -66,3 +66,18 @@ func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserBot(userID,
 		Find(&rows).Error
 	return rows, err
 }
+
+func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserBotScene(userID, botID uint, scene string, limit int) ([]model.OAFBotGenerationFeedback, error) {
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	var rows []model.OAFBotGenerationFeedback
+	err := r.DB.Where("user_id = ? AND bot_id = ? AND scene = ? AND rating = ?", userID, botID, scene, "negative").
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}

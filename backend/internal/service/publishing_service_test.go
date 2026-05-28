@@ -53,7 +53,7 @@ func TestClassifyXPublishFailure(t *testing.T) {
 		errors.New("x api 403: Reply to this conversation is not allowed because you have not been mentioned"),
 		repository.PublishSourceComment,
 	)
-	if category != "x_reply_restricted" || retryable || alertable {
+	if category != "x_reply_restricted" || retryable || !alertable {
 		t.Fatalf("unexpected restricted reply classification: %s retryable=%v alertable=%v", category, retryable, alertable)
 	}
 

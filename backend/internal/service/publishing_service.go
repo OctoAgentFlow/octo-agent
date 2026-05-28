@@ -516,7 +516,7 @@ func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *
 func classifyXPublishFailure(err error, sourceType string) (category string, retryable bool, alertable bool) {
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if sourceType == repository.PublishSourceComment && strings.Contains(msg, "reply to this conversation is not allowed") {
-		return "x_reply_restricted", false, false
+		return "x_reply_restricted", false, true
 	}
 	return "x_api_publish_failed", true, true
 }

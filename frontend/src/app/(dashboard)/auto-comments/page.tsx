@@ -871,7 +871,7 @@ export default function AutoCommentsPage() {
                           <p className="line-clamp-2 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
                         </div>
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
                               <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
@@ -891,7 +891,7 @@ export default function AutoCommentsPage() {
                               ) : null}
                             </div>
                             {(draft.delivery_mode || "manual_comment") === "manual_comment" ? (
-                              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                              <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:max-w-[260px] lg:justify-end">
                                 <Button size="sm" variant="outline" onClick={() => void copyComment(draft)} disabled={!draft.generated_comment}>
                                   <Clipboard className="size-4" />
                                   {t("autoComment.manualAction.copy")}
@@ -909,7 +909,7 @@ export default function AutoCommentsPage() {
                               </div>
                             ) : null}
                             {draft.delivery_mode === "quote_post" ? (
-                              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                              <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:max-w-[260px] lg:justify-end">
                                 <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
                                   {t("autoComment.manualAction.quoteQueued")}
                                 </span>

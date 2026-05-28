@@ -927,6 +927,7 @@ export const dict: I18nDict = {
   "autoComment.review.showAll": "Show all opportunities",
   "autoComment.review.targetTweet": "Target tweet",
   "autoComment.review.generated": "Generated comment",
+  "autoComment.review.quoteGenerated": "Quote-post copy",
   "autoComment.review.edit": "Edit",
   "autoComment.review.save": "Save",
   "autoComment.review.approve": "Approve",

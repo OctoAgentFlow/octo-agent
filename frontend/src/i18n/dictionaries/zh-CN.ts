@@ -900,6 +900,7 @@ export const dict: I18nDict = {
   "autoComment.review.showAll": "查看全部机会",
   "autoComment.review.targetTweet": "目标推文",
   "autoComment.review.generated": "生成评论",
+  "autoComment.review.quoteGenerated": "引用发布文案",
   "autoComment.review.edit": "编辑",
   "autoComment.review.save": "保存",
   "autoComment.review.approve": "批准",

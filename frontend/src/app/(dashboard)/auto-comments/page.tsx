@@ -80,6 +80,17 @@ function deliveryKey(mode?: string) {
   return `autoComment.delivery.${mode || "manual_comment"}`;
 }
 
+function primaryOpportunityText(draft: AutoCommentTaskApi) {
+  if (draft.delivery_mode === "quote_post") {
+    return draft.quote_post_candidate || draft.generated_comment || "";
+  }
+  return draft.generated_comment || "";
+}
+
+function generatedLabelKey(draft: AutoCommentTaskApi) {
+  return draft.delivery_mode === "quote_post" ? "autoComment.review.quoteGenerated" : "autoComment.review.generated";
+}
+
 export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -135,23 +146,23 @@ export default function AutoCommentsPage() {
   );
   const filteredDrafts = useMemo(
     () =>
-      drafts.filter((draft) => {
+      accountDrafts.filter((draft) => {
         if (deliveryFilter === "all") return true;
         if (deliveryFilter === "blocked") return draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted";
         return (draft.delivery_mode || "manual_comment") === deliveryFilter;
       }),
-    [deliveryFilter, drafts]
+    [accountDrafts, deliveryFilter]
   );
   const deliveryFilterOptions = useMemo(
     () =>
       ([
-        ["all", drafts.length],
-        ["auto_comment", drafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
-        ["manual_comment", drafts.filter((draft) => (draft.delivery_mode || "manual_comment") === "manual_comment").length],
-        ["quote_post", drafts.filter((draft) => draft.delivery_mode === "quote_post").length],
-        ["blocked", drafts.filter((draft) => draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted").length],
+        ["all", accountDrafts.length],
+        ["auto_comment", accountDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
+        ["manual_comment", accountDrafts.filter((draft) => (draft.delivery_mode || "manual_comment") === "manual_comment").length],
+        ["quote_post", accountDrafts.filter((draft) => draft.delivery_mode === "quote_post").length],
+        ["blocked", accountDrafts.filter((draft) => draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted").length],
       ] as Array<[DeliveryFilter, number]>),
-    [drafts]
+    [accountDrafts]
   );
   const filteredTargets = useMemo(
     () =>
@@ -808,7 +819,7 @@ export default function AutoCommentsPage() {
             </div>
           </div>
           <div className="divide-y divide-[#2f3336]">
-            {drafts.length === 0 ? (
+            {accountDrafts.length === 0 ? (
               <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
                 <p className="font-semibold text-white">{t("autoComment.review.emptyTitle")}</p>
                 <p className="mx-auto mt-2 max-w-xl leading-6">{t("autoComment.review.empty")}</p>
@@ -834,23 +845,31 @@ export default function AutoCommentsPage() {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
                 const editing = editingDraftID === draft.id;
                 const expanded = Boolean(expandedDrafts[draft.id]);
+                const primaryText = primaryOpportunityText(draft);
                 return (
                   <div key={draft.id} className="bg-black p-5 transition-colors hover:bg-[#080808]">
-                    <div className="flex flex-col items-start justify-between gap-4 xl:flex-row">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                       <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</span>
-                          <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t(statusKey(draft.status))}</span>
-                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(deliveryKey(draft.delivery_mode))}</span>
-                          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t("autoComment.scene")}</span>
-                          {draft.status === "ready_to_publish" ? <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-0.5 text-xs text-[#7ee0b5]">{t("autoComment.execution.autopilot.title")}</span> : null}
-                          {draft.risk_level === "high" ? <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.review.riskIntercepted")}</span> : null}
-                          {draft.bot_id ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("oafBots.botNumber", { id: draft.bot_id })}</span> : null}
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{formatHandle(draft.target_tweet_author || draft.target_username)}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t(statusKey(draft.status))}</span>
+                              <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(deliveryKey(draft.delivery_mode))}</span>
+                              {draft.status === "ready_to_publish" ? <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-0.5 text-xs text-[#7ee0b5]">{t("autoComment.execution.autopilot.title")}</span> : null}
+                              {draft.risk_level === "high" ? <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.review.riskIntercepted")}</span> : null}
+                              {draft.bot_id ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("oafBots.botNumber", { id: draft.bot_id })}</span> : null}
+                            </div>
+                          </div>
+                          <div className="shrink-0 rounded-2xl border border-[#1d9bf0]/30 bg-[#0f1419] px-3 py-2 text-left sm:text-center">
+                            <p className="text-[11px] text-[#71767b]">{t("autoComment.opportunity.score")}</p>
+                            <p className="mt-0.5 text-lg font-semibold text-white">{draft.generation_reason ? draft.opportunity_score : "—"}</p>
+                          </div>
                         </div>
-	                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-	                          <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
-	                          <p className="line-clamp-3 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
-	                        </div>
+                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                          <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
+                          <p className="line-clamp-2 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
+                        </div>
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
@@ -908,10 +927,6 @@ export default function AutoCommentsPage() {
                               <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.opportunity.title")}</p>
                               <p className="mt-1 text-sm leading-6 text-[#e7e9ea]">{draft.generation_reason || t("autoComment.opportunity.defaultReason")}</p>
                             </div>
-                            <div className="shrink-0 rounded-2xl border border-[#1d9bf0]/30 bg-black px-4 py-2 text-center">
-                              <p className="text-[11px] text-[#71767b]">{t("autoComment.opportunity.score")}</p>
-                              <p className="mt-0.5 text-xl font-semibold text-white">{draft.generation_reason ? draft.opportunity_score : "—"}</p>
-                            </div>
                           </div>
                           <div className="mt-3 grid gap-3 md:grid-cols-2">
                             <OpportunityList title={t("autoComment.opportunity.keywords")} items={draft.matched_keywords || []} empty={t("autoComment.opportunity.noKeywords")} />
@@ -920,7 +935,7 @@ export default function AutoCommentsPage() {
                         </div>
                         ) : null}
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-                          <p className="mb-2 text-xs text-[#1d9bf0]">{t("autoComment.review.generated")}</p>
+                          <p className="mb-2 text-xs text-[#1d9bf0]">{t(generatedLabelKey(draft))}</p>
                           {editing ? (
                             <textarea
                               value={editingContent}
@@ -929,7 +944,7 @@ export default function AutoCommentsPage() {
                               className={`${inputClass} min-h-28 resize-y leading-6`}
                             />
                           ) : (
-                            <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{draft.generated_comment || "—"}</p>
+                            <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{primaryText || "—"}</p>
                           )}
                         </div>
                         {expanded && draft.comment_variants?.length ? (
@@ -997,7 +1012,7 @@ export default function AutoCommentsPage() {
                         </div>
                         ) : null}
                       </div>
-                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2 xl:max-w-[220px]">
                         {editing ? (
                           <>
                             <Button size="sm" onClick={() => void saveDraft()}>{t("autoComment.review.save")}</Button>

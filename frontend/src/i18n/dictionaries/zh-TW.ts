@@ -411,6 +411,7 @@ export const dict: I18nDict = {
   "autoComment.review.empty": "還沒有評論草稿。",
   "autoComment.review.targetTweet": "目標推文",
   "autoComment.review.generated": "生成評論",
+  "autoComment.review.quoteGenerated": "引用發布文案",
   "autoComment.review.edit": "編輯",
   "autoComment.review.save": "儲存",
   "autoComment.review.approve": "批准",

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -30,6 +30,7 @@ type ExecutionMode = "manual" | "review" | "autopilot";
 type TargetFilter = "all" | "active" | "paused";
 type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_tone" | "good";
 type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked";
+type DraftPanel = "target" | "action";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
 const inputClass = "form-input";
@@ -127,6 +128,7 @@ export default function AutoCommentsPage() {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<number, string>>({});
   const [quotePreviewDraft, setQuotePreviewDraft] = useState<AutoCommentTaskApi | null>(null);
   const [expandedDrafts, setExpandedDrafts] = useState<Record<number, boolean>>({});
+  const [expandedDraftPanels, setExpandedDraftPanels] = useState<Record<string, boolean>>({});
 
   const selectedAccount = accounts.find((account) => account.id === xAccountID) ?? accounts[0] ?? null;
   const selectedBot = useMemo(
@@ -173,6 +175,12 @@ export default function AutoCommentsPage() {
     [targets, targetCategoryFilter, targetStatusFilter]
   );
   const quotePreviewAccount = quotePreviewDraft ? accounts.find((account) => account.id === quotePreviewDraft.x_account_id) : null;
+  const draftPanelKey = (draftID: number, panel: DraftPanel) => `${draftID}:${panel}`;
+  const isDraftPanelOpen = (draftID: number, panel: DraftPanel) => Boolean(expandedDraftPanels[draftPanelKey(draftID, panel)]);
+  const toggleDraftPanel = (draftID: number, panel: DraftPanel) => {
+    const key = draftPanelKey(draftID, panel);
+    setExpandedDraftPanels((current) => ({ ...current, [key]: !current[key] }));
+  };
 
   const loadAll = useCallback(async () => {
     setLoadState("loading");
@@ -846,6 +854,9 @@ export default function AutoCommentsPage() {
                 const editing = editingDraftID === draft.id;
                 const expanded = Boolean(expandedDrafts[draft.id]);
                 const primaryText = primaryOpportunityText(draft);
+                const targetOpen = isDraftPanelOpen(draft.id, "target");
+                const actionOpen = isDraftPanelOpen(draft.id, "action");
+                const insightOpen = expanded;
                 return (
                   <div key={draft.id} className="bg-black p-5 transition-colors hover:bg-[#080808]">
                     <div className="space-y-4">
@@ -866,61 +877,79 @@ export default function AutoCommentsPage() {
                             <p className="mt-0.5 text-lg font-semibold text-white">{draft.generation_reason ? draft.opportunity_score : "—"}</p>
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-                          <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
-                          <p className="line-clamp-2 break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant={targetOpen ? "default" : "outline"} onClick={() => toggleDraftPanel(draft.id, "target")}>
+                            <MessageSquare className="size-4" />
+                            {targetOpen ? t("autoComment.review.hideTarget") : t("autoComment.review.showTarget")}
+                          </Button>
+                          <Button size="sm" variant={actionOpen ? "default" : "outline"} onClick={() => toggleDraftPanel(draft.id, "action")}>
+                            <ListChecks className="size-4" />
+                            {actionOpen ? t("autoComment.review.hideAction") : t("autoComment.review.showAction")}
+                          </Button>
+                          <Button size="sm" variant={insightOpen ? "default" : "outline"} onClick={() => setExpandedDrafts((current) => ({ ...current, [draft.id]: !expanded }))}>
+                            <Sparkles className="size-4" />
+                            {insightOpen ? t("autoComment.review.hideInsights") : t("autoComment.review.showInsights")}
+                          </Button>
                         </div>
-                        <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-                          <div className="space-y-3">
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
-                              <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
-                              <p className="mt-1 text-xs leading-5 text-[#71767b]">
-                                {draft.delivery_reason || t("autoComment.delivery.defaultReason")}
-                              </p>
-                              {!draft.api_reply_eligible && draft.api_reply_block_reason ? (
-                                <p className="mt-2 text-xs leading-5 text-amber-100/80">
-                                  {t(`autoComment.deliveryBlock.${draft.api_reply_block_reason}`)}
+                        {targetOpen ? (
+                          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                            <p className="mb-1 text-xs text-[#71767b]">{t("autoComment.review.targetTweet")}</p>
+                            <p className="break-words text-sm leading-6 text-[#b6bec5]">{draft.target_tweet_text || draft.target_tweet_id}</p>
+                          </div>
+                        ) : null}
+                        {actionOpen ? (
+                          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                            <div className="space-y-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
+                                <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
+                                <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                                  {draft.delivery_reason || t("autoComment.delivery.defaultReason")}
                                 </p>
+                                {!draft.api_reply_eligible && draft.api_reply_block_reason ? (
+                                  <p className="mt-2 text-xs leading-5 text-amber-100/80">
+                                    {t(`autoComment.deliveryBlock.${draft.api_reply_block_reason}`)}
+                                  </p>
+                                ) : null}
+                                {draft.quote_post_candidate ? (
+                                  <div className="mt-3 rounded-xl border border-[#2f3336] bg-black p-3">
+                                    <p className="text-xs text-[#71767b]">{t("autoComment.delivery.quoteCandidate")}</p>
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#b6bec5]">{draft.quote_post_candidate}</p>
+                                  </div>
+                                ) : null}
+                              </div>
+                              {(draft.delivery_mode || "manual_comment") === "manual_comment" ? (
+                                <div className="flex w-full flex-wrap gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => void copyComment(draft)} disabled={!draft.generated_comment}>
+                                    <Clipboard className="size-4" />
+                                    {t("autoComment.manualAction.copy")}
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => openTargetTweet(draft)} disabled={!draft.manual_action_url && !draft.target_tweet_id}>
+                                    <ExternalLink className="size-4" />
+                                    {t("autoComment.manualAction.open")}
+                                  </Button>
+                                  {draft.quote_post_candidate ? (
+                                    <Button size="sm" onClick={() => setQuotePreviewDraft(draft)} disabled={modulePaused} title={modulePausedActionTip}>
+                                      <Send className="size-4" />
+                                      {t("autoComment.manualAction.queueQuote")}
+                                    </Button>
+                                  ) : null}
+                                </div>
                               ) : null}
-                              {draft.quote_post_candidate ? (
-                                <div className="mt-3 rounded-xl border border-[#2f3336] bg-black p-3">
-                                  <p className="text-xs text-[#71767b]">{t("autoComment.delivery.quoteCandidate")}</p>
-                                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#b6bec5]">{draft.quote_post_candidate}</p>
+                              {draft.delivery_mode === "quote_post" ? (
+                                <div className="flex w-full flex-wrap gap-2">
+                                  <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
+                                    {t("autoComment.manualAction.quoteQueued")}
+                                  </span>
+                                  <Link href="/execution-queue?type=comment&mode=autopilot" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white hover:bg-[#16181c]">
+                                    {t("autoComment.manualAction.openQueue")}
+                                  </Link>
                                 </div>
                               ) : null}
                             </div>
-                            {(draft.delivery_mode || "manual_comment") === "manual_comment" ? (
-                              <div className="flex w-full flex-wrap gap-2">
-                                <Button size="sm" variant="outline" onClick={() => void copyComment(draft)} disabled={!draft.generated_comment}>
-                                  <Clipboard className="size-4" />
-                                  {t("autoComment.manualAction.copy")}
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => openTargetTweet(draft)} disabled={!draft.manual_action_url && !draft.target_tweet_id}>
-                                  <ExternalLink className="size-4" />
-                                  {t("autoComment.manualAction.open")}
-                                </Button>
-                                {draft.quote_post_candidate ? (
-                                  <Button size="sm" onClick={() => setQuotePreviewDraft(draft)} disabled={modulePaused} title={modulePausedActionTip}>
-                                    <Send className="size-4" />
-                                    {t("autoComment.manualAction.queueQuote")}
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            {draft.delivery_mode === "quote_post" ? (
-                              <div className="flex w-full flex-wrap gap-2">
-                                <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
-                                  {t("autoComment.manualAction.quoteQueued")}
-                                </span>
-                                <Link href="/execution-queue?type=comment&mode=autopilot" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white hover:bg-[#16181c]">
-                                  {t("autoComment.manualAction.openQueue")}
-                                </Link>
-                              </div>
-                            ) : null}
                           </div>
-                        </div>
-                        {expanded ? (
+                        ) : null}
+                        {insightOpen ? (
                         <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
@@ -947,7 +976,7 @@ export default function AutoCommentsPage() {
                             <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{primaryText || "—"}</p>
                           )}
                         </div>
-                        {expanded && draft.comment_variants?.length ? (
+                        {insightOpen && draft.comment_variants?.length ? (
                           <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                             <div className="mb-3">
                               <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.variants.title")}</p>
@@ -976,7 +1005,7 @@ export default function AutoCommentsPage() {
                             </div>
                           </div>
                         ) : null}
-                        {expanded ? (
+                        {insightOpen ? (
                         <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                           <div className="mb-3">
                             <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.feedback.title")}</p>
@@ -1004,7 +1033,7 @@ export default function AutoCommentsPage() {
                           </div>
                         </div>
                         ) : null}
-                        {expanded ? (
+                        {insightOpen ? (
                         <div className="grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
                           <DraftRouteStep label={t("autoComment.pipeline.input")} value={formatHandle(draft.target_tweet_author || draft.target_username)} />
                           <DraftRouteStep label={t("autoComment.pipeline.queue")} value={t(statusKey(draft.status))} />
@@ -1020,13 +1049,6 @@ export default function AutoCommentsPage() {
                           </>
                         ) : (
                           <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setExpandedDrafts((current) => ({ ...current, [draft.id]: !expanded }))}
-                            >
-                              {expanded ? t("autoComment.review.hideDetails") : t("autoComment.review.showDetails")}
-                            </Button>
                             <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
                               <Pencil className="size-4" />
                               {t("autoComment.review.edit")}

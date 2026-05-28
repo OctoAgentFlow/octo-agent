@@ -136,6 +136,8 @@ function mapLimits(item: PlanLimitsApi): PlanLimits {
     monthlyAutoReplies: item.monthly_auto_replies,
     monthlyAutoComments: item.monthly_auto_comments,
     monthlyAutoDMs: item.monthly_auto_dms,
+    autoCommentTargets: item.auto_comment_targets,
+    monthlyAutoCommentScans: item.monthly_auto_comment_scans,
     dailyAutoPosts: item.daily_auto_posts,
     dailyAutoReplies: item.daily_auto_replies,
     dailyAutoComments: item.daily_auto_comments,

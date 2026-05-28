@@ -48,6 +48,8 @@ type OAFBotListApi = {
     monthly_auto_replies: number;
     monthly_auto_comments: number;
     monthly_auto_dms: number;
+    auto_comment_targets: number;
+    monthly_auto_comment_scans: number;
     daily_auto_posts: number;
     daily_auto_replies: number;
     daily_auto_comments: number;
@@ -108,6 +110,8 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       monthlyAutoReplies: data.limits.monthly_auto_replies,
       monthlyAutoComments: data.limits.monthly_auto_comments,
       monthlyAutoDMs: data.limits.monthly_auto_dms,
+      autoCommentTargets: data.limits.auto_comment_targets,
+      monthlyAutoCommentScans: data.limits.monthly_auto_comment_scans,
       dailyAutoPosts: data.limits.daily_auto_posts,
       dailyAutoReplies: data.limits.daily_auto_replies,
       dailyAutoComments: data.limits.daily_auto_comments,

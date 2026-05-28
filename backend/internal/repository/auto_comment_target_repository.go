@@ -68,6 +68,12 @@ func (r *AutoCommentTargetRepository) DeleteByUserAndID(userID, id uint) error {
 	return r.DB.Where("user_id = ? AND id = ?", userID, id).Delete(&model.AutoCommentTarget{}).Error
 }
 
+func (r *AutoCommentTargetRepository) CountByUser(userID uint) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.AutoCommentTarget{}).Where("user_id = ?", userID).Count(&n).Error
+	return n, err
+}
+
 func (r *AutoCommentTargetRepository) ListDueActiveTargets(limit int, now time.Time) ([]model.AutoCommentTarget, error) {
 	if limit <= 0 {
 		limit = 100
@@ -79,7 +85,7 @@ func (r *AutoCommentTargetRepository) ListDueActiveTargets(limit int, now time.T
 		Joins(`INNER JOIN users ON users.id = auto_comment_targets.user_id AND users.subscription_status = ? AND users.subscription_expires_at IS NOT NULL AND users.subscription_expires_at > ?`,
 			"active", now).
 		Where("auto_comment_targets.status = ?", "active").
-		Where("(auto_comment_targets.last_checked_at IS NULL OR auto_comment_targets.last_checked_at <= ?)", now.Add(-2*time.Minute)).
+		Where("(auto_comment_targets.last_checked_at IS NULL OR auto_comment_targets.last_checked_at <= ?)", now.Add(-6*time.Hour)).
 		Order("auto_comment_targets.priority DESC, auto_comment_targets.last_checked_at ASC, auto_comment_targets.id ASC").
 		Limit(limit).
 		Find(&rows).Error

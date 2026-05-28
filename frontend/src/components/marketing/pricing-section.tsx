@@ -37,7 +37,7 @@ export function PricingSection() {
           {t("pricing.yearlySave")}
         </span>
       </div>
-      <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-5">
         {pricingPlans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
           const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });

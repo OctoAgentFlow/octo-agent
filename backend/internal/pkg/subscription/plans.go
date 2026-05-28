@@ -19,33 +19,35 @@ const (
 )
 
 type PlanLimits struct {
-	MaxBots              int64 `json:"max_bots"`
-	MaxTwitterAccounts   int64 `json:"max_twitter_accounts"`
-	AIGenerationsMonthly int64 `json:"ai_generations_monthly"`
-	MonthlyXWrites       int64 `json:"monthly_x_writes"`
-	MonthlyXURLPosts     int64 `json:"monthly_x_url_posts"`
-	MonthlyCostCapCents  int64 `json:"monthly_cost_cap_cents"`
-	MonthlyAutoPosts     int64 `json:"monthly_auto_posts"`
-	MonthlyAutoReplies   int64 `json:"monthly_auto_replies"`
-	MonthlyAutoComments  int64 `json:"monthly_auto_comments"`
-	MonthlyAutoDMs       int64 `json:"monthly_auto_dms"`
-	DailyAutoPosts       int64 `json:"daily_auto_posts"`
-	DailyAutoReplies     int64 `json:"daily_auto_replies"`
-	DailyAutoComments    int64 `json:"daily_auto_comments"`
-	DailyAutoDMs         int64 `json:"daily_auto_dms"`
-	AnalyticsDays        int64 `json:"analytics_days"`
-	TeamSeats            int64 `json:"team_seats"`
-	FullPersonaFields    bool  `json:"full_persona_fields"`
-	AutoDMImport         bool  `json:"auto_dm_import"`
-	AdvancedBotStrategy  bool  `json:"advanced_bot_strategy"`
-	BulkReview           bool  `json:"bulk_review"`
-	BotPerformance       bool  `json:"bot_performance"`
-	DataExport           bool  `json:"data_export"`
-	MultiBotMatrix       bool  `json:"multi_bot_matrix"`
-	ABTesting            bool  `json:"ab_testing"`
-	AdvancedFlowBuilder  bool  `json:"advanced_flow_builder"`
-	AdvancedRiskRules    bool  `json:"advanced_risk_rules"`
-	PrioritySupport      bool  `json:"priority_support"`
+	MaxBots                 int64 `json:"max_bots"`
+	MaxTwitterAccounts      int64 `json:"max_twitter_accounts"`
+	AIGenerationsMonthly    int64 `json:"ai_generations_monthly"`
+	MonthlyXWrites          int64 `json:"monthly_x_writes"`
+	MonthlyXURLPosts        int64 `json:"monthly_x_url_posts"`
+	MonthlyCostCapCents     int64 `json:"monthly_cost_cap_cents"`
+	MonthlyAutoPosts        int64 `json:"monthly_auto_posts"`
+	MonthlyAutoReplies      int64 `json:"monthly_auto_replies"`
+	MonthlyAutoComments     int64 `json:"monthly_auto_comments"`
+	MonthlyAutoDMs          int64 `json:"monthly_auto_dms"`
+	AutoCommentTargets      int64 `json:"auto_comment_targets"`
+	MonthlyAutoCommentScans int64 `json:"monthly_auto_comment_scans"`
+	DailyAutoPosts          int64 `json:"daily_auto_posts"`
+	DailyAutoReplies        int64 `json:"daily_auto_replies"`
+	DailyAutoComments       int64 `json:"daily_auto_comments"`
+	DailyAutoDMs            int64 `json:"daily_auto_dms"`
+	AnalyticsDays           int64 `json:"analytics_days"`
+	TeamSeats               int64 `json:"team_seats"`
+	FullPersonaFields       bool  `json:"full_persona_fields"`
+	AutoDMImport            bool  `json:"auto_dm_import"`
+	AdvancedBotStrategy     bool  `json:"advanced_bot_strategy"`
+	BulkReview              bool  `json:"bulk_review"`
+	BotPerformance          bool  `json:"bot_performance"`
+	DataExport              bool  `json:"data_export"`
+	MultiBotMatrix          bool  `json:"multi_bot_matrix"`
+	ABTesting               bool  `json:"ab_testing"`
+	AdvancedFlowBuilder     bool  `json:"advanced_flow_builder"`
+	AdvancedRiskRules       bool  `json:"advanced_risk_rules"`
+	PrioritySupport         bool  `json:"priority_support"`
 }
 
 type PlanFeature struct {
@@ -80,22 +82,24 @@ func Catalog() []PlanDefinition {
 			Audience:     "Single creator or early project account",
 			Description:  "Start one OAF Bot with core social automation quotas.",
 			Limits: PlanLimits{
-				MaxBots:              1,
-				MaxTwitterAccounts:   1,
-				AIGenerationsMonthly: 500,
-				MonthlyXWrites:       100,
-				MonthlyXURLPosts:     5,
-				MonthlyCostCapCents:  400,
-				MonthlyAutoPosts:     60,
-				MonthlyAutoReplies:   480,
-				MonthlyAutoComments:  240,
-				MonthlyAutoDMs:       480,
-				DailyAutoPosts:       2,
-				DailyAutoReplies:     16,
-				DailyAutoComments:    8,
-				DailyAutoDMs:         16,
-				AnalyticsDays:        7,
-				TeamSeats:            1,
+				MaxBots:                 1,
+				MaxTwitterAccounts:      1,
+				AIGenerationsMonthly:    500,
+				MonthlyXWrites:          100,
+				MonthlyXURLPosts:        5,
+				MonthlyCostCapCents:     400,
+				MonthlyAutoPosts:        60,
+				MonthlyAutoReplies:      480,
+				MonthlyAutoComments:     240,
+				MonthlyAutoDMs:          480,
+				AutoCommentTargets:      3,
+				MonthlyAutoCommentScans: 30,
+				DailyAutoPosts:          2,
+				DailyAutoReplies:        16,
+				DailyAutoComments:       8,
+				DailyAutoDMs:            16,
+				AnalyticsDays:           7,
+				TeamSeats:               1,
 			},
 			Benefits: []string{
 				"1 OAF Bot",
@@ -116,24 +120,26 @@ func Catalog() []PlanDefinition {
 			Badge:        "Most Popular",
 			Description:  "Unlock full persona fields and more monthly automation capacity.",
 			Limits: PlanLimits{
-				MaxBots:              3,
-				MaxTwitterAccounts:   3,
-				AIGenerationsMonthly: 2500,
-				MonthlyXWrites:       400,
-				MonthlyXURLPosts:     20,
-				MonthlyCostCapCents:  1450,
-				MonthlyAutoPosts:     300,
-				MonthlyAutoReplies:   3000,
-				MonthlyAutoComments:  1500,
-				MonthlyAutoDMs:       3000,
-				DailyAutoPosts:       10,
-				DailyAutoReplies:     100,
-				DailyAutoComments:    50,
-				DailyAutoDMs:         100,
-				AnalyticsDays:        30,
-				TeamSeats:            1,
-				FullPersonaFields:    true,
-				AutoDMImport:         true,
+				MaxBots:                 3,
+				MaxTwitterAccounts:      3,
+				AIGenerationsMonthly:    2500,
+				MonthlyXWrites:          400,
+				MonthlyXURLPosts:        20,
+				MonthlyCostCapCents:     1450,
+				MonthlyAutoPosts:        300,
+				MonthlyAutoReplies:      3000,
+				MonthlyAutoComments:     1500,
+				MonthlyAutoDMs:          3000,
+				AutoCommentTargets:      10,
+				MonthlyAutoCommentScans: 200,
+				DailyAutoPosts:          10,
+				DailyAutoReplies:        100,
+				DailyAutoComments:       50,
+				DailyAutoDMs:            100,
+				AnalyticsDays:           30,
+				TeamSeats:               1,
+				FullPersonaFields:       true,
+				AutoDMImport:            true,
 			},
 			Benefits: []string{
 				"3 OAF Bots",
@@ -155,28 +161,30 @@ func Catalog() []PlanDefinition {
 			Badge:        "Best for Teams",
 			Description:  "Scale bot operations with review, analytics and export capabilities.",
 			Limits: PlanLimits{
-				MaxBots:              10,
-				MaxTwitterAccounts:   10,
-				AIGenerationsMonthly: 8000,
-				MonthlyXWrites:       1200,
-				MonthlyXURLPosts:     50,
-				MonthlyCostCapCents:  3950,
-				MonthlyAutoPosts:     1500,
-				MonthlyAutoReplies:   15000,
-				MonthlyAutoComments:  9000,
-				MonthlyAutoDMs:       15000,
-				DailyAutoPosts:       50,
-				DailyAutoReplies:     500,
-				DailyAutoComments:    300,
-				DailyAutoDMs:         500,
-				AnalyticsDays:        90,
-				TeamSeats:            3,
-				FullPersonaFields:    true,
-				AutoDMImport:         true,
-				AdvancedBotStrategy:  true,
-				BulkReview:           true,
-				BotPerformance:       true,
-				DataExport:           true,
+				MaxBots:                 10,
+				MaxTwitterAccounts:      10,
+				AIGenerationsMonthly:    8000,
+				MonthlyXWrites:          1200,
+				MonthlyXURLPosts:        50,
+				MonthlyCostCapCents:     3950,
+				MonthlyAutoPosts:        1500,
+				MonthlyAutoReplies:      15000,
+				MonthlyAutoComments:     9000,
+				MonthlyAutoDMs:          15000,
+				AutoCommentTargets:      30,
+				MonthlyAutoCommentScans: 800,
+				DailyAutoPosts:          50,
+				DailyAutoReplies:        500,
+				DailyAutoComments:       300,
+				DailyAutoDMs:            500,
+				AnalyticsDays:           90,
+				TeamSeats:               3,
+				FullPersonaFields:       true,
+				AutoDMImport:            true,
+				AdvancedBotStrategy:     true,
+				BulkReview:              true,
+				BotPerformance:          true,
+				DataExport:              true,
 			},
 			Benefits: []string{
 				"10 OAF Bots",
@@ -197,33 +205,35 @@ func Catalog() []PlanDefinition {
 			Audience:     "High-frequency matrix operations",
 			Description:  "Run a larger AI social agent matrix with advanced growth controls.",
 			Limits: PlanLimits{
-				MaxBots:              30,
-				MaxTwitterAccounts:   30,
-				AIGenerationsMonthly: 20000,
-				MonthlyXWrites:       2500,
-				MonthlyXURLPosts:     120,
-				MonthlyCostCapCents:  9950,
-				MonthlyAutoPosts:     6000,
-				MonthlyAutoReplies:   60000,
-				MonthlyAutoComments:  30000,
-				MonthlyAutoDMs:       60000,
-				DailyAutoPosts:       200,
-				DailyAutoReplies:     2000,
-				DailyAutoComments:    1000,
-				DailyAutoDMs:         2000,
-				AnalyticsDays:        365,
-				TeamSeats:            10,
-				FullPersonaFields:    true,
-				AutoDMImport:         true,
-				AdvancedBotStrategy:  true,
-				BulkReview:           true,
-				BotPerformance:       true,
-				DataExport:           true,
-				MultiBotMatrix:       true,
-				ABTesting:            true,
-				AdvancedFlowBuilder:  true,
-				AdvancedRiskRules:    true,
-				PrioritySupport:      true,
+				MaxBots:                 30,
+				MaxTwitterAccounts:      30,
+				AIGenerationsMonthly:    20000,
+				MonthlyXWrites:          2500,
+				MonthlyXURLPosts:        120,
+				MonthlyCostCapCents:     9950,
+				MonthlyAutoPosts:        6000,
+				MonthlyAutoReplies:      60000,
+				MonthlyAutoComments:     30000,
+				MonthlyAutoDMs:          60000,
+				AutoCommentTargets:      80,
+				MonthlyAutoCommentScans: 2400,
+				DailyAutoPosts:          200,
+				DailyAutoReplies:        2000,
+				DailyAutoComments:       1000,
+				DailyAutoDMs:            2000,
+				AnalyticsDays:           365,
+				TeamSeats:               10,
+				FullPersonaFields:       true,
+				AutoDMImport:            true,
+				AdvancedBotStrategy:     true,
+				BulkReview:              true,
+				BotPerformance:          true,
+				DataExport:              true,
+				MultiBotMatrix:          true,
+				ABTesting:               true,
+				AdvancedFlowBuilder:     true,
+				AdvancedRiskRules:       true,
+				PrioritySupport:         true,
 			},
 			Benefits: []string{
 				"30 OAF Bots",
@@ -301,22 +311,24 @@ func LimitsForUser(u *model.User) PlanLimits {
 
 func FreeTrialLimits() PlanLimits {
 	return PlanLimits{
-		MaxBots:              1,
-		MaxTwitterAccounts:   FreeTrialTwitterAccountLimit,
-		AIGenerationsMonthly: 100,
-		MonthlyXWrites:       10,
-		MonthlyXURLPosts:     0,
-		MonthlyCostCapCents:  0,
-		MonthlyAutoPosts:     30,
-		MonthlyAutoReplies:   150,
-		MonthlyAutoComments:  90,
-		MonthlyAutoDMs:       150,
-		DailyAutoPosts:       1,
-		DailyAutoReplies:     5,
-		DailyAutoComments:    3,
-		DailyAutoDMs:         5,
-		AnalyticsDays:        7,
-		TeamSeats:            1,
+		MaxBots:                 1,
+		MaxTwitterAccounts:      FreeTrialTwitterAccountLimit,
+		AIGenerationsMonthly:    100,
+		MonthlyXWrites:          10,
+		MonthlyXURLPosts:        0,
+		MonthlyCostCapCents:     0,
+		MonthlyAutoPosts:        30,
+		MonthlyAutoReplies:      150,
+		MonthlyAutoComments:     90,
+		MonthlyAutoDMs:          150,
+		AutoCommentTargets:      2,
+		MonthlyAutoCommentScans: 20,
+		DailyAutoPosts:          1,
+		DailyAutoReplies:        5,
+		DailyAutoComments:       3,
+		DailyAutoDMs:            5,
+		AnalyticsDays:           7,
+		TeamSeats:               1,
 	}
 }
 

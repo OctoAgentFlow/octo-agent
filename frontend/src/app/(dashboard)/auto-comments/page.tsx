@@ -63,6 +63,10 @@ function formatHandle(value?: string) {
   return normalized ? `@${normalized}` : "—";
 }
 
+function formatCompactNumber(value?: number) {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
+}
+
 function normalizePlan(plan?: string) {
   if (plan === "pro_plus") return "pro_plus";
   if (plan === "pro" || plan === "plus" || plan === "basic") return plan;
@@ -148,6 +152,26 @@ export default function AutoCommentsPage() {
     () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
     [accountDrafts]
   );
+  const quotaCards = useMemo(() => {
+    if (!analytics) return [];
+    return [
+      {
+        label: t("autoComment.quota.targets"),
+        value: `${formatCompactNumber(analytics.summary.target_count)} / ${formatCompactNumber(analytics.summary.target_limit)}`,
+        helper: t("autoComment.quota.targetsHint"),
+      },
+      {
+        label: t("autoComment.quota.scans"),
+        value: `${formatCompactNumber(analytics.summary.monthly_scans_used)} / ${formatCompactNumber(analytics.summary.monthly_scan_limit)}`,
+        helper: t("autoComment.quota.scansHint"),
+      },
+      {
+        label: t("autoComment.quota.comments"),
+        value: `${formatCompactNumber(analytics.summary.monthly_comments_used)} / ${formatCompactNumber(analytics.summary.monthly_comment_limit)}`,
+        helper: t("autoComment.quota.commentsHint"),
+      },
+    ];
+  }, [analytics, t]);
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
@@ -254,6 +278,8 @@ export default function AutoCommentsPage() {
       const message =
         isQuotaError
           ? t("autoComment.errors.quota")
+          : body?.error_code === "auto_comment_opportunity_too_low"
+            ? t("autoComment.errors.lowOpportunity")
           : body?.message || t("autoComment.errors.generate");
       pushToast(message);
     } finally {
@@ -574,6 +600,17 @@ export default function AutoCommentsPage() {
             executionMode={executionMode}
             queueHref="/execution-queue?type=comment"
           />
+          {quotaCards.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              {quotaCards.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <p className="text-xs text-[#71767b]">{item.label}</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{item.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">{item.helper}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {analytics ? <AutoCommentAnalyticsPanel data={analytics} /> : null}
         </>
       ) : null}

@@ -51,11 +51,12 @@ export function PlanComparison({
           {t("billing.billingCycle.yearlySave")}
         </span>
       </div>
-      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-5">
         {plans.map((plan) => {
           const badgeKey = planBadgeKey(plan.code);
           const benefits = getPlanBenefits(plan, t, lang, { includeTeamSeats: true });
           const isCurrentPlan = currentPlan === plan.code;
+          const isFreeTrial = plan.code === "free_trial";
           return (
             <article
               key={plan.code}
@@ -125,10 +126,10 @@ export function PlanComparison({
                       ? ""
                       : "border border-[#2f3336] bg-transparent text-white hover:bg-[#16181c]"
                   }`}
-                  disabled={isCurrentPlan}
+                  disabled={isCurrentPlan || isFreeTrial}
                   onClick={() => onUpgrade(plan.code)}
                 >
-                  {isCurrentPlan ? t("actions.currentPlan") : t("actions.upgradeTo", { plan: plan.name })}
+                  {isCurrentPlan ? t("actions.currentPlan") : isFreeTrial ? t("actions.trialIncluded") : t("actions.upgradeTo", { plan: plan.name })}
                 </Button>
               </div>
             </article>

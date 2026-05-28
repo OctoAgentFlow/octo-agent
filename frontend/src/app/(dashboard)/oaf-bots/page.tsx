@@ -187,6 +187,8 @@ const emptyLimits: PlanLimits = {
   monthlyAutoReplies: 150,
   monthlyAutoComments: 90,
   monthlyAutoDMs: 150,
+  autoCommentTargets: 2,
+  monthlyAutoCommentScans: 20,
   dailyAutoPosts: 1,
   dailyAutoReplies: 5,
   dailyAutoComments: 3,

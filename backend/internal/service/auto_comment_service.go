@@ -698,19 +698,41 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 	if strings.TrimSpace(target.TargetUserID) == "" {
 		xu, err := twitter.LookupUserByUsername(ctx, nil, acc.AccessToken, target.TargetUsername)
 		if err != nil {
-			return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
+			if isXUnauthorizedError(err) {
+				if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, *acc,
+					zap.Uint("user_id", target.UserID),
+					zap.Uint("target_id", target.ID),
+					zap.String("operation", "lookup_comment_target")); ok {
+					acc = &refreshed
+					xu, err = twitter.LookupUserByUsername(ctx, nil, acc.AccessToken, target.TargetUsername)
+				}
+			}
+			if err != nil {
+				return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
+			}
 		}
 		target.TargetUserID = xu.ID
 		target.TargetUsername = normalizeHandle(xu.Username)
 		target.TargetDisplayName = xu.DisplayName
 		target.ResolvedAt = &now
 		if err := s.targetRepo.Save(&target); err != nil {
-			return err
+			return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
 		}
 	}
 	tweets, err := twitter.ListUserRootTweets(ctx, nil, acc.AccessToken, target.TargetUserID, 5)
 	if err != nil {
-		return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
+		if isXUnauthorizedError(err) {
+			if refreshed, ok := s.refreshXAccountAfterUnauthorized(ctx, *acc,
+				zap.Uint("user_id", target.UserID),
+				zap.Uint("target_id", target.ID),
+				zap.String("operation", "list_comment_target_tweets")); ok {
+				acc = &refreshed
+				tweets, err = twitter.ListUserRootTweets(ctx, nil, acc.AccessToken, target.TargetUserID, 5)
+			}
+		}
+		if err != nil {
+			return s.markTargetChecked(&target, now, truncateErrMsg(err.Error()))
+		}
 	}
 	target.LastCheckedAt = &now
 	target.LastFailureReason = ""
@@ -1131,6 +1153,24 @@ func (s *AutoCommentService) failTask(task *model.AutoCommentTask, category, rea
 		return err
 	}
 	return errors.New(task.FailureReason)
+}
+
+func (s *AutoCommentService) refreshXAccountAfterUnauthorized(ctx context.Context, acc model.TwitterAccount, fields ...zap.Field) (model.TwitterAccount, bool) {
+	if s == nil || s.publishing == nil {
+		zap.L().Warn("auto comment: x token refresh unavailable", fields...)
+		return acc, false
+	}
+	refreshed, err := s.publishing.RefreshXAccessTokenForAccount(ctx, &acc)
+	if err != nil {
+		zap.L().Warn("auto comment: x token refresh failed; account marked for reauth", append(fields, zap.Error(err))...)
+		return acc, false
+	}
+	if refreshed == nil {
+		zap.L().Warn("auto comment: x token refresh returned empty account", fields...)
+		return acc, false
+	}
+	zap.L().Info("auto comment: x token refreshed after unauthorized", fields...)
+	return *refreshed, true
 }
 
 func (s *AutoCommentService) commentLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {

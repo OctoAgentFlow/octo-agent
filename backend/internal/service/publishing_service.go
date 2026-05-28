@@ -454,7 +454,7 @@ func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 	if strings.TrimSpace(job.Content) == "" {
 		return s.failJob(job, "simulated_publish_failed", "publish content is empty", true)
 	}
-	if shouldAutoPublishRealPost(job, s.cfg) {
+	if shouldAutoPublishRealJob(job, s.cfg) {
 		return s.processAutoPostPublishJob(ctx, job, now)
 	}
 	return s.completeJob(job, PublishResult{
@@ -510,8 +510,13 @@ func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *
 	return s.completeJob(job, result, mode, previewKey)
 }
 
-func shouldAutoPublishRealPost(job *model.PublishJob, cfg config.XPublisherConfig) bool {
-	if job == nil || job.SourceType != repository.PublishSourcePost {
+func shouldAutoPublishRealJob(job *model.PublishJob, cfg config.XPublisherConfig) bool {
+	if job == nil {
+		return false
+	}
+	switch job.SourceType {
+	case repository.PublishSourcePost, repository.PublishSourceComment:
+	default:
 		return false
 	}
 	return cfg.DryRun || cfg.RealPublishEnabled

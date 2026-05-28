@@ -512,6 +512,10 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/approve`);
     return res.data.data;
   },
+  async queueCommentQuotePost(id: number) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/quote-post`);
+    return res.data.data;
+  },
   async updateCommentDraft(id: number, generatedComment: string) {
     const res = await request.patch<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}`, {
       generated_comment: generatedComment,

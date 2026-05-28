@@ -696,6 +696,28 @@ func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) QueueCommentQuotePost(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	data, err := ctl.autoCommentService.QueueQuotePost(c.Request.Context(), userID, taskID)
+	if err != nil {
+		if automationActionError(c, err) {
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) RejectCommentDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

@@ -493,6 +493,53 @@ func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (
 	return &item, nil
 }
 
+func (s *AutoCommentService) QueueQuotePost(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
+	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "queue quote post"); err != nil {
+		return nil, err
+	}
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(task.TargetTweetID) == "" {
+		return nil, fmt.Errorf("target tweet id is required")
+	}
+	quote := strings.TrimSpace(task.QuotePostCandidate)
+	if quote == "" {
+		quote = strings.TrimSpace(task.GeneratedComment)
+	}
+	if quote == "" {
+		return nil, fmt.Errorf("quote post candidate is required")
+	}
+	now := time.Now().UTC()
+	task.DeliveryMode = autoCommentDeliveryQuotePost
+	task.DeliveryReason = "User confirmed this Auto Comment opportunity as a Quote Post and queued it for publishing."
+	task.APIReplyEligible = false
+	task.APIReplyBlockReason = firstNonEmpty(task.APIReplyBlockReason, "not_mentioned_or_engaged")
+	task.QuotePostCandidate = truncateRunes(quote, autoCommentPreviewRunes)
+	task.Status = "ready_to_publish"
+	task.CapabilityStatus = "quote_post_ready"
+	task.ApprovalRequired = false
+	task.ApprovedAt = &now
+	task.FailureCategory = ""
+	task.FailureReason = ""
+	task.Retryable = false
+	task.RetryAfterAt = nil
+	if strings.TrimSpace(task.ManualActionURL) == "" {
+		task.ManualActionURL = autoCommentManualActionURL(task.TargetUsername, task.TargetTweetID)
+	}
+	if err := s.taskRepo.Save(task); err != nil {
+		return nil, err
+	}
+	if s.publishing != nil {
+		if _, _, err := s.publishing.EnsureCommentJob(task, now); err != nil {
+			return nil, err
+		}
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
 func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.AutoCommentTaskItem, error) {
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {

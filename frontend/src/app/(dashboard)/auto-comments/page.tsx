@@ -246,6 +246,16 @@ export default function AutoCommentsPage() {
     }
   };
 
+  const queueQuotePost = async (id: number) => {
+    try {
+      const updated = await automationService.queueCommentQuotePost(id);
+      setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t("autoComment.toast.quoteQueued"));
+    } catch (error) {
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoComment.errors.quotePost"));
+    }
+  };
+
   const rejectDraft = async (id: number) => {
     try {
       const updated = await automationService.rejectCommentDraft(id, t("autoComment.review.rejectReason"));
@@ -813,6 +823,12 @@ export default function AutoCommentsPage() {
                                   <ExternalLink className="size-4" />
                                   {t("autoComment.manualAction.open")}
                                 </Button>
+                                {draft.quote_post_candidate ? (
+                                  <Button size="sm" onClick={() => void queueQuotePost(draft.id)} disabled={modulePaused} title={modulePausedActionTip}>
+                                    <Send className="size-4" />
+                                    {t("autoComment.manualAction.queueQuote")}
+                                  </Button>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>

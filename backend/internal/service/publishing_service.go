@@ -35,6 +35,7 @@ type PublishResult struct {
 type XPublisher interface {
 	PublishReply(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
 	PublishComment(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error)
+	PublishQuotePost(ctx context.Context, account model.TwitterAccount, quoteTweetID string, content string) (PublishResult, error)
 	PublishPost(ctx context.Context, account model.TwitterAccount, content string) (PublishResult, error)
 }
 
@@ -46,6 +47,10 @@ func (RealXPublisher) PublishReply(ctx context.Context, account model.TwitterAcc
 
 func (RealXPublisher) PublishComment(ctx context.Context, account model.TwitterAccount, targetTweetID string, content string) (PublishResult, error) {
 	return publishXReply(ctx, account, targetTweetID, content)
+}
+
+func (RealXPublisher) PublishQuotePost(ctx context.Context, account model.TwitterAccount, quoteTweetID string, content string) (PublishResult, error) {
+	return publishXQuotePost(ctx, account, quoteTweetID, content)
 }
 
 func (RealXPublisher) PublishPost(ctx context.Context, account model.TwitterAccount, content string) (PublishResult, error) {
@@ -84,6 +89,24 @@ func publishXReply(ctx context.Context, account model.TwitterAccount, targetTwee
 		ExternalID:  tweetID,
 		ExternalURL: fmt.Sprintf("https://x.com/%s/status/%s", strings.TrimPrefix(strings.TrimSpace(account.Username), "@"), tweetID),
 		RawResponse: "x api publish succeeded",
+		PublishedAt: now,
+	}, nil
+}
+
+func publishXQuotePost(ctx context.Context, account model.TwitterAccount, quoteTweetID string, content string) (PublishResult, error) {
+	token := strings.TrimSpace(account.AccessToken)
+	if token == "" {
+		return PublishResult{}, fmt.Errorf("missing x access token")
+	}
+	tweetID, err := twitter.CreateQuoteTweet(ctx, token, strings.TrimSpace(content), strings.TrimSpace(quoteTweetID))
+	if err != nil {
+		return PublishResult{}, err
+	}
+	now := time.Now().UTC()
+	return PublishResult{
+		ExternalID:  tweetID,
+		ExternalURL: fmt.Sprintf("https://x.com/%s/status/%s", strings.TrimPrefix(strings.TrimSpace(account.Username), "@"), tweetID),
+		RawResponse: "x api quote post succeeded",
 		PublishedAt: now,
 	}, nil
 }
@@ -190,8 +213,16 @@ func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now ti
 	if task == nil || task.Status != "ready_to_publish" {
 		return nil, false, nil
 	}
-	if strings.TrimSpace(task.DeliveryMode) != "" && task.DeliveryMode != "auto_comment" {
+	deliveryMode := strings.TrimSpace(task.DeliveryMode)
+	if deliveryMode == "" {
+		deliveryMode = "auto_comment"
+	}
+	if deliveryMode != "auto_comment" && deliveryMode != "quote_post" {
 		return nil, false, nil
+	}
+	content := task.GeneratedComment
+	if deliveryMode == "quote_post" && strings.TrimSpace(task.QuotePostCandidate) != "" {
+		content = task.QuotePostCandidate
 	}
 	job := &model.PublishJob{
 		UserID:           task.UserID,
@@ -199,7 +230,7 @@ func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now ti
 		BotID:            task.BotID,
 		SourceType:       repository.PublishSourceComment,
 		SourceID:         task.ID,
-		Content:          task.GeneratedComment,
+		Content:          content,
 		Status:           repository.PublishStatusPending,
 		ExecutionMode:    ExecutionModeAutopilot,
 		PublishMode:      repository.PublishModeSimulated,
@@ -209,6 +240,19 @@ func (s *PublishingService) EnsureCommentJob(task *model.AutoCommentTask, now ti
 	createdJob, created, err := s.jobRepo.Ensure(job)
 	if err != nil {
 		return nil, false, err
+	}
+	if !created && deliveryMode == "quote_post" && createdJob.Status != repository.PublishStatusPublished {
+		createdJob.Content = content
+		createdJob.Status = repository.PublishStatusPending
+		createdJob.ExecutionMode = ExecutionModeAutopilot
+		createdJob.PublishMode = repository.PublishModeSimulated
+		createdJob.AttemptCount = 0
+		createdJob.MaxAttempts = 3
+		createdJob.NextAttemptAt = &now
+		createdJob.LastError = ""
+		if err := s.jobRepo.Save(createdJob); err != nil {
+			return nil, false, err
+		}
 	}
 	if created {
 		_ = s.createJobActivity(createdJob, "activity.preview.commentPublishJobCreated", "")
@@ -826,6 +870,14 @@ func (s *PublishingService) publishWithAdapter(ctx context.Context, job *model.P
 	}
 	switch job.SourceType {
 	case repository.PublishSourceComment:
+		task, err := s.commentRepo.GetByUserAndID(job.UserID, job.SourceID)
+		if err != nil {
+			return PublishResult{}, "", "", err
+		}
+		if task.DeliveryMode == "quote_post" {
+			result, err := s.publisher.PublishQuotePost(ctx, account, targetTweetID, job.Content)
+			return result, repository.PublishModeReal, "activity.preview.realPublishSuccess", err
+		}
 		result, err := s.publisher.PublishComment(ctx, account, targetTweetID, job.Content)
 		return result, repository.PublishModeReal, "activity.preview.realPublishSuccess", err
 	case repository.PublishSourceReply:
@@ -1038,7 +1090,7 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		if err != nil {
 			return err
 		}
-		if category == "x_reply_restricted" {
+		if category == "x_reply_restricted" && task.DeliveryMode != "quote_post" {
 			convertRestrictedAutoCommentToManualSuggestion(task, reason)
 			return s.commentRepo.Save(task)
 		}

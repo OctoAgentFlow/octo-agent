@@ -798,7 +798,7 @@ export const dict: I18nDict = {
   "autoComment.discovery.loading": "生成中...",
   "autoComment.discovery.ready": "已生成 {count} 个目标建议。",
   "autoComment.discovery.failed": "生成目标建议失败。",
-  "autoComment.discovery.empty": "暂时没有新的候选账号。请补充 OAF Bot 关键词或内容池素材后再试。",
+  "autoComment.discovery.empty": "暂时没有通过检测的新候选账号。系统已过滤检测失败或长期无原创推文的账号，请补充 OAF Bot 关键词或稍后再试。",
   "autoComment.discovery.collapsedHint": "展开后可查看候选账号，或点击生成建议获取推荐。",
   "autoComment.discovery.verify": "需验证",
   "autoComment.discovery.search": "验证搜索",

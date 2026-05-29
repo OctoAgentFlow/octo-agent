@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/subscription"
 )
@@ -105,6 +106,19 @@ func TestFillAutoCommentTargetSuggestionsFallsBack(t *testing.T) {
 		if item.Priority < 1 || item.Priority > 5 {
 			t.Fatalf("expected normalized priority, got %#v", item)
 		}
+	}
+}
+
+func TestHasRecentAutoCommentCandidateTweet(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	if !hasRecentAutoCommentCandidateTweet([]twitter.UserTweet{{ID: "1", CreatedAt: now.Add(-24 * time.Hour)}}, now, 45*24*time.Hour) {
+		t.Fatal("expected recent tweet to pass")
+	}
+	if hasRecentAutoCommentCandidateTweet([]twitter.UserTweet{{ID: "1", CreatedAt: now.Add(-90 * 24 * time.Hour)}}, now, 45*24*time.Hour) {
+		t.Fatal("expected stale tweet to fail")
+	}
+	if hasRecentAutoCommentCandidateTweet(nil, now, 45*24*time.Hour) {
+		t.Fatal("expected empty tweets to fail")
 	}
 }
 

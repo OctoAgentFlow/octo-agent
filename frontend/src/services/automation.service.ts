@@ -287,7 +287,7 @@ export type AutoCommentTaskApi = {
   api_reply_block_reason?: string;
   manual_action_url?: string;
   quote_post_candidate?: string;
-  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent";
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent" | "handled";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;
@@ -510,8 +510,10 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comment/tasks");
     return res.data.data;
   },
-  async commentDrafts() {
-    const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comments/drafts");
+  async commentDrafts(query?: { pageSize?: number }) {
+    const res = await request.get<ApiResponse<AutoCommentTasksData>>("/auto-comments/drafts", {
+      params: { page_size: query?.pageSize || 200 },
+    });
     return res.data.data;
   },
   async commentAnalytics() {
@@ -541,6 +543,10 @@ export const automationService = {
   },
   async rejectCommentDraft(id: number, reason: string) {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/reject`, { reason });
+    return res.data.data;
+  },
+  async markCommentHandled(id: number) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/handled`, {});
     return res.data.data;
   },
   async blockCommentTask(id: number, reason: string) {

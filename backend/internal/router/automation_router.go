@@ -59,6 +59,7 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	comment.DELETE("/tasks/:id", c.DeleteCommentDraft)
 	comment.POST("/tasks/:id/block", c.BlockCommentTask)
 	comment.POST("/tasks/:id/retry", c.RetryCommentTask)
+	comment.POST("/tasks/:id/handled", c.MarkCommentTaskHandled)
 
 	comments := rg.Group("/auto-comments")
 	comments.Use(middleware.Auth())
@@ -77,4 +78,5 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	comments.POST("/drafts/:id/approve", c.ApproveCommentTask)
 	comments.POST("/drafts/:id/quote-post", c.QueueCommentQuotePost)
 	comments.POST("/drafts/:id/reject", c.RejectCommentDraft)
+	comments.POST("/drafts/:id/handled", c.MarkCommentTaskHandled)
 }

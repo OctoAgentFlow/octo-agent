@@ -251,6 +251,10 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 	if err != nil {
 		return nil, err
 	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, xAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
 	bot, err := s.botForAccount(userID, xAccountID)
 	if err != nil {
 		return nil, err
@@ -266,14 +270,19 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 	contentRows, _ := s.contentRepo.ListActiveForGenerationContext(userID, xAccountID, botIDForUsage(bot), 12)
 	input := autoCommentTargetSuggestionInput(bot, targets, contentRows)
 	generated, err := s.ai.GenerateAutoCommentTargetSuggestions(ctx, input)
+	if err == nil {
+		if err := recordAIGenerationUsage(s.usageRepo, userID, botIDForUsage(bot), repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
+			return nil, err
+		}
+	}
+	suggestions := generated.Items
 	if err != nil {
-		return nil, err
+		suggestions = nil
 	}
-	if err := recordAIGenerationUsage(s.usageRepo, userID, botIDForUsage(bot), repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
-		return nil, err
-	}
-	items := make([]dto.AutoCommentTargetSuggestionItem, 0, len(generated.Items))
-	for _, item := range generated.Items {
+	suggestions = fillAutoCommentTargetSuggestions(suggestions, input.ExistingTargets, 20)
+	suggestions = s.filterActiveAutoCommentTargetSuggestions(ctx, *acc, suggestions, input.ExistingTargets, 8, now)
+	items := make([]dto.AutoCommentTargetSuggestionItem, 0, len(suggestions))
+	for _, item := range suggestions {
 		items = append(items, dto.AutoCommentTargetSuggestionItem{
 			Handle:      item.Handle,
 			DisplayName: item.DisplayName,
@@ -308,8 +317,8 @@ func (s *AutoCommentService) DeleteTarget(userID, id uint) error {
 	return s.targetRepo.DeleteByUserAndID(userID, id)
 }
 
-func (s *AutoCommentService) ListTasks(userID uint) (*dto.AutoCommentTasksResponse, error) {
-	rows, err := s.taskRepo.ListByUser(userID, 50)
+func (s *AutoCommentService) ListTasks(userID uint, limit int) (*dto.AutoCommentTasksResponse, error) {
+	rows, err := s.taskRepo.ListByUser(userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -557,6 +566,9 @@ func (s *AutoCommentService) QueueQuotePost(ctx context.Context, userID, id uint
 	if strings.TrimSpace(task.TargetTweetID) == "" {
 		return nil, fmt.Errorf("target tweet id is required")
 	}
+	if !task.APIReplyEligible {
+		return nil, fmt.Errorf("X API quote publishing is not available for this conversation unless the executor account is mentioned or part of the conversation thread; use the manual copy/open action instead")
+	}
 	quote := strings.TrimSpace(task.QuotePostCandidate)
 	if quote == "" {
 		quote = strings.TrimSpace(task.GeneratedComment)
@@ -606,6 +618,37 @@ func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.Au
 	if task.FailureReason == "" {
 		task.FailureReason = "Rejected by user."
 	}
+	if err := s.taskRepo.Save(task); err != nil {
+		return nil, err
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
+func (s *AutoCommentService) MarkTaskHandled(userID, id uint) (*dto.AutoCommentTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status == "sent" || task.Status == "published" {
+		return nil, fmt.Errorf("published task is already completed")
+	}
+	if s.publishing != nil {
+		if err := s.publishing.DeleteNonPublishedSourceJobs(userID, repository.PublishSourceComment, id); err != nil {
+			return nil, err
+		}
+	}
+	now := time.Now().UTC()
+	task.Status = "handled"
+	task.CapabilityStatus = "manual_handled"
+	task.ApprovalRequired = false
+	task.ApprovedAt = nil
+	task.Retryable = false
+	task.RetryAfterAt = nil
+	task.BlockedAt = &now
+	task.FailureCategory = ""
+	task.FailureReason = ""
+	task.DeliveryReason = firstNonEmpty(task.DeliveryReason, "Marked as handled by the user.")
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
@@ -1647,6 +1690,144 @@ func autoCommentTargetSuggestionInput(bot *model.OAFBot, targets []model.AutoCom
 	return input
 }
 
+func fillAutoCommentTargetSuggestions(items []AutoCommentTargetSuggestion, existing []string, minCount int) []AutoCommentTargetSuggestion {
+	if minCount <= 0 {
+		minCount = 8
+	}
+	existingSet := map[string]bool{}
+	for _, item := range existing {
+		if handle := normalizeSuggestionHandle(item); handle != "" {
+			existingSet[handle] = true
+		}
+	}
+	seen := map[string]bool{}
+	out := make([]AutoCommentTargetSuggestion, 0, minCount+len(items))
+	for _, item := range items {
+		normalized := normalizeSuggestionHandle(item.Handle)
+		if normalized == "" || existingSet[normalized] || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		item.Handle = normalized
+		item.Category = normalizeSuggestionCategory(item.Category)
+		item.Priority = normalizeAutoCommentTargetPriority(item.Priority)
+		out = append(out, item)
+	}
+	for _, item := range fallbackAutoCommentTargetSuggestions() {
+		if len(out) >= minCount {
+			break
+		}
+		normalized := normalizeSuggestionHandle(item.Handle)
+		if normalized == "" || existingSet[normalized] || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		item.Handle = normalized
+		item.Category = normalizeSuggestionCategory(item.Category)
+		item.Priority = normalizeAutoCommentTargetPriority(item.Priority)
+		out = append(out, item)
+	}
+	return out
+}
+
+func (s *AutoCommentService) filterActiveAutoCommentTargetSuggestions(ctx context.Context, account model.TwitterAccount, items []AutoCommentTargetSuggestion, existing []string, minCount int, now time.Time) []AutoCommentTargetSuggestion {
+	if minCount <= 0 {
+		minCount = 8
+	}
+	token := strings.TrimSpace(account.AccessToken)
+	if token == "" {
+		return firstAutoCommentSuggestions(items, minCount)
+	}
+	existingSet := map[string]bool{}
+	for _, item := range existing {
+		if handle := normalizeSuggestionHandle(item); handle != "" {
+			existingSet[handle] = true
+		}
+	}
+	out := make([]AutoCommentTargetSuggestion, 0, minCount)
+	seen := map[string]bool{}
+	checked := 0
+	for _, item := range items {
+		if len(out) >= minCount || checked >= 16 {
+			break
+		}
+		handle := normalizeSuggestionHandle(item.Handle)
+		if handle == "" || existingSet[handle] || seen[handle] {
+			continue
+		}
+		seen[handle] = true
+		checked++
+		xu, err := twitter.LookupUserByUsername(ctx, nil, token, handle)
+		if err != nil {
+			zap.L().Debug("auto comment: skip suggested target lookup failed", zap.String("handle", handle), zap.Error(err))
+			continue
+		}
+		tweets, err := twitter.ListUserRootTweets(ctx, nil, token, xu.ID, 5)
+		if err != nil {
+			zap.L().Debug("auto comment: skip suggested target tweets failed", zap.String("handle", handle), zap.Error(err))
+			continue
+		}
+		if !hasRecentAutoCommentCandidateTweet(tweets, now, 45*24*time.Hour) {
+			zap.L().Debug("auto comment: skip stale suggested target", zap.String("handle", handle))
+			continue
+		}
+		item.Handle = normalizeSuggestionHandle(firstNonEmpty(xu.Username, handle))
+		item.DisplayName = firstNonEmpty(strings.TrimSpace(xu.DisplayName), item.DisplayName)
+		item.Category = normalizeSuggestionCategory(item.Category)
+		item.Priority = normalizeAutoCommentTargetPriority(item.Priority)
+		if strings.TrimSpace(item.Reason) == "" {
+			item.Reason = "Recently active X account relevant to the current Auto Comment target profile."
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func hasRecentAutoCommentCandidateTweet(tweets []twitter.UserTweet, now time.Time, maxAge time.Duration) bool {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	for _, tw := range tweets {
+		if tw.ID == "" {
+			continue
+		}
+		if tw.CreatedAt.IsZero() {
+			return true
+		}
+		if !tw.CreatedAt.Before(now.Add(-maxAge)) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstAutoCommentSuggestions(items []AutoCommentTargetSuggestion, limit int) []AutoCommentTargetSuggestion {
+	if limit <= 0 || len(items) <= limit {
+		return items
+	}
+	return items[:limit]
+}
+
+func fallbackAutoCommentTargetSuggestions() []AutoCommentTargetSuggestion {
+	return []AutoCommentTargetSuggestion{
+		{Handle: "BanklessHQ", DisplayName: "Bankless", Category: "media", Priority: 5, Reason: "Large Web3 media audience; suitable for adoption, community, and operations discussions.", SearchQuery: "site:x.com/BanklessHQ Web3 community"},
+		{Handle: "MessariCrypto", DisplayName: "Messari", Category: "media", Priority: 5, Reason: "Research/media account with industry audience and frequent Web3 project discussions.", SearchQuery: "site:x.com/MessariCrypto Web3 research"},
+		{Handle: "a16zcrypto", DisplayName: "a16z crypto", Category: "ecosystem", Priority: 5, Reason: "Builder and founder-heavy Web3 audience with overlap for AI agent and growth tooling.", SearchQuery: "site:x.com/a16zcrypto builders AI agents"},
+		{Handle: "base", DisplayName: "Base", Category: "ecosystem", Priority: 5, Reason: "Active onchain ecosystem account with builder, consumer crypto, and community-growth discussions.", SearchQuery: "site:x.com/base onchain builders"},
+		{Handle: "Optimism", DisplayName: "Optimism", Category: "ecosystem", Priority: 4, Reason: "Active L2 ecosystem with builder and governance conversations relevant to Web3 operators.", SearchQuery: "site:x.com/Optimism builders governance"},
+		{Handle: "arbitrum", DisplayName: "Arbitrum", Category: "ecosystem", Priority: 4, Reason: "Large L2 ecosystem account with frequent project and developer conversation opportunities.", SearchQuery: "site:x.com/arbitrum ecosystem developers"},
+		{Handle: "solana", DisplayName: "Solana", Category: "ecosystem", Priority: 5, Reason: "High-velocity ecosystem account with strong founder, consumer crypto, and community overlap.", SearchQuery: "site:x.com/solana consumer crypto"},
+		{Handle: "farcaster_xyz", DisplayName: "Farcaster", Category: "project", Priority: 5, Reason: "Social protocol audience overlaps strongly with SocialFi, creator tooling, and autonomous social agents.", SearchQuery: "site:x.com/farcaster_xyz social protocol"},
+		{Handle: "LensProtocol", DisplayName: "Lens", Category: "project", Priority: 5, Reason: "SocialFi protocol with audience interested in social graphs, creators, and agent-powered engagement.", SearchQuery: "site:x.com/LensProtocol SocialFi creators"},
+		{Handle: "DefiLlama", DisplayName: "DefiLlama", Category: "media", Priority: 4, Reason: "Data-focused DeFi audience where practical tooling and analytics comments can fit naturally.", SearchQuery: "site:x.com/DefiLlama DeFi data"},
+		{Handle: "DefiIgnas", DisplayName: "Ignas", Category: "analyst", Priority: 5, Reason: "DeFi analyst with educational threads and an audience likely to care about operational tooling.", SearchQuery: "site:x.com/DefiIgnas DeFi tools growth"},
+		{Handle: "thedefiedge", DisplayName: "The DeFi Edge", Category: "analyst", Priority: 5, Reason: "DeFi/Web3 growth and project-analysis audience with high overlap for practical social operations.", SearchQuery: "site:x.com/thedefiedge DeFi growth"},
+		{Handle: "Foresight_News", DisplayName: "Foresight News", Category: "media", Priority: 4, Reason: "Chinese Web3 media account; useful for Chinese-language exposure and market discussion.", SearchQuery: "site:x.com/Foresight_News Web3 中文"},
+		{Handle: "BlockBeatsAsia", DisplayName: "BlockBeats", Category: "media", Priority: 4, Reason: "Chinese crypto media audience with frequent project and market updates.", SearchQuery: "site:x.com/BlockBeatsAsia crypto 中文"},
+		{Handle: "TechFlowPost", DisplayName: "TechFlow", Category: "media", Priority: 4, Reason: "Chinese Web3 media and research audience with frequent ecosystem and project conversations.", SearchQuery: "site:x.com/TechFlowPost Web3 中文"},
+	}
+}
+
 func displayCommentTargetHandle(target model.AutoCommentTarget) string {
 	handle := normalizeHandle(firstNonEmpty(target.TargetAuthorHandle, target.TargetUsername))
 	if handle == "" {
@@ -2182,6 +2363,7 @@ func autoCommentInputFromValues(username, tweet, tone string, blocked []string, 
 	in := GenerateAutoCommentInput{
 		TargetUsername: normalizeHandle(username),
 		TargetTweet:    tweet,
+		TargetLanguage: detectTargetTweetLanguage(tweet),
 		Tone:           tone,
 		BlockedWords:   blocked,
 	}

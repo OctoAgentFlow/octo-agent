@@ -57,6 +57,14 @@ func TestClassifyXPublishFailure(t *testing.T) {
 		t.Fatalf("unexpected restricted reply classification: %s retryable=%v alertable=%v", category, retryable, alertable)
 	}
 
+	category, retryable, alertable = classifyXPublishFailure(
+		errors.New("x api 403: Quoting this post is not allowed because you have not been mentioned or are not part of the conversation thread"),
+		repository.PublishSourceComment,
+	)
+	if category != "x_reply_restricted" || retryable || !alertable {
+		t.Fatalf("unexpected restricted quote classification: %s retryable=%v alertable=%v", category, retryable, alertable)
+	}
+
 	category, retryable, alertable = classifyXPublishFailure(errors.New("x api 500: upstream failed"), repository.PublishSourceComment)
 	if category != "x_api_publish_failed" || !retryable || !alertable {
 		t.Fatalf("unexpected generic publish classification: %s retryable=%v alertable=%v", category, retryable, alertable)

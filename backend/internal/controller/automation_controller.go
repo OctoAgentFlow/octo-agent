@@ -629,7 +629,13 @@ func (ctl *AutomationController) ListCommentTasks(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoCommentService.ListTasks(userID)
+	pageSize := 200
+	if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			pageSize = parsed
+		}
+	}
+	data, err := ctl.autoCommentService.ListTasks(userID, pageSize)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -740,6 +746,25 @@ func (ctl *AutomationController) RejectCommentDraft(c *gin.Context) {
 	var req dto.AutoCommentTaskBlockRequest
 	_ = c.ShouldBindJSON(&req)
 	data, err := ctl.autoCommentService.RejectTask(userID, taskID, req.Reason)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) MarkCommentTaskHandled(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	data, err := ctl.autoCommentService.MarkTaskHandled(userID, taskID)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

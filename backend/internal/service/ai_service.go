@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"octo-agent/backend/internal/dto"
 	openaiint "octo-agent/backend/internal/integration/openai"
@@ -73,6 +74,7 @@ type GenerationContentContextItem struct {
 type GenerateAutoCommentInput struct {
 	TargetUsername    string
 	TargetTweet       string
+	TargetLanguage    string
 	Tone              string
 	BlockedWords      []string
 	HasBot            bool
@@ -440,6 +442,10 @@ func (s *AIService) GenerateAutoCommentCandidates(ctx context.Context, in Genera
 	if targetTweet == "" {
 		return AIGeneratedAutoCommentCandidates{}, fmt.Errorf("target tweet is required")
 	}
+	targetLanguage := strings.TrimSpace(in.TargetLanguage)
+	if targetLanguage == "" {
+		targetLanguage = detectTargetTweetLanguage(targetTweet)
+	}
 	tone := strings.TrimSpace(in.Tone)
 	if tone == "" {
 		tone = "Friendly"
@@ -459,6 +465,12 @@ func (s *AIService) GenerateAutoCommentCandidates(ctx context.Context, in Genera
 	user.WriteString("Target tweet:\n")
 	user.WriteString(targetTweet)
 	user.WriteString("\n\n")
+	if targetLanguage != "" {
+		user.WriteString("detected_target_tweet_language: ")
+		user.WriteString(targetLanguage)
+		user.WriteString("\n")
+		user.WriteString("Auto Comment language requirement: write every candidate in the detected_target_tweet_language. This overrides English persona fields, English content library items, and primary_language when they conflict with the target tweet language.\n\n")
+	}
 	if in.HasBot {
 		user.WriteString("Use this OAF Bot persona:\n")
 		user.WriteString("name: " + strings.TrimSpace(in.Name) + "\n")
@@ -514,6 +526,7 @@ func (s *AIService) GenerateAutoCommentCandidates(ctx context.Context, in Genera
 	user.WriteString("- soft_cta: a subtle product-relevant angle without sounding like an ad.\n")
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
+	user.WriteString("- Language is mandatory: match the target tweet language whenever detected_target_tweet_language is provided. Do not switch to English because the persona, keywords, or content library are English.\n")
 	user.WriteString("- Prefer short, natural sentences suitable for X comments.\n")
 	user.WriteString("- Add a concrete point of view or a light question when useful.\n")
 	user.WriteString("- Use content library context only when it is relevant to the target tweet. Do not force unrelated product promotion.\n")
@@ -1265,6 +1278,38 @@ func writeLanguageConfig(user *strings.Builder, primaryLanguage, strategy string
 	}
 	user.WriteString("- If there is no explicit external input context, output in primary_language.\n")
 	user.WriteString("- Keep language choice stable and intentional according to the configured strategy.\n")
+}
+
+func detectTargetTweetLanguage(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	var han, hiraganaKatakana, hangul, latin int
+	for _, r := range text {
+		switch {
+		case unicode.In(r, unicode.Han):
+			han++
+		case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+			hiraganaKatakana++
+		case unicode.In(r, unicode.Hangul):
+			hangul++
+		case unicode.In(r, unicode.Latin):
+			latin++
+		}
+	}
+	switch {
+	case hiraganaKatakana > 0:
+		return "Japanese"
+	case hangul > 0:
+		return "Korean"
+	case han >= 2:
+		return "Chinese"
+	case latin >= 8:
+		return "English"
+	default:
+		return ""
+	}
 }
 
 func languageLabelForPrompt(value string) string {

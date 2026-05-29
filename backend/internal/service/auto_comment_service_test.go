@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/subscription"
 )
@@ -74,6 +75,50 @@ func TestParseAutoCommentCandidates(t *testing.T) {
 	}
 	if got[1].Type != "engagement_question" {
 		t.Fatalf("expected normalized candidate type, got %s", got[1].Type)
+	}
+}
+
+func TestDetectTargetTweetLanguage(t *testing.T) {
+	if got := detectTargetTweetLanguage("或许这是真正的 $ETH Bottom Signal，以太坊基金会要退居 2 线。"); got != "Chinese" {
+		t.Fatalf("expected Chinese target language, got %q", got)
+	}
+	if got := detectTargetTweetLanguage("How are teams using AI agents for X growth?"); got != "English" {
+		t.Fatalf("expected English target language, got %q", got)
+	}
+}
+
+func TestAutoCommentInputCarriesTargetLanguage(t *testing.T) {
+	got := autoCommentInputFromValues("0xtodd", "中文推文应该生成中文评论。", "Friendly", nil, nil)
+	if got.TargetLanguage != "Chinese" {
+		t.Fatalf("expected target language to be detected, got %q", got.TargetLanguage)
+	}
+}
+
+func TestFillAutoCommentTargetSuggestionsFallsBack(t *testing.T) {
+	got := fillAutoCommentTargetSuggestions(nil, []string{"hosseeb", "KyleSamani"}, 4)
+	if len(got) != 4 {
+		t.Fatalf("expected fallback to fill four suggestions, got %#v", got)
+	}
+	for _, item := range got {
+		if item.Handle == "hosseeb" || item.Handle == "kylesamani" {
+			t.Fatalf("fallback should skip existing targets, got %#v", got)
+		}
+		if item.Priority < 1 || item.Priority > 5 {
+			t.Fatalf("expected normalized priority, got %#v", item)
+		}
+	}
+}
+
+func TestHasRecentAutoCommentCandidateTweet(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	if !hasRecentAutoCommentCandidateTweet([]twitter.UserTweet{{ID: "1", CreatedAt: now.Add(-24 * time.Hour)}}, now, 45*24*time.Hour) {
+		t.Fatal("expected recent tweet to pass")
+	}
+	if hasRecentAutoCommentCandidateTweet([]twitter.UserTweet{{ID: "1", CreatedAt: now.Add(-90 * 24 * time.Hour)}}, now, 45*24*time.Hour) {
+		t.Fatal("expected stale tweet to fail")
+	}
+	if hasRecentAutoCommentCandidateTweet(nil, now, 45*24*time.Hour) {
+		t.Fatal("expected empty tweets to fail")
 	}
 }
 

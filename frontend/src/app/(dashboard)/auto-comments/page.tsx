@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -14,8 +14,9 @@ import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
-import { billingService } from "@/services/billing.service";
+import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import {
   automationService,
   type AutoCommentAnalyticsData,
@@ -30,7 +31,7 @@ type LoadState = "loading" | "ready" | "error";
 type ExecutionMode = "manual" | "review" | "autopilot";
 type TargetFilter = "all" | "active" | "paused";
 type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_tone" | "good";
-type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked";
+type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked" | "handled";
 type DraftPanel = "target" | "action";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
@@ -86,6 +87,28 @@ function deliveryKey(mode?: string) {
   return `autoComment.delivery.${mode || "manual_comment"}`;
 }
 
+function isClosedDraft(draft: AutoCommentTaskApi) {
+  return draft.status === "rejected" || draft.status === "failed" || draft.status === "blocked";
+}
+
+function isHandledDraft(draft: AutoCommentTaskApi) {
+  return draft.status === "handled";
+}
+
+function isQueuedQuotePost(draft: AutoCommentTaskApi) {
+  return draft.delivery_mode === "quote_post" && (draft.status === "ready_to_publish" || draft.status === "sending");
+}
+
+function displayDeliveryMode(draft: AutoCommentTaskApi) {
+  if (isHandledDraft(draft)) {
+    return "handled";
+  }
+  if (draft.delivery_mode === "quote_post" && (isClosedDraft(draft) || !draft.api_reply_eligible)) {
+    return "manual_comment";
+  }
+  return draft.delivery_mode || "manual_comment";
+}
+
 function primaryOpportunityText(draft: AutoCommentTaskApi) {
   if (draft.delivery_mode === "quote_post") {
     return draft.quote_post_candidate || draft.generated_comment || "";
@@ -101,12 +124,14 @@ export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
   const { confirm } = useConfirm();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [targets, setTargets] = useState<AutoCommentTargetApi[]>([]);
   const [drafts, setDrafts] = useState<AutoCommentTaskApi[]>([]);
   const [analytics, setAnalytics] = useState<AutoCommentAnalyticsData | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [plan, setPlan] = useState("free_trial");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [xAccountID, setXAccountID] = useState<number>(0);
@@ -122,6 +147,8 @@ export default function AutoCommentsPage() {
   const [bulkNotes, setBulkNotes] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [suggestRequested, setSuggestRequested] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [targetSuggestions, setTargetSuggestions] = useState<AutoCommentTargetSuggestionData["items"]>([]);
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
@@ -152,6 +179,11 @@ export default function AutoCommentsPage() {
     () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
     [accountDrafts]
   );
+  const activeDrafts = useMemo(() => accountDrafts.filter((draft) => !isHandledDraft(draft)), [accountDrafts]);
+  const quotaPeriodEndsAt = useMemo(() => {
+    if (!subscription?.expiration_date) return t("autoComment.quota.periodUnknown");
+    return formatDateTime(subscription.expiration_date, timeZone);
+  }, [subscription?.expiration_date, timeZone, t]);
   const quotaCards = useMemo(() => {
     if (!analytics) return [];
     return [
@@ -163,34 +195,40 @@ export default function AutoCommentsPage() {
       {
         label: t("autoComment.quota.scans"),
         value: `${formatCompactNumber(analytics.summary.monthly_scans_used)} / ${formatCompactNumber(analytics.summary.monthly_scan_limit)}`,
+        period: t("autoComment.quota.periodEnds", { date: quotaPeriodEndsAt }),
         helper: t("autoComment.quota.scansHint"),
       },
       {
         label: t("autoComment.quota.comments"),
         value: `${formatCompactNumber(analytics.summary.monthly_comments_used)} / ${formatCompactNumber(analytics.summary.monthly_comment_limit)}`,
+        period: t("autoComment.quota.periodEnds", { date: quotaPeriodEndsAt }),
         helper: t("autoComment.quota.commentsHint"),
       },
     ];
-  }, [analytics, t]);
+  }, [analytics, quotaPeriodEndsAt, t]);
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
+        if (deliveryFilter === "handled") return isHandledDraft(draft);
+        if (isHandledDraft(draft)) return false;
         if (deliveryFilter === "all") return true;
-        if (deliveryFilter === "blocked") return draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted";
-        return (draft.delivery_mode || "manual_comment") === deliveryFilter;
+        if (deliveryFilter === "blocked") return isClosedDraft(draft) || draft.failure_category === "x_reply_restricted";
+        if (deliveryFilter === "quote_post") return isQueuedQuotePost(draft);
+        return displayDeliveryMode(draft) === deliveryFilter;
       }),
     [accountDrafts, deliveryFilter]
   );
   const deliveryFilterOptions = useMemo(
     () =>
       ([
-        ["all", accountDrafts.length],
-        ["auto_comment", accountDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
-        ["manual_comment", accountDrafts.filter((draft) => (draft.delivery_mode || "manual_comment") === "manual_comment").length],
-        ["quote_post", accountDrafts.filter((draft) => draft.delivery_mode === "quote_post").length],
-        ["blocked", accountDrafts.filter((draft) => draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted").length],
+        ["all", activeDrafts.length],
+        ["auto_comment", activeDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
+        ["manual_comment", activeDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
+        ["quote_post", activeDrafts.filter((draft) => isQueuedQuotePost(draft)).length],
+        ["blocked", activeDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length],
+        ["handled", accountDrafts.filter((draft) => isHandledDraft(draft)).length],
       ] as Array<[DeliveryFilter, number]>),
-    [accountDrafts]
+    [accountDrafts, activeDrafts]
   );
   const filteredTargets = useMemo(
     () =>
@@ -215,7 +253,7 @@ export default function AutoCommentsPage() {
         accountService.list(),
         oafBotService.list(),
         automationService.commentTargets(),
-        automationService.commentDrafts(),
+        automationService.commentDrafts({ pageSize: 200 }),
         automationService.commentAnalytics(),
         automationService.list(),
         billingService.subscription(),
@@ -226,6 +264,7 @@ export default function AutoCommentsPage() {
       setTargets(targetData.items);
       setDrafts(draftData.items);
       setAnalytics(analyticsData);
+      setSubscription(subscriptionData);
       setPlan(subscriptionData.plan);
       setQuotaUpgradeVisible(false);
       const commentModule = automationData.modules.find((item) => item.type === "comment");
@@ -315,6 +354,16 @@ export default function AutoCommentsPage() {
       pushToast(t("autoComment.toast.rejected"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.reject") : t("autoComment.errors.reject"));
+    }
+  };
+
+  const markHandled = async (id: number) => {
+    try {
+      const updated = await automationService.markCommentHandled(id);
+      setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t("autoComment.toast.handled"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoComment.errors.handled"));
     }
   };
 
@@ -463,6 +512,8 @@ export default function AutoCommentsPage() {
     const accountID = selectedAccount?.id ?? 0;
     if (!accountID || suggestBusy) return;
     setSuggestBusy(true);
+    setSuggestRequested(true);
+    setSuggestOpen(true);
     try {
       const data = await automationService.suggestCommentTargets(accountID);
       setTargetSuggestions(data.items || []);
@@ -542,7 +593,12 @@ export default function AutoCommentsPage() {
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setQuotePreviewDraft(null)}>{t("common.cancel")}</Button>
-              <Button type="button" disabled={modulePaused} title={modulePausedActionTip} onClick={() => void queueQuotePost(quotePreviewDraft.id)}>
+              <Button
+                type="button"
+                disabled={modulePaused || !quotePreviewDraft.api_reply_eligible}
+                title={!quotePreviewDraft.api_reply_eligible ? t("autoComment.quoteConfirm.unavailableTip") : modulePausedActionTip}
+                onClick={() => void queueQuotePost(quotePreviewDraft.id)}
+              >
                 <Send className="size-4" />
                 {t("autoComment.quoteConfirm.confirm")}
               </Button>
@@ -606,6 +662,7 @@ export default function AutoCommentsPage() {
                 <div key={item.label} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                   <p className="text-xs text-[#71767b]">{item.label}</p>
                   <p className="mt-2 text-xl font-semibold text-white">{item.value}</p>
+                  {"period" in item && item.period ? <p className="mt-1 text-xs text-[#1d9bf0]">{item.period}</p> : null}
                   <p className="mt-1 text-xs leading-5 text-[#71767b]">{item.helper}</p>
                 </div>
               ))}
@@ -849,35 +906,58 @@ export default function AutoCommentsPage() {
               <Button className="mt-3 w-full" variant="outline" disabled={!selectedAccount || !bulkHandles.trim() || bulkBusy} onClick={() => void importTargets()}>
                 {bulkBusy ? t("autoComment.bulkImport.importing") : t("autoComment.bulkImport.action")}
               </Button>
-              <div className="mt-4 border-t border-[#2f3336] pt-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{t("autoComment.discovery.title")}</p>
-                    <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.description")}</p>
-                  </div>
+              <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black/35">
+                <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => setSuggestOpen((open) => !open)}
+                    aria-expanded={suggestOpen}
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]">
+                      <Sparkles className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-white">{t("autoComment.discovery.title")}</span>
+                      <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.description")}</span>
+                    </span>
+                    <ChevronDown className={`ml-auto size-4 shrink-0 text-[#71767b] transition-transform ${suggestOpen ? "rotate-180" : ""}`} />
+                  </button>
                   <Button size="sm" variant="outline" disabled={!selectedAccount || suggestBusy} onClick={() => void suggestTargets()}>
-                    {suggestBusy ? t("autoComment.discovery.loading") : t("autoComment.discovery.action")}
+                    {suggestBusy ? t("autoComment.discovery.loading") : targetSuggestions.length > 0 ? t("autoComment.discovery.regenerate") : t("autoComment.discovery.action")}
                   </Button>
                 </div>
-                {targetSuggestions.length > 0 ? (
-                  <div className="mt-3 grid gap-2">
-                    {targetSuggestions.slice(0, 8).map((item) => (
-                      <div key={item.handle} className="rounded-xl border border-[#2f3336] bg-black p-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white">{formatHandle(item.handle)} {item.display_name ? <span className="text-[#71767b]">· {item.display_name}</span> : null}</p>
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(`autoComment.targetCategory.${item.category || "kol"}`)}</span>
-                              <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.target.priorityValue", { value: item.priority || 3 })}</span>
-                              {item.needs_verify ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("autoComment.discovery.verify")}</span> : null}
+                {suggestOpen ? (
+                  <div className="border-t border-[#2f3336] p-3">
+                    {targetSuggestions.length > 0 ? (
+                      <div className="grid gap-2">
+                        {targetSuggestions.slice(0, 8).map((item) => (
+                          <div key={item.handle} className="rounded-xl border border-[#2f3336] bg-black p-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-white">{formatHandle(item.handle)} {item.display_name ? <span className="text-[#71767b]">· {item.display_name}</span> : null}</p>
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(`autoComment.targetCategory.${item.category || "kol"}`)}</span>
+                                  <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.target.priorityValue", { value: item.priority || 3 })}</span>
+                                  {item.needs_verify ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("autoComment.discovery.verify")}</span> : null}
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-[#b6bec5]">{item.reason}</p>
+                                {item.search_query ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.search")}: {item.search_query}</p> : null}
+                              </div>
+                              <Button size="sm" onClick={() => applySuggestedTarget(item)}>{t("autoComment.discovery.use")}</Button>
                             </div>
-                            <p className="mt-2 text-xs leading-5 text-[#b6bec5]">{item.reason}</p>
-                            {item.search_query ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.search")}: {item.search_query}</p> : null}
                           </div>
-                          <Button size="sm" onClick={() => applySuggestedTarget(item)}>{t("autoComment.discovery.use")}</Button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : suggestRequested && !suggestBusy ? (
+                      <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
+                        {t("autoComment.discovery.empty")}
+                      </p>
+                    ) : (
+                      <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
+                        {t("autoComment.discovery.collapsedHint")}
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -988,7 +1068,7 @@ export default function AutoCommentsPage() {
                             <div className="space-y-3">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
-                                <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
+                                <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(displayDeliveryMode(draft)))}</p>
                                 <p className="mt-1 text-xs leading-5 text-[#71767b]">
                                   {draft.delivery_reason || t("autoComment.delivery.defaultReason")}
                                 </p>
@@ -1014,7 +1094,7 @@ export default function AutoCommentsPage() {
                                     <ExternalLink className="size-4" />
                                     {t("autoComment.manualAction.open")}
                                   </Button>
-                                  {draft.quote_post_candidate ? (
+                                  {draft.quote_post_candidate && draft.api_reply_eligible ? (
                                     <Button size="sm" onClick={() => setQuotePreviewDraft(draft)} disabled={modulePaused} title={modulePausedActionTip}>
                                       <Send className="size-4" />
                                       {t("autoComment.manualAction.queueQuote")}
@@ -1022,7 +1102,7 @@ export default function AutoCommentsPage() {
                                   ) : null}
                                 </div>
                               ) : null}
-                              {draft.delivery_mode === "quote_post" ? (
+                              {isQueuedQuotePost(draft) ? (
                                 <div className="flex w-full flex-wrap gap-2">
                                   <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
                                     {t("autoComment.manualAction.quoteQueued")}
@@ -1145,10 +1225,16 @@ export default function AutoCommentsPage() {
                                 {t("autoComment.review.approve")}
                               </Button>
                             ) : null}
-                            {draft.status !== "rejected" && draft.status !== "sent" && draft.status !== "published" ? (
+                            {draft.status !== "rejected" && draft.status !== "sent" && draft.status !== "published" && draft.status !== "handled" ? (
                               <Button size="sm" variant="outline" onClick={() => void rejectDraft(draft.id)}>
                                 <XCircle className="size-4" />
                                 {t("autoComment.review.reject")}
+                              </Button>
+                            ) : null}
+                            {draft.status !== "sent" && draft.status !== "published" && draft.status !== "handled" ? (
+                              <Button size="sm" variant="outline" onClick={() => void markHandled(draft.id)}>
+                                <CheckCircle2 className="size-4" />
+                                {t("autoComment.review.handled")}
                               </Button>
                             ) : null}
                             <Button size="sm" variant="destructive" onClick={() => void deleteDraft(draft.id)}>
@@ -1201,7 +1287,7 @@ export default function AutoCommentsPage() {
           <p className="rounded-2xl border border-[#2f3336] bg-black px-4 py-6 text-sm text-[#71767b]">{t("autoComment.targets.noFiltered")}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredTargets.slice(0, 12).map((target) => (
+            {filteredTargets.map((target) => (
               <div key={target.id} className="rounded-2xl border border-[#2f3336] bg-black p-3 transition-colors hover:bg-[#080808]">
                 <div className="flex items-center justify-between gap-3">
                   <p className="min-w-0 truncate text-sm font-semibold text-white">{formatHandle(target.target_author_handle || target.target_username)}</p>

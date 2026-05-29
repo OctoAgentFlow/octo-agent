@@ -179,6 +179,7 @@ export default function AutoCommentsPage() {
     () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
     [accountDrafts]
   );
+  const activeDrafts = useMemo(() => accountDrafts.filter((draft) => !isHandledDraft(draft)), [accountDrafts]);
   const quotaPeriodEndsAt = useMemo(() => {
     if (!subscription?.expiration_date) return t("autoComment.quota.periodUnknown");
     return formatDateTime(subscription.expiration_date, timeZone);
@@ -208,8 +209,9 @@ export default function AutoCommentsPage() {
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
-        if (deliveryFilter === "all") return true;
         if (deliveryFilter === "handled") return isHandledDraft(draft);
+        if (isHandledDraft(draft)) return false;
+        if (deliveryFilter === "all") return true;
         if (deliveryFilter === "blocked") return isClosedDraft(draft) || draft.failure_category === "x_reply_restricted";
         if (deliveryFilter === "quote_post") return isQueuedQuotePost(draft);
         return displayDeliveryMode(draft) === deliveryFilter;
@@ -219,14 +221,14 @@ export default function AutoCommentsPage() {
   const deliveryFilterOptions = useMemo(
     () =>
       ([
-        ["all", accountDrafts.length],
-        ["auto_comment", accountDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
-        ["manual_comment", accountDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
-        ["quote_post", accountDrafts.filter((draft) => isQueuedQuotePost(draft)).length],
-        ["blocked", accountDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length],
+        ["all", activeDrafts.length],
+        ["auto_comment", activeDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
+        ["manual_comment", activeDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
+        ["quote_post", activeDrafts.filter((draft) => isQueuedQuotePost(draft)).length],
+        ["blocked", activeDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length],
         ["handled", accountDrafts.filter((draft) => isHandledDraft(draft)).length],
       ] as Array<[DeliveryFilter, number]>),
-    [accountDrafts]
+    [accountDrafts, activeDrafts]
   );
   const filteredTargets = useMemo(
     () =>

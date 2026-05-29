@@ -29,6 +29,11 @@ type AutoDMSegmentStatusCount struct {
 	Count   int64
 }
 
+type AutoDMSegmentReplyCount struct {
+	Segment string
+	Count   int64
+}
+
 func NewAutoDMTaskRepository(db *gorm.DB) *AutoDMTaskRepository {
 	return &AutoDMTaskRepository{DB: db}
 }
@@ -194,6 +199,60 @@ func (r *AutoDMTaskRepository) CountBySegmentAndStatusBetween(userID uint, from,
 	var rows []AutoDMSegmentStatusCount
 	err := q.Group(segmentExpr + ", auto_dm_tasks.status").Scan(&rows).Error
 	return rows, err
+}
+
+func (r *AutoDMTaskRepository) CountRepliesBySegmentBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMSegmentReplyCount, error) {
+	segmentExpr := "COALESCE(NULLIF(TRIM(auto_dm_tasks.recipient_segment), ''), NULLIF(TRIM(auto_dm_recipient_rules.recipient_segment), ''), 'lead')"
+	q := r.DB.Model(&model.AutoDMTask{}).
+		Select(segmentExpr+" AS segment, COUNT(*) AS count").
+		Joins("LEFT JOIN auto_dm_recipient_rules ON auto_dm_recipient_rules.user_id = auto_dm_tasks.user_id AND auto_dm_recipient_rules.x_account_id = auto_dm_tasks.x_account_id AND auto_dm_recipient_rules.recipient_user_id = auto_dm_tasks.recipient_user_id").
+		Where("auto_dm_tasks.user_id = ? AND auto_dm_tasks.status = ? AND auto_dm_tasks.inbound_reply_at IS NOT NULL", userID, "sent")
+	if accountID > 0 {
+		q = q.Where("auto_dm_tasks.x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("auto_dm_tasks.sent_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("auto_dm_tasks.sent_at < ?", to)
+	}
+	var rows []AutoDMSegmentReplyCount
+	err := q.Group(segmentExpr).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoDMTaskRepository) ListSentAwaitingInboundScan(limit int, now, scanBefore, sentAfter time.Time) ([]model.AutoDMTask, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	q := r.DB.Where("status = ? AND sent_at IS NOT NULL AND recipient_user_id <> '' AND inbound_reply_at IS NULL", "sent")
+	if !sentAfter.IsZero() {
+		q = q.Where("sent_at >= ?", sentAfter)
+	}
+	if !scanBefore.IsZero() {
+		q = q.Where("(last_inbound_scan_at IS NULL OR last_inbound_scan_at <= ?)", scanBefore)
+	}
+	if !now.IsZero() {
+		q = q.Where("sent_at <= ?", now)
+	}
+	var rows []model.AutoDMTask
+	err := q.Order("sent_at DESC, id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+func (r *AutoDMTaskRepository) MarkInboundScanned(taskID uint, at time.Time) error {
+	return r.DB.Model(&model.AutoDMTask{}).Where("id = ?", taskID).Update("last_inbound_scan_at", at).Error
+}
+
+func (r *AutoDMTaskRepository) MarkInboundReply(taskID uint, eventID string, repliedAt, scannedAt time.Time) error {
+	updates := map[string]any{
+		"last_inbound_scan_at":   scannedAt,
+		"inbound_reply_event_id": strings.TrimSpace(eventID),
+	}
+	if !repliedAt.IsZero() {
+		updates["inbound_reply_at"] = repliedAt
+	}
+	return r.DB.Model(&model.AutoDMTask{}).Where("id = ? AND inbound_reply_at IS NULL", taskID).Updates(updates).Error
 }
 
 func (r *AutoDMTaskRepository) Approve(task *model.AutoDMTask, at time.Time) error {

@@ -72,6 +72,16 @@ func TestMissingDMSendScopesRequiresTweetRead(t *testing.T) {
 	}
 }
 
+func TestMissingDMReadScopes(t *testing.T) {
+	missing := missingDMReadScopes("dm.write tweet.read users.read")
+	if len(missing) != 1 || missing[0] != "dm.read" {
+		t.Fatalf("expected dm.read to be required, got %#v", missing)
+	}
+	if got := missingDMReadScopes("dm.read tweet.read users.read"); len(got) != 0 {
+		t.Fatalf("expected no missing scopes, got %#v", got)
+	}
+}
+
 func TestAutoDMOptInSource(t *testing.T) {
 	for _, source := range []string{"inbound_dm", "campaign_keyword", "manual_consent", "manual_consent_import", "site_form", "task"} {
 		if !isAutoDMOptInSource(source) {
@@ -100,5 +110,23 @@ func TestAutoDMConservativeDailySendLimit(t *testing.T) {
 		if got := autoDMConservativeDailySendLimit(&model.User{SubscriptionPlanCode: tc.plan}); got != tc.want {
 			t.Fatalf("plan %s daily send limit = %d, want %d", tc.plan, got, tc.want)
 		}
+	}
+}
+
+func TestFirstInboundReplyEvent(t *testing.T) {
+	sentAt := time.Date(2026, 5, 29, 4, 0, 0, 0, time.UTC)
+	task := &model.AutoDMTask{
+		RecipientUserID: "recipient-1",
+		DMEventID:       "outbound-1",
+		SentAt:          &sentAt,
+	}
+	events := []twitter.DirectMessageEvent{
+		{ID: "old", EventType: "MessageCreate", SenderID: "recipient-1", CreatedAt: sentAt.Add(-time.Minute).Format(time.RFC3339), Text: "before"},
+		{ID: "own", EventType: "MessageCreate", SenderID: "sender-1", CreatedAt: sentAt.Add(time.Minute).Format(time.RFC3339), Text: "own"},
+		{ID: "reply-1", EventType: "MessageCreate", SenderID: "recipient-1", CreatedAt: sentAt.Add(2 * time.Minute).Format(time.RFC3339), Text: "reply"},
+	}
+	reply, repliedAt := firstInboundReplyEvent(events, task, "sender-1")
+	if reply.ID != "reply-1" || !repliedAt.Equal(sentAt.Add(2*time.Minute)) {
+		t.Fatalf("unexpected reply: %#v at %s", reply, repliedAt)
 	}
 }

@@ -563,6 +563,7 @@ function AutoDMSegmentAnalytics({ metrics }: { metrics: NonNullable<AutoDMOvervi
               <MetricMini label={t("autoDm.segmentAnalytics.failed")} value={item.failed} tone={item.failed > 0 ? "danger" : "default"} />
               <MetricMini label={t("autoDm.segmentAnalytics.unsubscribed")} value={item.unsubscribed} tone={item.unsubscribed > 0 ? "warn" : "default"} />
               <MetricMini label={t("autoDm.segmentAnalytics.successRate")} value={`${item.send_success_rate_pct}%`} />
+              <MetricMini label={t("autoDm.segmentAnalytics.replies")} value={item.replies} />
             </div>
             <div className="mt-2 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs">
               <p className="text-[#71767b]">{t("autoDm.segmentAnalytics.replyRate")}</p>

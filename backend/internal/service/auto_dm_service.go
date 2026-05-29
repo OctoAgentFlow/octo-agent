@@ -28,6 +28,8 @@ const (
 	autoDMDefaultIntervalMinutes = 60
 	autoDMMaxSendAttempts        = 3
 	autoDMRecipientCooldown      = 24 * time.Hour
+	autoDMInboundScanInterval    = 6 * time.Hour
+	autoDMInboundLookupWindow    = 30 * 24 * time.Hour
 	autoDMNoAccountReason        = "Auto DM skipped: no connected X account is available."
 	autoDMNoTokenReason          = "Auto DM skipped: connected X account is missing an access token."
 	autoDMNoRecipientReason      = "Auto DM skipped: no eligible recent interaction recipient was found."
@@ -38,6 +40,7 @@ type AutoDMService struct {
 	automationRepo  *repository.AutomationRepository
 	activityRepo    *repository.ActivityRepository
 	taskRepo        *repository.AutoDMTaskRepository
+	inboundRepo     *repository.AutoDMInboundEventRepository
 	ruleRepo        *repository.AutoDMRecipientRuleRepository
 	importRepo      *repository.AutoDMRecipientImportRepository
 	userRepo        *repository.UserRepository
@@ -53,6 +56,7 @@ func NewAutoDMService(
 	automationRepo *repository.AutomationRepository,
 	activityRepo *repository.ActivityRepository,
 	taskRepo *repository.AutoDMTaskRepository,
+	inboundRepo *repository.AutoDMInboundEventRepository,
 	ruleRepo *repository.AutoDMRecipientRuleRepository,
 	importRepo *repository.AutoDMRecipientImportRepository,
 	userRepo *repository.UserRepository,
@@ -67,6 +71,7 @@ func NewAutoDMService(
 		automationRepo:  automationRepo,
 		activityRepo:    activityRepo,
 		taskRepo:        taskRepo,
+		inboundRepo:     inboundRepo,
 		ruleRepo:        ruleRepo,
 		importRepo:      importRepo,
 		userRepo:        userRepo,
@@ -117,6 +122,9 @@ func (s *AutoDMService) RunTick(ctx context.Context) {
 	now := time.Now().UTC()
 	if err := s.sendApprovedTasks(ctx, now); err != nil {
 		zap.L().Warn("auto dm: send approved tasks failed", zap.Error(err))
+	}
+	if err := s.scanInboundReplies(ctx, now); err != nil {
+		zap.L().Warn("auto dm: scan inbound replies failed", zap.Error(err))
 	}
 	configs, err := s.automationRepo.ListDueDMAutomationConfigs(50, now)
 	if err != nil {
@@ -397,7 +405,7 @@ func (s *AutoDMService) segmentMetrics(userID uint, from, to time.Time, accountI
 	segments := []string{"lead", "partner", "community", "investor", "existing_user"}
 	metrics := make(map[string]*dto.AutoDMSegmentMetric, len(segments))
 	for _, segment := range segments {
-		metrics[segment] = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+		metrics[segment] = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: true}
 	}
 	if s.taskRepo != nil {
 		rows, err := s.taskRepo.CountBySegmentAndStatusBetween(userID, from, to, accountID)
@@ -408,7 +416,7 @@ func (s *AutoDMService) segmentMetrics(userID uint, from, to time.Time, accountI
 			segment := normalizeAutoDMRecipientSegment(row.Segment)
 			item := metrics[segment]
 			if item == nil {
-				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: true}
 				metrics[segment] = item
 				segments = append(segments, segment)
 			}
@@ -423,6 +431,20 @@ func (s *AutoDMService) segmentMetrics(userID uint, from, to time.Time, accountI
 				item.Review += row.Count
 			}
 		}
+		replyRows, err := s.taskRepo.CountRepliesBySegmentBetween(userID, from, to, accountID)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range replyRows {
+			segment := normalizeAutoDMRecipientSegment(row.Segment)
+			item := metrics[segment]
+			if item == nil {
+				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: true}
+				metrics[segment] = item
+				segments = append(segments, segment)
+			}
+			item.Replies += row.Count
+		}
 	}
 	if s.ruleRepo != nil {
 		rows, err := s.ruleRepo.CountBySegmentAndStatusBetween(userID, from, to, accountID)
@@ -436,7 +458,7 @@ func (s *AutoDMService) segmentMetrics(userID uint, from, to time.Time, accountI
 			segment := normalizeAutoDMRecipientSegment(row.Segment)
 			item := metrics[segment]
 			if item == nil {
-				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: true}
 				metrics[segment] = item
 				segments = append(segments, segment)
 			}
@@ -898,6 +920,123 @@ func (s *AutoDMService) sendApprovedTasks(ctx context.Context, now time.Time) er
 		}
 	}
 	return nil
+}
+
+func (s *AutoDMService) scanInboundReplies(ctx context.Context, now time.Time) error {
+	if s.taskRepo == nil || s.inboundRepo == nil || s.accountRepo == nil {
+		return nil
+	}
+	tasks, err := s.taskRepo.ListSentAwaitingInboundScan(5, now, now.Add(-autoDMInboundScanInterval), now.Add(-autoDMInboundLookupWindow))
+	if err != nil {
+		return err
+	}
+	for i := range tasks {
+		task := tasks[i]
+		if err := s.scanInboundReplyForTask(ctx, &task, now); err != nil {
+			zap.L().Warn("auto dm: inbound reply scan failed",
+				zap.Uint("task_id", task.ID),
+				zap.Uint("user_id", task.UserID),
+				zap.Error(err))
+		}
+	}
+	return nil
+}
+
+func (s *AutoDMService) scanInboundReplyForTask(ctx context.Context, task *model.AutoDMTask, now time.Time) error {
+	if task == nil || task.SentAt == nil || strings.TrimSpace(task.RecipientUserID) == "" {
+		return nil
+	}
+	account, err := s.accountRepo.GetConnectedByUserAndAccountID(task.UserID, task.XAccountID)
+	if err != nil {
+		_ = s.taskRepo.MarkInboundScanned(task.ID, now)
+		return err
+	}
+	if strings.TrimSpace(account.AccessToken) == "" || len(missingDMReadScopes(account.OAuthScopes)) > 0 {
+		_ = s.taskRepo.MarkInboundScanned(task.ID, now)
+		return nil
+	}
+	events, err := twitter.ListDirectMessageEventsWithParticipant(ctx, account.AccessToken, task.RecipientUserID, 100)
+	if err != nil {
+		_ = s.taskRepo.MarkInboundScanned(task.ID, now)
+		return err
+	}
+	reply, repliedAt := firstInboundReplyEvent(events, task, account.TwitterUserID)
+	if strings.TrimSpace(reply.ID) == "" {
+		return s.taskRepo.MarkInboundScanned(task.ID, now)
+	}
+	if err := s.inboundRepo.CreateIgnore(&model.AutoDMInboundEvent{
+		UserID:            task.UserID,
+		XAccountID:        task.XAccountID,
+		AutoDMTaskID:      task.ID,
+		RecipientUserID:   task.RecipientUserID,
+		RecipientUsername: task.RecipientUsername,
+		RecipientSegment:  normalizeAutoDMRecipientSegment(task.RecipientSegment),
+		DMConversationID:  strings.TrimSpace(reply.DMConversationID),
+		DMEventID:         strings.TrimSpace(reply.ID),
+		SenderID:          strings.TrimSpace(reply.SenderID),
+		Text:              truncateErrMsg(reply.Text),
+		EventCreatedAt:    repliedAt,
+		DetectedAt:        now,
+	}); err != nil {
+		return err
+	}
+	return s.taskRepo.MarkInboundReply(task.ID, reply.ID, repliedAt, now)
+}
+
+func firstInboundReplyEvent(events []twitter.DirectMessageEvent, task *model.AutoDMTask, connectedTwitterUserID string) (twitter.DirectMessageEvent, time.Time) {
+	if task == nil || task.SentAt == nil {
+		return twitter.DirectMessageEvent{}, time.Time{}
+	}
+	recipientID := strings.TrimSpace(task.RecipientUserID)
+	ownID := strings.TrimSpace(connectedTwitterUserID)
+	sentAt := task.SentAt.UTC()
+	var best twitter.DirectMessageEvent
+	var bestAt time.Time
+	for _, event := range events {
+		if !isAutoDMMessageCreateEvent(event.EventType) {
+			continue
+		}
+		if strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.ID) == strings.TrimSpace(task.DMEventID) {
+			continue
+		}
+		senderID := strings.TrimSpace(event.SenderID)
+		if senderID == "" || senderID != recipientID || senderID == ownID {
+			continue
+		}
+		createdAt, err := parseXEventTime(event.CreatedAt)
+		if err != nil || createdAt.Before(sentAt) || createdAt.Equal(sentAt) {
+			continue
+		}
+		if bestAt.IsZero() || createdAt.Before(bestAt) {
+			best = event
+			bestAt = createdAt
+		}
+	}
+	return best, bestAt
+}
+
+func isAutoDMMessageCreateEvent(eventType string) bool {
+	switch strings.ToLower(strings.TrimSpace(eventType)) {
+	case "", "message_create", "messagecreate", "dm_event":
+		return true
+	default:
+		return strings.Contains(strings.ToLower(eventType), "message")
+	}
+}
+
+func parseXEventTime(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, errors.New("empty x event time")
+	}
+	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return t.UTC(), nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t.UTC(), nil
 }
 
 func (s *AutoDMService) sendOneApprovedTask(ctx context.Context, task *model.AutoDMTask, now time.Time) error {
@@ -1425,6 +1564,21 @@ func missingDMSendScopes(scopes string) []string {
 	return missing
 }
 
+func missingDMReadScopes(scopes string) []string {
+	have := map[string]bool{}
+	for _, s := range strings.Fields(strings.TrimSpace(scopes)) {
+		have[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+	required := []string{"dm.read", "tweet.read", "users.read"}
+	missing := make([]string, 0, len(required))
+	for _, scope := range required {
+		if !have[scope] {
+			missing = append(missing, scope)
+		}
+	}
+	return missing
+}
+
 func autoDMMessageForCandidate(username string) string {
 	name := replyAuthorDisplay(username)
 	return "Thanks for engaging with our post, " + name + " — appreciate it. If this is not useful, feel free to ignore."
@@ -1647,6 +1801,15 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 	}
 	if task.LastAttemptAt != nil {
 		out.LastAttemptAt = task.LastAttemptAt.UTC().Format(time.RFC3339)
+	}
+	if task.LastInboundScanAt != nil {
+		out.LastInboundScanAt = task.LastInboundScanAt.UTC().Format(time.RFC3339)
+	}
+	if task.InboundReplyAt != nil {
+		out.InboundReplyAt = task.InboundReplyAt.UTC().Format(time.RFC3339)
+	}
+	if strings.TrimSpace(task.InboundReplyEventID) != "" {
+		out.InboundReplyEventID = strings.TrimSpace(task.InboundReplyEventID)
 	}
 	if task.BlockedAt != nil {
 		out.BlockedAt = task.BlockedAt.UTC().Format(time.RFC3339)

@@ -72,6 +72,9 @@ export type AutoDMTaskApi = {
   activity_log_id?: number;
   dm_conversation_id?: string;
   dm_event_id?: string;
+  last_inbound_scan_at?: string;
+  inbound_reply_at?: string;
+  inbound_reply_event_id?: string;
   generated_at: string;
   approved_at?: string;
   blocked_at?: string;

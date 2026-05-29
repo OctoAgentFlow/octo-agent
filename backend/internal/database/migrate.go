@@ -45,6 +45,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.AutoDMRecipientRule{},
 		&model.AutoDMRecipientImport{},
 		&model.AutoDMTask{},
+		&model.AutoDMInboundEvent{},
 		&model.Post{},
 		&model.Agent{},
 		&model.OAFBot{},

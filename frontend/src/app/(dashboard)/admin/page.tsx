@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
   LayoutDashboard,
+  Radar,
   ReceiptText,
   RefreshCcw,
   Search,
@@ -37,7 +38,7 @@ import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
 type LoadState = "loading" | "ready" | "error" | "forbidden";
-type AdminSection = "overview" | "users" | "billing" | "points" | "activity" | "system";
+type AdminSection = "overview" | "users" | "billing" | "points" | "activity" | "trends" | "system";
 
 const sections: Array<{ id: AdminSection; labelKey: string; descriptionKey: string; icon: LucideIcon }> = [
   { id: "overview", labelKey: "admin.sections.overview", descriptionKey: "admin.sections.overviewDesc", icon: LayoutDashboard },
@@ -45,6 +46,7 @@ const sections: Array<{ id: AdminSection; labelKey: string; descriptionKey: stri
   { id: "billing", labelKey: "admin.sections.billing", descriptionKey: "admin.sections.billingDesc", icon: ReceiptText },
   { id: "points", labelKey: "admin.sections.points", descriptionKey: "admin.sections.pointsDesc", icon: Coins },
   { id: "activity", labelKey: "admin.sections.activity", descriptionKey: "admin.sections.activityDesc", icon: Activity },
+  { id: "trends", labelKey: "admin.sections.trends", descriptionKey: "admin.sections.trendsDesc", icon: Radar },
   { id: "system", labelKey: "admin.sections.system", descriptionKey: "admin.sections.systemDesc", icon: Settings },
 ];
 
@@ -497,8 +499,10 @@ export default function AdminPage() {
         />
       ) : null}
       {activeSection === "activity" ? (
-        <ActivitySection
-          overview={overview}
+        <ActivitySection overview={overview} />
+      ) : null}
+      {activeSection === "trends" ? (
+        <TrendGovernanceSection
           trendFeedbackSummary={trendFeedbackSummary}
           submittingTrendRuleKey={submittingTrendRuleKey}
           trendRules={trendRules}
@@ -1582,18 +1586,8 @@ const GiftIcon = Coins;
 
 function ActivitySection({
   overview,
-  trendFeedbackSummary,
-  submittingTrendRuleKey,
-  trendRules,
-  onApplyTrendRule,
-  onUpdateTrendRule,
 }: {
   overview: AdminOverviewApi;
-  trendFeedbackSummary: AdminTrendFeedbackSummaryApi | null;
-  submittingTrendRuleKey: string;
-  trendRules: AdminTrendOperationRuleApi[];
-  onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
-  onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
 }) {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -1634,6 +1628,25 @@ function ActivitySection({
           <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/auto-post?panel=history&run_status=failed&account_scope=all&run_range=24h" />
         </div>
       </Card>
+    </div>
+  );
+}
+
+function TrendGovernanceSection({
+  trendFeedbackSummary,
+  submittingTrendRuleKey,
+  trendRules,
+  onApplyTrendRule,
+  onUpdateTrendRule,
+}: {
+  trendFeedbackSummary: AdminTrendFeedbackSummaryApi | null;
+  submittingTrendRuleKey: string;
+  trendRules: AdminTrendOperationRuleApi[];
+  onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
+  onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
+}) {
+  return (
+    <div className="space-y-4">
       <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
       <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />
     </div>

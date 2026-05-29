@@ -533,8 +533,13 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		ApprovedAt:        approvedAt,
 	}
 	applyAutoCommentDelivery(task, decideAutoCommentDelivery(target.TargetText, displayCommentTargetHandle(*target), target.TargetTweetID, *acc, comment))
-	if err := s.taskRepo.Create(task); err != nil {
+	created, err := s.taskRepo.CreateIfNotExists(task)
+	if err != nil {
 		return nil, err
+	}
+	if !created {
+		item := toAutoCommentTaskItem(*task)
+		return &item, nil
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
@@ -1223,6 +1228,11 @@ func autoCommentHealthSeverityRank(severity string) int {
 
 func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target model.AutoCommentTarget, cfg model.AutomationConfig, tw twitter.UserTweet) (*model.AutoCommentTask, error) {
 	now := time.Now().UTC()
+	if existing, err := s.taskRepo.GetByTargetTweet(target.UserID, target.XAccountID, tw.ID); err == nil {
+		return existing, nil
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, target.UserID, now); err != nil {
 		return nil, err
 	}
@@ -1285,15 +1295,19 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 		task.FailureCategory = "llm_error"
 		task.FailureReason = truncateErrMsg(err.Error())
 		task.Retryable = true
-		if createErr := s.taskRepo.Create(task); createErr != nil {
+		if _, createErr := s.taskRepo.CreateIfNotExists(task); createErr != nil {
 			return nil, createErr
 		}
 		return task, err
 	}
 	task.GeneratedComment = truncateRunes(comment, autoCommentPreviewRunes)
 	task.GeneratedAt = &now
-	if err := s.taskRepo.Create(task); err != nil {
+	created, err := s.taskRepo.CreateIfNotExists(task)
+	if err != nil {
 		return nil, err
+	}
+	if !created {
+		return task, nil
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err

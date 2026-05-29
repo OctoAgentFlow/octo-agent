@@ -30,7 +30,7 @@ type LoadState = "loading" | "ready" | "error";
 type ExecutionMode = "manual" | "review" | "autopilot";
 type TargetFilter = "all" | "active" | "paused";
 type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_tone" | "good";
-type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked";
+type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked" | "handled";
 type DraftPanel = "target" | "action";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
@@ -90,11 +90,18 @@ function isClosedDraft(draft: AutoCommentTaskApi) {
   return draft.status === "rejected" || draft.status === "failed" || draft.status === "blocked";
 }
 
+function isHandledDraft(draft: AutoCommentTaskApi) {
+  return draft.status === "handled";
+}
+
 function isQueuedQuotePost(draft: AutoCommentTaskApi) {
   return draft.delivery_mode === "quote_post" && (draft.status === "ready_to_publish" || draft.status === "sending");
 }
 
 function displayDeliveryMode(draft: AutoCommentTaskApi) {
+  if (isHandledDraft(draft)) {
+    return "handled";
+  }
   if (draft.delivery_mode === "quote_post" && (isClosedDraft(draft) || !draft.api_reply_eligible)) {
     return "manual_comment";
   }
@@ -193,6 +200,7 @@ export default function AutoCommentsPage() {
     () =>
       accountDrafts.filter((draft) => {
         if (deliveryFilter === "all") return true;
+        if (deliveryFilter === "handled") return isHandledDraft(draft);
         if (deliveryFilter === "blocked") return isClosedDraft(draft) || draft.failure_category === "x_reply_restricted";
         if (deliveryFilter === "quote_post") return isQueuedQuotePost(draft);
         return displayDeliveryMode(draft) === deliveryFilter;
@@ -207,6 +215,7 @@ export default function AutoCommentsPage() {
         ["manual_comment", accountDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
         ["quote_post", accountDrafts.filter((draft) => isQueuedQuotePost(draft)).length],
         ["blocked", accountDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length],
+        ["handled", accountDrafts.filter((draft) => isHandledDraft(draft)).length],
       ] as Array<[DeliveryFilter, number]>),
     [accountDrafts]
   );
@@ -233,7 +242,7 @@ export default function AutoCommentsPage() {
         accountService.list(),
         oafBotService.list(),
         automationService.commentTargets(),
-        automationService.commentDrafts(),
+        automationService.commentDrafts({ pageSize: 200 }),
         automationService.commentAnalytics(),
         automationService.list(),
         billingService.subscription(),
@@ -333,6 +342,16 @@ export default function AutoCommentsPage() {
       pushToast(t("autoComment.toast.rejected"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoComment.errors.reject") : t("autoComment.errors.reject"));
+    }
+  };
+
+  const markHandled = async (id: number) => {
+    try {
+      const updated = await automationService.markCommentHandled(id);
+      setDrafts((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t("autoComment.toast.handled"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoComment.errors.handled"));
     }
   };
 
@@ -1193,10 +1212,16 @@ export default function AutoCommentsPage() {
                                 {t("autoComment.review.approve")}
                               </Button>
                             ) : null}
-                            {draft.status !== "rejected" && draft.status !== "sent" && draft.status !== "published" ? (
+                            {draft.status !== "rejected" && draft.status !== "sent" && draft.status !== "published" && draft.status !== "handled" ? (
                               <Button size="sm" variant="outline" onClick={() => void rejectDraft(draft.id)}>
                                 <XCircle className="size-4" />
                                 {t("autoComment.review.reject")}
+                              </Button>
+                            ) : null}
+                            {draft.status !== "sent" && draft.status !== "published" && draft.status !== "handled" ? (
+                              <Button size="sm" variant="outline" onClick={() => void markHandled(draft.id)}>
+                                <CheckCircle2 className="size-4" />
+                                {t("autoComment.review.handled")}
                               </Button>
                             ) : null}
                             <Button size="sm" variant="destructive" onClick={() => void deleteDraft(draft.id)}>

@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const autoCommentQueueOrder = "CASE WHEN status IN ('ready_to_publish','approved','pending_review','review','draft') THEN 0 ELSE 1 END ASC, opportunity_score DESC, detected_at DESC, id DESC"
+const autoCommentQueueOrder = "CASE WHEN status IN ('ready_to_publish','approved','pending_review','review','draft') THEN 0 WHEN status IN ('handled','rejected','failed','blocked','sent','published') THEN 2 ELSE 1 END ASC, opportunity_score DESC, detected_at DESC, id DESC"
 
 type AutoCommentTaskRepository struct {
 	DB *gorm.DB
@@ -22,6 +22,9 @@ func (r *AutoCommentTaskRepository) ListByUser(userID uint, limit int) ([]model.
 	if limit <= 0 {
 		limit = 50
 	}
+	if limit > 500 {
+		limit = 500
+	}
 	var rows []model.AutoCommentTask
 	err := r.DB.Where("user_id = ?", userID).Order(autoCommentQueueOrder).Limit(limit).Find(&rows).Error
 	return rows, err
@@ -32,7 +35,7 @@ func (r *AutoCommentTaskRepository) ListQueueByUser(userID uint, limit int) ([]m
 		limit = 500
 	}
 	var rows []model.AutoCommentTask
-	err := r.DB.Where("user_id = ?", userID).Order(autoCommentQueueOrder).Limit(limit).Find(&rows).Error
+	err := r.DB.Where("user_id = ? AND status <> ?", userID, "handled").Order(autoCommentQueueOrder).Limit(limit).Find(&rows).Error
 	return rows, err
 }
 

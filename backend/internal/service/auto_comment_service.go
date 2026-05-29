@@ -312,8 +312,8 @@ func (s *AutoCommentService) DeleteTarget(userID, id uint) error {
 	return s.targetRepo.DeleteByUserAndID(userID, id)
 }
 
-func (s *AutoCommentService) ListTasks(userID uint) (*dto.AutoCommentTasksResponse, error) {
-	rows, err := s.taskRepo.ListByUser(userID, 50)
+func (s *AutoCommentService) ListTasks(userID uint, limit int) (*dto.AutoCommentTasksResponse, error) {
+	rows, err := s.taskRepo.ListByUser(userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -613,6 +613,37 @@ func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.Au
 	if task.FailureReason == "" {
 		task.FailureReason = "Rejected by user."
 	}
+	if err := s.taskRepo.Save(task); err != nil {
+		return nil, err
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
+func (s *AutoCommentService) MarkTaskHandled(userID, id uint) (*dto.AutoCommentTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status == "sent" || task.Status == "published" {
+		return nil, fmt.Errorf("published task is already completed")
+	}
+	if s.publishing != nil {
+		if err := s.publishing.DeleteNonPublishedSourceJobs(userID, repository.PublishSourceComment, id); err != nil {
+			return nil, err
+		}
+	}
+	now := time.Now().UTC()
+	task.Status = "handled"
+	task.CapabilityStatus = "manual_handled"
+	task.ApprovalRequired = false
+	task.ApprovedAt = nil
+	task.Retryable = false
+	task.RetryAfterAt = nil
+	task.BlockedAt = &now
+	task.FailureCategory = ""
+	task.FailureReason = ""
+	task.DeliveryReason = firstNonEmpty(task.DeliveryReason, "Marked as handled by the user.")
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}

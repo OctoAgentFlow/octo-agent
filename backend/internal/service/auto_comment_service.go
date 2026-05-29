@@ -2182,6 +2182,7 @@ func autoCommentInputFromValues(username, tweet, tone string, blocked []string, 
 	in := GenerateAutoCommentInput{
 		TargetUsername: normalizeHandle(username),
 		TargetTweet:    tweet,
+		TargetLanguage: detectTargetTweetLanguage(tweet),
 		Tone:           tone,
 		BlockedWords:   blocked,
 	}

@@ -77,6 +77,22 @@ func TestParseAutoCommentCandidates(t *testing.T) {
 	}
 }
 
+func TestDetectTargetTweetLanguage(t *testing.T) {
+	if got := detectTargetTweetLanguage("或许这是真正的 $ETH Bottom Signal，以太坊基金会要退居 2 线。"); got != "Chinese" {
+		t.Fatalf("expected Chinese target language, got %q", got)
+	}
+	if got := detectTargetTweetLanguage("How are teams using AI agents for X growth?"); got != "English" {
+		t.Fatalf("expected English target language, got %q", got)
+	}
+}
+
+func TestAutoCommentInputCarriesTargetLanguage(t *testing.T) {
+	got := autoCommentInputFromValues("0xtodd", "中文推文应该生成中文评论。", "Friendly", nil, nil)
+	if got.TargetLanguage != "Chinese" {
+		t.Fatalf("expected target language to be detected, got %q", got.TargetLanguage)
+	}
+}
+
 func TestAutoCommentQueueScorePrioritizesTargetPriorityAndOpportunity(t *testing.T) {
 	highPriority := autoCommentQueueScore(5, 40)
 	highOpportunity := autoCommentQueueScore(2, 90)

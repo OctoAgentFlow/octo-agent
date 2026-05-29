@@ -1201,7 +1201,7 @@ export default function AutoCommentsPage() {
           <p className="rounded-2xl border border-[#2f3336] bg-black px-4 py-6 text-sm text-[#71767b]">{t("autoComment.targets.noFiltered")}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredTargets.slice(0, 12).map((target) => (
+            {filteredTargets.map((target) => (
               <div key={target.id} className="rounded-2xl border border-[#2f3336] bg-black p-3 transition-colors hover:bg-[#080808]">
                 <div className="flex items-center justify-between gap-3">
                   <p className="min-w-0 truncate text-sm font-semibold text-white">{formatHandle(target.target_author_handle || target.target_username)}</p>

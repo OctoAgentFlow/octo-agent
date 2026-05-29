@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
+  AlertTriangle,
   CheckCircle2,
   Clock3,
   Inbox,
+  PlugZap,
   RefreshCw,
   ShieldCheck,
   Upload,
@@ -22,12 +24,15 @@ import { AutomationModulePausedNotice } from "@/components/automation/automation
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
+import { accountService, type AccountListItem } from "@/services/account.service";
 import {
   automationService,
   type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
 } from "@/services/automation.service";
+
+const requiredDMScopeList = ["dm.read", "dm.write", "tweet.read", "users.read"];
 
 export default function AutoDMsPage() {
   const { t } = useT();
@@ -37,9 +42,14 @@ export default function AutoDMsPage() {
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
 
+  const dmAccount = accounts.find((account) => account.status === "connected") ?? accounts[0] ?? null;
+  const dmScopes = new Set((dmAccount?.oauth_scopes || []).map((scope) => scope.toLowerCase()));
+  const missingDMScopeList = dmAccount ? requiredDMScopeList.filter((scope) => !dmScopes.has(scope)) : requiredDMScopeList;
+  const dmAuthorizationReady = Boolean(dmAccount && dmAccount.status === "connected" && missingDMScopeList.length === 0);
   const reviewCount = dmTasks.filter((task) => task.status === "review").length;
   const approvedCount = dmTasks.filter((task) => task.status === "approved" || task.status === "sent").length;
   const riskCount = dmTasks.filter((task) => task.status === "failed" || task.status === "blocked").length;
@@ -52,11 +62,13 @@ export default function AutoDMsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
+      const [accountData, dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
+        accountService.list(),
         automationService.dmTasks(),
         automationService.dmRecipients(),
         automationService.dmRecipientImports(),
       ]);
+      setAccounts(accountData.items);
       setDMTasks(dmTaskData.items);
       setDMRecipients(dmRecipientData.items);
       setDMImports(dmImportData.items);
@@ -70,6 +82,19 @@ export default function AutoDMsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const reconnectXAccount = async () => {
+    try {
+      const data = await accountService.startXOAuth();
+      if (!data.auth_url) throw new Error(t("accounts.toast.oauthUrlMissing"));
+      const features = ["popup=yes", "width=560", "height=720", "left=80", "top=80"].join(",");
+      const popup = window.open(data.auth_url, "octo_x_oauth", features);
+      if (!popup) throw new Error(t("accounts.toast.popupBlocked"));
+      popup.focus();
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("accounts.toast.oauthUrlMissing") : error instanceof Error ? error.message : t("accounts.toast.oauthUrlMissing"));
+    }
+  };
 
   const approveDMTask = async (id: number) => {
     try {
@@ -174,6 +199,38 @@ export default function AutoDMsPage() {
       ) : (
         <>
           <AutomationModulePausedNotice type="dm" onEnabledChange={setModuleEnabled} />
+          <Card className={dmAuthorizationReady ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {dmAuthorizationReady ? <CheckCircle2 className="size-5 text-[#7ee0b5]" /> : <AlertTriangle className="size-5 text-amber-100" />}
+                  <p className="text-sm font-semibold text-white">{t("autoDm.auth.title")}</p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[#b6bec5]">
+                  {dmAccount
+                    ? t(dmAuthorizationReady ? "autoDm.auth.readyDescription" : "autoDm.auth.missingDescription", { account: `@${dmAccount.username || dmAccount.id}` })
+                    : t("autoDm.auth.noAccountDescription")}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {requiredDMScopeList.map((scope) => {
+                    const ok = dmScopes.has(scope);
+                    return (
+                      <span key={scope} className={`rounded-full border px-2.5 py-1 text-xs ${ok ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#8ff0c3]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
+                        {scope}
+                      </span>
+                    );
+                  })}
+                </div>
+                {!dmAuthorizationReady && missingDMScopeList.length > 0 ? (
+                  <p className="mt-2 text-xs leading-5 text-amber-100/80">{t("autoDm.auth.missingScopes", { scopes: missingDMScopeList.join(", ") })}</p>
+                ) : null}
+              </div>
+              <Button onClick={() => void reconnectXAccount()} variant={dmAuthorizationReady ? "outline" : "default"}>
+                <PlugZap className="size-4" />
+                {t(dmAuthorizationReady ? "autoDm.auth.reconnectAnyway" : "autoDm.auth.reconnect")}
+              </Button>
+            </div>
+          </Card>
 
           <AutoDMSetupGuide
             hasRecipients={dmRecipients.length > 0}

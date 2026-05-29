@@ -97,6 +97,22 @@ func (r *AutoDMTaskRepository) HasTaskForRecipient(userID, accountID uint, recip
 	return n > 0, nil
 }
 
+func (r *AutoDMTaskRepository) HasSentToRecipientSince(userID, accountID uint, recipientUserID string, since time.Time) (bool, error) {
+	recipientUserID = strings.TrimSpace(recipientUserID)
+	if recipientUserID == "" || since.IsZero() {
+		return false, nil
+	}
+	var n int64
+	err := r.DB.Model(&model.AutoDMTask{}).
+		Where("user_id = ? AND x_account_id = ? AND recipient_user_id = ?", userID, accountID, recipientUserID).
+		Where("status = ? AND sent_at IS NOT NULL AND sent_at >= ?", "sent", since).
+		Count(&n).Error
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func (r *AutoDMTaskRepository) CountByStatusBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMTaskStatusCount, int64, error) {
 	var rows []AutoDMTaskStatusCount
 	q := r.DB.Model(&model.AutoDMTask{}).

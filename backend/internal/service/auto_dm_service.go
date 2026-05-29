@@ -27,6 +27,7 @@ import (
 const (
 	autoDMDefaultIntervalMinutes = 60
 	autoDMMaxSendAttempts        = 3
+	autoDMRecipientCooldown      = 24 * time.Hour
 	autoDMNoAccountReason        = "Auto DM skipped: no connected X account is available."
 	autoDMNoTokenReason          = "Auto DM skipped: connected X account is missing an access token."
 	autoDMNoRecipientReason      = "Auto DM skipped: no eligible recent interaction recipient was found."
@@ -545,6 +546,8 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 			return nil, err
 		}
 		accountID = account.ID
+	} else if _, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, accountID); err != nil {
+		return nil, errors.New("x account not found")
 	}
 	reader := csv.NewReader(strings.NewReader(req.CSV))
 	reader.FieldsPerRecord = -1
@@ -577,8 +580,8 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 			recipientID,
 			username,
 			repository.AutoDMRecipientAllowlisted,
-			"csv_import",
-			"Imported from Auto DM allowlist CSV.",
+			"manual_consent_import",
+			"Imported as an explicit opt-in Auto DM recipient.",
 			mustAutoDMUnsubscribeToken(),
 			now,
 		)
@@ -593,7 +596,7 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 	batch := &model.AutoDMRecipientImport{
 		UserID:       userID,
 		XAccountID:   accountID,
-		Source:       "csv_import",
+		Source:       "manual_consent_import",
 		Imported:     out.Imported,
 		Skipped:      out.Skipped,
 		ErrorSummary: marshalAutoDMImportErrors(out.Errors),
@@ -748,6 +751,13 @@ func (s *AutoDMService) validateApprovedSend(task *model.AutoDMTask, now time.Ti
 	if !decision.Allowed {
 		return nil, nil, false, newAutoDMFailureError("recipient_rule_blocked", decision.Reason)
 	}
+	recentlySent, err := s.taskRepo.HasSentToRecipientSince(task.UserID, task.XAccountID, task.RecipientUserID, now.Add(-autoDMRecipientCooldown))
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if recentlySent {
+		return nil, nil, false, newAutoDMFailureError("recipient_cooldown", "auto dm recipient was contacted within the last 24 hours")
+	}
 	if missing := missingDMSendScopes(account.OAuthScopes); len(missing) > 0 {
 		return nil, nil, false, newAutoDMFailureError("missing_oauth_scope", "reconnect this X account with OAuth scopes "+strings.Join(missing, ", "))
 	}
@@ -839,9 +849,18 @@ func newAutoDMFailureError(category, message string) error {
 	return &autoDMFailureError{category: strings.TrimSpace(category), message: strings.TrimSpace(message)}
 }
 
+func isAutoDMOptInSource(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "inbound_dm", "campaign_keyword", "manual_consent", "manual_consent_import", "site_form", "task":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *AutoDMService) autoDMRecipientAllowed(userID, accountID uint, recipientUserID string, candidateLookup bool) (autoDMRecipientDecision, error) {
 	if s.ruleRepo == nil {
-		return autoDMRecipientDecision{Allowed: true}, nil
+		return autoDMRecipientDecision{Allowed: false, Reason: "auto dm requires an explicit opt-in recipient rule"}, nil
 	}
 	recipientUserID = strings.TrimSpace(recipientUserID)
 	if recipientUserID == "" {
@@ -858,20 +877,16 @@ func (s *AutoDMService) autoDMRecipientAllowed(userID, accountID uint, recipient
 		case repository.AutoDMRecipientUnsubscribed:
 			return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is unsubscribed"}, nil
 		case repository.AutoDMRecipientAllowlisted:
+			if !isAutoDMOptInSource(rule.Source) {
+				return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is allowlisted but missing an explicit opt-in source"}, nil
+			}
 			return autoDMRecipientDecision{Allowed: true}, nil
 		}
 	}
-	allowlistCount, err := s.ruleRepo.CountAllowlisted(userID, accountID)
-	if err != nil {
-		return autoDMRecipientDecision{}, err
-	}
-	if allowlistCount > 0 {
-		return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient is not allowlisted"}, nil
-	}
 	if candidateLookup {
-		return autoDMRecipientDecision{Allowed: true}, nil
+		return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient has not opted in"}, nil
 	}
-	return autoDMRecipientDecision{Allowed: true}, nil
+	return autoDMRecipientDecision{Allowed: false, Reason: "auto dm recipient has not opted in"}, nil
 }
 
 func (s *AutoDMService) firstConnectedAccountForUser(userID uint) (*model.TwitterAccount, error) {
@@ -1025,6 +1040,16 @@ func newAutoDMUnsubscribeToken() (string, error) {
 func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationConfig, now time.Time) (bool, string) {
 	if s.userRepo != nil {
 		if u, err := s.userRepo.GetByID(userID); err == nil {
+			dailyLimit := autoDMConservativeDailySendLimit(u)
+			if dailyLimit <= 0 {
+				return true, "daily_quota"
+			}
+			dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+			if n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", dayStart, now); err != nil {
+				zap.L().Warn("auto dm: count daily sends failed", zap.Uint("user_id", userID), zap.Error(err))
+			} else if n >= dailyLimit {
+				return true, "daily_quota"
+			}
 			limit := subscription.LimitsForUser(u).MonthlyAutoDMs
 			if limit <= 0 {
 				return true, "monthly_quota"
@@ -1039,6 +1064,24 @@ func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationC
 		}
 	}
 	return false, ""
+}
+
+func autoDMConservativeDailySendLimit(u *model.User) int64 {
+	if u == nil {
+		return 0
+	}
+	switch subscription.NormalizePlanCode(u.SubscriptionPlanCode) {
+	case subscription.PlanBasic:
+		return 5
+	case subscription.PlanPlus:
+		return 20
+	case subscription.PlanPro:
+		return 80
+	case subscription.PlanProPlus:
+		return 150
+	default:
+		return 0
+	}
 }
 
 func (s *AutoDMService) finishRun(cfg *model.AutomationConfig, now time.Time, state string) error {
@@ -1063,7 +1106,7 @@ func missingDMSendScopes(scopes string) []string {
 	for _, s := range strings.Fields(strings.TrimSpace(scopes)) {
 		have[strings.ToLower(strings.TrimSpace(s))] = true
 	}
-	required := []string{"dm.read", "dm.write", "users.read"}
+	required := []string{"dm.read", "dm.write", "tweet.read", "users.read"}
 	missing := make([]string, 0, len(required))
 	for _, scope := range required {
 		if !have[scope] {

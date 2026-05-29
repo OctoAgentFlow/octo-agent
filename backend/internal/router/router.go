@@ -47,6 +47,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoPostPlanRepo := repository.NewAutoPostPlanRepository(db)
 	autoPostDraftRepo := repository.NewAutoPostDraftRepository(db)
 	autoPostRunRepo := repository.NewAutoPostGenerationRunRepository(db)
+	trendTopicRepo := repository.NewTrendTopicRepository(db)
 	contentLibraryRepo := repository.NewContentLibraryRepository(db)
 	oafBotRepo := repository.NewOAFBotRepository(db)
 	aiGenerationUsageRepo := repository.NewAIGenerationUsageRepository(db)
@@ -89,6 +90,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, autoCommentScanLedgerRepo, activityRepo, userRepo, oafBotRepo, contentLibraryRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, aiService, publishingService)
 	contentLibraryService := service.NewContentLibraryService(contentLibraryRepo, twitterAccountRepo, oafBotRepo)
 	autoPostService := service.NewAutoPostService(twitterAccountRepo, automationRepo, autoPostPlanRepo, autoPostDraftRepo, autoPostRunRepo, contentLibraryRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, aiService, publishingService)
+	trendService := service.NewTrendService(trendTopicRepo, cfg.XTrends)
 	reviewQueueService := service.NewReviewQueueService(autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, publishJobRepo, oafBotRepo, twitterAccountRepo)
 	a := controller.NewAuthController(authService)
 	wc := controller.NewWalletController(walletService)
@@ -96,6 +98,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	acc := controller.NewAccountController(accountService, cfg.App.FrontendBaseURL)
 	auto := controller.NewAutomationController(automationService, autoReplyService, autoDMService, autoCommentService)
 	autoPost := controller.NewAutoPostController(autoPostService)
+	trends := controller.NewTrendController(trendService)
 	contentLibrary := controller.NewContentLibraryController(contentLibraryService)
 	act := controller.NewActivityController(activityService)
 	an := controller.NewAnalyticsController(analyticsService)
@@ -119,6 +122,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterAccount(v1, acc)
 	RegisterAutomation(v1, auto)
 	RegisterAutoPost(v1, autoPost)
+	RegisterTrend(v1, trends)
 	RegisterContentLibrary(v1, contentLibrary)
 	RegisterActivity(v1, act)
 	RegisterAnalytics(v1, an)
@@ -130,7 +134,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterPublishing(v1, publishing)
 	RegisterPost(v1, p)
 	RegisterAgent(v1, ag)
-	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService, autoPostService, publishingService, billingService, pointRepo)
+	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService, autoPostService, trendService, publishingService, billingService, pointRepo)
 
 	return r
 }

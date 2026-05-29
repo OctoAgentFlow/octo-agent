@@ -21,6 +21,7 @@ func Start(
 	autoDM *service.AutoDMService,
 	autoComment *service.AutoCommentService,
 	autoPost *service.AutoPostService,
+	trends *service.TrendService,
 	publishing *service.PublishingService,
 	billing *service.BillingService,
 	pointRepo *repository.PointRepository,
@@ -102,12 +103,16 @@ func Start(
 			lastGrossMarginCheck = time.Now()
 			RunGrossMarginAlertOnce(context.Background(), billing)
 		}
+		runTrends := func() {
+			RunTrendSyncOnce(context.Background(), trends)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
 		RunAutoDMOnce(context.Background(), autoDM)
 		RunAutoCommentOnce(context.Background(), autoComment)
 		RunAutoPostOnce(context.Background(), autoPost)
+		runTrends()
 		RunPublishingOnce(context.Background(), publishing)
 		runBillingScanner()
 		runPointExpiry()
@@ -119,6 +124,7 @@ func Start(
 			RunAutoDMOnce(context.Background(), autoDM)
 			RunAutoCommentOnce(context.Background(), autoComment)
 			RunAutoPostOnce(context.Background(), autoPost)
+			runTrends()
 			RunPublishingOnce(context.Background(), publishing)
 			runBillingScanner()
 			runPointExpiry()

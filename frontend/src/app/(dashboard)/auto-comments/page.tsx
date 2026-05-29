@@ -542,7 +542,12 @@ export default function AutoCommentsPage() {
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setQuotePreviewDraft(null)}>{t("common.cancel")}</Button>
-              <Button type="button" disabled={modulePaused} title={modulePausedActionTip} onClick={() => void queueQuotePost(quotePreviewDraft.id)}>
+              <Button
+                type="button"
+                disabled={modulePaused || !quotePreviewDraft.api_reply_eligible}
+                title={!quotePreviewDraft.api_reply_eligible ? t("autoComment.quoteConfirm.unavailableTip") : modulePausedActionTip}
+                onClick={() => void queueQuotePost(quotePreviewDraft.id)}
+              >
                 <Send className="size-4" />
                 {t("autoComment.quoteConfirm.confirm")}
               </Button>
@@ -1014,7 +1019,7 @@ export default function AutoCommentsPage() {
                                     <ExternalLink className="size-4" />
                                     {t("autoComment.manualAction.open")}
                                   </Button>
-                                  {draft.quote_post_candidate ? (
+                                  {draft.quote_post_candidate && draft.api_reply_eligible ? (
                                     <Button size="sm" onClick={() => setQuotePreviewDraft(draft)} disabled={modulePaused} title={modulePausedActionTip}>
                                       <Send className="size-4" />
                                       {t("autoComment.manualAction.queueQuote")}

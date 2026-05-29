@@ -569,8 +569,12 @@ func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *
 
 func classifyXPublishFailure(err error, sourceType string) (category string, retryable bool, alertable bool) {
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if sourceType == repository.PublishSourceComment && strings.Contains(msg, "reply to this conversation is not allowed") {
-		return "x_reply_restricted", false, true
+	if sourceType == repository.PublishSourceComment {
+		if strings.Contains(msg, "reply to this conversation is not allowed") ||
+			strings.Contains(msg, "quoting this post is not allowed") ||
+			strings.Contains(msg, "not part of the conversation thread") {
+			return "x_reply_restricted", false, true
+		}
 	}
 	return "x_api_publish_failed", true, true
 }
@@ -1097,7 +1101,7 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		if err != nil {
 			return err
 		}
-		if category == "x_reply_restricted" && task.DeliveryMode != "quote_post" {
+		if category == "x_reply_restricted" {
 			convertRestrictedAutoCommentToManualSuggestion(task, reason)
 			return s.commentRepo.Save(task)
 		}

@@ -557,6 +557,9 @@ func (s *AutoCommentService) QueueQuotePost(ctx context.Context, userID, id uint
 	if strings.TrimSpace(task.TargetTweetID) == "" {
 		return nil, fmt.Errorf("target tweet id is required")
 	}
+	if !task.APIReplyEligible {
+		return nil, fmt.Errorf("X API quote publishing is not available for this conversation unless the executor account is mentioned or part of the conversation thread; use the manual copy/open action instead")
+	}
 	quote := strings.TrimSpace(task.QuotePostCandidate)
 	if quote == "" {
 		quote = strings.TrimSpace(task.GeneratedComment)

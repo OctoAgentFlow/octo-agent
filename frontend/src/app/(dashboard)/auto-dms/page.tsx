@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock3,
   Inbox,
+  MessageCircleReply,
   PlugZap,
   RefreshCw,
   ShieldCheck,
@@ -38,6 +39,7 @@ import {
 
 const requiredDMScopeList = ["dm.read", "dm.write", "tweet.read", "users.read"];
 const dmRecipientSegments: AutoDMRecipientSegment[] = ["lead", "partner", "community", "investor", "existing_user"];
+type AutoDMTaskFilter = "all" | "review" | "approved" | "sent" | "replied" | "risk";
 
 export default function AutoDMsPage() {
   const { t } = useT();
@@ -53,6 +55,7 @@ export default function AutoDMsPage() {
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
+  const [dmTaskFilter, setDMTaskFilter] = useState<AutoDMTaskFilter>("all");
 
   const dmAccount = accounts.find((account) => account.status === "connected") ?? accounts[0] ?? null;
   const dmScopes = new Set((dmAccount?.oauth_scopes || []).map((scope) => scope.toLowerCase()));
@@ -61,7 +64,16 @@ export default function AutoDMsPage() {
   const reviewCount = dmTasks.filter((task) => task.status === "review").length;
   const approvedCount = dmTasks.filter((task) => task.status === "approved" || task.status === "sent").length;
   const riskCount = dmTasks.filter((task) => task.status === "failed" || task.status === "blocked").length;
+  const repliedCount = dmTasks.filter((task) => Boolean(task.inbound_reply_at)).length;
   const allowlistedCount = dmRecipients.filter((rule) => rule.status === "allowlisted").length;
+  const filteredDMTasks = dmTasks.filter((task) => {
+    if (dmTaskFilter === "review") return task.status === "review";
+    if (dmTaskFilter === "approved") return task.status === "approved";
+    if (dmTaskFilter === "sent") return task.status === "sent";
+    if (dmTaskFilter === "replied") return Boolean(task.inbound_reply_at);
+    if (dmTaskFilter === "risk") return task.status === "failed" || task.status === "blocked";
+    return true;
+  });
   const modulePaused = moduleEnabled === false;
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.dm.name") })
@@ -275,10 +287,11 @@ export default function AutoDMsPage() {
             riskCount={riskCount}
           />
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
               { icon: Inbox, label: t("autoDm.stats.review"), value: reviewCount, tone: "text-[#f6d96b]" },
               { icon: CheckCircle2, label: t("autoDm.stats.approved"), value: approvedCount, tone: "text-[#00ba7c]" },
+              { icon: MessageCircleReply, label: t("autoDm.stats.replied"), value: repliedCount, tone: "text-[#8ecdf8]" },
               { icon: ShieldCheck, label: t("autoDm.stats.allowlisted"), value: allowlistedCount, tone: "text-[#1d9bf0]" },
               { icon: UserX, label: t("autoDm.stats.risk"), value: riskCount, tone: "text-[#f4212e]" },
             ].map((item) => {
@@ -316,6 +329,28 @@ export default function AutoDMsPage() {
                   {modulePausedActionTip}
                 </p>
               ) : null}
+              <div className="mb-4 flex flex-wrap gap-2 px-5 md:px-6">
+                {[
+                  ["all", t("autoDm.taskFilter.all"), dmTasks.length],
+                  ["review", t("autoDm.taskFilter.review"), reviewCount],
+                  ["approved", t("autoDm.taskFilter.approved"), dmTasks.filter((task) => task.status === "approved").length],
+                  ["sent", t("autoDm.taskFilter.sent"), dmTasks.filter((task) => task.status === "sent").length],
+                  ["replied", t("autoDm.taskFilter.replied"), repliedCount],
+                  ["risk", t("autoDm.taskFilter.risk"), riskCount],
+                ].map(([key, label, count]) => {
+                  const active = dmTaskFilter === key;
+                  return (
+                    <button
+                      key={String(key)}
+                      type="button"
+                      onClick={() => setDMTaskFilter(key as AutoDMTaskFilter)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${active ? "border-[#1d9bf0] bg-[#1d9bf0]/15 text-[#8ecdf8]" : "border-[#2f3336] bg-black text-[#b6bec5] hover:border-[#536471]"}`}
+                    >
+                      {label} {count}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="space-y-3">
                 {dmTasks.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center">
@@ -323,8 +358,14 @@ export default function AutoDMsPage() {
                     <p className="mt-3 text-sm font-medium text-white">{t("automation.dmReview.empty")}</p>
                     <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.empty.reviewHint")}</p>
                   </div>
+                ) : filteredDMTasks.length === 0 ? (
+                  <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center">
+                    <Inbox className="mx-auto size-8 text-[#71767b]" />
+                    <p className="mt-3 text-sm font-medium text-white">{t("autoDm.empty.filteredTitle")}</p>
+                    <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.empty.filteredHint")}</p>
+                  </div>
                 ) : (
-                  dmTasks.slice(0, 12).map((task) => {
+                  filteredDMTasks.slice(0, 12).map((task) => {
                     const canAct = task.status === "review";
                     const canRetry = task.status === "failed" && task.retryable && (task.attempt_count ?? 0) < 3;
                     return (
@@ -349,7 +390,24 @@ export default function AutoDMsPage() {
                                   {t("autoDm.task.generatedAt")}: {formatDateTime(task.generated_at, timeZone)}
                                 </span>
                               ) : null}
+                              {task.sent_at ? (
+                                <span>
+                                  {t("autoDm.task.sentAt")}: {formatDateTime(task.sent_at, timeZone)}
+                                </span>
+                              ) : null}
+                              {task.last_inbound_scan_at ? (
+                                <span>
+                                  {t("autoDm.task.lastInboundScanAt")}: {formatDateTime(task.last_inbound_scan_at, timeZone)}
+                                </span>
+                              ) : null}
                             </div>
+                            {task.inbound_reply_at ? (
+                              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-2 text-xs text-[#8ff0c3]">
+                                <MessageCircleReply className="size-4" />
+                                <span className="font-semibold">{t("autoDm.task.replied")}</span>
+                                <span>{formatDateTime(task.inbound_reply_at, timeZone)}</span>
+                              </div>
+                            ) : null}
                             <p className="break-words rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-sm leading-relaxed text-[#e7e9ea]">
                               {task.message_preview || "—"}
                             </p>

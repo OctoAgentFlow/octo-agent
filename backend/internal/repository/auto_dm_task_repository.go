@@ -185,6 +185,23 @@ func (r *AutoDMTaskRepository) Approve(task *model.AutoDMTask, at time.Time) err
 	return nil
 }
 
+func (r *AutoDMTaskRepository) UpdateMessagePreview(task *model.AutoDMTask, message string) error {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return errors.New("auto dm message is required")
+	}
+	tx := r.DB.Model(&model.AutoDMTask{}).
+		Where("id = ? AND status IN ?", task.ID, []string{"review", "failed"}).
+		Update("message_preview", message)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return errors.New("auto dm task message cannot be updated")
+	}
+	return nil
+}
+
 func (r *AutoDMTaskRepository) ReserveForSending(task *model.AutoDMTask, at time.Time, maxAttempts int) (bool, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = 3

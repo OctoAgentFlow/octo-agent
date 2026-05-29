@@ -134,6 +134,16 @@ export default function AutoDMsPage() {
     }
   };
 
+  const applyDMVariant = async (taskID: number, message: string) => {
+    try {
+      const updated = await automationService.updateDMTaskMessage(taskID, message);
+      setDMTasks((items) => items.map((item) => (item.id === taskID ? updated : item)));
+      pushToast(t("autoDm.variants.applied"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoDm.errors.updateMessage"));
+    }
+  };
+
   const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
     try {
       const rule = await automationService.setDMRecipientRule(id, status, t("autoDm.reason.ruleUpdated"));
@@ -340,6 +350,9 @@ export default function AutoDMsPage() {
                             <p className="break-words rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-sm leading-relaxed text-[#e7e9ea]">
                               {task.message_preview || "—"}
                             </p>
+                            {task.generation_reason || task.message_variants?.length ? (
+                              <AutoDMGenerationInsight task={task} onApplyVariant={applyDMVariant} />
+                            ) : null}
                             {task.failure_reason ? (
                               <p className="break-words rounded-2xl border border-[#f6d96b]/20 bg-[#f6d96b]/10 px-3 py-2 text-xs leading-5 text-[#f6d96b]">
                                 {task.failure_reason}
@@ -525,6 +538,54 @@ function AutoDMTaskDiagnostics({ items }: { items: AutoDMDiagnosticApi[] }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AutoDMGenerationInsight({
+  task,
+  onApplyVariant,
+}: {
+  task: AutoDMTaskApi;
+  onApplyVariant: (taskID: number, message: string) => void;
+}) {
+  const { t } = useT();
+  const variants = task.message_variants || [];
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/20 bg-[#1d9bf0]/10 p-3">
+      <p className="text-xs font-semibold text-[#8ecdf8]">{t("autoDm.generation.title")}</p>
+      {task.generation_reason ? (
+        <p className="mt-1 text-xs leading-5 text-[#b6bec5]">{task.generation_reason}</p>
+      ) : (
+        <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoDm.generation.defaultReason")}</p>
+      )}
+      {variants.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-medium text-[#8ecdf8]">{t("autoDm.variants.title")}</p>
+          {variants.map((variant) => {
+            const selected = variant.message === task.message_preview;
+            return (
+              <button
+                key={`${variant.type}-${variant.message}`}
+                type="button"
+                onClick={() => onApplyVariant(task.id, variant.message)}
+                disabled={selected || !["review", "failed"].includes(task.status)}
+                className={`w-full rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                  selected
+                    ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#d8fff0]"
+                    : "border-[#2f3336] bg-black text-[#b6bec5] hover:border-[#1d9bf0]/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                }`}
+              >
+                <span className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-white">{variant.label || variant.type}</span>
+                  {selected ? <span className="text-[#7ee0b5]">{t("autoDm.variants.current")}</span> : <span className="text-[#1d9bf0]">{t("autoDm.variants.apply")}</span>}
+                </span>
+                <span className="mt-1 block break-words leading-5">{variant.message}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

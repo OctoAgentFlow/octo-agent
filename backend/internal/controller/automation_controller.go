@@ -473,6 +473,30 @@ func (ctl *AutomationController) BlockDMTask(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) UpdateDMTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	var req dto.AutoDMTaskUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.UpdateTaskMessage(userID, taskID, req.MessagePreview)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) RetryDMTask(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

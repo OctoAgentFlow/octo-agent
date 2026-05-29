@@ -57,6 +57,8 @@ export type AutoDMTaskApi = {
   recipient_user_id?: string;
   recipient_username?: string;
   message_preview?: string;
+  generation_reason?: string;
+  message_variants?: AutoDMMessageVariantApi[];
   status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
   capability_status: string;
   failure_category?: string;
@@ -86,6 +88,12 @@ export type AutoDMDiagnosticApi = {
   status: string;
   severity: "info" | "success" | "warning" | "error" | string;
   detail?: string;
+};
+
+export type AutoDMMessageVariantApi = {
+  type: string;
+  label: string;
+  message: string;
 };
 
 export type AutoDMOverviewData = {
@@ -501,6 +509,10 @@ export const automationService = {
   },
   async blockDMTask(id: number, reason: string) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/block`, { reason });
+    return res.data.data;
+  },
+  async updateDMTaskMessage(id: number, messagePreview: string) {
+    const res = await request.patch<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}`, { message_preview: messagePreview });
     return res.data.data;
   },
   async retryDMTask(id: number) {

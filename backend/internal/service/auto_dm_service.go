@@ -79,9 +79,11 @@ func NewAutoDMService(
 }
 
 type autoDMCandidate struct {
-	UserID   string
-	Username string
-	Message  string
+	UserID           string
+	Username         string
+	Message          string
+	GenerationReason string
+	Candidates       []AutoDMCandidate
 }
 
 type autoDMFailure struct {
@@ -265,6 +267,8 @@ func (s *AutoDMService) createDMAuditWithCandidate(userID, accountID uint, handl
 		RecipientUserID:   recipientUserID,
 		RecipientUsername: recipientUsername,
 		MessagePreview:    messagePreview,
+		GenerationReason:  autoDMGenerationReason(candidate),
+		MessageVariants:   encodeAutoDMVariants(autoDMCandidates(candidate)),
 		Status:            status,
 		CapabilityStatus:  capabilityStatus,
 		FailureReason:     truncateErrMsg(reason),
@@ -314,11 +318,13 @@ func (s *AutoDMService) findAutoDMCandidate(ctx context.Context, userID uint, ac
 			if !decision.Allowed {
 				continue
 			}
-			message := s.generateAutoDMMessage(ctx, userID, account.ID, reply.AuthorUsername, reply.Text)
+			generated := s.generateAutoDMCandidates(ctx, userID, account.ID, reply.AuthorUsername, reply.Text)
 			return &autoDMCandidate{
-				UserID:   reply.AuthorID,
-				Username: replyAuthorDisplay(reply.AuthorUsername),
-				Message:  message,
+				UserID:           reply.AuthorID,
+				Username:         replyAuthorDisplay(reply.AuthorUsername),
+				Message:          generated.Text,
+				GenerationReason: generated.GenerationReason,
+				Candidates:       generated.Candidates,
 			}, nil
 		}
 	}
@@ -441,6 +447,26 @@ func (s *AutoDMService) BlockTask(userID, taskID uint, reason string) (*dto.Auto
 	}
 	now := time.Now().UTC()
 	if err := s.taskRepo.Block(task, truncateErrMsg(reason), now); err != nil {
+		return nil, err
+	}
+	updated, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	out := autoDMTaskToDTO(updated)
+	return &out, nil
+}
+
+func (s *AutoDMService) UpdateTaskMessage(userID, taskID uint, message string) (*dto.AutoDMTaskItem, error) {
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	message = truncateRunes(strings.TrimSpace(message), 240)
+	if message == "" {
+		return nil, errors.New("auto dm message is required")
+	}
+	if err := s.taskRepo.UpdateMessagePreview(task, message); err != nil {
 		return nil, err
 	}
 	updated, err := s.taskRepo.GetByUserAndID(userID, taskID)
@@ -1271,27 +1297,28 @@ func autoDMMessageForCandidate(username string) string {
 	return "Thanks for engaging with our post, " + name + " — appreciate it. If this is not useful, feel free to ignore."
 }
 
-func (s *AutoDMService) generateAutoDMMessage(ctx context.Context, userID, xAccountID uint, username, recentInteraction string) string {
+func (s *AutoDMService) generateAutoDMCandidates(ctx context.Context, userID, xAccountID uint, username, recentInteraction string) AIGeneratedAutoDMCandidates {
 	fallback := autoDMMessageForCandidate(username)
+	fallbackCandidate := AutoDMCandidate{Type: "helpful_followup", Label: "Helpful follow-up", Message: fallback}
 	if s == nil || s.ai == nil {
-		return fallback
+		return AIGeneratedAutoDMCandidates{Text: fallback, GenerationReason: "Generated from a safe fallback because AI generation is unavailable.", Candidates: []AutoDMCandidate{fallbackCandidate}}
 	}
 	now := time.Now().UTC()
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
-		return fallback
+		return AIGeneratedAutoDMCandidates{Text: fallback, GenerationReason: "Generated from a safe fallback because AI generation quota is unavailable.", Candidates: []AutoDMCandidate{fallbackCandidate}}
 	}
 	bot, _ := s.botForAccount(userID, xAccountID)
 	botID := botIDForUsage(bot)
 	input := autoDMInputFromBot(username, recentInteraction, bot)
 	input.ContentContext = contentContextForGeneration(s.contentRepo, userID, xAccountID, botID, recentInteraction, username, bot)
-	generated, err := s.ai.GenerateAutoDM(ctx, input)
+	generated, err := s.ai.GenerateAutoDMCandidates(ctx, input)
 	if err != nil || strings.TrimSpace(generated.Text) == "" {
-		return fallback
+		return AIGeneratedAutoDMCandidates{Text: fallback, GenerationReason: "Generated from a safe fallback because AI candidate generation failed.", Candidates: []AutoDMCandidate{fallbackCandidate}}
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, userID, botID, "dm", now, generated.Usage); err != nil {
 		zap.L().Warn("auto dm: record ai usage failed", zap.Uint("user_id", userID), zap.Error(err))
 	}
-	return generated.Text
+	return generated
 }
 
 func (s *AutoDMService) botForAccount(userID, xAccountID uint) (*model.OAFBot, error) {
@@ -1355,6 +1382,78 @@ func autoDMMessagePreview(recipientSource string, candidate *autoDMCandidate) st
 	}
 }
 
+func autoDMGenerationReason(candidate *autoDMCandidate) string {
+	if candidate == nil {
+		return ""
+	}
+	return truncateRunes(strings.TrimSpace(candidate.GenerationReason), 1000)
+}
+
+func autoDMCandidates(candidate *autoDMCandidate) []AutoDMCandidate {
+	if candidate == nil {
+		return nil
+	}
+	if len(candidate.Candidates) > 0 {
+		return candidate.Candidates
+	}
+	if strings.TrimSpace(candidate.Message) == "" {
+		return nil
+	}
+	return []AutoDMCandidate{{Type: "helpful_followup", Label: "Helpful follow-up", Message: candidate.Message}}
+}
+
+func encodeAutoDMVariants(items []AutoDMCandidate) string {
+	clean := make([]AutoDMCandidate, 0, len(items))
+	for _, item := range items {
+		message := strings.TrimSpace(item.Message)
+		if message == "" {
+			continue
+		}
+		typ := normalizeAutoDMCandidateType(item.Type)
+		clean = append(clean, AutoDMCandidate{
+			Type:    typ,
+			Label:   firstNonEmpty(strings.TrimSpace(item.Label), defaultAutoDMCandidateLabel(typ)),
+			Message: truncateRunes(message, 240),
+		})
+		if len(clean) >= 3 {
+			break
+		}
+	}
+	if len(clean) == 0 {
+		return ""
+	}
+	raw, _ := json.Marshal(clean)
+	return string(raw)
+}
+
+func decodeAutoDMVariants(raw string) []dto.AutoDMMessageVariantItem {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var rows []AutoDMCandidate
+	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
+		return nil
+	}
+	out := make([]dto.AutoDMMessageVariantItem, 0, len(rows))
+	for _, row := range rows {
+		message := strings.TrimSpace(row.Message)
+		if message == "" {
+			continue
+		}
+		typ := normalizeAutoDMCandidateType(row.Type)
+		out = append(out, dto.AutoDMMessageVariantItem{
+			Type:    typ,
+			Label:   firstNonEmpty(strings.TrimSpace(row.Label), defaultAutoDMCandidateLabel(typ)),
+			Message: truncateRunes(message, 240),
+		})
+		if len(out) >= 3 {
+			break
+		}
+	}
+	return out
+}
+
 func blockedKeywordInMessage(rawKeywords, message string) string {
 	message = strings.ToLower(strings.TrimSpace(message))
 	if message == "" {
@@ -1382,6 +1481,8 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 		RecipientUserID:   task.RecipientUserID,
 		RecipientUsername: task.RecipientUsername,
 		MessagePreview:    task.MessagePreview,
+		GenerationReason:  task.GenerationReason,
+		MessageVariants:   decodeAutoDMVariants(task.MessageVariants),
 		Status:            task.Status,
 		CapabilityStatus:  task.CapabilityStatus,
 		FailureCategory:   task.FailureCategory,

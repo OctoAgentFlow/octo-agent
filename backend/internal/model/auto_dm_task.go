@@ -12,6 +12,8 @@ type AutoDMTask struct {
 	RecipientUserID   string     `gorm:"size:64;index;comment:X收件人ID" json:"recipient_user_id,omitempty"`
 	RecipientUsername string     `gorm:"size:128;comment:X收件人用户名" json:"recipient_username,omitempty"`
 	MessagePreview    string     `gorm:"size:512;comment:待发送私信预览" json:"message_preview,omitempty"`
+	GenerationReason  string     `gorm:"size:1024;comment:私信生成原因说明" json:"generation_reason,omitempty"`
+	MessageVariants   string     `gorm:"type:text;comment:私信候选JSON数组" json:"message_variants,omitempty"`
 	Status            string     `gorm:"size:32;index;not null;comment:任务状态（review/approved/sending/blocked/failed/sent）" json:"status"`
 	CapabilityStatus  string     `gorm:"size:64;index;not null;comment:发送能力状态" json:"capability_status"`
 	FailureCategory   string     `gorm:"size:64;index;comment:失败分类（retryable_rate_limit等）" json:"failure_category,omitempty"`

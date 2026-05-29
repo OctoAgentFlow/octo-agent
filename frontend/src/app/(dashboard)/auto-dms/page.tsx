@@ -27,6 +27,9 @@ import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import {
   automationService,
+  type AutoDMDiagnosticApi,
+  type AutoDMOverviewData,
+  type AutoDMRecipientImportPreviewData,
   type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
   type AutoDMTaskApi,
@@ -42,6 +45,9 @@ export default function AutoDMsPage() {
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
   const [dmImports, setDMImports] = useState<AutoDMRecipientImportApi[]>([]);
+  const [dmOverview, setDMOverview] = useState<AutoDMOverviewData | null>(null);
+  const [dmImportPreview, setDMImportPreview] = useState<AutoDMRecipientImportPreviewData | null>(null);
+  const [dmImportPreviewLoading, setDMImportPreviewLoading] = useState(false);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
@@ -62,13 +68,15 @@ export default function AutoDMsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [accountData, dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
+      const [accountData, overviewData, dmTaskData, dmRecipientData, dmImportData] = await Promise.all([
         accountService.list(),
+        automationService.dmOverview(),
         automationService.dmTasks(),
         automationService.dmRecipients(),
         automationService.dmRecipientImports(),
       ]);
       setAccounts(accountData.items);
+      setDMOverview(overviewData);
       setDMTasks(dmTaskData.items);
       setDMRecipients(dmRecipientData.items);
       setDMImports(dmImportData.items);
@@ -158,9 +166,23 @@ export default function AutoDMsPage() {
         setDMImports((items) => [data.batch!, ...items.filter((item) => item.id !== data.batch!.id)]);
       }
       setDMImportCSV("");
+      setDMImportPreview(null);
       pushToast(t("autoDm.toast.imported", { imported: data.imported, skipped: data.skipped }));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.import") : t("autoDm.errors.import"));
+    }
+  };
+
+  const previewDMImport = async () => {
+    setDMImportPreviewLoading(true);
+    try {
+      const data = await automationService.previewDMRecipientImport(dmImportCSV);
+      setDMImportPreview(data);
+      pushToast(t("autoDm.toast.importPreview", { willImport: data.will_import, skipped: data.skipped }));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.importPreview") : t("autoDm.errors.importPreview"));
+    } finally {
+      setDMImportPreviewLoading(false);
     }
   };
 
@@ -199,6 +221,7 @@ export default function AutoDMsPage() {
       ) : (
         <>
           <AutomationModulePausedNotice type="dm" onEnabledChange={setModuleEnabled} />
+          {dmOverview ? <AutoDMQuotaCard overview={dmOverview} timeZone={timeZone} /> : null}
           <Card className={dmAuthorizationReady ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
@@ -322,6 +345,9 @@ export default function AutoDMsPage() {
                                 {task.failure_reason}
                               </p>
                             ) : null}
+                            {task.diagnostics && task.diagnostics.length > 0 ? (
+                              <AutoDMTaskDiagnostics items={task.diagnostics} />
+                            ) : null}
                           </div>
                           <div className="flex min-w-0 flex-wrap justify-start gap-2 lg:max-w-[260px] lg:justify-end">
                             {canAct ? <Button size="sm" onClick={() => approveDMTask(task.id)} disabled={modulePaused} title={modulePausedActionTip}>{t("automation.dmReview.approve")}</Button> : null}
@@ -382,7 +408,10 @@ export default function AutoDMsPage() {
                 <CardHeader title={t("automation.dmReview.import")} description={t("autoDm.import.description")} />
                 <textarea
                   value={dmImportCSV}
-                  onChange={(event) => setDMImportCSV(event.target.value)}
+                  onChange={(event) => {
+                    setDMImportCSV(event.target.value);
+                    setDMImportPreview(null);
+                  }}
                   rows={5}
                   placeholder={t("automation.dmReview.importPlaceholder")}
                   className="min-h-32 w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
@@ -392,8 +421,16 @@ export default function AutoDMsPage() {
                     <Upload className="size-3.5" />
                     <span>{t("autoDm.import.history", { count: dmImports.length })}</span>
                   </div>
-                  <Button size="sm" onClick={importDMRecipients} disabled={!dmImportCSV.trim()}>{t("automation.dmReview.importCta")}</Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={previewDMImport} disabled={!dmImportCSV.trim() || dmImportPreviewLoading}>
+                      {dmImportPreviewLoading ? t("autoDm.import.previewing") : t("autoDm.import.preview")}
+                    </Button>
+                    <Button size="sm" onClick={importDMRecipients} disabled={!dmImportCSV.trim() || (dmImportPreview !== null && dmImportPreview.will_import === 0 && dmImportPreview.existing === 0)}>
+                      {t("automation.dmReview.importCta")}
+                    </Button>
+                  </div>
                 </div>
+                {dmImportPreview ? <AutoDMImportPreview preview={dmImportPreview} /> : null}
                 {dmImports.length > 0 ? (
                   <div className="mt-3 space-y-2">
                     {dmImports.slice(0, 3).map((item) => (
@@ -422,6 +459,142 @@ export default function AutoDMsPage() {
       )}
     </div>
   );
+}
+
+function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData; timeZone: string }) {
+  const { t } = useT();
+  const monthlyLimitText = overview.monthly_limit > 0 ? overview.monthly_limit.toLocaleString() : t("autoDm.quota.none");
+  const monthlyRemainingText = overview.monthly_limit > 0 ? overview.monthly_remaining.toLocaleString() : "0";
+  const dailyLimitText = overview.daily_soft_limit > 0 ? overview.daily_soft_limit.toLocaleString() : t("autoDm.quota.none");
+  const dailyRemainingText = overview.daily_soft_limit > 0 ? overview.daily_remaining.toLocaleString() : "0";
+  return (
+    <Card className={overview.quota_exhausted ? "border-amber-300/20 bg-amber-500/10" : "bg-[#0f1419]"}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">{t("autoDm.quota.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">
+            {overview.period_end
+              ? t("autoDm.quota.descriptionWithReset", { reset: formatDateTime(overview.period_end, timeZone) })
+              : t("autoDm.quota.description")}
+          </p>
+        </div>
+        {overview.upgrade_required ? (
+          <Link href="/billing">
+            <Button size="sm">{t("autoDm.quota.upgrade")}</Button>
+          </Link>
+        ) : null}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-xs text-[#71767b]">{t("autoDm.quota.monthly")}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {overview.monthly_used.toLocaleString()} / {monthlyLimitText}
+          </p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.quota.remaining", { count: monthlyRemainingText })}</p>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-xs text-[#71767b]">{t("autoDm.quota.dailySoft")}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {overview.daily_used.toLocaleString()} / {dailyLimitText}
+          </p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.quota.remaining", { count: dailyRemainingText })}</p>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-xs text-[#71767b]">{t("autoDm.quota.plan")}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{overview.plan_code || "free_trial"}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{overview.quota_exhausted ? t("autoDm.quota.exhausted") : t("autoDm.quota.ready")}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AutoDMTaskDiagnostics({ items }: { items: AutoDMDiagnosticApi[] }) {
+  const { t } = useT();
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-xs font-semibold text-white">{t("autoDm.diagnostics.title")}</p>
+      <div className="mt-2 space-y-2">
+        {items.map((item) => (
+          <div key={`${item.key}-${item.status}`} className="flex items-start gap-2 text-xs leading-5">
+            <span className={`mt-1 size-2 shrink-0 rounded-full ${diagnosticDotClass(item.severity)}`} />
+            <div className="min-w-0">
+              <p className="font-medium text-[#e7e9ea]">{diagnosticLabel(item.key, item.label, t)}</p>
+              {item.detail ? <p className="break-words text-[#71767b]">{diagnosticDetail(item.key, item.detail, t)}</p> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AutoDMImportPreview({ preview }: { preview: AutoDMRecipientImportPreviewData }) {
+  const { t } = useT();
+  const rows = preview.rows || [];
+  return (
+    <div className="mt-3 rounded-2xl border border-[#2f3336] bg-black p-3">
+      <div className="grid gap-2 sm:grid-cols-4">
+        {[
+          [t("autoDm.importPreview.willImport"), preview.will_import],
+          [t("autoDm.importPreview.existing"), preview.existing],
+          [t("autoDm.importPreview.duplicates"), preview.duplicates_in_file],
+          [t("autoDm.importPreview.skipped"), preview.skipped],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+            <p className="text-xs text-[#71767b]">{label}</p>
+            <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+          </div>
+        ))}
+      </div>
+      {rows.length > 0 ? (
+        <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
+          {rows.slice(0, 20).map((row) => (
+            <div key={`${row.line}-${row.recipient_user_id || row.status}`} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-white">
+                  {t("autoDm.importPreview.line", { line: row.line })} · {row.recipient_username || row.recipient_user_id || "—"}
+                </span>
+                <span className={`rounded-full border px-2 py-0.5 ${importPreviewStatusClass(row.status)}`}>
+                  {t(`autoDm.importPreview.status.${row.status}`)}
+                </span>
+              </div>
+              {row.message ? <p className="mt-1 break-words text-[#71767b]">{row.message}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {(preview.errors || []).length > 0 ? (
+        <p className="mt-3 break-words rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-3 py-2 text-xs leading-5 text-[#ff8a91]">
+          {(preview.errors || []).slice(0, 3).join(" · ")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function diagnosticDotClass(severity: string) {
+  if (severity === "success") return "bg-[#00ba7c]";
+  if (severity === "error") return "bg-[#f4212e]";
+  if (severity === "warning") return "bg-[#f6d96b]";
+  return "bg-[#1d9bf0]";
+}
+
+function importPreviewStatusClass(status: string) {
+  if (status === "ready") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#8ff0c3]";
+  if (status === "existing") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  if (status === "duplicate_in_file") return "border-[#f6d96b]/25 bg-[#f6d96b]/10 text-[#f6d96b]";
+  return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+}
+
+function diagnosticLabel(key: string, fallback: string, t: ReturnType<typeof useT>["t"]) {
+  const known = new Set(["recipient", "send_state", "recipient_rule", "oauth_scope", "x_token", "recipient_lookup", "x_account", "capability", "failure", "sent", "blocked"]);
+  return known.has(key) ? t(`autoDm.diagnostics.${key}`) : fallback;
+}
+
+function diagnosticDetail(key: string, fallback: string, t: ReturnType<typeof useT>["t"]) {
+  const known = new Set(["recipient_rule", "oauth_scope", "x_token", "recipient_lookup", "x_account", "failure", "sent", "blocked"]);
+  return known.has(key) ? t(`autoDm.diagnostics.detail.${key}`, { detail: fallback }) : fallback;
 }
 
 function AutoDMSetupGuide({

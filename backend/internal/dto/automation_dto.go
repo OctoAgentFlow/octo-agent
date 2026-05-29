@@ -216,33 +216,57 @@ type AutoPostGenerationRunsResponse struct {
 }
 
 type AutoDMTaskItem struct {
-	ID                uint   `json:"id"`
-	XAccountID        uint   `json:"x_account_id,omitempty"`
-	AccountHandle     string `json:"account_handle"`
-	RecipientSource   string `json:"recipient_source"`
-	RecipientUserID   string `json:"recipient_user_id,omitempty"`
-	RecipientUsername string `json:"recipient_username,omitempty"`
-	MessagePreview    string `json:"message_preview,omitempty"`
-	Status            string `json:"status"`
-	CapabilityStatus  string `json:"capability_status"`
-	FailureCategory   string `json:"failure_category,omitempty"`
-	FailureReason     string `json:"failure_reason,omitempty"`
-	Retryable         bool   `json:"retryable"`
-	RetryAfterAt      string `json:"retry_after_at,omitempty"`
-	AttemptCount      int    `json:"attempt_count"`
-	LastAttemptAt     string `json:"last_attempt_at,omitempty"`
-	ApprovalRequired  bool   `json:"approval_required"`
-	ActivityLogID     uint   `json:"activity_log_id,omitempty"`
-	DMConversationID  string `json:"dm_conversation_id,omitempty"`
-	DMEventID         string `json:"dm_event_id,omitempty"`
-	GeneratedAt       string `json:"generated_at"`
-	ApprovedAt        string `json:"approved_at,omitempty"`
-	BlockedAt         string `json:"blocked_at,omitempty"`
-	SentAt            string `json:"sent_at,omitempty"`
+	ID                uint                   `json:"id"`
+	XAccountID        uint                   `json:"x_account_id,omitempty"`
+	AccountHandle     string                 `json:"account_handle"`
+	RecipientSource   string                 `json:"recipient_source"`
+	RecipientUserID   string                 `json:"recipient_user_id,omitempty"`
+	RecipientUsername string                 `json:"recipient_username,omitempty"`
+	MessagePreview    string                 `json:"message_preview,omitempty"`
+	Status            string                 `json:"status"`
+	CapabilityStatus  string                 `json:"capability_status"`
+	FailureCategory   string                 `json:"failure_category,omitempty"`
+	FailureReason     string                 `json:"failure_reason,omitempty"`
+	Retryable         bool                   `json:"retryable"`
+	RetryAfterAt      string                 `json:"retry_after_at,omitempty"`
+	AttemptCount      int                    `json:"attempt_count"`
+	LastAttemptAt     string                 `json:"last_attempt_at,omitempty"`
+	ApprovalRequired  bool                   `json:"approval_required"`
+	ActivityLogID     uint                   `json:"activity_log_id,omitempty"`
+	DMConversationID  string                 `json:"dm_conversation_id,omitempty"`
+	DMEventID         string                 `json:"dm_event_id,omitempty"`
+	GeneratedAt       string                 `json:"generated_at"`
+	ApprovedAt        string                 `json:"approved_at,omitempty"`
+	BlockedAt         string                 `json:"blocked_at,omitempty"`
+	SentAt            string                 `json:"sent_at,omitempty"`
+	Diagnostics       []AutoDMDiagnosticItem `json:"diagnostics,omitempty"`
+}
+
+type AutoDMDiagnosticItem struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Status   string `json:"status"`
+	Severity string `json:"severity"`
+	Detail   string `json:"detail,omitempty"`
 }
 
 type AutoDMTasksResponse struct {
 	Items []AutoDMTaskItem `json:"items"`
+}
+
+type AutoDMOverviewResponse struct {
+	PlanCode        string `json:"plan_code"`
+	PeriodStart     string `json:"period_start,omitempty"`
+	PeriodEnd       string `json:"period_end,omitempty"`
+	MonthlyLimit    int64  `json:"monthly_limit"`
+	MonthlyUsed     int64  `json:"monthly_used"`
+	MonthlyRemain   int64  `json:"monthly_remaining"`
+	DailySoftLimit  int64  `json:"daily_soft_limit"`
+	DailyUsed       int64  `json:"daily_used"`
+	DailyRemaining  int64  `json:"daily_remaining"`
+	NextResetAt     string `json:"next_reset_at,omitempty"`
+	QuotaExhausted  bool   `json:"quota_exhausted"`
+	UpgradeRequired bool   `json:"upgrade_required"`
 }
 
 type AutoDMTaskBlockRequest struct {
@@ -302,6 +326,25 @@ type AutoDMRecipientImportResponse struct {
 	Batch    *AutoDMRecipientImportItem `json:"batch,omitempty"`
 	Items    []AutoDMRecipientRuleItem  `json:"items"`
 	Errors   []string                   `json:"errors,omitempty"`
+}
+
+type AutoDMRecipientImportPreviewResponse struct {
+	Valid            int                               `json:"valid"`
+	Skipped          int                               `json:"skipped"`
+	DuplicatesInFile int                               `json:"duplicates_in_file"`
+	Existing         int                               `json:"existing"`
+	WillImport       int                               `json:"will_import"`
+	Rows             []AutoDMRecipientImportPreviewRow `json:"rows,omitempty"`
+	Errors           []string                          `json:"errors,omitempty"`
+	Warnings         []string                          `json:"warnings,omitempty"`
+}
+
+type AutoDMRecipientImportPreviewRow struct {
+	Line              int    `json:"line"`
+	RecipientUserID   string `json:"recipient_user_id,omitempty"`
+	RecipientUsername string `json:"recipient_username,omitempty"`
+	Status            string `json:"status"`
+	Message           string `json:"message,omitempty"`
 }
 
 type AutoDMRecipientImportItem struct {

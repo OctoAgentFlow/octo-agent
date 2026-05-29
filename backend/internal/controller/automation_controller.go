@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/pkg/response"
@@ -298,6 +299,20 @@ func (ctl *AutomationController) ListDMTasks(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) DMOverview(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.autoDMService.Overview(userID, time.Now().UTC())
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ListDMRecipientRules(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -343,6 +358,25 @@ func (ctl *AutomationController) ImportDMRecipientRules(c *gin.Context) {
 		return
 	}
 	data, err := ctl.autoDMService.ImportRecipientRules(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) PreviewDMRecipientRulesImport(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AutoDMRecipientImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoDMService.PreviewRecipientImport(userID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

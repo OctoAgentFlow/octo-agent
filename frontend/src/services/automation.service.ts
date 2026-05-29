@@ -73,10 +73,34 @@ export type AutoDMTaskApi = {
   approved_at?: string;
   blocked_at?: string;
   sent_at?: string;
+  diagnostics?: AutoDMDiagnosticApi[];
 };
 
 export type AutoDMTasksData = {
   items: AutoDMTaskApi[];
+};
+
+export type AutoDMDiagnosticApi = {
+  key: string;
+  label: string;
+  status: string;
+  severity: "info" | "success" | "warning" | "error" | string;
+  detail?: string;
+};
+
+export type AutoDMOverviewData = {
+  plan_code: string;
+  period_start?: string;
+  period_end?: string;
+  monthly_limit: number;
+  monthly_used: number;
+  monthly_remaining: number;
+  daily_soft_limit: number;
+  daily_used: number;
+  daily_remaining: number;
+  next_reset_at?: string;
+  quota_exhausted: boolean;
+  upgrade_required: boolean;
 };
 
 export type AutoDMRecipientRuleApi = {
@@ -111,6 +135,25 @@ export type AutoDMRecipientImportData = {
   batch?: AutoDMRecipientImportApi;
   items: AutoDMRecipientRuleApi[];
   errors?: string[];
+};
+
+export type AutoDMRecipientImportPreviewRowApi = {
+  line: number;
+  recipient_user_id?: string;
+  recipient_username?: string;
+  status: "ready" | "existing" | "duplicate_in_file" | "invalid" | string;
+  message?: string;
+};
+
+export type AutoDMRecipientImportPreviewData = {
+  valid: number;
+  skipped: number;
+  duplicates_in_file: number;
+  existing: number;
+  will_import: number;
+  rows?: AutoDMRecipientImportPreviewRowApi[];
+  errors?: string[];
+  warnings?: string[];
 };
 
 export type AutoDMRecipientImportApi = {
@@ -420,6 +463,10 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoDMTasksData>>("/auto-dm/tasks");
     return res.data.data;
   },
+  async dmOverview() {
+    const res = await request.get<ApiResponse<AutoDMOverviewData>>("/auto-dm/overview");
+    return res.data.data;
+  },
   async dmRecipients(query?: AutoDMRecipientRulesQuery) {
     const params = {
       search: query?.search || undefined,
@@ -436,6 +483,13 @@ export const automationService = {
   },
   async importDMRecipients(csv: string, xAccountID?: number) {
     const res = await request.post<ApiResponse<AutoDMRecipientImportData>>("/auto-dm/recipients/import", {
+      csv,
+      x_account_id: xAccountID || 0,
+    });
+    return res.data.data;
+  },
+  async previewDMRecipientImport(csv: string, xAccountID?: number) {
+    const res = await request.post<ApiResponse<AutoDMRecipientImportPreviewData>>("/auto-dm/recipients/import/preview", {
       csv,
       x_account_id: xAccountID || 0,
     });

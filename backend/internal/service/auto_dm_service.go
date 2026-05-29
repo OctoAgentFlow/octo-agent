@@ -337,6 +337,44 @@ func (s *AutoDMService) ListTasks(userID uint) (*dto.AutoDMTasksResponse, error)
 	return &dto.AutoDMTasksResponse{Items: items}, nil
 }
 
+func (s *AutoDMService) Overview(userID uint, now time.Time) (*dto.AutoDMOverviewResponse, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	limits := subscription.LimitsForUser(user)
+	periodStart, periodEnd := autoDMUsagePeriod(user, now)
+	monthlyUsed, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", periodStart, now)
+	if err != nil {
+		return nil, err
+	}
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	dailyUsed, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", dayStart, now)
+	if err != nil {
+		return nil, err
+	}
+	dailyLimit := autoDMConservativeDailySendLimit(user)
+	out := &dto.AutoDMOverviewResponse{
+		PlanCode:        subscription.NormalizePlanCode(user.SubscriptionPlanCode),
+		MonthlyLimit:    limits.MonthlyAutoDMs,
+		MonthlyUsed:     monthlyUsed,
+		MonthlyRemain:   remainingQuota(limits.MonthlyAutoDMs, monthlyUsed),
+		DailySoftLimit:  dailyLimit,
+		DailyUsed:       dailyUsed,
+		DailyRemaining:  remainingQuota(dailyLimit, dailyUsed),
+		QuotaExhausted:  limits.MonthlyAutoDMs <= 0 || monthlyUsed >= limits.MonthlyAutoDMs || dailyLimit <= 0 || dailyUsed >= dailyLimit,
+		UpgradeRequired: limits.MonthlyAutoDMs <= 0 || monthlyUsed >= limits.MonthlyAutoDMs,
+	}
+	if !periodStart.IsZero() {
+		out.PeriodStart = periodStart.UTC().Format(time.RFC3339)
+	}
+	if !periodEnd.IsZero() {
+		out.PeriodEnd = periodEnd.UTC().Format(time.RFC3339)
+		out.NextResetAt = periodEnd.UTC().Format(time.RFC3339)
+	}
+	return out, nil
+}
+
 func (s *AutoDMService) ListRecipientRules(userID uint, query dto.AutoDMRecipientRuleQuery) (*dto.AutoDMRecipientRulesResponse, error) {
 	if s.ruleRepo == nil {
 		return &dto.AutoDMRecipientRulesResponse{Items: []dto.AutoDMRecipientRuleItem{}}, nil
@@ -616,6 +654,90 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 		if err := s.createRecipientRuleActivity(userID, accountID, accountHandle, "activity.preview.dmRecipientImport", repository.AutoDMRecipientAllowlisted, fmt.Sprintf("Imported %d Auto DM allowlist recipients (%d skipped).", out.Imported, out.Skipped), now); err != nil {
 			return nil, err
 		}
+	}
+	return out, nil
+}
+
+func (s *AutoDMService) PreviewRecipientImport(userID uint, req dto.AutoDMRecipientImportRequest) (*dto.AutoDMRecipientImportPreviewResponse, error) {
+	if s.ruleRepo == nil {
+		return nil, errors.New("auto dm recipient rules are not configured")
+	}
+	accountID := req.XAccountID
+	if accountID == 0 {
+		account, err := s.firstConnectedAccountForUser(userID)
+		if err != nil {
+			return nil, err
+		}
+		accountID = account.ID
+	} else if _, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, accountID); err != nil {
+		return nil, errors.New("x account not found")
+	}
+	reader := csv.NewReader(strings.NewReader(req.CSV))
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	out := &dto.AutoDMRecipientImportPreviewResponse{Rows: []dto.AutoDMRecipientImportPreviewRow{}}
+	seen := map[string]int{}
+	line := 0
+	for {
+		row, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		line++
+		if err != nil {
+			out.Skipped++
+			msg := fmt.Sprintf("line %d: %v", line, err)
+			out.Errors = append(out.Errors, msg)
+			out.Rows = append(out.Rows, dto.AutoDMRecipientImportPreviewRow{Line: line, Status: "invalid", Message: err.Error()})
+			continue
+		}
+		recipientID, username, skip, rowErr := parseAutoDMImportRow(row)
+		if skip {
+			if rowErr != "" {
+				out.Skipped++
+				msg := fmt.Sprintf("line %d: %s", line, rowErr)
+				out.Errors = append(out.Errors, msg)
+				out.Rows = append(out.Rows, dto.AutoDMRecipientImportPreviewRow{Line: line, RecipientUserID: recipientID, RecipientUsername: username, Status: "invalid", Message: rowErr})
+			}
+			continue
+		}
+		out.Valid++
+		preview := dto.AutoDMRecipientImportPreviewRow{
+			Line:              line,
+			RecipientUserID:   recipientID,
+			RecipientUsername: username,
+			Status:            "ready",
+			Message:           "Ready to import as explicit opt-in recipient.",
+		}
+		if firstLine, ok := seen[recipientID]; ok {
+			out.DuplicatesInFile++
+			out.Skipped++
+			preview.Status = "duplicate_in_file"
+			preview.Message = fmt.Sprintf("Duplicate of line %d.", firstLine)
+			out.Rows = append(out.Rows, preview)
+			continue
+		}
+		seen[recipientID] = line
+		existing, err := s.ruleRepo.GetByRecipient(userID, accountID, recipientID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			out.Skipped++
+			preview.Status = "invalid"
+			preview.Message = err.Error()
+			out.Errors = append(out.Errors, fmt.Sprintf("line %d: %v", line, err))
+			out.Rows = append(out.Rows, preview)
+			continue
+		}
+		if existing != nil {
+			out.Existing++
+			preview.Status = "existing"
+			preview.Message = "Recipient rule already exists; import will update it as allowlisted."
+		} else {
+			out.WillImport++
+		}
+		out.Rows = append(out.Rows, preview)
+	}
+	if out.Valid == 0 && out.Skipped == 0 {
+		out.Warnings = append(out.Warnings, "No importable rows found. Expected CSV columns: recipient_user_id, username.")
 	}
 	return out, nil
 }
@@ -1054,8 +1176,8 @@ func (s *AutoDMService) dmSendLimitsExceeded(userID uint, cfg *model.AutomationC
 			if limit <= 0 {
 				return true, "monthly_quota"
 			}
-			monthStart := startOfUTCMonth(now)
-			n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", monthStart, now)
+			periodStart, _ := autoDMUsagePeriod(u, now)
+			n, err := s.activityRepo.CountSuccessByTypeBetween(userID, "dm", periodStart, now)
 			if err != nil {
 				zap.L().Warn("auto dm: count monthly sends failed", zap.Uint("user_id", userID), zap.Error(err))
 			} else if n >= limit {
@@ -1082,6 +1204,34 @@ func autoDMConservativeDailySendLimit(u *model.User) int64 {
 	default:
 		return 0
 	}
+}
+
+func autoDMUsagePeriod(u *model.User, now time.Time) (time.Time, time.Time) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	end := now.UTC().AddDate(0, 1, 0)
+	if u != nil && u.SubscriptionExpiresAt != nil {
+		end = u.SubscriptionExpiresAt.UTC()
+	}
+	start := now.UTC().AddDate(0, -1, 0)
+	if u != nil && u.SubscriptionStartedAt != nil && u.SubscriptionStartedAt.Before(end) {
+		start = u.SubscriptionStartedAt.UTC()
+	}
+	if !end.After(start) {
+		end = start.AddDate(0, 1, 0)
+	}
+	return start, end
+}
+
+func remainingQuota(limit, used int64) int64 {
+	if limit <= 0 {
+		return 0
+	}
+	if used >= limit {
+		return 0
+	}
+	return limit - used
 }
 
 func (s *AutoDMService) finishRun(cfg *model.AutomationConfig, now time.Time, state string) error {
@@ -1243,6 +1393,7 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 		DMConversationID:  task.DMConversationID,
 		DMEventID:         task.DMEventID,
 		GeneratedAt:       task.GeneratedAt.UTC().Format(time.RFC3339),
+		Diagnostics:       autoDMTaskDiagnostics(task),
 	}
 	if task.ApprovedAt != nil {
 		out.ApprovedAt = task.ApprovedAt.UTC().Format(time.RFC3339)
@@ -1260,6 +1411,61 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 		out.SentAt = task.SentAt.UTC().Format(time.RFC3339)
 	}
 	return out
+}
+
+func autoDMTaskDiagnostics(task *model.AutoDMTask) []dto.AutoDMDiagnosticItem {
+	if task == nil {
+		return nil
+	}
+	items := []dto.AutoDMDiagnosticItem{}
+	add := func(key, label, status, severity, detail string) {
+		items = append(items, dto.AutoDMDiagnosticItem{Key: key, Label: label, Status: status, Severity: severity, Detail: detail})
+	}
+	if strings.TrimSpace(task.RecipientUserID) == "" {
+		add("recipient", "Recipient", "blocked", "error", "Missing recipient_user_id; real DM cannot be sent.")
+	} else {
+		add("recipient", "Recipient", "ok", "info", "Recipient user ID is present.")
+	}
+	switch task.CapabilityStatus {
+	case "approved_pending_real_send":
+		add("send_state", "Send state", "ok", "info", "Approved and waiting for the sender.")
+	case "recipient_rule_pending":
+		add("recipient_rule", "Recipient rule", "review", "warning", "Needs explicit allowlist confirmation before real send.")
+	case "missing_oauth_scope":
+		add("oauth_scope", "X OAuth scopes", "blocked", "error", "Reconnect the X account with dm.read, dm.write, tweet.read and users.read.")
+	case "token_missing":
+		add("x_token", "X access token", "blocked", "error", "Connected X account is missing a usable access token.")
+	case "no_eligible_recipient":
+		add("recipient_lookup", "Recipient lookup", "blocked", "warning", "No eligible opt-in recipient was found in recent interactions.")
+	case "recipient_lookup_failed":
+		add("recipient_lookup", "Recipient lookup", "blocked", "error", "Recipient lookup failed; check the failure reason.")
+	case "account_missing":
+		add("x_account", "X account", "blocked", "error", "No connected X account is available.")
+	default:
+		if strings.TrimSpace(task.CapabilityStatus) != "" {
+			add("capability", "Capability", "review", "warning", task.CapabilityStatus)
+		}
+	}
+	if strings.TrimSpace(task.FailureCategory) != "" || strings.TrimSpace(task.FailureReason) != "" {
+		severity := "error"
+		status := "blocked"
+		if task.Retryable {
+			severity = "warning"
+			status = "retryable"
+		}
+		detail := strings.TrimSpace(task.FailureReason)
+		if detail == "" {
+			detail = task.FailureCategory
+		}
+		add("failure", "Last failure", status, severity, detail)
+	}
+	if task.Status == "sent" {
+		add("sent", "Delivery", "ok", "success", "DM was sent successfully.")
+	}
+	if task.Status == "blocked" {
+		add("blocked", "Manual decision", "blocked", "warning", "This task was blocked from the Auto DM workbench.")
+	}
+	return items
 }
 
 func (s *AutoDMService) autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule) dto.AutoDMRecipientRuleItem {

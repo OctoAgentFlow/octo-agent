@@ -207,6 +207,14 @@ export default function AutoCommentsPage() {
       },
     ];
   }, [analytics, quotaPeriodEndsAt, t]);
+  const suggestionQuotaMeta = useMemo(() => {
+    const hasResponseMeta = targetSuggestionMeta.targetLimit > 0;
+    const targetLimit = hasResponseMeta ? targetSuggestionMeta.targetLimit : analytics?.summary.target_limit || 0;
+    const targetCount = hasResponseMeta ? targetSuggestionMeta.targetCount : analytics?.summary.target_count || accountTargets.length;
+    const suggestionLimit = hasResponseMeta ? targetSuggestionMeta.suggestionLimit : Math.max(targetLimit - targetCount, 0);
+    return { targetCount, targetLimit, suggestionLimit };
+  }, [accountTargets.length, analytics?.summary.target_count, analytics?.summary.target_limit, targetSuggestionMeta]);
+  const targetSuggestionQuotaFull = suggestionQuotaMeta.targetLimit > 0 && suggestionQuotaMeta.targetCount >= suggestionQuotaMeta.targetLimit;
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
@@ -939,9 +947,9 @@ export default function AutoCommentsPage() {
                       <div className="grid gap-2">
                         <p className="rounded-xl border border-[#1d9bf0]/20 bg-[#1d9bf0]/10 p-3 text-xs leading-5 text-[#8ecdf8]">
                           {t("autoComment.discovery.limitHint", {
-                            count: targetSuggestionMeta.targetCount,
-                            limit: targetSuggestionMeta.targetLimit,
-                            remaining: targetSuggestionMeta.suggestionLimit,
+                            count: suggestionQuotaMeta.targetCount,
+                            limit: suggestionQuotaMeta.targetLimit,
+                            remaining: suggestionQuotaMeta.suggestionLimit,
                           })}
                         </p>
                         {targetSuggestions.map((item) => (
@@ -964,8 +972,8 @@ export default function AutoCommentsPage() {
                       </div>
                     ) : suggestRequested && !suggestBusy ? (
                       <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
-                        {targetSuggestionMeta.suggestionLimit <= 0
-                          ? t("autoComment.discovery.noSlots", { count: targetSuggestionMeta.targetCount, limit: targetSuggestionMeta.targetLimit })
+                        {targetSuggestionQuotaFull
+                          ? t("autoComment.discovery.noSlots", { count: suggestionQuotaMeta.targetCount, limit: suggestionQuotaMeta.targetLimit })
                           : t("autoComment.discovery.empty")}
                       </p>
                     ) : (

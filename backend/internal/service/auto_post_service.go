@@ -964,11 +964,7 @@ func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequ
 		plan.Timezone = "UTC"
 	}
 	plan.ContentLengthMode = normalizeAutoPostLengthMode(req.ContentLengthMode, accountTier)
-	plan.TrendRegions = encodeStringList(normalizeTrendRegions(req.TrendRegions))
-	plan.TrendCategories = encodeStringList(normalizeTrendCategories(req.TrendCategories))
 	plan.ExcludedTrendNames = encodeStringList(normalizeTrendExcludeNames(req.ExcludedTrendNames))
-	plan.AllowGeneralTrends = req.AllowGeneralTrends
-	plan.SensitiveTrendPolicy = normalizeSensitiveTrendPolicy(req.SensitiveTrendPolicy)
 	if plan.Enabled && plan.NextRunAt == nil {
 		now := time.Now().UTC()
 		next := computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)

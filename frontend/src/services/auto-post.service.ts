@@ -119,11 +119,11 @@ export type AutoPostPlanPayload = {
   posting_windows: string;
   timezone: string;
   content_length_mode: AutoPostLengthMode;
-  trend_regions: string[];
-  trend_categories: string[];
+  trend_regions?: string[];
+  trend_categories?: string[];
   excluded_trend_names: string[];
-  allow_general_trends: boolean;
-  sensitive_trend_policy: TrendSensitivePolicy;
+  allow_general_trends?: boolean;
+  sensitive_trend_policy?: TrendSensitivePolicy;
 };
 
 export type TrendTopicApi = {

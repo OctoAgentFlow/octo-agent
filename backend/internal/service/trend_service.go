@@ -354,11 +354,7 @@ func preferenceFromPlan(plan *model.AutoPostPlan) trendPreference {
 		return trendPreference{}
 	}
 	return trendPreference{
-		Regions:              normalizeTrendRegions(decodeStringList(plan.TrendRegions)),
-		Categories:           normalizeTrendCategories(decodeStringList(plan.TrendCategories)),
-		ExcludedNames:        normalizeTrendExcludeNames(decodeStringList(plan.ExcludedTrendNames)),
-		AllowGeneral:         plan.AllowGeneralTrends,
-		SensitiveTrendPolicy: normalizeSensitiveTrendPolicy(plan.SensitiveTrendPolicy),
+		ExcludedNames: normalizeTrendExcludeNames(decodeStringList(plan.ExcludedTrendNames)),
 	}
 }
 

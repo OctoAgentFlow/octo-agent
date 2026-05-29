@@ -173,6 +173,8 @@ type GenerateAutoReplyInput struct {
 
 type GenerateAutoDMInput struct {
 	RecipientUsername string
+	RecipientSegment  string
+	DMStrategy        string
 	RecentInteraction string
 	Tone              string
 	HasBot            bool
@@ -784,6 +786,13 @@ func (s *AIService) GenerateAutoDMCandidates(ctx context.Context, in GenerateAut
 	}, " ")
 	var user strings.Builder
 	user.WriteString("Recipient: @" + recipient + "\n")
+	if segment := strings.TrimSpace(in.RecipientSegment); segment != "" {
+		user.WriteString("Recipient segment: " + segment + "\n")
+	}
+	if strategy := strings.TrimSpace(in.DMStrategy); strategy != "" {
+		user.WriteString("Segment-specific DM strategy:\n")
+		user.WriteString(strategy + "\n")
+	}
 	if strings.TrimSpace(in.RecentInteraction) != "" {
 		user.WriteString("Recent interaction context:\n")
 		user.WriteString(truncateRunes(in.RecentInteraction, 600))

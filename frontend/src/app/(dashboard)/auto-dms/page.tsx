@@ -32,10 +32,12 @@ import {
   type AutoDMRecipientImportPreviewData,
   type AutoDMRecipientImportApi,
   type AutoDMRecipientRuleApi,
+  type AutoDMRecipientSegment,
   type AutoDMTaskApi,
 } from "@/services/automation.service";
 
 const requiredDMScopeList = ["dm.read", "dm.write", "tweet.read", "users.read"];
+const dmRecipientSegments: AutoDMRecipientSegment[] = ["lead", "partner", "community", "investor", "existing_user"];
 
 export default function AutoDMsPage() {
   const { t } = useT();
@@ -144,9 +146,9 @@ export default function AutoDMsPage() {
     }
   };
 
-  const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
+  const setDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"], segment?: AutoDMRecipientSegment) => {
     try {
-      const rule = await automationService.setDMRecipientRule(id, status, t("autoDm.reason.ruleUpdated"));
+      const rule = await automationService.setDMRecipientRule(id, status, t("autoDm.reason.ruleUpdated"), segment);
       setDMRecipients((items) => [rule, ...items.filter((item) => item.id !== rule.id)]);
       if (status === "blocked" || status === "unsubscribed") {
         const dmTaskData = await automationService.dmTasks();
@@ -158,9 +160,9 @@ export default function AutoDMsPage() {
     }
   };
 
-  const updateDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"]) => {
+  const updateDMRecipientRule = async (id: number, status: AutoDMRecipientRuleApi["status"], segment?: AutoDMRecipientSegment) => {
     try {
-      const rule = await automationService.updateDMRecipientRule(id, status, t("autoDm.reason.ruleUpdated"));
+      const rule = await automationService.updateDMRecipientRule(id, status, t("autoDm.reason.ruleUpdated"), segment);
       setDMRecipients((items) => items.map((item) => (item.id === id ? rule : item)));
       pushToast(t("autoDm.toast.ruleUpdated"));
     } catch (error) {
@@ -402,9 +404,25 @@ export default function AutoDMsPage() {
                               <span className={`rounded-full border px-2.5 py-1 text-xs ${recipientStatusClass(rule.status)}`}>
                                 {t(`autoDm.recipientStatus.${rule.status}`)}
                               </span>
+                              <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
+                                {t(`autoDm.segment.${rule.recipient_segment || "lead"}`)}
+                              </span>
                               {rule.updated_at ? <span className="text-xs text-[#71767b]">{formatDateTime(rule.updated_at, timeZone)}</span> : null}
                             </div>
                           </div>
+                          <label className="block">
+                            <span className="text-xs text-[#71767b]">{t("autoDm.segment.label")}</span>
+                            <select
+                              value={(rule.recipient_segment as AutoDMRecipientSegment) || "lead"}
+                              onChange={(event) => updateDMRecipientRule(rule.id, rule.status, event.target.value as AutoDMRecipientSegment)}
+                              className="mt-1 w-full rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]/60"
+                            >
+                              {dmRecipientSegments.map((segment) => (
+                                <option key={segment} value={segment}>{t(`autoDm.segment.${segment}`)}</option>
+                              ))}
+                            </select>
+                            <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoDm.segmentStrategy.${rule.recipient_segment || "lead"}`)}</span>
+                          </label>
                           <div className="flex flex-wrap gap-2">
                             <Button size="sm" variant="outline" onClick={() => updateDMRecipientRule(rule.id, "allowlisted")} disabled={rule.status === "allowlisted"}>{t("automation.dmReview.allowlist")}</Button>
                             <Button size="sm" variant="outline" onClick={() => updateDMRecipientRule(rule.id, "blocked")} disabled={rule.status === "blocked"}>{t("automation.dmReview.blacklist")}</Button>
@@ -426,7 +444,7 @@ export default function AutoDMsPage() {
                     setDMImportPreview(null);
                   }}
                   rows={5}
-                  placeholder={t("automation.dmReview.importPlaceholder")}
+                  placeholder={t("autoDm.import.segmentPlaceholder")}
                   className="min-h-32 w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -616,8 +634,13 @@ function AutoDMImportPreview({ preview }: { preview: AutoDMRecipientImportPrevie
                 <span className="font-medium text-white">
                   {t("autoDm.importPreview.line", { line: row.line })} · {row.recipient_username || row.recipient_user_id || "—"}
                 </span>
-                <span className={`rounded-full border px-2 py-0.5 ${importPreviewStatusClass(row.status)}`}>
-                  {t(`autoDm.importPreview.status.${row.status}`)}
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-[#8ecdf8]">
+                    {t(`autoDm.segment.${row.recipient_segment || "lead"}`)}
+                  </span>
+                  <span className={`rounded-full border px-2 py-0.5 ${importPreviewStatusClass(row.status)}`}>
+                    {t(`autoDm.importPreview.status.${row.status}`)}
+                  </span>
                 </span>
               </div>
               {row.message ? <p className="mt-1 break-words text-[#71767b]">{row.message}</p> : null}

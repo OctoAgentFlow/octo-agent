@@ -116,6 +116,7 @@ export type AutoDMRecipientRuleApi = {
   x_account_id: number;
   recipient_user_id: string;
   recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
   status: "allowlisted" | "blocked" | "unsubscribed";
   unsubscribe_token?: string;
   unsubscribe_url?: string;
@@ -125,6 +126,8 @@ export type AutoDMRecipientRuleApi = {
   updated_at?: string;
 };
 
+export type AutoDMRecipientSegment = "lead" | "partner" | "community" | "investor" | "existing_user";
+
 export type AutoDMRecipientRulesData = {
   items: AutoDMRecipientRuleApi[];
   total: number;
@@ -133,6 +136,7 @@ export type AutoDMRecipientRulesData = {
 export type AutoDMRecipientRulesQuery = {
   search?: string;
   status?: AutoDMRecipientRuleApi["status"] | "";
+  segment?: AutoDMRecipientSegment | "";
   xAccountID?: number;
   limit?: number;
 };
@@ -149,6 +153,7 @@ export type AutoDMRecipientImportPreviewRowApi = {
   line: number;
   recipient_user_id?: string;
   recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
   status: "ready" | "existing" | "duplicate_in_file" | "invalid" | string;
   message?: string;
 };
@@ -479,6 +484,7 @@ export const automationService = {
     const params = {
       search: query?.search || undefined,
       status: query?.status || undefined,
+      segment: query?.segment || undefined,
       x_account_id: query?.xAccountID || undefined,
       limit: query?.limit || undefined,
     };
@@ -519,12 +525,12 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/retry`);
     return res.data.data;
   },
-  async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
-    const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason });
+  async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string, segment?: AutoDMRecipientSegment) {
+    const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason, recipient_segment: segment });
     return res.data.data;
   },
-  async updateDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
-    const res = await request.patch<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/recipient-rules/${id}`, { status, reason });
+  async updateDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string, segment?: AutoDMRecipientSegment) {
+    const res = await request.patch<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/recipient-rules/${id}`, { status, reason, recipient_segment: segment });
     return res.data.data;
   },
   async bulkUpdateDMRecipientRules(ids: number[], status: AutoDMRecipientRuleApi["status"], reason: string) {

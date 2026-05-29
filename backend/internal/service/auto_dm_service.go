@@ -81,6 +81,7 @@ func NewAutoDMService(
 type autoDMCandidate struct {
 	UserID           string
 	Username         string
+	Segment          string
 	Message          string
 	GenerationReason string
 	Candidates       []AutoDMCandidate
@@ -318,10 +319,15 @@ func (s *AutoDMService) findAutoDMCandidate(ctx context.Context, userID uint, ac
 			if !decision.Allowed {
 				continue
 			}
-			generated := s.generateAutoDMCandidates(ctx, userID, account.ID, reply.AuthorUsername, reply.Text)
+			segment := "lead"
+			if rule, err := s.ruleRepo.GetByRecipient(userID, account.ID, reply.AuthorID); err == nil && rule != nil {
+				segment = normalizeAutoDMRecipientSegment(rule.RecipientSegment)
+			}
+			generated := s.generateAutoDMCandidates(ctx, userID, account.ID, reply.AuthorUsername, segment, reply.Text)
 			return &autoDMCandidate{
 				UserID:           reply.AuthorID,
 				Username:         replyAuthorDisplay(reply.AuthorUsername),
+				Segment:          segment,
 				Message:          generated.Text,
 				GenerationReason: generated.GenerationReason,
 				Candidates:       generated.Candidates,
@@ -388,6 +394,7 @@ func (s *AutoDMService) ListRecipientRules(userID uint, query dto.AutoDMRecipien
 	rows, total, err := s.ruleRepo.ListByUser(userID, repository.AutoDMRecipientRuleListQuery{
 		Search:     query.Search,
 		Status:     query.Status,
+		Segment:    normalizeAutoDMRecipientSegmentForQuery(query.Segment),
 		XAccountID: query.XAccountID,
 		Limit:      query.Limit,
 	})
@@ -503,7 +510,7 @@ func (s *AutoDMService) RetryTask(userID, taskID uint) (*dto.AutoDMTaskItem, err
 	return &out, nil
 }
 
-func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, reason string) (*dto.AutoDMRecipientRuleItem, error) {
+func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, segment, reason string) (*dto.AutoDMRecipientRuleItem, error) {
 	status = strings.TrimSpace(status)
 	if !repository.IsAutoDMRecipientRuleStatus(status) {
 		return nil, errors.New("invalid auto dm recipient rule status")
@@ -521,6 +528,7 @@ func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, re
 		task.XAccountID,
 		task.RecipientUserID,
 		task.RecipientUsername,
+		normalizeAutoDMRecipientSegment(segment),
 		status,
 		"task",
 		reason,
@@ -544,7 +552,7 @@ func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, re
 	return &out, nil
 }
 
-func (s *AutoDMService) UpdateRecipientRule(userID, ruleID uint, status, reason string) (*dto.AutoDMRecipientRuleItem, error) {
+func (s *AutoDMService) UpdateRecipientRule(userID, ruleID uint, status, segment, reason string) (*dto.AutoDMRecipientRuleItem, error) {
 	status = strings.TrimSpace(status)
 	if !repository.IsAutoDMRecipientRuleStatus(status) {
 		return nil, errors.New("invalid auto dm recipient rule status")
@@ -554,7 +562,11 @@ func (s *AutoDMService) UpdateRecipientRule(userID, ruleID uint, status, reason 
 	if reason == "" {
 		reason = "Updated from Auto DM recipient manager."
 	}
-	rule, err := s.ruleRepo.UpdateStatusByID(userID, ruleID, status, reason, "manual", now)
+	normalizedSegment := ""
+	if strings.TrimSpace(segment) != "" {
+		normalizedSegment = normalizeAutoDMRecipientSegment(segment)
+	}
+	rule, err := s.ruleRepo.UpdateStatusByID(userID, ruleID, status, normalizedSegment, reason, "manual", now)
 	if err != nil {
 		return nil, err
 	}
@@ -630,7 +642,7 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 			out.Errors = append(out.Errors, fmt.Sprintf("line %d: %v", line, err))
 			continue
 		}
-		recipientID, username, skip, rowErr := parseAutoDMImportRow(row)
+		recipientID, username, segment, skip, rowErr := parseAutoDMImportRow(row)
 		if skip {
 			if rowErr != "" {
 				out.Skipped++
@@ -643,6 +655,7 @@ func (s *AutoDMService) ImportRecipientRules(userID uint, req dto.AutoDMRecipien
 			accountID,
 			recipientID,
 			username,
+			segment,
 			repository.AutoDMRecipientAllowlisted,
 			"manual_consent_import",
 			"Imported as an explicit opt-in Auto DM recipient.",
@@ -717,13 +730,13 @@ func (s *AutoDMService) PreviewRecipientImport(userID uint, req dto.AutoDMRecipi
 			out.Rows = append(out.Rows, dto.AutoDMRecipientImportPreviewRow{Line: line, Status: "invalid", Message: err.Error()})
 			continue
 		}
-		recipientID, username, skip, rowErr := parseAutoDMImportRow(row)
+		recipientID, username, segment, skip, rowErr := parseAutoDMImportRow(row)
 		if skip {
 			if rowErr != "" {
 				out.Skipped++
 				msg := fmt.Sprintf("line %d: %s", line, rowErr)
 				out.Errors = append(out.Errors, msg)
-				out.Rows = append(out.Rows, dto.AutoDMRecipientImportPreviewRow{Line: line, RecipientUserID: recipientID, RecipientUsername: username, Status: "invalid", Message: rowErr})
+				out.Rows = append(out.Rows, dto.AutoDMRecipientImportPreviewRow{Line: line, RecipientUserID: recipientID, RecipientUsername: username, RecipientSegment: segment, Status: "invalid", Message: rowErr})
 			}
 			continue
 		}
@@ -732,6 +745,7 @@ func (s *AutoDMService) PreviewRecipientImport(userID uint, req dto.AutoDMRecipi
 			Line:              line,
 			RecipientUserID:   recipientID,
 			RecipientUsername: username,
+			RecipientSegment:  segment,
 			Status:            "ready",
 			Message:           "Ready to import as explicit opt-in recipient.",
 		}
@@ -1049,19 +1063,19 @@ func (s *AutoDMService) firstConnectedAccountForUser(userID uint) (*model.Twitte
 	return account, nil
 }
 
-func parseAutoDMImportRow(row []string) (recipientID, username string, skip bool, rowErr string) {
+func parseAutoDMImportRow(row []string) (recipientID, username, segment string, skip bool, rowErr string) {
 	if len(row) == 0 {
-		return "", "", true, ""
+		return "", "", "", true, ""
 	}
 	recipientID = strings.TrimSpace(row[0])
 	if strings.EqualFold(recipientID, "recipient_user_id") || strings.EqualFold(recipientID, "user_id") {
-		return "", "", true, ""
+		return "", "", "", true, ""
 	}
 	if recipientID == "" {
-		return "", "", true, ""
+		return "", "", "", true, ""
 	}
 	if !isAutoDMRecipientID(recipientID) {
-		return "", "", true, "recipient_user_id must be numeric"
+		return "", "", "", true, "recipient_user_id must be numeric"
 	}
 	if len(row) > 1 {
 		rawUsername := strings.TrimSpace(row[1])
@@ -1069,7 +1083,13 @@ func parseAutoDMImportRow(row []string) (recipientID, username string, skip bool
 			username = replyAuthorDisplay(rawUsername)
 		}
 	}
-	return recipientID, username, false, ""
+	if len(row) > 2 {
+		segment = normalizeAutoDMRecipientSegment(row[2])
+	}
+	if segment == "" {
+		segment = "lead"
+	}
+	return recipientID, username, segment, false, ""
 }
 
 func isAutoDMRecipientID(value string) bool {
@@ -1082,6 +1102,45 @@ func isAutoDMRecipientID(value string) bool {
 		}
 	}
 	return true
+}
+
+func normalizeAutoDMRecipientSegment(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "partner", "partners":
+		return "partner"
+	case "community", "community_member", "member":
+		return "community"
+	case "investor", "investors":
+		return "investor"
+	case "existing_user", "existing-user", "customer", "user":
+		return "existing_user"
+	case "lead", "prospect", "":
+		return "lead"
+	default:
+		return "lead"
+	}
+}
+
+func normalizeAutoDMRecipientSegmentForQuery(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return normalizeAutoDMRecipientSegment(value)
+}
+
+func autoDMStrategyForSegment(segment string) string {
+	switch normalizeAutoDMRecipientSegment(segment) {
+	case "partner":
+		return "Treat the recipient as a potential partner. Use collaborative language, mention mutual audience or co-marketing fit, and avoid a direct sales pitch."
+	case "community":
+		return "Treat the recipient as a community member. Be warm, conversational, and invite lightweight discussion or group participation without pressure."
+	case "investor":
+		return "Treat the recipient as an investor or analyst. Emphasize traction, market narrative, differentiation, and a concise reason to learn more; avoid financial promises."
+	case "existing_user":
+		return "Treat the recipient as an existing or likely product user. Be helpful, support-oriented, and focus on activation, next-step guidance, or feedback."
+	default:
+		return "Treat the recipient as a qualified lead. Be helpful and specific, offer a low-friction next step, and avoid sounding like cold outreach."
+	}
 }
 
 func uniqueAutoDMRuleIDs(ids []uint) []uint {
@@ -1297,7 +1356,7 @@ func autoDMMessageForCandidate(username string) string {
 	return "Thanks for engaging with our post, " + name + " — appreciate it. If this is not useful, feel free to ignore."
 }
 
-func (s *AutoDMService) generateAutoDMCandidates(ctx context.Context, userID, xAccountID uint, username, recentInteraction string) AIGeneratedAutoDMCandidates {
+func (s *AutoDMService) generateAutoDMCandidates(ctx context.Context, userID, xAccountID uint, username, segment, recentInteraction string) AIGeneratedAutoDMCandidates {
 	fallback := autoDMMessageForCandidate(username)
 	fallbackCandidate := AutoDMCandidate{Type: "helpful_followup", Label: "Helpful follow-up", Message: fallback}
 	if s == nil || s.ai == nil {
@@ -1310,6 +1369,8 @@ func (s *AutoDMService) generateAutoDMCandidates(ctx context.Context, userID, xA
 	bot, _ := s.botForAccount(userID, xAccountID)
 	botID := botIDForUsage(bot)
 	input := autoDMInputFromBot(username, recentInteraction, bot)
+	input.RecipientSegment = normalizeAutoDMRecipientSegment(segment)
+	input.DMStrategy = autoDMStrategyForSegment(segment)
 	input.ContentContext = contentContextForGeneration(s.contentRepo, userID, xAccountID, botID, recentInteraction, username, bot)
 	generated, err := s.ai.GenerateAutoDMCandidates(ctx, input)
 	if err != nil || strings.TrimSpace(generated.Text) == "" {
@@ -1575,6 +1636,7 @@ func (s *AutoDMService) autoDMRecipientRuleToDTO(rule *model.AutoDMRecipientRule
 		XAccountID:        rule.XAccountID,
 		RecipientUserID:   rule.RecipientUserID,
 		RecipientUsername: rule.RecipientUsername,
+		RecipientSegment:  normalizeAutoDMRecipientSegment(rule.RecipientSegment),
 		Status:            rule.Status,
 		UnsubscribeToken:  rule.UnsubscribeToken,
 		UnsubscribeURL:    s.autoDMUnsubscribeURL(rule.UnsubscribeToken),

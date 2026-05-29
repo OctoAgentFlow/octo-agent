@@ -290,6 +290,7 @@ type AutoDMRecipientRuleItem struct {
 	XAccountID        uint   `json:"x_account_id"`
 	RecipientUserID   string `json:"recipient_user_id"`
 	RecipientUsername string `json:"recipient_username,omitempty"`
+	RecipientSegment  string `json:"recipient_segment,omitempty"`
 	Status            string `json:"status"`
 	UnsubscribeToken  string `json:"unsubscribe_token,omitempty"`
 	UnsubscribeURL    string `json:"unsubscribe_url,omitempty"`
@@ -302,6 +303,7 @@ type AutoDMRecipientRuleItem struct {
 type AutoDMRecipientRuleQuery struct {
 	Search     string `form:"search"`
 	Status     string `form:"status"`
+	Segment    string `form:"segment"`
 	XAccountID uint   `form:"x_account_id"`
 	Limit      int    `form:"limit"`
 }
@@ -312,8 +314,9 @@ type AutoDMRecipientRulesResponse struct {
 }
 
 type AutoDMRecipientRuleRequest struct {
-	Status string `json:"status" binding:"required"`
-	Reason string `json:"reason"`
+	Status           string `json:"status" binding:"required"`
+	RecipientSegment string `json:"recipient_segment"`
+	Reason           string `json:"reason"`
 }
 
 type AutoDMRecipientRuleBulkRequest struct {
@@ -355,6 +358,7 @@ type AutoDMRecipientImportPreviewRow struct {
 	Line              int    `json:"line"`
 	RecipientUserID   string `json:"recipient_user_id,omitempty"`
 	RecipientUsername string `json:"recipient_username,omitempty"`
+	RecipientSegment  string `json:"recipient_segment,omitempty"`
 	Status            string `json:"status"`
 	Message           string `json:"message,omitempty"`
 }

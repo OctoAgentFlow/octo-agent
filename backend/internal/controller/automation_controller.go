@@ -400,7 +400,7 @@ func (ctl *AutomationController) UpdateDMRecipientRule(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoDMService.UpdateRecipientRule(userID, ruleID, req.Status, req.Reason)
+	data, err := ctl.autoDMService.UpdateRecipientRule(userID, ruleID, req.Status, req.RecipientSegment, req.Reason)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -535,7 +535,7 @@ func (ctl *AutomationController) SetDMRecipientRule(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoDMService.SetRecipientRuleFromTask(userID, taskID, req.Status, req.Reason)
+	data, err := ctl.autoDMService.SetRecipientRuleFromTask(userID, taskID, req.Status, req.RecipientSegment, req.Reason)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

@@ -46,17 +46,17 @@ func TestClassifyAutoDMFailureNetwork(t *testing.T) {
 }
 
 func TestParseAutoDMImportRow(t *testing.T) {
-	recipientID, username, skip, rowErr := parseAutoDMImportRow([]string{"1234567890", "alice"})
-	if skip || rowErr != "" || recipientID != "1234567890" || username != "@alice" {
-		t.Fatalf("unexpected valid row parse: id=%q username=%q skip=%v err=%q", recipientID, username, skip, rowErr)
+	recipientID, username, segment, skip, rowErr := parseAutoDMImportRow([]string{"1234567890", "alice", "partner"})
+	if skip || rowErr != "" || recipientID != "1234567890" || username != "@alice" || segment != "partner" {
+		t.Fatalf("unexpected valid row parse: id=%q username=%q segment=%q skip=%v err=%q", recipientID, username, segment, skip, rowErr)
 	}
 
-	_, _, skip, rowErr = parseAutoDMImportRow([]string{"recipient_user_id", "username"})
+	_, _, _, skip, rowErr = parseAutoDMImportRow([]string{"recipient_user_id", "username"})
 	if !skip || rowErr != "" {
 		t.Fatalf("header row should be silently skipped: skip=%v err=%q", skip, rowErr)
 	}
 
-	_, _, skip, rowErr = parseAutoDMImportRow([]string{"not-a-user", "alice"})
+	_, _, _, skip, rowErr = parseAutoDMImportRow([]string{"not-a-user", "alice"})
 	if !skip || rowErr == "" {
 		t.Fatalf("invalid recipient id should be reported: skip=%v err=%q", skip, rowErr)
 	}

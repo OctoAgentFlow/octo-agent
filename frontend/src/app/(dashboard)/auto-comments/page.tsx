@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -138,6 +138,7 @@ export default function AutoCommentsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [suggestBusy, setSuggestBusy] = useState(false);
   const [suggestRequested, setSuggestRequested] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [targetSuggestions, setTargetSuggestions] = useState<AutoCommentTargetSuggestionData["items"]>([]);
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
@@ -481,6 +482,7 @@ export default function AutoCommentsPage() {
     if (!accountID || suggestBusy) return;
     setSuggestBusy(true);
     setSuggestRequested(true);
+    setSuggestOpen(true);
     try {
       const data = await automationService.suggestCommentTargets(accountID);
       setTargetSuggestions(data.items || []);
@@ -872,40 +874,59 @@ export default function AutoCommentsPage() {
               <Button className="mt-3 w-full" variant="outline" disabled={!selectedAccount || !bulkHandles.trim() || bulkBusy} onClick={() => void importTargets()}>
                 {bulkBusy ? t("autoComment.bulkImport.importing") : t("autoComment.bulkImport.action")}
               </Button>
-              <div className="mt-4 border-t border-[#2f3336] pt-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{t("autoComment.discovery.title")}</p>
-                    <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.description")}</p>
-                  </div>
+              <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black/35">
+                <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => setSuggestOpen((open) => !open)}
+                    aria-expanded={suggestOpen}
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]">
+                      <Sparkles className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-white">{t("autoComment.discovery.title")}</span>
+                      <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.description")}</span>
+                    </span>
+                    <ChevronDown className={`ml-auto size-4 shrink-0 text-[#71767b] transition-transform ${suggestOpen ? "rotate-180" : ""}`} />
+                  </button>
                   <Button size="sm" variant="outline" disabled={!selectedAccount || suggestBusy} onClick={() => void suggestTargets()}>
-                    {suggestBusy ? t("autoComment.discovery.loading") : t("autoComment.discovery.action")}
+                    {suggestBusy ? t("autoComment.discovery.loading") : targetSuggestions.length > 0 ? t("autoComment.discovery.regenerate") : t("autoComment.discovery.action")}
                   </Button>
                 </div>
-                {targetSuggestions.length > 0 ? (
-                  <div className="mt-3 grid gap-2">
-                    {targetSuggestions.slice(0, 8).map((item) => (
-                      <div key={item.handle} className="rounded-xl border border-[#2f3336] bg-black p-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white">{formatHandle(item.handle)} {item.display_name ? <span className="text-[#71767b]">· {item.display_name}</span> : null}</p>
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(`autoComment.targetCategory.${item.category || "kol"}`)}</span>
-                              <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.target.priorityValue", { value: item.priority || 3 })}</span>
-                              {item.needs_verify ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("autoComment.discovery.verify")}</span> : null}
+                {suggestOpen ? (
+                  <div className="border-t border-[#2f3336] p-3">
+                    {targetSuggestions.length > 0 ? (
+                      <div className="grid gap-2">
+                        {targetSuggestions.slice(0, 8).map((item) => (
+                          <div key={item.handle} className="rounded-xl border border-[#2f3336] bg-black p-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-white">{formatHandle(item.handle)} {item.display_name ? <span className="text-[#71767b]">· {item.display_name}</span> : null}</p>
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">{t(`autoComment.targetCategory.${item.category || "kol"}`)}</span>
+                                  <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2 py-0.5 text-xs text-[#f6d96b]">{t("autoComment.target.priorityValue", { value: item.priority || 3 })}</span>
+                                  {item.needs_verify ? <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-0.5 text-xs text-[#71767b]">{t("autoComment.discovery.verify")}</span> : null}
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-[#b6bec5]">{item.reason}</p>
+                                {item.search_query ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.search")}: {item.search_query}</p> : null}
+                              </div>
+                              <Button size="sm" onClick={() => applySuggestedTarget(item)}>{t("autoComment.discovery.use")}</Button>
                             </div>
-                            <p className="mt-2 text-xs leading-5 text-[#b6bec5]">{item.reason}</p>
-                            {item.search_query ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.discovery.search")}: {item.search_query}</p> : null}
                           </div>
-                          <Button size="sm" onClick={() => applySuggestedTarget(item)}>{t("autoComment.discovery.use")}</Button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : suggestRequested && !suggestBusy ? (
+                      <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
+                        {t("autoComment.discovery.empty")}
+                      </p>
+                    ) : (
+                      <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
+                        {t("autoComment.discovery.collapsedHint")}
+                      </p>
+                    )}
                   </div>
-                ) : suggestRequested && !suggestBusy ? (
-                  <p className="mt-3 rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
-                    {t("autoComment.discovery.empty")}
-                  </p>
                 ) : null}
               </div>
             </div>

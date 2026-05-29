@@ -14,8 +14,9 @@ import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
+import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
-import { billingService } from "@/services/billing.service";
+import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import {
   automationService,
   type AutoCommentAnalyticsData,
@@ -123,12 +124,14 @@ export default function AutoCommentsPage() {
   const { t } = useT();
   const { pushToast } = useToast();
   const { confirm } = useConfirm();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [targets, setTargets] = useState<AutoCommentTargetApi[]>([]);
   const [drafts, setDrafts] = useState<AutoCommentTaskApi[]>([]);
   const [analytics, setAnalytics] = useState<AutoCommentAnalyticsData | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [plan, setPlan] = useState("free_trial");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [xAccountID, setXAccountID] = useState<number>(0);
@@ -176,6 +179,10 @@ export default function AutoCommentsPage() {
     () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
     [accountDrafts]
   );
+  const quotaPeriodEndsAt = useMemo(() => {
+    if (!subscription?.expiration_date) return t("autoComment.quota.periodUnknown");
+    return formatDateTime(subscription.expiration_date, timeZone);
+  }, [subscription?.expiration_date, timeZone, t]);
   const quotaCards = useMemo(() => {
     if (!analytics) return [];
     return [
@@ -187,15 +194,17 @@ export default function AutoCommentsPage() {
       {
         label: t("autoComment.quota.scans"),
         value: `${formatCompactNumber(analytics.summary.monthly_scans_used)} / ${formatCompactNumber(analytics.summary.monthly_scan_limit)}`,
+        period: t("autoComment.quota.periodEnds", { date: quotaPeriodEndsAt }),
         helper: t("autoComment.quota.scansHint"),
       },
       {
         label: t("autoComment.quota.comments"),
         value: `${formatCompactNumber(analytics.summary.monthly_comments_used)} / ${formatCompactNumber(analytics.summary.monthly_comment_limit)}`,
+        period: t("autoComment.quota.periodEnds", { date: quotaPeriodEndsAt }),
         helper: t("autoComment.quota.commentsHint"),
       },
     ];
-  }, [analytics, t]);
+  }, [analytics, quotaPeriodEndsAt, t]);
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
@@ -253,6 +262,7 @@ export default function AutoCommentsPage() {
       setTargets(targetData.items);
       setDrafts(draftData.items);
       setAnalytics(analyticsData);
+      setSubscription(subscriptionData);
       setPlan(subscriptionData.plan);
       setQuotaUpgradeVisible(false);
       const commentModule = automationData.modules.find((item) => item.type === "comment");
@@ -650,6 +660,7 @@ export default function AutoCommentsPage() {
                 <div key={item.label} className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                   <p className="text-xs text-[#71767b]">{item.label}</p>
                   <p className="mt-2 text-xl font-semibold text-white">{item.value}</p>
+                  {"period" in item && item.period ? <p className="mt-1 text-xs text-[#1d9bf0]">{item.period}</p> : null}
                   <p className="mt-1 text-xs leading-5 text-[#71767b]">{item.helper}</p>
                 </div>
               ))}

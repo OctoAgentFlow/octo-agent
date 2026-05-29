@@ -931,7 +931,7 @@ export const dict: I18nDict = {
   "autoComment.deliveryFilter.auto_comment": "可自动评论",
   "autoComment.deliveryFilter.manual_comment": "建议手动评论",
   "autoComment.deliveryFilter.quote_post": "建议引用发布",
-  "autoComment.deliveryFilter.blocked": "受限/失败",
+  "autoComment.deliveryFilter.blocked": "受限/失败/已拒绝",
   "autoComment.delivery.title": "推荐动作",
   "autoComment.delivery.auto_comment": "可自动评论",
   "autoComment.delivery.manual_comment": "建议手动评论",

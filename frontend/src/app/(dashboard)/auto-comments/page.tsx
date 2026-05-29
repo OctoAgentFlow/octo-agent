@@ -86,6 +86,21 @@ function deliveryKey(mode?: string) {
   return `autoComment.delivery.${mode || "manual_comment"}`;
 }
 
+function isClosedDraft(draft: AutoCommentTaskApi) {
+  return draft.status === "rejected" || draft.status === "failed" || draft.status === "blocked";
+}
+
+function isQueuedQuotePost(draft: AutoCommentTaskApi) {
+  return draft.delivery_mode === "quote_post" && (draft.status === "ready_to_publish" || draft.status === "sending");
+}
+
+function displayDeliveryMode(draft: AutoCommentTaskApi) {
+  if (draft.delivery_mode === "quote_post" && (isClosedDraft(draft) || !draft.api_reply_eligible)) {
+    return "manual_comment";
+  }
+  return draft.delivery_mode || "manual_comment";
+}
+
 function primaryOpportunityText(draft: AutoCommentTaskApi) {
   if (draft.delivery_mode === "quote_post") {
     return draft.quote_post_candidate || draft.generated_comment || "";
@@ -177,8 +192,9 @@ export default function AutoCommentsPage() {
     () =>
       accountDrafts.filter((draft) => {
         if (deliveryFilter === "all") return true;
-        if (deliveryFilter === "blocked") return draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted";
-        return (draft.delivery_mode || "manual_comment") === deliveryFilter;
+        if (deliveryFilter === "blocked") return isClosedDraft(draft) || draft.failure_category === "x_reply_restricted";
+        if (deliveryFilter === "quote_post") return isQueuedQuotePost(draft);
+        return displayDeliveryMode(draft) === deliveryFilter;
       }),
     [accountDrafts, deliveryFilter]
   );
@@ -187,9 +203,9 @@ export default function AutoCommentsPage() {
       ([
         ["all", accountDrafts.length],
         ["auto_comment", accountDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
-        ["manual_comment", accountDrafts.filter((draft) => (draft.delivery_mode || "manual_comment") === "manual_comment").length],
-        ["quote_post", accountDrafts.filter((draft) => draft.delivery_mode === "quote_post").length],
-        ["blocked", accountDrafts.filter((draft) => draft.status === "failed" || draft.status === "blocked" || draft.failure_category === "x_reply_restricted").length],
+        ["manual_comment", accountDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
+        ["quote_post", accountDrafts.filter((draft) => isQueuedQuotePost(draft)).length],
+        ["blocked", accountDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length],
       ] as Array<[DeliveryFilter, number]>),
     [accountDrafts]
   );
@@ -999,7 +1015,7 @@ export default function AutoCommentsPage() {
                             <div className="space-y-3">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-[#8ecdf8]">{t("autoComment.delivery.title")}</p>
-                                <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(draft.delivery_mode))}</p>
+                                <p className="mt-1 text-sm font-semibold text-white">{t(deliveryKey(displayDeliveryMode(draft)))}</p>
                                 <p className="mt-1 text-xs leading-5 text-[#71767b]">
                                   {draft.delivery_reason || t("autoComment.delivery.defaultReason")}
                                 </p>
@@ -1033,7 +1049,7 @@ export default function AutoCommentsPage() {
                                   ) : null}
                                 </div>
                               ) : null}
-                              {draft.delivery_mode === "quote_post" ? (
+                              {isQueuedQuotePost(draft) ? (
                                 <div className="flex w-full flex-wrap gap-2">
                                   <span className="inline-flex h-9 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
                                     {t("autoComment.manualAction.quoteQueued")}

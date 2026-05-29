@@ -958,7 +958,7 @@ export const dict: I18nDict = {
   "autoComment.deliveryFilter.auto_comment": "Auto-commentable",
   "autoComment.deliveryFilter.manual_comment": "Manual comment",
   "autoComment.deliveryFilter.quote_post": "Quote suggestion",
-  "autoComment.deliveryFilter.blocked": "Restricted / failed",
+  "autoComment.deliveryFilter.blocked": "Restricted / failed / rejected",
   "autoComment.delivery.title": "Recommended action",
   "autoComment.delivery.auto_comment": "Auto-commentable",
   "autoComment.delivery.manual_comment": "Manual comment suggested",

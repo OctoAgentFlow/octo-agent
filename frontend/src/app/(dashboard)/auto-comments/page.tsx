@@ -150,6 +150,7 @@ export default function AutoCommentsPage() {
   const [suggestRequested, setSuggestRequested] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [targetSuggestions, setTargetSuggestions] = useState<AutoCommentTargetSuggestionData["items"]>([]);
+  const [targetSuggestionMeta, setTargetSuggestionMeta] = useState({ targetCount: 0, targetLimit: 0, suggestionLimit: 0 });
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
@@ -517,6 +518,11 @@ export default function AutoCommentsPage() {
     try {
       const data = await automationService.suggestCommentTargets(accountID);
       setTargetSuggestions(data.items || []);
+      setTargetSuggestionMeta({
+        targetCount: data.target_count || 0,
+        targetLimit: data.target_limit || 0,
+        suggestionLimit: data.suggestion_limit || 0,
+      });
       pushToast(t("autoComment.discovery.ready", { count: data.items?.length || 0 }));
     } catch (error) {
       pushToast(apiErrorCode(error) === "ai_generation_quota_exceeded" ? t("autoComment.errors.quota") : apiErrorMessage(error) || t("autoComment.discovery.failed"));
@@ -931,7 +937,14 @@ export default function AutoCommentsPage() {
                   <div className="border-t border-[#2f3336] p-3">
                     {targetSuggestions.length > 0 ? (
                       <div className="grid gap-2">
-                        {targetSuggestions.slice(0, 8).map((item) => (
+                        <p className="rounded-xl border border-[#1d9bf0]/20 bg-[#1d9bf0]/10 p-3 text-xs leading-5 text-[#8ecdf8]">
+                          {t("autoComment.discovery.limitHint", {
+                            count: targetSuggestionMeta.targetCount,
+                            limit: targetSuggestionMeta.targetLimit,
+                            remaining: targetSuggestionMeta.suggestionLimit,
+                          })}
+                        </p>
+                        {targetSuggestions.map((item) => (
                           <div key={item.handle} className="rounded-xl border border-[#2f3336] bg-black p-3">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                               <div className="min-w-0">
@@ -951,7 +964,9 @@ export default function AutoCommentsPage() {
                       </div>
                     ) : suggestRequested && !suggestBusy ? (
                       <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
-                        {t("autoComment.discovery.empty")}
+                        {targetSuggestionMeta.suggestionLimit <= 0
+                          ? t("autoComment.discovery.noSlots", { count: targetSuggestionMeta.targetCount, limit: targetSuggestionMeta.targetLimit })
+                          : t("autoComment.discovery.empty")}
                       </p>
                     ) : (
                       <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">

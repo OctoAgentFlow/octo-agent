@@ -189,6 +189,9 @@ export type AutoCommentTargetSuggestionData = {
     search_query?: string;
     needs_verify: boolean;
   }>;
+  target_count: number;
+  target_limit: number;
+  suggestion_limit: number;
 };
 
 export type AutoCommentAnalyticsData = {

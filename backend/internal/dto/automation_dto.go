@@ -393,7 +393,10 @@ type AutoCommentTargetSuggestionItem struct {
 }
 
 type AutoCommentTargetSuggestionResponse struct {
-	Items []AutoCommentTargetSuggestionItem `json:"items"`
+	Items           []AutoCommentTargetSuggestionItem `json:"items"`
+	TargetCount     int64                             `json:"target_count"`
+	TargetLimit     int64                             `json:"target_limit"`
+	SuggestionLimit int64                             `json:"suggestion_limit"`
 }
 
 type AutoCommentTargetStatusRequest struct {

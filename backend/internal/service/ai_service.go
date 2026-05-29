@@ -284,53 +284,65 @@ type CompleteOAFBotProfileInput struct {
 }
 
 type GenerateAutoPostInput struct {
-	AccountHandle     string
-	Topic             string
-	ContentDirection  string
-	ContentItemTitle  string
-	ContentItemType   string
-	ContentItemBody   string
-	ContentItemURL    string
-	ContentItemTopics []string
-	ContentItemGoal   string
-	ContentItemCTA    string
-	RecentPosts       []string
-	ContentLengthMode string
-	MaxCharacters     int
-	HasBot            bool
-	Name              string
-	Occupation        string
-	Industry          string
-	AgeRange          string
-	Gender            string
-	Education         string
-	MBTI              string
-	PersonalityTags   []string
-	IdentitySummary   string
-	VoiceTone         string
-	Topics            []string
-	ForbiddenTopics   []string
-	GrowthGoal        string
-	ProjectOneLiner   string
-	TargetAudience    string
-	CoreValueProps    string
-	ProductFeatures   string
-	Differentiators   string
-	ContentPillars    []string
-	ContentObjectives string
-	PreferredCTA      string
-	WebsiteURL        string
-	TelegramURL       string
-	DiscordURL        string
-	DocsURL           string
-	CTAPolicy         string
-	Hashtags          []string
-	Keywords          []string
-	ComplianceNotes   string
-	AvoidClaims       []string
-	SafetyMode        string
-	PrimaryLanguage   string
-	LanguageStrategy  string
+	AccountHandle        string
+	Topic                string
+	ContentDirection     string
+	ContentItemTitle     string
+	ContentItemType      string
+	ContentItemBody      string
+	ContentItemURL       string
+	ContentItemTopics    []string
+	ContentItemGoal      string
+	ContentItemCTA       string
+	SelectedTrends       []TrendPromptItem
+	TrendFeedbackSignals []string
+	RecentPosts          []string
+	ContentLengthMode    string
+	MaxCharacters        int
+	HasBot               bool
+	Name                 string
+	Occupation           string
+	Industry             string
+	AgeRange             string
+	Gender               string
+	Education            string
+	MBTI                 string
+	PersonalityTags      []string
+	IdentitySummary      string
+	VoiceTone            string
+	Topics               []string
+	ForbiddenTopics      []string
+	GrowthGoal           string
+	ProjectOneLiner      string
+	TargetAudience       string
+	CoreValueProps       string
+	ProductFeatures      string
+	Differentiators      string
+	ContentPillars       []string
+	ContentObjectives    string
+	PreferredCTA         string
+	WebsiteURL           string
+	TelegramURL          string
+	DiscordURL           string
+	DocsURL              string
+	CTAPolicy            string
+	Hashtags             []string
+	Keywords             []string
+	ComplianceNotes      string
+	AvoidClaims          []string
+	SafetyMode           string
+	PrimaryLanguage      string
+	LanguageStrategy     string
+}
+
+type TrendPromptItem struct {
+	Name         string
+	RegionName   string
+	Category     string
+	RiskLevel    string
+	TweetCount   int64
+	LanguageHint string
+	Reason       string
 }
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
@@ -1228,6 +1240,48 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 			user.WriteString("cta_preference_from_content_item: " + strings.TrimSpace(in.ContentItemCTA) + "\n")
 		}
 	}
+	if len(in.SelectedTrends) > 0 {
+		user.WriteString("Relevant cached X trends that may inform this post:\n")
+		for _, trend := range in.SelectedTrends {
+			name := strings.TrimSpace(trend.Name)
+			if name == "" {
+				continue
+			}
+			user.WriteString("- " + name)
+			meta := []string{}
+			if strings.TrimSpace(trend.RegionName) != "" {
+				meta = append(meta, "region="+strings.TrimSpace(trend.RegionName))
+			}
+			if strings.TrimSpace(trend.Category) != "" {
+				meta = append(meta, "category="+strings.TrimSpace(trend.Category))
+			}
+			if trend.TweetCount > 0 {
+				meta = append(meta, fmt.Sprintf("tweet_count=%d", trend.TweetCount))
+			}
+			if strings.TrimSpace(trend.RiskLevel) != "" {
+				meta = append(meta, "risk="+strings.TrimSpace(trend.RiskLevel))
+			}
+			if strings.TrimSpace(trend.Reason) != "" {
+				meta = append(meta, "why="+strings.TrimSpace(trend.Reason))
+			}
+			if len(meta) > 0 {
+				user.WriteString(" (" + strings.Join(meta, ", ") + ")")
+			}
+			user.WriteString("\n")
+		}
+		user.WriteString("Use a trend only when it naturally supports the content source and persona. Do not force unrelated trend-jacking.\n")
+	}
+	if len(in.TrendFeedbackSignals) > 0 {
+		user.WriteString("Trend feedback constraints from previous user reviews:\n")
+		for _, signal := range in.TrendFeedbackSignals {
+			signal = strings.TrimSpace(signal)
+			if signal == "" {
+				continue
+			}
+			user.WriteString("- " + signal + "\n")
+		}
+		user.WriteString("Negative trend feedback should reduce forced topical references and keep the post grounded in the Bot persona and content source.\n")
+	}
 	if in.HasBot {
 		user.WriteString("Use this OAF Bot persona:\n")
 		user.WriteString("internal_bot_name: " + strings.TrimSpace(in.Name) + "\n")
@@ -1293,6 +1347,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	}
 	user.WriteString("- Use at most 2 hashtags, and only when they fit naturally.\n")
 	user.WriteString("- Make it useful and specific, not hype.\n")
+	user.WriteString("- If using a trend, connect it to the product/user pain point with a clear, natural angle.\n")
 	user.WriteString("- Do not mention that you are AI.\n")
 	user.WriteString("- Do not mention the bot name in generated content unless the user explicitly instructed it in identity_summary, voice_tone, or growth_goal.\n")
 	user.WriteString("- Avoid repeating recent posts or using the same opening pattern.\n")

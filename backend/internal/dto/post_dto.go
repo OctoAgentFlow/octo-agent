@@ -14,8 +14,9 @@ type PostCreateRequest struct {
 }
 
 type PostGenerateRequest struct {
-	XAccountID uint   `json:"x_account_id" binding:"required"`
-	Topic      string `json:"topic"`
+	XAccountID         uint     `json:"x_account_id" binding:"required"`
+	Topic              string   `json:"topic"`
+	ExcludedTrendNames []string `json:"excluded_trend_names"`
 }
 
 type PostUpdateRequest struct {
@@ -58,9 +59,10 @@ type PostExecuteResponse struct {
 }
 
 type PostGenerateResponse struct {
-	Content string         `json:"content"`
-	BotID   uint           `json:"bot_id,omitempty"`
-	Scene   string         `json:"scene"`
-	Usage   PlanUsageData  `json:"usage"`
-	Limits  PlanLimitsData `json:"limits"`
+	Content        string           `json:"content"`
+	BotID          uint             `json:"bot_id,omitempty"`
+	Scene          string           `json:"scene"`
+	SelectedTrends []TrendTopicItem `json:"selected_trends,omitempty"`
+	Usage          PlanUsageData    `json:"usage"`
+	Limits         PlanLimitsData   `json:"limits"`
 }

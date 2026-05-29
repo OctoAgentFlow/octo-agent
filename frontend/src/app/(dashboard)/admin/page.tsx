@@ -32,7 +32,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -234,8 +234,11 @@ export default function AdminPage() {
   const [redemptionCodes, setRedemptionCodes] = useState<AdminPointRedemptionCodeApi[]>([]);
   const [referralSummary, setReferralSummary] = useState<AdminReferralSummaryApi | null>(null);
   const [pointCostSummary, setPointCostSummary] = useState<AdminPointCostSummaryApi | null>(null);
+  const [trendFeedbackSummary, setTrendFeedbackSummary] = useState<AdminTrendFeedbackSummaryApi | null>(null);
+  const [trendRules, setTrendRules] = useState<AdminTrendOperationRuleApi[]>([]);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
+  const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
 
   const userParams = useMemo(
     () => ({
@@ -254,7 +257,7 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
@@ -263,6 +266,8 @@ export default function AdminPage() {
           adminService.pointRedemptionCodes(),
           adminService.referralSummary(),
           adminService.pointCostSummary(),
+          adminService.trendFeedbackSummary({ days: 30, limit: 10 }),
+          adminService.trendRules(),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -273,6 +278,8 @@ export default function AdminPage() {
         setRedemptionCodes(redemptionData);
         setReferralSummary(referralData);
         setPointCostSummary(costData);
+        setTrendFeedbackSummary(trendFeedbackData);
+        setTrendRules(trendRulesData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -388,6 +395,41 @@ export default function AdminPage() {
     }
   };
 
+  const applyTrendRule = async (item: AdminTrendFeedbackTopicApi) => {
+    if (!item.suggested_action || item.suggested_action === "no_action" || item.suggested_action === "monitor") return;
+    const key = `${item.normalized_name}:${item.suggested_action}`;
+    setSubmittingTrendRuleKey(key);
+    try {
+      await adminService.applyTrendRule({
+        trend_name: item.trend_name || item.normalized_name,
+        normalized_name: item.normalized_name,
+        category: item.category,
+        action: item.suggested_action,
+        reason: item.suggested_reason,
+      });
+      await fetchAdmin({ quiet: true });
+      pushToast(t("admin.trends.ruleApplied"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.trends.ruleApplyFailed")));
+    } finally {
+      setSubmittingTrendRuleKey("");
+    }
+  };
+
+  const updateTrendRule = async (rule: AdminTrendOperationRuleApi, enabled: boolean) => {
+    setSubmittingTrendRuleKey(`rule:${rule.id}`);
+    try {
+      const next = await adminService.updateTrendRule(rule.id, { enabled });
+      setTrendRules((items) => items.map((item) => (item.id === next.id ? next : item)));
+      await fetchAdmin({ quiet: true });
+      pushToast(enabled ? t("admin.trends.ruleEnabled") : t("admin.trends.ruleDisabled"));
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.trends.ruleUpdateFailed")));
+    } finally {
+      setSubmittingTrendRuleKey("");
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -454,7 +496,16 @@ export default function AdminPage() {
           onCreateRedemptionCode={createRedemptionCode}
         />
       ) : null}
-      {activeSection === "activity" ? <ActivitySection overview={overview} /> : null}
+      {activeSection === "activity" ? (
+        <ActivitySection
+          overview={overview}
+          trendFeedbackSummary={trendFeedbackSummary}
+          submittingTrendRuleKey={submittingTrendRuleKey}
+          trendRules={trendRules}
+          onApplyTrendRule={applyTrendRule}
+          onUpdateTrendRule={updateTrendRule}
+        />
+      ) : null}
       {activeSection === "system" ? <SystemSection overview={overview} /> : null}
     </div>
   );
@@ -1529,7 +1580,21 @@ function RiskInput({ label, value, disabled, onSave }: { label: string; value: n
 
 const GiftIcon = Coins;
 
-function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
+function ActivitySection({
+  overview,
+  trendFeedbackSummary,
+  submittingTrendRuleKey,
+  trendRules,
+  onApplyTrendRule,
+  onUpdateTrendRule,
+}: {
+  overview: AdminOverviewApi;
+  trendFeedbackSummary: AdminTrendFeedbackSummaryApi | null;
+  submittingTrendRuleKey: string;
+  trendRules: AdminTrendOperationRuleApi[];
+  onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
+  onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
+}) {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
   return (
@@ -1569,8 +1634,188 @@ function ActivitySection({ overview }: { overview: AdminOverviewApi }) {
           <Metric label={t("admin.execution.autoPostFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/auto-post?panel=history&run_status=failed&account_scope=all&run_range=24h" />
         </div>
       </Card>
+      <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
+      <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />
     </div>
   );
+}
+
+function TrendFeedbackAdminCard({
+  summary,
+  submittingRuleKey,
+  onApplyRule,
+}: {
+  summary: AdminTrendFeedbackSummaryApi | null;
+  submittingRuleKey: string;
+  onApplyRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
+}) {
+  const { t } = useT();
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("admin.trends.feedbackTitle")}
+        description={summary ? t("admin.trends.feedbackDesc", { days: summary.days }) : t("admin.trends.feedbackDesc", { days: 30 })}
+      />
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label={t("admin.trends.totalNegative")} value={summary?.total_negative || 0} icon={AlertTriangle} tone={(summary?.total_negative || 0) > 0 ? "warn" : "good"} />
+        <Metric label={t("admin.trends.irrelevant")} value={summary?.irrelevant || 0} icon={Activity} tone={(summary?.irrelevant || 0) > 0 ? "warn" : "good"} />
+        <Metric label={t("admin.trends.tooForced")} value={summary?.too_forced || 0} icon={AlertTriangle} tone={(summary?.too_forced || 0) > 0 ? "danger" : "good"} />
+        <Metric label={t("admin.trends.uniqueTrends")} value={summary?.unique_trends || 0} icon={Settings} />
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <TrendFeedbackRanking title={t("admin.trends.topNegative")} items={summary?.top_negative || []} submittingRuleKey={submittingRuleKey} onApplyRule={onApplyRule} />
+        <TrendFeedbackRanking title={t("admin.trends.topIrrelevant")} items={summary?.top_irrelevant || []} submittingRuleKey={submittingRuleKey} onApplyRule={onApplyRule} />
+        <TrendFeedbackRanking title={t("admin.trends.topTooForced")} items={summary?.top_too_forced || []} submittingRuleKey={submittingRuleKey} onApplyRule={onApplyRule} />
+      </div>
+    </Card>
+  );
+}
+
+function TrendFeedbackRanking({
+  title,
+  items,
+  submittingRuleKey,
+  onApplyRule,
+}: {
+  title: string;
+  items: AdminTrendFeedbackTopicApi[];
+  submittingRuleKey: string;
+  onApplyRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
+}) {
+  const { t } = useT();
+  const timeZone = usePreferredTimeZone();
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <p className="text-sm font-semibold text-[#e7e9ea]">{title}</p>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <div key={`${item.normalized_name}-${title}`} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 break-words text-sm font-semibold text-white">{item.trend_name || item.normalized_name}</p>
+              <Badge variant={item.too_forced > item.irrelevant ? "danger" : "warning"}>{item.total_negative}</Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#71767b]">
+              <span>{t("admin.trends.irrelevant")}: {item.irrelevant}</span>
+              <span>{t("admin.trends.tooForced")}: {item.too_forced}</span>
+              {item.category ? <span>{item.category}</span> : null}
+            </div>
+            <div className="mt-3 rounded-xl border border-[#2f3336] bg-black p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold text-[#8ecdf8]">{t("admin.trends.suggestedAction")}</span>
+                <Badge variant={trendSuggestedActionVariant(item.suggested_action)}>{t(`admin.trends.action.${item.suggested_action}`)}</Badge>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-[#71767b]">
+                {t(`admin.trends.reason.${item.suggested_action}`)}
+              </p>
+              {item.active_rules?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {item.active_rules.map((rule) => (
+                    <Badge key={rule} variant="success">{t(`admin.trends.rule.${rule}`)}</Badge>
+                  ))}
+                </div>
+              ) : null}
+              {trendActionCanApply(item) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-8"
+                  disabled={Boolean(submittingRuleKey) || trendActionAlreadyApplied(item)}
+                  onClick={() => void onApplyRule(item)}
+                >
+                  {submittingRuleKey === `${item.normalized_name}:${item.suggested_action}` ? t("admin.trends.applyingRule") : trendActionAlreadyApplied(item) ? t("admin.trends.ruleAlreadyApplied") : t("admin.trends.applyRule")}
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-[11px] text-[#71767b]">{t("admin.trends.lastFeedback", { time: formatDate(item.last_feedback_at, timeZone) })}</p>
+          </div>
+        ))}
+        {items.length === 0 ? <p className="py-4 text-center text-sm text-[#71767b]">{t("admin.trends.empty")}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function trendSuggestedActionVariant(action: string): BadgeVariant {
+  if (action === "move_to_review_pool") return "danger";
+  if (action === "lower_general_weight" || action === "check_classification_keywords") return "warning";
+  if (action === "monitor") return "info";
+  return "default";
+}
+
+function trendActionCanApply(item: AdminTrendFeedbackTopicApi) {
+  return ["move_to_review_pool", "lower_general_weight", "check_classification_keywords"].includes(item.suggested_action);
+}
+
+function trendActionRuleType(action: string) {
+  if (action === "move_to_review_pool") return "review_pool";
+  if (action === "lower_general_weight") return "downweight";
+  if (action === "check_classification_keywords") return "classification_review";
+  return "";
+}
+
+function trendActionAlreadyApplied(item: AdminTrendFeedbackTopicApi) {
+  const ruleType = trendActionRuleType(item.suggested_action);
+  return Boolean(ruleType && item.active_rules?.includes(ruleType));
+}
+
+function TrendRuleManagementCard({
+  rules,
+  submittingRuleKey,
+  onUpdateRule,
+}: {
+  rules: AdminTrendOperationRuleApi[];
+  submittingRuleKey: string;
+  onUpdateRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
+}) {
+  const { t } = useT();
+  const timeZone = usePreferredTimeZone();
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("admin.trends.ruleManagementTitle")}
+        description={t("admin.trends.ruleManagementDesc")}
+        right={<Badge variant="info">{t("admin.trends.ruleCount", { count: rules.length })}</Badge>}
+      />
+      <div className="grid gap-2">
+        {rules.map((rule) => (
+          <div key={rule.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="break-words text-sm font-semibold text-white">{rule.trend_name || rule.normalized_name}</p>
+                  <Badge variant={rule.enabled ? "success" : "default"}>{rule.enabled ? t("admin.trends.ruleEnabledStatus") : t("admin.trends.ruleDisabledStatus")}</Badge>
+                  <Badge variant={trendRuleTypeVariant(rule.rule_type)}>{t(`admin.trends.rule.${rule.rule_type}`)}</Badge>
+                  {rule.category ? <Badge variant="default">{rule.category}</Badge> : null}
+                </div>
+                <p className="mt-2 break-words text-xs leading-5 text-[#71767b]">{rule.reason || t("admin.trends.ruleNoReason")}</p>
+                <p className="mt-2 text-[11px] text-[#71767b]">
+                  {t("admin.trends.ruleUpdatedAt", { time: formatDate(rule.updated_at, timeZone) })}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0"
+                disabled={Boolean(submittingRuleKey)}
+                onClick={() => void onUpdateRule(rule, !rule.enabled)}
+              >
+                {submittingRuleKey === `rule:${rule.id}` ? t("admin.trends.ruleUpdating") : rule.enabled ? t("admin.trends.disableRule") : t("admin.trends.enableRule")}
+              </Button>
+            </div>
+          </div>
+        ))}
+        {rules.length === 0 ? <p className="py-8 text-center text-sm text-[#71767b]">{t("admin.trends.noRules")}</p> : null}
+      </div>
+    </Card>
+  );
+}
+
+function trendRuleTypeVariant(ruleType: string): BadgeVariant {
+  if (ruleType === "review_pool") return "danger";
+  if (ruleType === "downweight" || ruleType === "classification_review") return "warning";
+  return "default";
 }
 
 function SystemSection({ overview }: { overview: AdminOverviewApi }) {

@@ -11,6 +11,7 @@ type AutoPostDraft struct {
 	ContentLibraryID uint       `gorm:"index;column:content_library_item_id;not null;default:0;comment:内容池素材ID，0表示未使用素材" json:"content_library_item_id,omitempty"`
 	ContentDirection string     `gorm:"size:512;comment:本次内容方向" json:"content_direction,omitempty"`
 	ContentHash      string     `gorm:"size:64;index;comment:生成内容去重Hash" json:"content_hash,omitempty"`
+	SelectedTrends   string     `gorm:"type:text;comment:本次生成使用的趋势上下文JSON" json:"selected_trends,omitempty"`
 	GeneratedContent string     `gorm:"type:text;comment:LLM生成的推文内容" json:"generated_content"`
 	Status           string     `gorm:"size:32;index;not null;default:pending_review;comment:状态（draft/pending_review/approved/ready_to_publish/published/rejected/failed）" json:"status"`
 	RiskLevel        string     `gorm:"size:32;index;not null;default:low;comment:风险等级" json:"risk_level"`

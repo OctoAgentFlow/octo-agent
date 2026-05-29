@@ -170,11 +170,18 @@ const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
   "safety_mode",
   "primary_language",
   "language_strategy",
+  "trend_regions",
+  "trend_categories",
+  "allow_general_trends",
+  "sensitive_trend_policy",
 ];
 const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
 const safetyRewriteModes: SafetyRewriteMode[] = ["natural", "conservative", "shorter"];
 const negativeFeedbackInspectionThreshold = 3;
 const reviewBacklogInspectionThreshold = 5;
+const trendRegionValues = ["1", "23424977"];
+const trendCategoryValues = ["crypto", "finance", "tech", "sports", "entertainment", "gaming", "politics", "news", "culture", "lifestyle", "meme", "other"];
+const sensitiveTrendPolicyValues = ["avoid", "review_only", "allow"];
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -258,6 +265,10 @@ function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
     safety_mode: "balanced",
     primary_language: defaultPrimaryLanguage,
     language_strategy: "follow_context",
+    trend_regions: ["1", "23424977"],
+    trend_categories: [],
+    allow_general_trends: false,
+    sensitive_trend_policy: "avoid",
   };
 }
 
@@ -725,6 +736,18 @@ export default function OAFBotsPage() {
       { value: "bilingual", label: t("oafBots.languageStrategy.bilingual") },
       { value: "mixed_style", label: t("oafBots.languageStrategy.mixedStyle") },
     ],
+    [t],
+  );
+  const trendRegionOptions = useMemo<ChipOption[]>(
+    () => trendRegionValues.map((value) => ({ value, label: t(`autoPost.trends.region.${value}`) })),
+    [t],
+  );
+  const trendCategoryOptions = useMemo<ChipOption[]>(
+    () => trendCategoryValues.map((value) => ({ value, label: t(`autoPost.trends.category.${value}`) })),
+    [t],
+  );
+  const sensitiveTrendPolicyOptions = useMemo<SelectOption[]>(
+    () => sensitiveTrendPolicyValues.map((value) => ({ value, label: t(`autoPost.trends.policy.${value}`) })),
     [t],
   );
 
@@ -1563,6 +1586,51 @@ export default function OAFBotsPage() {
                   onAvoidClaimsChange={(values) => updateForm("avoid_claims", values)}
                   onComplianceNotesChange={(value) => updateForm("compliance_notes", value)}
                 />
+                <div className="mt-4 rounded-[8px] border border-[#2f3336] bg-black/25 p-4">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.trends.title")}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#71767b]">{t("oafBots.trends.description")}</p>
+                  </div>
+                  <div className="grid gap-4">
+                    <TagPicker
+                      label={t("oafBots.fields.trendRegions")}
+                      values={form.trend_regions}
+                      options={trendRegionOptions}
+                      onChange={(values) => updateForm("trend_regions", values)}
+                      helper={t("oafBots.helpers.trendRegions")}
+                      placeholder={t("oafBots.placeholders.tagInput")}
+                    />
+                    <TagPicker
+                      label={t("oafBots.fields.trendCategories")}
+                      values={form.trend_categories}
+                      options={trendCategoryOptions}
+                      onChange={(values) => updateForm("trend_categories", values)}
+                      helper={t("oafBots.helpers.trendCategories")}
+                      placeholder={t("oafBots.placeholders.tagInput")}
+                    />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <SelectField
+                        label={t("oafBots.fields.sensitiveTrendPolicy")}
+                        value={form.sensitive_trend_policy}
+                        onChange={(value) => updateForm("sensitive_trend_policy", value as OAFBotPayload["sensitive_trend_policy"])}
+                        options={sensitiveTrendPolicyOptions}
+                        helper={t("oafBots.helpers.sensitiveTrendPolicy")}
+                      />
+                      <label className="flex items-start gap-3 rounded-[8px] border border-[#2f3336] bg-black p-3">
+                        <input
+                          type="checkbox"
+                          checked={form.allow_general_trends}
+                          onChange={(event) => updateForm("allow_general_trends", event.target.checked)}
+                          className="mt-1 size-4 accent-[#1d9bf0]"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-[#e7e9ea]">{t("oafBots.fields.allowGeneralTrends")}</span>
+                          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("oafBots.helpers.allowGeneralTrends")}</span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
               </WizardPanel>
             ) : null}
 
@@ -1851,6 +1919,10 @@ function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayl
     safety_mode: bot.safety_mode || "balanced",
     primary_language: bot.primary_language || defaultPrimaryLanguage,
     language_strategy: bot.language_strategy || "follow_context",
+    trend_regions: bot.trend_regions?.length ? bot.trend_regions : ["1", "23424977"],
+    trend_categories: bot.trend_categories || [],
+    allow_general_trends: Boolean(bot.allow_general_trends),
+    sensitive_trend_policy: bot.sensitive_trend_policy || "avoid",
   };
 }
 
@@ -1889,6 +1961,7 @@ function normalizeProfileValue(value: OAFBotPayload[keyof OAFBotPayload]) {
 function formatProfileValue(value: OAFBotPayload[keyof OAFBotPayload], t: (key: string, params?: Record<string, string | number>) => string) {
   if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : t("oafBots.feedbackSuggestion.emptyValue");
   if (typeof value === "number") return value > 0 ? String(value) : t("oafBots.feedbackSuggestion.emptyValue");
+  if (typeof value === "boolean") return value ? "true" : "false";
   return value?.trim() || t("oafBots.feedbackSuggestion.emptyValue");
 }
 

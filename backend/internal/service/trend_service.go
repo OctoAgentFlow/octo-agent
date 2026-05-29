@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,9 +18,18 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	ErrInvalidTrendFeedbackRating = errors.New("invalid trend feedback rating")
+	ErrInvalidTrendFeedbackName   = errors.New("trend_name is required")
+)
+
 type TrendService struct {
-	repo *repository.TrendTopicRepository
-	cfg  config.XTrendsConfig
+	repo        *repository.TrendTopicRepository
+	feedback    *repository.TrendFeedbackRepository
+	botRepo     *repository.OAFBotRepository
+	planRepo    *repository.AutoPostPlanRepository
+	contentRepo *repository.ContentLibraryRepository
+	cfg         config.XTrendsConfig
 }
 
 type trendSyncResult struct {
@@ -28,8 +39,8 @@ type trendSyncResult struct {
 	SkippedReason string
 }
 
-func NewTrendService(repo *repository.TrendTopicRepository, cfg config.XTrendsConfig) *TrendService {
-	return &TrendService{repo: repo, cfg: cfg}
+func NewTrendService(repo *repository.TrendTopicRepository, feedback *repository.TrendFeedbackRepository, botRepo *repository.OAFBotRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, cfg config.XTrendsConfig) *TrendService {
+	return &TrendService{repo: repo, feedback: feedback, botRepo: botRepo, planRepo: planRepo, contentRepo: contentRepo, cfg: cfg}
 }
 
 func (s *TrendService) ListTopics(query dto.TrendTopicQuery, now time.Time) (*dto.TrendTopicListResponse, error) {
@@ -55,6 +66,159 @@ func (s *TrendService) ListTopics(query dto.TrendTopicQuery, now time.Time) (*dt
 		items = append(items, trendTopicToDTO(&rows[i]))
 	}
 	return &dto.TrendTopicListResponse{Items: items}, nil
+}
+
+func (s *TrendService) SelectForBot(userID uint, query dto.TrendSelectionQuery, now time.Time) (*dto.TrendSelectionResponse, error) {
+	if s == nil || s.repo == nil {
+		return &dto.TrendSelectionResponse{Items: []dto.TrendTopicItem{}}, nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	pref, bot, plan, err := s.trendPreference(userID, query)
+	if err != nil {
+		return nil, err
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 10 {
+		limit = 3
+	}
+	if len(pref.Regions) == 0 {
+		pref.Regions = []string{"1", "23424977"}
+	}
+	pref.ExcludedNames = append(pref.ExcludedNames, s.recentNegativeTrendNames(userID, botIDFromTrendContext(bot, plan))...)
+	candidates := make([]model.TrendTopic, 0, 100)
+	for _, region := range pref.Regions {
+		rows, err := s.repo.List(repository.TrendTopicListQuery{WOEID: region, ActiveAt: now, Limit: 100})
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, rows...)
+	}
+	keywords := s.trendRelevanceKeywords(userID, bot, plan)
+	qualitySignals := s.trendQualitySignals()
+	selected := selectRelevantTrendTopics(candidates, pref, keywords, qualitySignals, limit)
+	items := make([]dto.TrendTopicItem, 0, len(selected))
+	for i := range selected {
+		item := trendTopicToDTO(&selected[i])
+		item.MatchedKeywords = trendMatchedKeywords(selected[i], keywords)
+		item.RelevanceReason = trendRelevanceReason(selected[i], pref, item.MatchedKeywords, qualitySignals[normalizeTrendName(selected[i].TrendName)])
+		items = append(items, item)
+	}
+	return &dto.TrendSelectionResponse{Items: items}, nil
+}
+
+func (s *TrendService) CreateFeedback(userID uint, req dto.TrendFeedbackRequest) (*dto.TrendFeedbackResponse, error) {
+	if s == nil || s.feedback == nil {
+		return nil, nil
+	}
+	rating := repository.NormalizeFeedbackRating(req.Rating)
+	if rating == "" {
+		return nil, ErrInvalidTrendFeedbackRating
+	}
+	name := strings.TrimSpace(req.TrendName)
+	if name == "" {
+		return nil, ErrInvalidTrendFeedbackName
+	}
+	normalized := strings.TrimSpace(req.NormalizedName)
+	if normalized == "" {
+		normalized = normalizeTrendName(name)
+	}
+	row := &model.TrendFeedback{
+		UserID:         userID,
+		BotID:          req.BotID,
+		XAccountID:     req.XAccountID,
+		TrendName:      truncateRunes(name, 255),
+		NormalizedName: truncateRunes(normalized, 255),
+		WOEID:          truncateRunes(strings.TrimSpace(req.WOEID), 32),
+		Category:       truncateRunes(strings.TrimSpace(req.Category), 32),
+		Rating:         rating,
+		SourceType:     truncateRunes(strings.TrimSpace(req.SourceType), 48),
+		SourceID:       req.SourceID,
+		Comment:        truncateRunes(strings.TrimSpace(req.Comment), 512),
+	}
+	if err := s.feedback.Create(row); err != nil {
+		return nil, err
+	}
+	return &dto.TrendFeedbackResponse{Item: trendFeedbackToDTO(row)}, nil
+}
+
+func (s *TrendService) ListFeedback(userID uint, query dto.TrendFeedbackQuery) (*dto.TrendFeedbackListResponse, error) {
+	if s == nil || s.feedback == nil {
+		return &dto.TrendFeedbackListResponse{Items: []dto.TrendFeedbackItem{}}, nil
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.feedback.ListRecent(repository.TrendFeedbackListQuery{
+		UserID:       userID,
+		BotID:        query.BotID,
+		OnlyNegative: query.OnlyNegative,
+		Since:        time.Now().UTC().AddDate(0, 0, -30),
+		Limit:        limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.TrendFeedbackItem, 0, len(rows))
+	summary := dto.TrendFeedbackSummary{}
+	for i := range rows {
+		item := trendFeedbackToDTO(&rows[i])
+		items = append(items, item)
+		summary.Total++
+		switch item.Rating {
+		case "relevant":
+			summary.Relevant++
+		case "irrelevant":
+			summary.Irrelevant++
+		case "too_forced":
+			summary.TooForced++
+		}
+	}
+	return &dto.TrendFeedbackListResponse{Items: items, Summary: summary}, nil
+}
+
+func (s *TrendService) DeleteFeedback(userID, id uint) error {
+	if s == nil || s.feedback == nil {
+		return nil
+	}
+	return s.feedback.DeleteByUserAndID(userID, id)
+}
+
+func (s *TrendService) FeedbackPromptSignals(userID, botID uint) []string {
+	if s == nil || s.feedback == nil || userID == 0 {
+		return nil
+	}
+	since := time.Now().UTC().AddDate(0, 0, -30)
+	rows, err := s.feedback.ListRecentNegative(userID, botID, since, 20)
+	if err != nil {
+		zap.L().Warn("trend feedback prompt signals failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.Error(err))
+		return nil
+	}
+	signals := []string{}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		key := strings.TrimSpace(row.NormalizedName)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		label := strings.TrimSpace(row.TrendName)
+		if label == "" {
+			label = key
+		}
+		switch strings.TrimSpace(row.Rating) {
+		case "too_forced":
+			signals = append(signals, "Avoid forcing trend '"+label+"' into content unless there is a direct product/persona connection.")
+		case "irrelevant":
+			signals = append(signals, "Treat trend '"+label+"' as previously marked irrelevant for this Bot/account context.")
+		}
+		if len(signals) >= 5 {
+			break
+		}
+	}
+	return signals
 }
 
 func (s *TrendService) RunTick(ctx context.Context, now time.Time) (*trendSyncResult, error) {
@@ -129,6 +293,92 @@ func (s *TrendService) RunTick(ctx context.Context, now time.Time) (*trendSyncRe
 	return result, nil
 }
 
+type trendPreference struct {
+	Regions              []string
+	Categories           []string
+	ExcludedNames        []string
+	AllowGeneral         bool
+	SensitiveTrendPolicy string
+}
+
+func (s *TrendService) trendPreference(userID uint, query dto.TrendSelectionQuery) (trendPreference, *model.OAFBot, *model.AutoPostPlan, error) {
+	pref := trendPreference{SensitiveTrendPolicy: "avoid"}
+	var bot *model.OAFBot
+	var plan *model.AutoPostPlan
+	if query.BotID > 0 && s.botRepo != nil {
+		row, err := s.botRepo.GetByUserAndID(userID, query.BotID)
+		if err != nil {
+			return pref, nil, nil, err
+		}
+		bot = row
+		pref = preferenceFromBot(row)
+	}
+	if query.PlanID > 0 && s.planRepo != nil {
+		row, err := s.planRepo.GetByUserAndID(userID, query.PlanID)
+		if err != nil {
+			return pref, bot, nil, err
+		}
+		plan = row
+		if bot == nil && row.BotID > 0 && s.botRepo != nil {
+			if b, err := s.botRepo.GetByUserAndID(userID, row.BotID); err == nil {
+				bot = b
+				pref = preferenceFromBot(b)
+			}
+		}
+		pref = mergeTrendPreference(pref, preferenceFromPlan(row))
+	}
+	if len(pref.Regions) == 0 {
+		pref.Regions = []string{"1", "23424977"}
+	}
+	pref.Regions = normalizeTrendRegions(pref.Regions)
+	pref.Categories = normalizeTrendCategories(pref.Categories)
+	pref.ExcludedNames = normalizeTrendExcludeNames(append(pref.ExcludedNames, query.ExcludedTrendNames...))
+	pref.SensitiveTrendPolicy = normalizeSensitiveTrendPolicy(pref.SensitiveTrendPolicy)
+	return pref, bot, plan, nil
+}
+
+func preferenceFromBot(bot *model.OAFBot) trendPreference {
+	if bot == nil {
+		return trendPreference{SensitiveTrendPolicy: "avoid"}
+	}
+	return trendPreference{
+		Regions:              normalizeTrendRegions(decodeStringList(bot.TrendRegions)),
+		Categories:           normalizeTrendCategories(decodeStringList(bot.TrendCategories)),
+		AllowGeneral:         bot.AllowGeneralTrends,
+		SensitiveTrendPolicy: normalizeSensitiveTrendPolicy(bot.SensitiveTrendPolicy),
+	}
+}
+
+func preferenceFromPlan(plan *model.AutoPostPlan) trendPreference {
+	if plan == nil {
+		return trendPreference{}
+	}
+	return trendPreference{
+		Regions:              normalizeTrendRegions(decodeStringList(plan.TrendRegions)),
+		Categories:           normalizeTrendCategories(decodeStringList(plan.TrendCategories)),
+		ExcludedNames:        normalizeTrendExcludeNames(decodeStringList(plan.ExcludedTrendNames)),
+		AllowGeneral:         plan.AllowGeneralTrends,
+		SensitiveTrendPolicy: normalizeSensitiveTrendPolicy(plan.SensitiveTrendPolicy),
+	}
+}
+
+func mergeTrendPreference(base, override trendPreference) trendPreference {
+	if len(override.Regions) > 0 {
+		base.Regions = override.Regions
+	}
+	if len(override.Categories) > 0 {
+		base.Categories = override.Categories
+	}
+	if len(override.ExcludedNames) > 0 {
+		base.ExcludedNames = override.ExcludedNames
+	}
+	base.AllowGeneral = override.AllowGeneral
+	if strings.TrimSpace(override.SensitiveTrendPolicy) != "" {
+		base.SensitiveTrendPolicy = override.SensitiveTrendPolicy
+	}
+	return base
+}
+
 func trendTopicFromAPI(topic twitter.TrendTopic, region config.XTrendsRegionConfig, now time.Time) model.TrendTopic {
 	name := strings.TrimSpace(topic.Name)
 	category, risk := classifyTrendTopic(name)
@@ -167,6 +417,351 @@ func trendTopicToDTO(row *model.TrendTopic) dto.TrendTopicItem {
 		FetchedAt:      row.FetchedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:      row.ExpiresAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func trendFeedbackToDTO(row *model.TrendFeedback) dto.TrendFeedbackItem {
+	if row == nil {
+		return dto.TrendFeedbackItem{}
+	}
+	return dto.TrendFeedbackItem{
+		ID:             row.ID,
+		BotID:          row.BotID,
+		XAccountID:     row.XAccountID,
+		TrendName:      row.TrendName,
+		NormalizedName: row.NormalizedName,
+		WOEID:          row.WOEID,
+		Category:       row.Category,
+		Rating:         row.Rating,
+		SourceType:     row.SourceType,
+		SourceID:       row.SourceID,
+		CreatedAt:      row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *TrendService) recentNegativeTrendNames(userID, botID uint) []string {
+	if s == nil || s.feedback == nil || userID == 0 {
+		return nil
+	}
+	rows, err := s.feedback.ListRecentNegative(userID, botID, time.Now().UTC().AddDate(0, 0, -30), 50)
+	if err != nil {
+		zap.L().Warn("trend feedback exclusion failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.Error(err))
+		return nil
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		key := strings.TrimSpace(row.NormalizedName)
+		if key == "" {
+			key = normalizeTrendName(row.TrendName)
+		}
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, key)
+	}
+	return out
+}
+
+func botIDFromTrendContext(bot *model.OAFBot, plan *model.AutoPostPlan) uint {
+	if bot != nil {
+		return bot.ID
+	}
+	if plan != nil {
+		return plan.BotID
+	}
+	return 0
+}
+
+type trendQualitySignal struct {
+	Irrelevant    int64
+	TooForced     int64
+	TotalNegative int64
+	Rules         map[string]bool
+}
+
+func (s *TrendService) trendQualitySignals() map[string]trendQualitySignal {
+	if s == nil || s.feedback == nil {
+		return nil
+	}
+	rows, err := s.feedback.ListQualitySignals(time.Now().UTC().AddDate(0, 0, -30), 2, 200)
+	if err != nil {
+		zap.L().Warn("trend quality signals failed", zap.Error(err))
+		return nil
+	}
+	out := make(map[string]trendQualitySignal, len(rows))
+	for key, row := range rows {
+		out[key] = trendQualitySignal{
+			Irrelevant:    row.Irrelevant,
+			TooForced:     row.TooForced,
+			TotalNegative: row.TotalNegative,
+		}
+	}
+	rules, err := s.feedback.ListActiveOperationRules()
+	if err != nil {
+		zap.L().Warn("trend operation rules failed", zap.Error(err))
+		return out
+	}
+	for key, items := range rules {
+		signal := out[key]
+		if signal.Rules == nil {
+			signal.Rules = map[string]bool{}
+		}
+		for _, item := range items {
+			ruleType := strings.TrimSpace(item.RuleType)
+			if ruleType != "" {
+				signal.Rules[ruleType] = true
+			}
+		}
+		out[key] = signal
+	}
+	return out
+}
+
+func (s *TrendService) trendRelevanceKeywords(userID uint, bot *model.OAFBot, plan *model.AutoPostPlan) []string {
+	terms := []string{}
+	if bot != nil {
+		terms = append(terms,
+			bot.Name,
+			bot.Occupation,
+			bot.Industry,
+			bot.IdentitySummary,
+			bot.GrowthGoal,
+			bot.ProjectOneLiner,
+			bot.TargetAudience,
+			bot.CoreValueProps,
+			bot.ProductFeatures,
+			bot.Differentiators,
+			bot.ContentObjectives,
+		)
+		terms = append(terms, decodeStringList(bot.Topics)...)
+		terms = append(terms, decodeStringList(bot.ContentPillars)...)
+		terms = append(terms, decodeStringList(bot.Hashtags)...)
+		terms = append(terms, decodeStringList(bot.Keywords)...)
+	}
+	if s.contentRepo != nil {
+		var accountID uint
+		var botID uint
+		if plan != nil {
+			accountID = plan.XAccountID
+			botID = plan.BotID
+		} else if bot != nil {
+			botID = bot.ID
+			accountID = bot.TwitterAccountID
+		}
+		if rows, err := s.contentRepo.ListActiveForGenerationContext(userID, accountID, botID, 20); err == nil {
+			for _, item := range rows {
+				terms = append(terms, item.Title, item.Body, item.GrowthGoal, item.CTAPreference)
+				terms = append(terms, decodeStringList(item.Topics)...)
+			}
+		}
+	}
+	return normalizeTrendKeywords(terms)
+}
+
+func selectRelevantTrendTopics(candidates []model.TrendTopic, pref trendPreference, keywords []string, qualitySignals map[string]trendQualitySignal, limit int) []model.TrendTopic {
+	if limit <= 0 {
+		limit = 3
+	}
+	categorySet := stringSet(pref.Categories)
+	excludedSet := normalizedStringSet(pref.ExcludedNames)
+	seen := map[string]bool{}
+	type scoredTrend struct {
+		row   model.TrendTopic
+		score int64
+	}
+	scored := []scoredTrend{}
+	for _, row := range candidates {
+		key := strings.TrimSpace(row.NormalizedName)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if excludedSet[key] {
+			continue
+		}
+		risk := strings.TrimSpace(row.RiskLevel)
+		if pref.SensitiveTrendPolicy == "avoid" && risk != "" && risk != "low" {
+			continue
+		}
+		if pref.SensitiveTrendPolicy == "review_only" && risk == "high" {
+			continue
+		}
+		categoryMatch := len(categorySet) == 0 || categorySet[strings.TrimSpace(row.Category)]
+		explicitCategoryMatch := len(categorySet) > 0 && categorySet[strings.TrimSpace(row.Category)]
+		keywordMatch := trendMatchesKeywords(row, keywords)
+		if !pref.AllowGeneral && !categoryMatch && !keywordMatch {
+			continue
+		}
+		quality := qualitySignals[key]
+		generalOnly := pref.AllowGeneral && !explicitCategoryMatch && !keywordMatch
+		if (quality.TooForced >= 3 || quality.Rules["review_pool"]) && generalOnly {
+			continue
+		}
+		score := row.TweetCount
+		if score <= 0 {
+			score = 1
+		}
+		if categoryMatch {
+			score += 1000000
+		}
+		if keywordMatch {
+			score += 2000000
+		}
+		if risk == "medium" {
+			score -= 500000
+		}
+		score -= trendFeedbackPenalty(quality)
+		scored = append(scored, scoredTrend{row: row, score: score})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			return scored[i].row.FetchedAt.After(scored[j].row.FetchedAt)
+		}
+		return scored[i].score > scored[j].score
+	})
+	out := make([]model.TrendTopic, 0, limit)
+	for _, item := range scored {
+		out = append(out, item.row)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func trendFeedbackPenalty(signal trendQualitySignal) int64 {
+	var penalty int64
+	if signal.Rules["review_pool"] {
+		penalty += 2500000
+	}
+	if signal.Rules["downweight"] {
+		penalty += 1800000
+	}
+	if signal.Rules["classification_review"] {
+		penalty += 900000
+	}
+	if signal.TooForced >= 2 {
+		penalty += signal.TooForced * 700000
+	}
+	if signal.Irrelevant >= 3 {
+		penalty += signal.Irrelevant * 500000
+	}
+	if penalty > 3000000 {
+		return 3000000
+	}
+	return penalty
+}
+
+func trendMatchesKeywords(row model.TrendTopic, keywords []string) bool {
+	return len(trendMatchedKeywords(row, keywords)) > 0
+}
+
+func trendMatchedKeywords(row model.TrendTopic, keywords []string) []string {
+	if len(keywords) == 0 {
+		return nil
+	}
+	name := normalizeTrendName(row.TrendName)
+	out := []string{}
+	seen := map[string]bool{}
+	for _, keyword := range keywords {
+		kw := normalizeTrendName(keyword)
+		if kw != "" && (strings.Contains(name, kw) || strings.Contains(kw, name)) {
+			if !seen[kw] {
+				seen[kw] = true
+				out = append(out, strings.TrimSpace(keyword))
+				if len(out) >= 3 {
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
+func trendRelevanceReason(row model.TrendTopic, pref trendPreference, matchedKeywords []string, quality trendQualitySignal) string {
+	reasons := []string{}
+	if len(matchedKeywords) > 0 {
+		reasons = append(reasons, "matched Bot/content keywords: "+strings.Join(matchedKeywords, ", "))
+	}
+	category := strings.TrimSpace(row.Category)
+	if category != "" {
+		if len(pref.Categories) == 0 {
+			reasons = append(reasons, "category is allowed by the current broad category setting: "+category)
+		} else if stringSet(pref.Categories)[category] {
+			reasons = append(reasons, "category matches the selected trend preference: "+category)
+		}
+	}
+	if pref.AllowGeneral && len(reasons) == 0 {
+		reasons = append(reasons, "general hot topics are allowed for this Planner")
+	}
+	if row.TweetCount > 0 {
+		reasons = append(reasons, "has visible X trend volume")
+	}
+	if strings.TrimSpace(row.RiskLevel) == "low" {
+		reasons = append(reasons, "risk level is low")
+	}
+	if trendFeedbackPenalty(quality) > 0 {
+		reasons = append(reasons, "rank adjusted by historical trend feedback")
+	}
+	if quality.Rules["review_pool"] {
+		reasons = append(reasons, "admin rule requires review before broad use")
+	} else if quality.Rules["downweight"] {
+		reasons = append(reasons, "admin rule lowers this trend for broad matching")
+	} else if quality.Rules["classification_review"] {
+		reasons = append(reasons, "admin rule marks classification for review")
+	}
+	if len(reasons) == 0 {
+		return "selected by cached trend relevance and safety filters"
+	}
+	return strings.Join(reasons, "; ")
+}
+
+func normalizeTrendKeywords(values []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, value := range values {
+		for _, part := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == ',' || r == '，' || r == '#' || r == '\n' || r == ';' || r == '；'
+		}) {
+			part = strings.TrimSpace(part)
+			if len([]rune(part)) < 2 || len([]rune(part)) > 40 {
+				continue
+			}
+			key := normalizeTrendName(part)
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, part)
+			if len(out) >= 80 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+func stringSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out[value] = true
+		}
+	}
+	return out
+}
+
+func normalizedStringSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		key := normalizeTrendName(value)
+		if key != "" {
+			out[key] = true
+		}
+	}
+	return out
 }
 
 func trendRegionName(region config.XTrendsRegionConfig) string {
@@ -232,4 +827,68 @@ func trendLanguageHint(name string) string {
 		}
 	}
 	return "en"
+}
+
+func normalizeTrendRegions(values []string) []string {
+	allowed := map[string]bool{"1": true, "23424977": true}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || !allowed[value] || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func normalizeTrendCategories(values []string) []string {
+	allowed := map[string]bool{
+		"crypto": true, "finance": true, "tech": true, "sports": true, "entertainment": true,
+		"gaming": true, "politics": true, "news": true, "culture": true, "lifestyle": true,
+		"meme": true, "other": true,
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" || !allowed[value] || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func normalizeTrendExcludeNames(values []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || len([]rune(value)) > 80 {
+			continue
+		}
+		key := normalizeTrendName(value)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, value)
+		if len(out) >= 50 {
+			break
+		}
+	}
+	return out
+}
+
+func normalizeSensitiveTrendPolicy(value string) string {
+	switch strings.TrimSpace(value) {
+	case "review_only", "allow":
+		return strings.TrimSpace(value)
+	default:
+		return "avoid"
+	}
 }

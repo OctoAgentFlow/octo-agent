@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Bot, CalendarClock, FileText, Send, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import { AlertCircle, Bot, CalendarClock, FileText, Send, ShieldCheck, Sparkles, X, type LucideIcon } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/use-t";
 import { accountService } from "@/services/account.service";
 import { automationService } from "@/services/automation.service";
+import { autoPostService, type TrendFeedbackRating, type TrendTopicApi } from "@/services/auto-post.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { postService } from "@/services/post.service";
 import type { OAFBot } from "@/types/oaf-bot";
@@ -53,6 +54,10 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
   const [scheduledTimeZone, setScheduledTimeZone] = useState(defaultScheduledPostTimezone());
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [selectedTrends, setSelectedTrends] = useState<TrendTopicApi[]>([]);
+  const [excludedTrendNames, setExcludedTrendNames] = useState<string[]>([]);
+  const [loadingTrends, setLoadingTrends] = useState(false);
+  const [trendFeedbackPendingKey, setTrendFeedbackPendingKey] = useState("");
   const selectedBot = bots.find((bot) => bot.twitter_account_id === xAccountId) ?? null;
   const currentMode = modeCopy(isAutoPostSource);
   const ModeIcon = currentMode.icon;
@@ -84,6 +89,66 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refreshTrends = useCallback(async () => {
+    if (!isAutoPostSource || !selectedBot?.id) {
+      setSelectedTrends([]);
+      return;
+    }
+    setLoadingTrends(true);
+    try {
+      const data = await autoPostService.selectedTrends({
+        botID: selectedBot.id,
+        limit: 3,
+        excludedTrendNames,
+      });
+      setSelectedTrends(data.items);
+    } catch {
+      setSelectedTrends([]);
+    } finally {
+      setLoadingTrends(false);
+    }
+  }, [excludedTrendNames, isAutoPostSource, selectedBot?.id]);
+
+  useEffect(() => {
+    void refreshTrends();
+  }, [refreshTrends]);
+
+  const excludeTrend = useCallback((trend: TrendTopicApi) => {
+    const name = trend.trend_name.trim();
+    if (!name) return;
+    setExcludedTrendNames((current) => (current.includes(name) ? current : [...current, name]));
+    setSelectedTrends((current) => current.filter((item) => item.normalized_name !== trend.normalized_name));
+  }, []);
+
+  const restoreTrend = useCallback((name: string) => {
+    setExcludedTrendNames((current) => current.filter((item) => item !== name));
+  }, []);
+
+  const submitTrendFeedback = useCallback(
+    async (trend: TrendTopicApi, rating: TrendFeedbackRating) => {
+      const key = `${trend.woeid}-${trend.normalized_name || trend.trend_name}-${rating}`;
+      setTrendFeedbackPendingKey(key);
+      try {
+        await autoPostService.submitTrendFeedback({
+          bot_id: selectedBot?.id || 0,
+          x_account_id: xAccountId || 0,
+          trend_name: trend.trend_name,
+          normalized_name: trend.normalized_name,
+          woeid: trend.woeid,
+          category: trend.category,
+          rating,
+          source_type: "manual_post_create",
+        });
+        pushToast(t("autoPost.trends.feedbackSaved"));
+      } catch (error) {
+        pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackFailed") : t("autoPost.trends.feedbackFailed"));
+      } finally {
+        setTrendFeedbackPendingKey("");
+      }
+    },
+    [pushToast, selectedBot?.id, t, xAccountId],
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,8 +200,9 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
     }
     setGenerating(true);
     try {
-      const data = await postService.generate({ x_account_id: xAccountId });
+      const data = await postService.generate({ x_account_id: xAccountId, excluded_trend_names: excludedTrendNames });
       setContent(data.content);
+      setSelectedTrends(data.selected_trends || []);
       const used = data.usage?.ai_generations_month ?? 0;
       const limit = data.limits?.ai_generations_monthly ?? 0;
       broadcastDataSynced(Date.now());
@@ -259,12 +325,67 @@ export function PostCreateClient({ source }: PostCreateClientProps) {
                 </div>
               </div>
 
+              {isAutoPostSource ? (
+                <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{t("posts.create.trends.title")}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-[#71767b]">
+                        {selectedBot ? t("posts.create.trends.description") : t("posts.create.trends.needBot")}
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" className="h-8" disabled={loadingTrends || !selectedBot} onClick={() => void refreshTrends()}>
+                      <Sparkles className="size-3.5" />
+                      {loadingTrends ? t("autoPost.trends.loading") : t("autoPost.trends.refresh")}
+                    </Button>
+                  </div>
+                  {loadingTrends ? (
+                    <p className="mt-3 text-sm text-[#71767b]">{t("autoPost.trends.loading")}</p>
+                  ) : selectedTrends.length ? (
+                    <div className="mt-3 grid gap-2">
+                      {selectedTrends.map((trend) => (
+                        <TrendPreviewRow
+                          key={`${trend.woeid}-${trend.normalized_name || trend.trend_name}`}
+                          trend={trend}
+                          pendingKey={trendFeedbackPendingKey}
+                          onExclude={excludeTrend}
+                          onFeedback={submitTrendFeedback}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-sm text-[#71767b]">
+                      {selectedBot ? t("autoPost.trends.selectedEmpty") : t("posts.create.trends.needBotShort")}
+                    </p>
+                  )}
+                  {excludedTrendNames.length ? (
+                    <div className="mt-3 border-t border-[#2f3336] pt-3">
+                      <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.excludedTitle")}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {excludedTrendNames.map((name) => (
+                          <span key={name} className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+                            {name}
+                            <button type="button" onClick={() => restoreTrend(name)} className="font-semibold hover:text-white">
+                              {t("autoPost.trends.restore")}
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <label className="block text-xs text-[#71767b]">
                 {t("posts.create.account")}
                 <select
                   className="form-input mt-1 w-full max-w-md"
                   value={xAccountId || ""}
-                  onChange={(e) => setXAccountId(Number(e.target.value))}
+                  onChange={(e) => {
+                    setXAccountId(Number(e.target.value));
+                    setExcludedTrendNames([]);
+                    setSelectedTrends([]);
+                  }}
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -426,6 +547,74 @@ function RoutingRow({ active, title, description }: { active: boolean; title: st
     <div className={cn("rounded-2xl border p-3", active ? "border-[#1d9bf0]/35 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black")}>
       <p className="text-sm font-medium text-[#e7e9ea]">{title}</p>
       <p className="mt-1 text-xs leading-relaxed text-[#71767b]">{description}</p>
+    </div>
+  );
+}
+
+function TrendPreviewRow({
+  trend,
+  pendingKey,
+  onExclude,
+  onFeedback,
+}: {
+  trend: TrendTopicApi;
+  pendingKey: string;
+  onExclude: (trend: TrendTopicApi) => void;
+  onFeedback: (trend: TrendTopicApi, rating: TrendFeedbackRating) => void;
+}) {
+  const { t } = useT();
+  const baseKey = `${trend.woeid}-${trend.normalized_name || trend.trend_name}`;
+  const feedbackOptions: Array<{ rating: TrendFeedbackRating; label: string }> = [
+    { rating: "relevant", label: t("autoPost.trends.feedback.relevant") },
+    { rating: "irrelevant", label: t("autoPost.trends.feedback.irrelevant") },
+    { rating: "too_forced", label: t("autoPost.trends.feedback.tooForced") },
+  ];
+  return (
+    <div className="rounded-xl border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-[#d7ebff]">{trend.trend_name}</span>
+            <span className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#71767b]">
+              {t(`autoPost.trends.category.${trend.category}`)}
+            </span>
+          </div>
+          {trend.relevance_reason ? (
+            <p className="mt-1 break-words text-xs leading-5 text-[#8b98a5]">
+              {t("autoPost.trends.reasonPrefix")} {trend.relevance_reason}
+            </p>
+          ) : null}
+          {trend.matched_keywords?.length ? (
+            <p className="mt-1 break-words text-xs leading-5 text-[#71767b]">
+              {t("autoPost.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => onExclude(trend)}
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] hover:border-[#1d9bf0]/60 hover:text-white"
+        >
+          <X className="size-3.5" />
+          {t("autoPost.trends.exclude")}
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {feedbackOptions.map((option) => {
+          const loading = pendingKey === `${baseKey}-${option.rating}`;
+          return (
+            <button
+              key={option.rating}
+              type="button"
+              onClick={() => onFeedback(trend, option.rating)}
+              disabled={Boolean(pendingKey)}
+              className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-medium text-[#8b98a5] transition hover:border-[#1d9bf0]/50 hover:text-[#d7ebff] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? t("autoPost.trends.feedback.saving") : option.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -103,19 +103,25 @@ type AutoReplyDraftUpdateRequest struct {
 }
 
 type AutoPostPlanRequest struct {
-	XAccountID         uint   `json:"x_account_id" binding:"required"`
-	Enabled            bool   `json:"enabled"`
-	ExecutionMode      string `json:"execution_mode"`
-	DailyLimit         int    `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
-	MinIntervalMinutes int    `json:"min_interval_minutes"`
-	PostingWindows     string `json:"posting_windows"`
-	Timezone           string `json:"timezone"`
-	ContentLengthMode  string `json:"content_length_mode"`
+	XAccountID           uint     `json:"x_account_id" binding:"required"`
+	Enabled              bool     `json:"enabled"`
+	ExecutionMode        string   `json:"execution_mode"`
+	DailyLimit           int      `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
+	MinIntervalMinutes   int      `json:"min_interval_minutes"`
+	PostingWindows       string   `json:"posting_windows"`
+	Timezone             string   `json:"timezone"`
+	ContentLengthMode    string   `json:"content_length_mode"`
+	TrendRegions         []string `json:"trend_regions"`
+	TrendCategories      []string `json:"trend_categories"`
+	ExcludedTrendNames   []string `json:"excluded_trend_names"`
+	AllowGeneralTrends   bool     `json:"allow_general_trends"`
+	SensitiveTrendPolicy string   `json:"sensitive_trend_policy"`
 }
 
 type AutoPostGenerateRequest struct {
-	ContentDirection     string `json:"content_direction"`
-	ContentLibraryItemID uint   `json:"content_library_item_id"`
+	ContentDirection     string   `json:"content_direction"`
+	ContentLibraryItemID uint     `json:"content_library_item_id"`
+	ExcludedTrendNames   []string `json:"excluded_trend_names"`
 }
 
 type AutoPostDraftUpdateRequest struct {
@@ -127,51 +133,57 @@ type AutoPostDraftRejectRequest struct {
 }
 
 type AutoPostPlanItem struct {
-	ID                 uint   `json:"id"`
-	UserID             uint   `json:"user_id"`
-	XAccountID         uint   `json:"x_account_id"`
-	AccountHandle      string `json:"account_handle,omitempty"`
-	BotID              uint   `json:"bot_id"`
-	BotName            string `json:"bot_name,omitempty"`
-	Enabled            bool   `json:"enabled"`
-	ExecutionMode      string `json:"execution_mode"`
-	DailyLimit         int    `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
-	MinIntervalMinutes int    `json:"min_interval_minutes"`
-	PostingWindows     string `json:"posting_windows"`
-	Timezone           string `json:"timezone"`
-	ContentLengthMode  string `json:"content_length_mode"`
-	LastRunAt          string `json:"last_run_at,omitempty"`
-	NextRunAt          string `json:"next_run_at,omitempty"`
-	ProcessingAt       string `json:"processing_at,omitempty"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
+	ID                   uint     `json:"id"`
+	UserID               uint     `json:"user_id"`
+	XAccountID           uint     `json:"x_account_id"`
+	AccountHandle        string   `json:"account_handle,omitempty"`
+	BotID                uint     `json:"bot_id"`
+	BotName              string   `json:"bot_name,omitempty"`
+	Enabled              bool     `json:"enabled"`
+	ExecutionMode        string   `json:"execution_mode"`
+	DailyLimit           int      `json:"daily_limit"` // Deprecated: kept for API compatibility; monthly plan quota is enforced instead.
+	MinIntervalMinutes   int      `json:"min_interval_minutes"`
+	PostingWindows       string   `json:"posting_windows"`
+	Timezone             string   `json:"timezone"`
+	ContentLengthMode    string   `json:"content_length_mode"`
+	TrendRegions         []string `json:"trend_regions"`
+	TrendCategories      []string `json:"trend_categories"`
+	ExcludedTrendNames   []string `json:"excluded_trend_names"`
+	AllowGeneralTrends   bool     `json:"allow_general_trends"`
+	SensitiveTrendPolicy string   `json:"sensitive_trend_policy"`
+	LastRunAt            string   `json:"last_run_at,omitempty"`
+	NextRunAt            string   `json:"next_run_at,omitempty"`
+	ProcessingAt         string   `json:"processing_at,omitempty"`
+	CreatedAt            string   `json:"created_at"`
+	UpdatedAt            string   `json:"updated_at"`
 }
 
 type AutoPostDraftItem struct {
-	ID               uint   `json:"id"`
-	UserID           uint   `json:"user_id"`
-	PlanID           uint   `json:"plan_id"`
-	BotID            uint   `json:"bot_id"`
-	BotName          string `json:"bot_name,omitempty"`
-	XAccountID       uint   `json:"x_account_id"`
-	ContentLibraryID uint   `json:"content_library_item_id,omitempty"`
-	ContentTitle     string `json:"content_title,omitempty"`
-	AccountHandle    string `json:"account_handle,omitempty"`
-	ContentDirection string `json:"content_direction,omitempty"`
-	ContentHash      string `json:"content_hash,omitempty"`
-	GeneratedContent string `json:"generated_content"`
-	Status           string `json:"status"`
-	RiskLevel        string `json:"risk_level"`
-	CapabilityStatus string `json:"capability_status"`
-	FailureCategory  string `json:"failure_category,omitempty"`
-	FailureReason    string `json:"failure_reason,omitempty"`
-	ApprovalRequired bool   `json:"approval_required"`
-	ActivityLogID    uint   `json:"activity_log_id,omitempty"`
-	CreatedAt        string `json:"created_at"`
-	GeneratedAt      string `json:"generated_at,omitempty"`
-	ApprovedAt       string `json:"approved_at,omitempty"`
-	RejectedAt       string `json:"rejected_at,omitempty"`
-	PublishedAt      string `json:"published_at,omitempty"`
+	ID               uint             `json:"id"`
+	UserID           uint             `json:"user_id"`
+	PlanID           uint             `json:"plan_id"`
+	BotID            uint             `json:"bot_id"`
+	BotName          string           `json:"bot_name,omitempty"`
+	XAccountID       uint             `json:"x_account_id"`
+	ContentLibraryID uint             `json:"content_library_item_id,omitempty"`
+	ContentTitle     string           `json:"content_title,omitempty"`
+	AccountHandle    string           `json:"account_handle,omitempty"`
+	ContentDirection string           `json:"content_direction,omitempty"`
+	ContentHash      string           `json:"content_hash,omitempty"`
+	SelectedTrends   []TrendTopicItem `json:"selected_trends,omitempty"`
+	GeneratedContent string           `json:"generated_content"`
+	Status           string           `json:"status"`
+	RiskLevel        string           `json:"risk_level"`
+	CapabilityStatus string           `json:"capability_status"`
+	FailureCategory  string           `json:"failure_category,omitempty"`
+	FailureReason    string           `json:"failure_reason,omitempty"`
+	ApprovalRequired bool             `json:"approval_required"`
+	ActivityLogID    uint             `json:"activity_log_id,omitempty"`
+	CreatedAt        string           `json:"created_at"`
+	GeneratedAt      string           `json:"generated_at,omitempty"`
+	ApprovedAt       string           `json:"approved_at,omitempty"`
+	RejectedAt       string           `json:"rejected_at,omitempty"`
+	PublishedAt      string           `json:"published_at,omitempty"`
 }
 
 type AutoPostPlansResponse struct {
@@ -183,21 +195,22 @@ type AutoPostDraftsResponse struct {
 }
 
 type AutoPostGenerationRunItem struct {
-	ID               uint   `json:"id"`
-	UserID           uint   `json:"user_id"`
-	PlanID           uint   `json:"plan_id"`
-	XAccountID       uint   `json:"x_account_id"`
-	AccountHandle    string `json:"account_handle,omitempty"`
-	BotID            uint   `json:"bot_id"`
-	BotName          string `json:"bot_name,omitempty"`
-	ContentLibraryID uint   `json:"content_library_item_id,omitempty"`
-	ContentTitle     string `json:"content_title,omitempty"`
-	ContentItemTitle string `json:"content_library_item_title,omitempty"`
-	Status           string `json:"status"`
-	SkipReason       string `json:"skip_reason,omitempty"`
-	GeneratedDraftID uint   `json:"generated_draft_id,omitempty"`
-	ErrorMessage     string `json:"error_message,omitempty"`
-	CreatedAt        string `json:"created_at"`
+	ID               uint             `json:"id"`
+	UserID           uint             `json:"user_id"`
+	PlanID           uint             `json:"plan_id"`
+	XAccountID       uint             `json:"x_account_id"`
+	AccountHandle    string           `json:"account_handle,omitempty"`
+	BotID            uint             `json:"bot_id"`
+	BotName          string           `json:"bot_name,omitempty"`
+	ContentLibraryID uint             `json:"content_library_item_id,omitempty"`
+	ContentTitle     string           `json:"content_title,omitempty"`
+	ContentItemTitle string           `json:"content_library_item_title,omitempty"`
+	Status           string           `json:"status"`
+	SkipReason       string           `json:"skip_reason,omitempty"`
+	GeneratedDraftID uint             `json:"generated_draft_id,omitempty"`
+	SelectedTrends   []TrendTopicItem `json:"selected_trends,omitempty"`
+	ErrorMessage     string           `json:"error_message,omitempty"`
+	CreatedAt        string           `json:"created_at"`
 }
 
 type AutoPostGenerationRunQuery struct {
@@ -635,27 +648,28 @@ type ReviewQueueStats struct {
 }
 
 type ReviewQueueItem struct {
-	ID                 uint     `json:"id"`
-	Type               string   `json:"type"`
-	DeliveryMode       string   `json:"delivery_mode,omitempty"`
-	Content            string   `json:"content"`
-	Status             string   `json:"status"`
-	ExecutionMode      string   `json:"execution_mode"`
-	BotID              uint     `json:"bot_id"`
-	BotName            string   `json:"bot_name,omitempty"`
-	TwitterAccountID   uint     `json:"twitter_account_id"`
-	TwitterAccountName string   `json:"twitter_account_name,omitempty"`
-	TargetSummary      string   `json:"target_summary,omitempty"`
-	RiskLevel          string   `json:"risk_level"`
-	RiskReasons        []string `json:"risk_reasons"`
-	PublishJobID       uint     `json:"publish_job_id,omitempty"`
-	PublishStatus      string   `json:"publish_status,omitempty"`
-	PublishMode        string   `json:"publish_mode,omitempty"`
-	PublishLastError   string   `json:"publish_last_error,omitempty"`
-	PublishExternalURL string   `json:"publish_external_url,omitempty"`
-	CreatedAt          string   `json:"created_at"`
-	SourceStatus       string   `json:"source_status,omitempty"`
-	SourceID           uint     `json:"source_id"`
+	ID                 uint             `json:"id"`
+	Type               string           `json:"type"`
+	DeliveryMode       string           `json:"delivery_mode,omitempty"`
+	Content            string           `json:"content"`
+	Status             string           `json:"status"`
+	ExecutionMode      string           `json:"execution_mode"`
+	BotID              uint             `json:"bot_id"`
+	BotName            string           `json:"bot_name,omitempty"`
+	TwitterAccountID   uint             `json:"twitter_account_id"`
+	TwitterAccountName string           `json:"twitter_account_name,omitempty"`
+	TargetSummary      string           `json:"target_summary,omitempty"`
+	RiskLevel          string           `json:"risk_level"`
+	RiskReasons        []string         `json:"risk_reasons"`
+	SelectedTrends     []TrendTopicItem `json:"selected_trends,omitempty"`
+	PublishJobID       uint             `json:"publish_job_id,omitempty"`
+	PublishStatus      string           `json:"publish_status,omitempty"`
+	PublishMode        string           `json:"publish_mode,omitempty"`
+	PublishLastError   string           `json:"publish_last_error,omitempty"`
+	PublishExternalURL string           `json:"publish_external_url,omitempty"`
+	CreatedAt          string           `json:"created_at"`
+	SourceStatus       string           `json:"source_status,omitempty"`
+	SourceID           uint             `json:"source_id"`
 }
 
 type ReviewQueueResponse struct {

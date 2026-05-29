@@ -39,6 +39,11 @@ import {
   type AutoPostGenerationRunApi,
   type AutoPostLengthMode,
   type AutoPostPlanApi,
+  type TrendFeedbackApi,
+  type TrendFeedbackListData,
+  type TrendFeedbackRating,
+  type TrendSensitivePolicy,
+  type TrendTopicApi,
 } from "@/services/auto-post.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import {
@@ -64,12 +69,20 @@ type PlannerForm = {
   postingWindows: string;
   timezone: string;
   contentLengthMode: AutoPostLengthMode;
+  trendRegions: string[];
+  trendCategories: string[];
+  excludedTrendNames: string[];
+  allowGeneralTrends: boolean;
+  sensitiveTrendPolicy: TrendSensitivePolicy;
 };
 
 const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
 const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
 const xSubscriptionTiers: XSubscriptionTier[] = ["unknown", "free", "premium", "premium_plus"];
 const autoPostLengthModes: AutoPostLengthMode[] = ["standard", "long"];
+const trendRegions = ["1", "23424977"];
+const trendCategories = ["crypto", "finance", "tech", "sports", "entertainment", "gaming", "politics", "news", "culture", "lifestyle", "meme", "other"];
+const sensitiveTrendPolicies: TrendSensitivePolicy[] = ["avoid", "review_only", "allow"];
 const contentItemTypes: ContentLibraryItemType[] = [
   "idea",
   "feature_highlight",
@@ -123,6 +136,11 @@ function defaultForm(): PlannerForm {
     postingWindows: "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     contentLengthMode: "standard",
+    trendRegions: ["1", "23424977"],
+    trendCategories: [],
+    excludedTrendNames: [],
+    allowGeneralTrends: false,
+    sensitiveTrendPolicy: "avoid",
   };
 }
 
@@ -270,6 +288,11 @@ export default function AutoPostPage() {
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
+  const [selectedTrends, setSelectedTrends] = useState<TrendTopicApi[]>([]);
+  const [loadingSelectedTrends, setLoadingSelectedTrends] = useState(false);
+  const [trendFeedbackData, setTrendFeedbackData] = useState<TrendFeedbackListData | null>(null);
+  const [trendFeedbackLoading, setTrendFeedbackLoading] = useState(false);
+  const [clearingTrendFeedbackID, setClearingTrendFeedbackID] = useState(0);
   const [activePanel, setActivePanel] = useState<WorkbenchPanel>(() => readWorkbenchPanel(searchParams.get("panel")));
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>(() => readRunStatus(searchParams.get("run_status")));
   const [runAccountScope, setRunAccountScope] = useState<RunAccountScope>(() => readRunAccountScope(searchParams.get("account_scope")));
@@ -463,6 +486,45 @@ export default function AutoPostPage() {
     updatePostingWindowHours(new Set(hours));
   }, [updatePostingWindowHours]);
 
+  const toggleTrendRegion = useCallback((region: string) => {
+    setForm((current) => {
+      const next = new Set(current.trendRegions);
+      if (next.has(region)) {
+        next.delete(region);
+      } else {
+        next.add(region);
+      }
+      return { ...current, trendRegions: Array.from(next) };
+    });
+  }, []);
+
+  const toggleTrendCategory = useCallback((category: string) => {
+    setForm((current) => {
+      const next = new Set(current.trendCategories);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return { ...current, trendCategories: Array.from(next) };
+    });
+  }, []);
+
+  const excludeTrend = useCallback((trend: TrendTopicApi) => {
+    const name = trend.trend_name.trim();
+    if (!name) return;
+    setForm((current) => {
+      const next = new Set(current.excludedTrendNames);
+      next.add(name);
+      return { ...current, excludedTrendNames: Array.from(next) };
+    });
+    setSelectedTrends((current) => current.filter((item) => item.normalized_name !== trend.normalized_name));
+  }, []);
+
+  const restoreExcludedTrend = useCallback((name: string) => {
+    setForm((current) => ({ ...current, excludedTrendNames: current.excludedTrendNames.filter((item) => item !== name) }));
+  }, []);
+
   const skipReasonLabel = useCallback(
     (reason?: string) => {
       if (!reason) return t("autoPost.runs.skipReason.unknown");
@@ -500,6 +562,11 @@ export default function AutoPostPage() {
         posting_windows: form.postingWindows.trim(),
         timezone: form.timezone.trim() || "UTC",
         content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
+        trend_regions: form.trendRegions,
+        trend_categories: form.trendCategories,
+        excluded_trend_names: form.excludedTrendNames,
+        allow_general_trends: form.allowGeneralTrends,
+        sensitive_trend_policy: form.sensitiveTrendPolicy,
       };
       const saved = selectedPlan ? await autoPostService.updatePlan(selectedPlan.id, payload) : await autoPostService.createPlan(payload);
       setPlans((current) => {
@@ -515,6 +582,65 @@ export default function AutoPostPage() {
       setSaving(false);
     }
   };
+
+  const refreshSelectedTrends = useCallback(async () => {
+    const planID = selectedPlan?.id || 0;
+    const botID = selectedPlan?.bot_id || selectedBot?.id || 0;
+    if (!planID && !botID) {
+      setSelectedTrends([]);
+      return;
+    }
+    setLoadingSelectedTrends(true);
+    try {
+      const data = await autoPostService.selectedTrends({ planID, botID, limit: 3, excludedTrendNames: form.excludedTrendNames });
+      setSelectedTrends(data.items);
+    } catch {
+      setSelectedTrends([]);
+    } finally {
+      setLoadingSelectedTrends(false);
+    }
+  }, [form.excludedTrendNames, selectedBot?.id, selectedPlan?.bot_id, selectedPlan?.id]);
+
+  useEffect(() => {
+    void refreshSelectedTrends();
+  }, [refreshSelectedTrends]);
+
+  const refreshTrendFeedback = useCallback(async () => {
+    const botID = selectedPlan?.bot_id || selectedBot?.id || 0;
+    if (!botID) {
+      setTrendFeedbackData(null);
+      return;
+    }
+    setTrendFeedbackLoading(true);
+    try {
+      const data = await autoPostService.trendFeedback({ botID, onlyNegative: true, limit: 20 });
+      setTrendFeedbackData(data);
+    } catch {
+      setTrendFeedbackData(null);
+    } finally {
+      setTrendFeedbackLoading(false);
+    }
+  }, [selectedBot?.id, selectedPlan?.bot_id]);
+
+  useEffect(() => {
+    void refreshTrendFeedback();
+  }, [refreshTrendFeedback]);
+
+  const clearTrendFeedback = useCallback(
+    async (item: TrendFeedbackApi) => {
+      setClearingTrendFeedbackID(item.id);
+      try {
+        await autoPostService.deleteTrendFeedback(item.id);
+        pushToast(t("autoPost.trends.feedbackCleared"));
+        await Promise.all([refreshTrendFeedback(), refreshSelectedTrends()]);
+      } catch (error) {
+        pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackClearFailed") : t("autoPost.trends.feedbackClearFailed"));
+      } finally {
+        setClearingTrendFeedbackID(0);
+      }
+    },
+    [pushToast, refreshSelectedTrends, refreshTrendFeedback, t],
+  );
 
   const updateAccountTier = async (tier: XSubscriptionTier) => {
     if (!selectedAccountID) return;
@@ -685,11 +811,16 @@ export default function AutoPostPage() {
           posting_windows: form.postingWindows.trim(),
           timezone: form.timezone.trim() || "UTC",
           content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
+          trend_regions: form.trendRegions,
+          trend_categories: form.trendCategories,
+          excluded_trend_names: form.excludedTrendNames,
+          allow_general_trends: form.allowGeneralTrends,
+          sensitive_trend_policy: form.sensitiveTrendPolicy,
         });
         plan = saved;
         setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
       }
-      const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id);
+      const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id, form.excludedTrendNames);
       setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
       setContentDirection("");
       setQuotaUpgradeVisible(false);
@@ -1045,6 +1176,122 @@ export default function AutoPostPage() {
                   </div>
                 </div>
 
+                <div className="grid gap-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.trends.title")}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.trends.description")}</p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void refreshSelectedTrends()} disabled={loadingSelectedTrends}>
+                      {loadingSelectedTrends ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                      {t("autoPost.trends.refresh")}
+                    </Button>
+                  </div>
+
+                  <TrendToggleGroup
+                    label={t("autoPost.trends.regions")}
+                    values={trendRegions}
+                    selected={form.trendRegions}
+                    labelFor={(value) => t(`autoPost.trends.region.${value}`)}
+                    onToggle={toggleTrendRegion}
+                  />
+
+                  <TrendToggleGroup
+                    label={t("autoPost.trends.categories")}
+                    values={trendCategories}
+                    selected={form.trendCategories}
+                    labelFor={(value) => t(`autoPost.trends.category.${value}`)}
+                    onToggle={toggleTrendCategory}
+                    emptyLabel={t("autoPost.trends.allCategories")}
+                  />
+
+                  <label className="flex items-start gap-3 rounded-xl border border-[#2f3336] bg-black p-3">
+                    <input
+                      type="checkbox"
+                      checked={form.allowGeneralTrends}
+                      onChange={(event) => setForm((current) => ({ ...current, allowGeneralTrends: event.target.checked }))}
+                      className="mt-1 size-4 accent-[#1d9bf0]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[#e7e9ea]">{t("autoPost.trends.allowGeneral")}</span>
+                      <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoPost.trends.allowGeneralHelper")}</span>
+                    </span>
+                  </label>
+
+                  <div className="grid gap-2">
+                    <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.sensitivePolicy")}</p>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {sensitiveTrendPolicies.map((policy) => (
+                        <button
+                          key={policy}
+                          type="button"
+                          onClick={() => setForm((current) => ({ ...current, sensitiveTrendPolicy: policy }))}
+                          className={`rounded-xl border p-3 text-left transition ${
+                            form.sensitiveTrendPolicy === policy
+                              ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]"
+                              : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold">{t(`autoPost.trends.policy.${policy}`)}</span>
+                          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoPost.trends.policyHelper.${policy}`)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+                    <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.selectedTitle")}</p>
+                    {loadingSelectedTrends ? (
+                      <p className="mt-2 text-sm text-[#71767b]">{t("autoPost.trends.loading")}</p>
+                    ) : selectedTrends.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedTrends.map((trend) => (
+                          <span key={trend.id} className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#d7ebff]">
+                            {trend.trend_name}
+                            <span className="ml-2 text-[#71767b]">{t(`autoPost.trends.category.${trend.category}`)}</span>
+                            <button
+                              type="button"
+                              onClick={() => excludeTrend(trend)}
+                              className="rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] font-semibold text-[#8ecdf8] hover:border-[#1d9bf0]/60 hover:text-white"
+                            >
+                              {t("autoPost.trends.exclude")}
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-[#71767b]">{t("autoPost.trends.selectedEmpty")}</p>
+                    )}
+                    {form.excludedTrendNames.length ? (
+                      <div className="mt-3 border-t border-[#2f3336] pt-3">
+                        <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.excludedTitle")}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {form.excludedTrendNames.map((name) => (
+                            <span key={name} className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+                              {name}
+                              <button
+                                type="button"
+                                onClick={() => restoreExcludedTrend(name)}
+                                className="rounded-full border border-amber-300/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-300/10"
+                              >
+                                {t("autoPost.trends.restore")}
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <TrendFeedbackPanel
+                    data={trendFeedbackData}
+                    loading={trendFeedbackLoading}
+                    clearingID={clearingTrendFeedbackID}
+                    onRefresh={refreshTrendFeedback}
+                    onClear={clearTrendFeedback}
+                  />
+                </div>
+
                 <Button type="button" onClick={() => void savePlan()} disabled={saving || !selectedAccountID}>
                   {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                   {t("autoPost.actions.savePlanner")}
@@ -1361,6 +1608,13 @@ export default function AutoPostPage() {
                           <span className="text-xs text-[#71767b]">{formatDateTime(draft.created_at, timeZone)}</span>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
+                        {draft.selected_trends?.length ? (
+                          <TrendSourceChips
+                            trends={draft.selected_trends}
+                            label={t("autoPost.trends.usedInDraft")}
+                            feedback={{ sourceType: "auto_post_draft", sourceID: draft.id, botID: draft.bot_id, xAccountID: draft.x_account_id }}
+                          />
+                        ) : null}
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
                         <div className="mt-3 grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
                           <DraftRouteStep label={t("autoPost.pipeline.material")} value={draft.content_title || t("autoPost.runs.noContentItem")} />
@@ -1461,6 +1715,13 @@ export default function AutoPostPage() {
                           </p>
                         ) : null}
                         {run.error_message ? <p className="mt-2 break-words text-xs text-rose-100">{run.error_message}</p> : null}
+                        {run.selected_trends?.length ? (
+                          <TrendSourceChips
+                            trends={run.selected_trends}
+                            label={t("autoPost.trends.usedInRun")}
+                            feedback={{ sourceType: "auto_post_run", sourceID: run.id, botID: run.bot_id, xAccountID: run.x_account_id }}
+                          />
+                        ) : null}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#71767b]">
                           <span>
                             {run.content_library_item_title || run.content_title
@@ -1818,7 +2079,236 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
     postingWindows: plan.posting_windows || "",
     timezone: plan.timezone || "UTC",
     contentLengthMode: plan.content_length_mode || "standard",
+    trendRegions: plan.trend_regions?.length ? plan.trend_regions : ["1", "23424977"],
+    trendCategories: plan.trend_categories || [],
+    excludedTrendNames: plan.excluded_trend_names || [],
+    allowGeneralTrends: Boolean(plan.allow_general_trends),
+    sensitiveTrendPolicy: plan.sensitive_trend_policy || "avoid",
   };
+}
+
+function TrendToggleGroup({
+  label,
+  values,
+  selected,
+  labelFor,
+  onToggle,
+  emptyLabel,
+}: {
+  label: string;
+  values: string[];
+  selected: string[];
+  labelFor: (value: string) => string;
+  onToggle: (value: string) => void;
+  emptyLabel?: string;
+}) {
+  const selectedSet = new Set(selected);
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-[#71767b]">{label}</p>
+        {emptyLabel && selected.length === 0 ? <span className="text-xs text-[#71767b]">{emptyLabel}</span> : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {values.map((value) => {
+          const active = selectedSet.has(value);
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onToggle(value)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                active
+                  ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/15 text-[#d7ebff]"
+                  : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+              }`}
+            >
+              {labelFor(value)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TrendFeedbackPanel({
+  data,
+  loading,
+  clearingID,
+  onRefresh,
+  onClear,
+}: {
+  data: TrendFeedbackListData | null;
+  loading: boolean;
+  clearingID: number;
+  onRefresh: () => void | Promise<void>;
+  onClear: (item: TrendFeedbackApi) => void | Promise<void>;
+}) {
+  const { t } = useT();
+  const timeZone = usePreferredTimeZone();
+  const items = data?.items || [];
+  const summary = data?.summary;
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.feedbackPanel.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.trends.feedbackPanel.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" className="h-8" disabled={loading} onClick={() => void onRefresh()}>
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          {t("autoPost.trends.feedbackPanel.refresh")}
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <TrendFeedbackMetric label={t("autoPost.trends.feedbackPanel.total")} value={summary?.total || 0} />
+        <TrendFeedbackMetric label={t("autoPost.trends.feedback.irrelevant")} value={summary?.irrelevant || 0} />
+        <TrendFeedbackMetric label={t("autoPost.trends.feedback.tooForced")} value={summary?.too_forced || 0} />
+      </div>
+      {loading ? (
+        <p className="mt-3 text-sm text-[#71767b]">{t("autoPost.trends.feedbackPanel.loading")}</p>
+      ) : items.length ? (
+        <div className="mt-3 grid gap-2">
+          {items.slice(0, 8).map((item) => (
+            <div key={item.id} className="flex flex-col gap-2 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-[#e7e9ea]">{item.trend_name}</span>
+                  <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-100">
+                    {t(`autoPost.trends.feedback.${item.rating === "too_forced" ? "tooForced" : "irrelevant"}`)}
+                  </span>
+                  {item.category ? (
+                    <span className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#71767b]">
+                      {t(`autoPost.trends.category.${item.category}`)}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.created_at, timeZone)}</p>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(clearingID)}
+                onClick={() => void onClear(item)}
+                className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] hover:border-[#1d9bf0]/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {clearingID === item.id ? t("autoPost.trends.feedbackPanel.clearing") : t("autoPost.trends.feedbackPanel.clear")}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-sm text-[#71767b]">
+          {t("autoPost.trends.feedbackPanel.empty")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TrendFeedbackMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+type TrendFeedbackContext = {
+  sourceType: string;
+  sourceID?: number;
+  botID?: number;
+  xAccountID?: number;
+};
+
+function TrendSourceChips({ trends, label, feedback }: { trends: TrendTopicApi[]; label: string; feedback?: TrendFeedbackContext }) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const [pendingKey, setPendingKey] = useState("");
+  if (!trends.length) return null;
+  async function submitFeedback(trend: TrendTopicApi, rating: TrendFeedbackRating) {
+    const key = `${trend.woeid}-${trend.normalized_name || trend.trend_name}-${rating}`;
+    setPendingKey(key);
+    try {
+      await autoPostService.submitTrendFeedback({
+        bot_id: feedback?.botID || 0,
+        x_account_id: feedback?.xAccountID || 0,
+        trend_name: trend.trend_name,
+        normalized_name: trend.normalized_name,
+        woeid: trend.woeid,
+        category: trend.category,
+        rating,
+        source_type: feedback?.sourceType || "auto_post",
+        source_id: feedback?.sourceID || 0,
+      });
+      pushToast(t("autoPost.trends.feedbackSaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackFailed") : t("autoPost.trends.feedbackFailed"));
+    } finally {
+      setPendingKey("");
+    }
+  }
+  return (
+    <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-xs font-medium text-[#71767b]">{label}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {trends.slice(0, 3).map((trend) => (
+          <div key={`${trend.woeid}-${trend.normalized_name || trend.trend_name}`} className="min-w-0 rounded-xl border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-3 py-2 text-xs text-[#d7ebff]">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{trend.trend_name}</span>
+              <span className="text-[#71767b]">{t(`autoPost.trends.category.${trend.category}`)}</span>
+            </div>
+            {trend.relevance_reason ? (
+              <p className="mt-1 break-words leading-5 text-[#8b98a5]">
+                {t("autoPost.trends.reasonPrefix")} {trend.relevance_reason}
+              </p>
+            ) : null}
+            {trend.matched_keywords?.length ? (
+              <p className="mt-1 break-words leading-5 text-[#71767b]">
+                {t("autoPost.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
+              </p>
+            ) : null}
+            {feedback ? (
+              <TrendFeedbackButtons
+                trend={trend}
+                pendingKey={pendingKey}
+                onSubmit={(rating) => void submitFeedback(trend, rating)}
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: TrendTopicApi; pendingKey: string; onSubmit: (rating: TrendFeedbackRating) => void }) {
+  const { t } = useT();
+  const baseKey = `${trend.woeid}-${trend.normalized_name || trend.trend_name}`;
+  const options: Array<{ rating: TrendFeedbackRating; label: string }> = [
+    { rating: "relevant", label: t("autoPost.trends.feedback.relevant") },
+    { rating: "irrelevant", label: t("autoPost.trends.feedback.irrelevant") },
+    { rating: "too_forced", label: t("autoPost.trends.feedback.tooForced") },
+  ];
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {options.map((option) => {
+        const loading = pendingKey === `${baseKey}-${option.rating}`;
+        return (
+          <button
+            key={option.rating}
+            type="button"
+            onClick={() => onSubmit(option.rating)}
+            disabled={Boolean(pendingKey)}
+            className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-medium text-[#8b98a5] transition hover:border-[#1d9bf0]/50 hover:text-[#d7ebff] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? t("autoPost.trends.feedback.saving") : option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function splitTopics(value: string) {

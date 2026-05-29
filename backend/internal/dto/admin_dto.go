@@ -71,6 +71,64 @@ type AdminConfigSummary struct {
 	FrontendBaseURL    string `json:"frontend_base_url"`
 }
 
+type AdminTrendFeedbackQuery struct {
+	Days  int `form:"days"`
+	Limit int `form:"limit"`
+}
+
+type AdminTrendFeedbackTopicItem struct {
+	TrendName       string   `json:"trend_name"`
+	NormalizedName  string   `json:"normalized_name"`
+	Category        string   `json:"category"`
+	Irrelevant      int64    `json:"irrelevant"`
+	TooForced       int64    `json:"too_forced"`
+	TotalNegative   int64    `json:"total_negative"`
+	SuggestedAction string   `json:"suggested_action"`
+	SuggestedReason string   `json:"suggested_reason"`
+	ActiveRules     []string `json:"active_rules,omitempty"`
+	LastFeedbackAt  string   `json:"last_feedback_at"`
+}
+
+type AdminTrendFeedbackSummaryResponse struct {
+	Days          int                           `json:"days"`
+	TotalNegative int64                         `json:"total_negative"`
+	Irrelevant    int64                         `json:"irrelevant"`
+	TooForced     int64                         `json:"too_forced"`
+	UniqueTrends  int64                         `json:"unique_trends"`
+	TopNegative   []AdminTrendFeedbackTopicItem `json:"top_negative"`
+	TopIrrelevant []AdminTrendFeedbackTopicItem `json:"top_irrelevant"`
+	TopTooForced  []AdminTrendFeedbackTopicItem `json:"top_too_forced"`
+}
+
+type AdminApplyTrendRuleRequest struct {
+	TrendName      string `json:"trend_name" binding:"required"`
+	NormalizedName string `json:"normalized_name" binding:"required"`
+	Category       string `json:"category"`
+	Action         string `json:"action" binding:"required"`
+	Reason         string `json:"reason"`
+}
+
+type AdminTrendOperationRuleItem struct {
+	ID             uint   `json:"id"`
+	TrendName      string `json:"trend_name"`
+	NormalizedName string `json:"normalized_name"`
+	Category       string `json:"category"`
+	RuleType       string `json:"rule_type"`
+	Reason         string `json:"reason"`
+	Source         string `json:"source"`
+	Enabled        bool   `json:"enabled"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+type AdminTrendOperationRuleListResponse struct {
+	Items []AdminTrendOperationRuleItem `json:"items"`
+}
+
+type AdminUpdateTrendOperationRuleRequest struct {
+	Enabled *bool `json:"enabled"`
+}
+
 type AdminUserListQuery struct {
 	Page     int    `form:"page"`
 	PageSize int    `form:"page_size"`

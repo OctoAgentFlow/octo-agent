@@ -110,6 +110,47 @@ export type AdminOverviewApi = {
   recent_events: AdminActivityListItemApi[];
 };
 
+export type AdminTrendFeedbackTopicApi = {
+  trend_name: string;
+  normalized_name: string;
+  category: string;
+  irrelevant: number;
+  too_forced: number;
+  total_negative: number;
+  suggested_action: "move_to_review_pool" | "lower_general_weight" | "check_classification_keywords" | "monitor" | "no_action" | string;
+  suggested_reason: string;
+  active_rules?: string[];
+  last_feedback_at: string;
+};
+
+export type AdminTrendOperationRuleApi = {
+  id: number;
+  trend_name: string;
+  normalized_name: string;
+  category: string;
+  rule_type: string;
+  reason: string;
+  source: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminTrendFeedbackSummaryApi = {
+  days: number;
+  total_negative: number;
+  irrelevant: number;
+  too_forced: number;
+  unique_trends: number;
+  top_negative: AdminTrendFeedbackTopicApi[];
+  top_irrelevant: AdminTrendFeedbackTopicApi[];
+  top_too_forced: AdminTrendFeedbackTopicApi[];
+};
+
+export type AdminTrendOperationRulesApi = {
+  items: AdminTrendOperationRuleApi[];
+};
+
 export type AdminUserQueryApi = {
   page?: number;
   page_size?: number;
@@ -330,6 +371,22 @@ export const adminService = {
   },
   async updateBillingOrder(orderId: string, body: BillingOrderOpsActionRequest) {
     const res = await request.post<ApiResponse<BillingOrderDetailApi>>(`/admin/billing/orders/${orderId}/ops-action`, body);
+    return res.data.data;
+  },
+  async trendFeedbackSummary(params?: { days?: number; limit?: number }) {
+    const res = await request.get<ApiResponse<AdminTrendFeedbackSummaryApi>>("/admin/trends/feedback-summary", { params });
+    return res.data.data;
+  },
+  async applyTrendRule(body: { trend_name: string; normalized_name: string; category?: string; action: string; reason?: string }) {
+    const res = await request.post<ApiResponse<AdminTrendOperationRuleApi>>("/admin/trends/rules/apply", body);
+    return res.data.data;
+  },
+  async trendRules() {
+    const res = await request.get<ApiResponse<AdminTrendOperationRulesApi>>("/admin/trends/rules");
+    return res.data.data;
+  },
+  async updateTrendRule(id: number, body: { enabled: boolean }) {
+    const res = await request.patch<ApiResponse<AdminTrendOperationRuleApi>>(`/admin/trends/rules/${id}`, body);
     return res.data.data;
   },
   async pointActivities() {

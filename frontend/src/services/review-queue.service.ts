@@ -1,4 +1,5 @@
 import { request } from "@/lib/request";
+import type { TrendTopicApi } from "@/services/auto-post.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -24,6 +25,7 @@ export type ReviewQueueItemApi = {
   target_summary?: string;
   risk_level: string;
   risk_reasons: string[];
+  selected_trends?: TrendTopicApi[];
   publish_job_id?: number;
   publish_status?: string;
   publish_mode?: "simulated" | "dry_run" | "real" | "";

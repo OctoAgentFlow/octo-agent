@@ -10,5 +10,6 @@ type AutoPostGenerationRun struct {
 	Status           string `gorm:"size:32;index;not null;comment:运行状态completed/skipped/failed" json:"status"`
 	SkipReason       string `gorm:"size:128;index;comment:跳过原因" json:"skip_reason,omitempty"`
 	GeneratedDraftID uint   `gorm:"index;comment:生成的Auto Post草稿ID" json:"generated_draft_id,omitempty"`
+	SelectedTrends   string `gorm:"type:text;comment:本次生成使用的趋势上下文JSON" json:"selected_trends,omitempty"`
 	ErrorMessage     string `gorm:"size:1024;comment:失败错误信息" json:"error_message,omitempty"`
 }

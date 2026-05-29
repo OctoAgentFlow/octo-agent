@@ -93,6 +93,21 @@ func TestAutoCommentInputCarriesTargetLanguage(t *testing.T) {
 	}
 }
 
+func TestFillAutoCommentTargetSuggestionsFallsBack(t *testing.T) {
+	got := fillAutoCommentTargetSuggestions(nil, []string{"hosseeb", "KyleSamani"}, 4)
+	if len(got) != 4 {
+		t.Fatalf("expected fallback to fill four suggestions, got %#v", got)
+	}
+	for _, item := range got {
+		if item.Handle == "hosseeb" || item.Handle == "kylesamani" {
+			t.Fatalf("fallback should skip existing targets, got %#v", got)
+		}
+		if item.Priority < 1 || item.Priority > 5 {
+			t.Fatalf("expected normalized priority, got %#v", item)
+		}
+	}
+}
+
 func TestAutoCommentQueueScorePrioritizesTargetPriorityAndOpportunity(t *testing.T) {
 	highPriority := autoCommentQueueScore(5, 40)
 	highOpportunity := autoCommentQueueScore(2, 90)

@@ -797,6 +797,7 @@ export const dict: I18nDict = {
   "autoComment.discovery.loading": "生成中...",
   "autoComment.discovery.ready": "已生成 {count} 个目标建议。",
   "autoComment.discovery.failed": "生成目标建议失败。",
+  "autoComment.discovery.empty": "暂时没有新的候选账号。请补充 OAF Bot 关键词或内容池素材后再试。",
   "autoComment.discovery.verify": "需验证",
   "autoComment.discovery.search": "验证搜索",
   "autoComment.discovery.use": "加入导入框",

@@ -824,6 +824,7 @@ export const dict: I18nDict = {
   "autoComment.discovery.loading": "Generating...",
   "autoComment.discovery.ready": "{count} target suggestions generated.",
   "autoComment.discovery.failed": "Failed to generate target suggestions.",
+  "autoComment.discovery.empty": "No new candidate accounts yet. Add more OAF Bot keywords or content pool materials, then try again.",
   "autoComment.discovery.verify": "Verify",
   "autoComment.discovery.search": "Search",
   "autoComment.discovery.use": "Add to import",

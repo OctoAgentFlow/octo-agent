@@ -122,6 +122,7 @@ export default function AutoCommentsPage() {
   const [bulkNotes, setBulkNotes] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [suggestRequested, setSuggestRequested] = useState(false);
   const [targetSuggestions, setTargetSuggestions] = useState<AutoCommentTargetSuggestionData["items"]>([]);
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
@@ -463,6 +464,7 @@ export default function AutoCommentsPage() {
     const accountID = selectedAccount?.id ?? 0;
     if (!accountID || suggestBusy) return;
     setSuggestBusy(true);
+    setSuggestRequested(true);
     try {
       const data = await automationService.suggestCommentTargets(accountID);
       setTargetSuggestions(data.items || []);
@@ -884,6 +886,10 @@ export default function AutoCommentsPage() {
                       </div>
                     ))}
                   </div>
+                ) : suggestRequested && !suggestBusy ? (
+                  <p className="mt-3 rounded-xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#71767b]">
+                    {t("autoComment.discovery.empty")}
+                  </p>
                 ) : null}
               </div>
             </div>

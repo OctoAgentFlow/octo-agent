@@ -266,14 +266,18 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 	contentRows, _ := s.contentRepo.ListActiveForGenerationContext(userID, xAccountID, botIDForUsage(bot), 12)
 	input := autoCommentTargetSuggestionInput(bot, targets, contentRows)
 	generated, err := s.ai.GenerateAutoCommentTargetSuggestions(ctx, input)
+	if err == nil {
+		if err := recordAIGenerationUsage(s.usageRepo, userID, botIDForUsage(bot), repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
+			return nil, err
+		}
+	}
+	suggestions := generated.Items
 	if err != nil {
-		return nil, err
+		suggestions = nil
 	}
-	if err := recordAIGenerationUsage(s.usageRepo, userID, botIDForUsage(bot), repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
-		return nil, err
-	}
-	items := make([]dto.AutoCommentTargetSuggestionItem, 0, len(generated.Items))
-	for _, item := range generated.Items {
+	suggestions = fillAutoCommentTargetSuggestions(suggestions, input.ExistingTargets, 8)
+	items := make([]dto.AutoCommentTargetSuggestionItem, 0, len(suggestions))
+	for _, item := range suggestions {
 		items = append(items, dto.AutoCommentTargetSuggestionItem{
 			Handle:      item.Handle,
 			DisplayName: item.DisplayName,
@@ -1648,6 +1652,63 @@ func autoCommentTargetSuggestionInput(bot *model.OAFBot, targets []model.AutoCom
 		}
 	}
 	return input
+}
+
+func fillAutoCommentTargetSuggestions(items []AutoCommentTargetSuggestion, existing []string, minCount int) []AutoCommentTargetSuggestion {
+	if minCount <= 0 {
+		minCount = 8
+	}
+	existingSet := map[string]bool{}
+	for _, item := range existing {
+		if handle := normalizeSuggestionHandle(item); handle != "" {
+			existingSet[handle] = true
+		}
+	}
+	seen := map[string]bool{}
+	out := make([]AutoCommentTargetSuggestion, 0, minCount+len(items))
+	for _, item := range items {
+		normalized := normalizeSuggestionHandle(item.Handle)
+		if normalized == "" || existingSet[normalized] || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		item.Handle = normalized
+		item.Category = normalizeSuggestionCategory(item.Category)
+		item.Priority = normalizeAutoCommentTargetPriority(item.Priority)
+		out = append(out, item)
+	}
+	for _, item := range fallbackAutoCommentTargetSuggestions() {
+		if len(out) >= minCount {
+			break
+		}
+		normalized := normalizeSuggestionHandle(item.Handle)
+		if normalized == "" || existingSet[normalized] || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		item.Handle = normalized
+		item.Category = normalizeSuggestionCategory(item.Category)
+		item.Priority = normalizeAutoCommentTargetPriority(item.Priority)
+		out = append(out, item)
+	}
+	return out
+}
+
+func fallbackAutoCommentTargetSuggestions() []AutoCommentTargetSuggestion {
+	return []AutoCommentTargetSuggestion{
+		{Handle: "hosseeb", DisplayName: "Haseeb Qureshi", Category: "investor", Priority: 5, Reason: "Crypto investor with frequent long-form market and founder discussions relevant to Web3 operators.", SearchQuery: "site:x.com/hosseeb crypto AI agents SocialFi"},
+		{Handle: "KyleSamani", DisplayName: "Kyle Samani", Category: "investor", Priority: 5, Reason: "High-signal crypto infrastructure and market commentary with strong founder audience overlap.", SearchQuery: "site:x.com/KyleSamani crypto infrastructure growth"},
+		{Handle: "cobie", DisplayName: "Cobie", Category: "kol", Priority: 5, Reason: "Large crypto-native audience and frequent discussion around market narratives and community behavior.", SearchQuery: "site:x.com/cobie crypto community narrative"},
+		{Handle: "zhusu", DisplayName: "Zhu Su", Category: "kol", Priority: 4, Reason: "Crypto audience with broad market discussion; useful for observing high-exposure conversation opportunities.", SearchQuery: "site:x.com/zhusu crypto market"},
+		{Handle: "DefiIgnas", DisplayName: "Ignas", Category: "analyst", Priority: 5, Reason: "DeFi analyst with educational threads and an audience likely to care about operational tooling.", SearchQuery: "site:x.com/DefiIgnas DeFi tools growth"},
+		{Handle: "Route2FI", DisplayName: "Route 2 FI", Category: "kol", Priority: 4, Reason: "DeFi and crypto yield audience; good fit for careful, non-promotional workflow comments.", SearchQuery: "site:x.com/Route2FI DeFi crypto"},
+		{Handle: "MessariCrypto", DisplayName: "Messari", Category: "media", Priority: 5, Reason: "Research/media account with industry audience and frequent Web3 project discussions.", SearchQuery: "site:x.com/MessariCrypto Web3 research"},
+		{Handle: "BanklessHQ", DisplayName: "Bankless", Category: "media", Priority: 5, Reason: "Large Web3 media audience; suitable for comments around adoption, community, and operational workflows.", SearchQuery: "site:x.com/BanklessHQ Web3 community"},
+		{Handle: "a16zcrypto", DisplayName: "a16z crypto", Category: "ecosystem", Priority: 5, Reason: "Builder and founder-heavy Web3 audience with strong overlap for AI agent and growth tooling.", SearchQuery: "site:x.com/a16zcrypto builders AI agents"},
+		{Handle: "paradigm", DisplayName: "Paradigm", Category: "ecosystem", Priority: 4, Reason: "Crypto research and infrastructure audience; useful for high-quality technical conversation monitoring.", SearchQuery: "site:x.com/paradigm crypto research"},
+		{Handle: "Foresight_News", DisplayName: "Foresight News", Category: "media", Priority: 4, Reason: "Chinese Web3 media account; useful for Chinese-language exposure and market discussion.", SearchQuery: "site:x.com/Foresight_News Web3 中文"},
+		{Handle: "BlockBeatsAsia", DisplayName: "BlockBeats", Category: "media", Priority: 4, Reason: "Chinese crypto media audience with frequent project and market updates.", SearchQuery: "site:x.com/BlockBeatsAsia crypto 中文"},
+	}
 }
 
 func displayCommentTargetHandle(target model.AutoCommentTarget) string {

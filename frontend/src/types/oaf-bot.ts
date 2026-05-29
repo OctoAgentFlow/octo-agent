@@ -1,5 +1,7 @@
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 
+export type OAFBotTrendSensitivePolicy = "avoid" | "review_only" | "allow";
+
 export type OAFBot = {
   id: number;
   name: string;
@@ -36,6 +38,10 @@ export type OAFBot = {
   safety_mode: string;
   primary_language: string;
   language_strategy: string;
+  trend_regions: string[];
+  trend_categories: string[];
+  allow_general_trends: boolean;
+  sensitive_trend_policy: OAFBotTrendSensitivePolicy;
   created_at: string;
   updated_at: string;
 };

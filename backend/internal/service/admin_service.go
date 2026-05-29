@@ -169,6 +169,228 @@ func (s *AdminService) GrossMarginSummary(operatorID uint) (*dto.AdminGrossMargi
 	}, nil
 }
 
+func (s *AdminService) TrendFeedbackSummary(operatorID uint, query dto.AdminTrendFeedbackQuery) (*dto.AdminTrendFeedbackSummaryResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	days := query.Days
+	if days <= 0 || days > 180 {
+		days = 30
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days)
+	var totals struct {
+		TotalNegative int64
+		Irrelevant    int64
+		TooForced     int64
+		UniqueTrends  int64
+	}
+	if err := s.db.Table("trend_feedbacks").
+		Select(`
+			COUNT(*) AS total_negative,
+			SUM(CASE WHEN rating = 'irrelevant' THEN 1 ELSE 0 END) AS irrelevant,
+			SUM(CASE WHEN rating = 'too_forced' THEN 1 ELSE 0 END) AS too_forced,
+			COUNT(DISTINCT normalized_name) AS unique_trends
+		`).
+		Where("rating IN ?", []string{"irrelevant", "too_forced"}).
+		Where("created_at >= ?", since).
+		Scan(&totals).Error; err != nil {
+		return nil, err
+	}
+	return &dto.AdminTrendFeedbackSummaryResponse{
+		Days:          days,
+		TotalNegative: totals.TotalNegative,
+		Irrelevant:    totals.Irrelevant,
+		TooForced:     totals.TooForced,
+		UniqueTrends:  totals.UniqueTrends,
+		TopNegative:   s.adminTrendFeedbackTopics(since, limit, ""),
+		TopIrrelevant: s.adminTrendFeedbackTopics(since, limit, "irrelevant"),
+		TopTooForced:  s.adminTrendFeedbackTopics(since, limit, "too_forced"),
+	}, nil
+}
+
+func (s *AdminService) adminTrendFeedbackTopics(since time.Time, limit int, rating string) []dto.AdminTrendFeedbackTopicItem {
+	type row struct {
+		TrendName      string
+		NormalizedName string
+		Category       string
+		Irrelevant     int64
+		TooForced      int64
+		TotalNegative  int64
+		LastFeedbackAt time.Time
+	}
+	q := s.db.Table("trend_feedbacks").
+		Select(`
+			MAX(trend_name) AS trend_name,
+			normalized_name,
+			MAX(category) AS category,
+			SUM(CASE WHEN rating = 'irrelevant' THEN 1 ELSE 0 END) AS irrelevant,
+			SUM(CASE WHEN rating = 'too_forced' THEN 1 ELSE 0 END) AS too_forced,
+			COUNT(*) AS total_negative,
+			MAX(created_at) AS last_feedback_at
+		`).
+		Where("rating IN ?", []string{"irrelevant", "too_forced"}).
+		Where("created_at >= ?", since).
+		Group("normalized_name").
+		Order("total_negative DESC, last_feedback_at DESC").
+		Limit(limit)
+	if strings.TrimSpace(rating) != "" {
+		q = q.Where("rating = ?", strings.TrimSpace(rating))
+	}
+	var rows []row
+	if err := q.Scan(&rows).Error; err != nil {
+		return []dto.AdminTrendFeedbackTopicItem{}
+	}
+	activeRules := s.adminTrendOperationRuleMap()
+	items := make([]dto.AdminTrendFeedbackTopicItem, 0, len(rows))
+	for _, r := range rows {
+		action, reason := adminTrendFeedbackSuggestedAction(r.Irrelevant, r.TooForced, r.TotalNegative, r.Category)
+		normalizedName := strings.TrimSpace(r.NormalizedName)
+		items = append(items, dto.AdminTrendFeedbackTopicItem{
+			TrendName:       strings.TrimSpace(r.TrendName),
+			NormalizedName:  normalizedName,
+			Category:        strings.TrimSpace(r.Category),
+			Irrelevant:      r.Irrelevant,
+			TooForced:       r.TooForced,
+			TotalNegative:   r.TotalNegative,
+			SuggestedAction: action,
+			SuggestedReason: reason,
+			ActiveRules:     activeRules[normalizedName],
+			LastFeedbackAt:  r.LastFeedbackAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return items
+}
+
+func (s *AdminService) ApplyTrendRule(operatorID uint, req dto.AdminApplyTrendRuleRequest) (*dto.AdminTrendOperationRuleItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	ruleType := adminTrendRuleType(req.Action)
+	if ruleType == "" {
+		return nil, ErrAdminInvalidStatus
+	}
+	normalizedName := strings.TrimSpace(req.NormalizedName)
+	if normalizedName == "" {
+		return nil, ErrAdminInvalidStatus
+	}
+	repo := repository.NewTrendFeedbackRepository(s.db)
+	rule := &model.TrendOperationRule{
+		TrendName:      truncateRunes(strings.TrimSpace(req.TrendName), 255),
+		NormalizedName: truncateRunes(normalizedName, 255),
+		Category:       truncateRunes(strings.TrimSpace(req.Category), 32),
+		RuleType:       ruleType,
+		Reason:         truncateRunes(firstNonEmpty(strings.TrimSpace(req.Reason), "Applied from admin trend feedback suggestion."), 512),
+		Source:         "admin_feedback_suggestion",
+		OperatorID:     operatorID,
+		Enabled:        true,
+	}
+	if err := repo.UpsertOperationRule(rule); err != nil {
+		return nil, err
+	}
+	return adminTrendOperationRuleDTO(rule), nil
+}
+
+func (s *AdminService) ListTrendRules(operatorID uint) (*dto.AdminTrendOperationRuleListResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	repo := repository.NewTrendFeedbackRepository(s.db)
+	rows, err := repo.ListOperationRules(100)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.AdminTrendOperationRuleItem, 0, len(rows))
+	for i := range rows {
+		items = append(items, *adminTrendOperationRuleDTO(&rows[i]))
+	}
+	return &dto.AdminTrendOperationRuleListResponse{Items: items}, nil
+}
+
+func (s *AdminService) UpdateTrendRule(operatorID, ruleID uint, req dto.AdminUpdateTrendOperationRuleRequest) (*dto.AdminTrendOperationRuleItem, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	if req.Enabled == nil {
+		return nil, ErrAdminInvalidStatus
+	}
+	repo := repository.NewTrendFeedbackRepository(s.db)
+	row, err := repo.UpdateOperationRuleEnabled(ruleID, *req.Enabled, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	return adminTrendOperationRuleDTO(row), nil
+}
+
+func (s *AdminService) adminTrendOperationRuleMap() map[string][]string {
+	repo := repository.NewTrendFeedbackRepository(s.db)
+	rows, err := repo.ListActiveOperationRules()
+	if err != nil {
+		return map[string][]string{}
+	}
+	out := map[string][]string{}
+	for key, items := range rows {
+		for _, item := range items {
+			ruleType := strings.TrimSpace(item.RuleType)
+			if ruleType != "" {
+				out[key] = append(out[key], ruleType)
+			}
+		}
+	}
+	return out
+}
+
+func adminTrendRuleType(action string) string {
+	switch strings.TrimSpace(action) {
+	case "move_to_review_pool":
+		return "review_pool"
+	case "lower_general_weight":
+		return "downweight"
+	case "check_classification_keywords":
+		return "classification_review"
+	default:
+		return ""
+	}
+}
+
+func adminTrendOperationRuleDTO(rule *model.TrendOperationRule) *dto.AdminTrendOperationRuleItem {
+	if rule == nil {
+		return &dto.AdminTrendOperationRuleItem{}
+	}
+	return &dto.AdminTrendOperationRuleItem{
+		ID:             rule.ID,
+		TrendName:      rule.TrendName,
+		NormalizedName: rule.NormalizedName,
+		Category:       rule.Category,
+		RuleType:       rule.RuleType,
+		Reason:         rule.Reason,
+		Source:         rule.Source,
+		Enabled:        rule.Enabled,
+		CreatedAt:      rule.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:      rule.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func adminTrendFeedbackSuggestedAction(irrelevant, tooForced, totalNegative int64, category string) (string, string) {
+	category = strings.TrimSpace(category)
+	if tooForced >= 5 {
+		return "move_to_review_pool", "too_forced feedback is high; require manual confirmation before this trend is used again"
+	}
+	if tooForced >= 3 {
+		return "lower_general_weight", "trend is repeatedly marked as forced; reduce its weight for general hot-topic matching"
+	}
+	if irrelevant >= 5 || (irrelevant >= 3 && category == "") {
+		return "check_classification_keywords", "irrelevant feedback is concentrated; review category and keyword matching rules"
+	}
+	if totalNegative >= 4 {
+		return "monitor", "negative feedback is accumulating; keep monitoring before changing global rules"
+	}
+	return "no_action", "feedback volume is still low; no rule change is recommended yet"
+}
+
 func (s *AdminService) GrossMarginAlertConfig(operatorID uint) (*dto.AdminGrossMarginAlertConfigData, error) {
 	if _, err := s.requireOperator(operatorID); err != nil {
 		return nil, err

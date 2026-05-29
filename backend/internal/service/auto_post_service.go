@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -41,9 +42,10 @@ type AutoPostService struct {
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
 	publishing     *PublishingService
+	trends         *TrendService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:    accountRepo,
 		automationRepo: automationRepo,
@@ -57,6 +59,7 @@ func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automa
 		usageRepo:      usageRepo,
 		ai:             ai,
 		publishing:     publishing,
+		trends:         trends,
 	}
 }
 
@@ -276,6 +279,9 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	input.RecentPosts = recent
 	input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
 	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
+	selectedTrends := s.selectTrendsForAutoPost(userID, plan.ID, botIDForUsage(bot), req.ExcludedTrendNames, now)
+	input.SelectedTrends = trendPromptItems(selectedTrends)
+	input.TrendFeedbackSignals = s.trendFeedbackSignals(userID, botIDForUsage(bot))
 	if contentItem != nil {
 		input.ContentItemTitle = contentItem.Title
 		input.ContentItemType = contentItem.ItemType
@@ -304,6 +310,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 		ContentLibraryID: req.ContentLibraryItemID,
 		ContentDirection: truncateRunes(contentDirection, 512),
 		ContentHash:      contentHash,
+		SelectedTrends:   encodeTrendTopicItems(selectedTrends),
 		GeneratedContent: fitXPostForAutoPost(content, acc.XSubscriptionTier, input.ContentLengthMode),
 		Status:           status,
 		RiskLevel:        risk.Level,
@@ -460,6 +467,7 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 	}
 	run := s.newAutoPostRun(*plan, "completed", "", contentItem.ID, draft.ID, "")
 	run.BotID = draft.BotID
+	run.SelectedTrends = encodeTrendTopicItems(draft.SelectedTrends)
 	if s.runRepo != nil {
 		if err := s.runRepo.Create(run); err != nil {
 			_ = finish(&now)
@@ -625,6 +633,82 @@ func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xA
 	return "", lastHash, AIGeneratedText{}, ErrAutoPostDuplicateContent
 }
 
+func (s *AutoPostService) selectTrendsForAutoPost(userID, planID, botID uint, excluded []string, now time.Time) []dto.TrendTopicItem {
+	if s == nil || s.trends == nil {
+		return nil
+	}
+	data, err := s.trends.SelectForBot(userID, dto.TrendSelectionQuery{PlanID: planID, BotID: botID, Limit: 3, ExcludedTrendNames: excluded}, now)
+	if err != nil || data == nil {
+		if err != nil {
+			zap.L().Warn("auto post trend selection failed", zap.Uint("user_id", userID), zap.Uint("plan_id", planID), zap.Error(err))
+		}
+		return nil
+	}
+	return data.Items
+}
+
+func (s *AutoPostService) trendFeedbackSignals(userID, botID uint) []string {
+	if s == nil || s.trends == nil {
+		return nil
+	}
+	return s.trends.FeedbackPromptSignals(userID, botID)
+}
+
+func trendPromptItems(items []dto.TrendTopicItem) []TrendPromptItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]TrendPromptItem, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item.TrendName)
+		if name == "" {
+			continue
+		}
+		out = append(out, TrendPromptItem{
+			Name:         name,
+			RegionName:   item.RegionName,
+			Category:     item.Category,
+			RiskLevel:    item.RiskLevel,
+			TweetCount:   item.TweetCount,
+			LanguageHint: item.LanguageHint,
+			Reason:       item.RelevanceReason,
+		})
+		if len(out) >= 3 {
+			break
+		}
+	}
+	return out
+}
+
+func encodeTrendTopicItems(items []dto.TrendTopicItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) > 3 {
+		items = items[:3]
+	}
+	raw, err := json.Marshal(items)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func decodeTrendTopicItems(raw string) []dto.TrendTopicItem {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var items []dto.TrendTopicItem
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil
+	}
+	if len(items) > 3 {
+		items = items[:3]
+	}
+	return items
+}
+
 func autoPostContentHash(content string) string {
 	normalized := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(content)), " "))
 	sum := sha256.Sum256([]byte(normalized))
@@ -741,6 +825,12 @@ func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPos
 		}
 	}
 	contentTitle := s.contentTitle(row.UserID, row.ContentLibraryID)
+	selectedTrends := decodeTrendTopicItems(row.SelectedTrends)
+	if len(selectedTrends) == 0 && row.GeneratedDraftID > 0 && s.draftRepo != nil {
+		if draft, err := s.draftRepo.GetByUserAndID(row.UserID, row.GeneratedDraftID); err == nil {
+			selectedTrends = decodeTrendTopicItems(draft.SelectedTrends)
+		}
+	}
 	return dto.AutoPostGenerationRunItem{
 		ID:               row.ID,
 		UserID:           row.UserID,
@@ -755,6 +845,7 @@ func (s *AutoPostService) toRunItem(row model.AutoPostGenerationRun) dto.AutoPos
 		Status:           row.Status,
 		SkipReason:       row.SkipReason,
 		GeneratedDraftID: row.GeneratedDraftID,
+		SelectedTrends:   selectedTrends,
 		ErrorMessage:     row.ErrorMessage,
 		CreatedAt:        row.CreatedAt.UTC().Format(timeRFC3339),
 	}
@@ -776,24 +867,29 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		}
 	}
 	return dto.AutoPostPlanItem{
-		ID:                 row.ID,
-		UserID:             row.UserID,
-		XAccountID:         row.XAccountID,
-		BotID:              row.BotID,
-		AccountHandle:      accountHandle,
-		BotName:            botName,
-		Enabled:            row.Enabled,
-		ExecutionMode:      effectiveExecutionMode(row.ExecutionMode),
-		DailyLimit:         0,
-		MinIntervalMinutes: row.MinIntervalMinutes,
-		PostingWindows:     row.PostingWindows,
-		Timezone:           row.Timezone,
-		ContentLengthMode:  normalizeAutoPostLengthMode(row.ContentLengthMode, accountTier),
-		LastRunAt:          formatOptionalTime(row.LastRunAt),
-		NextRunAt:          formatOptionalTime(row.NextRunAt),
-		ProcessingAt:       formatOptionalTime(row.ProcessingAt),
-		CreatedAt:          row.CreatedAt.UTC().Format(timeRFC3339),
-		UpdatedAt:          row.UpdatedAt.UTC().Format(timeRFC3339),
+		ID:                   row.ID,
+		UserID:               row.UserID,
+		XAccountID:           row.XAccountID,
+		BotID:                row.BotID,
+		AccountHandle:        accountHandle,
+		BotName:              botName,
+		Enabled:              row.Enabled,
+		ExecutionMode:        effectiveExecutionMode(row.ExecutionMode),
+		DailyLimit:           0,
+		MinIntervalMinutes:   row.MinIntervalMinutes,
+		PostingWindows:       row.PostingWindows,
+		Timezone:             row.Timezone,
+		ContentLengthMode:    normalizeAutoPostLengthMode(row.ContentLengthMode, accountTier),
+		TrendRegions:         normalizeTrendRegions(decodeStringList(row.TrendRegions)),
+		TrendCategories:      normalizeTrendCategories(decodeStringList(row.TrendCategories)),
+		ExcludedTrendNames:   normalizeTrendExcludeNames(decodeStringList(row.ExcludedTrendNames)),
+		AllowGeneralTrends:   row.AllowGeneralTrends,
+		SensitiveTrendPolicy: normalizeSensitiveTrendPolicy(row.SensitiveTrendPolicy),
+		LastRunAt:            formatOptionalTime(row.LastRunAt),
+		NextRunAt:            formatOptionalTime(row.NextRunAt),
+		ProcessingAt:         formatOptionalTime(row.ProcessingAt),
+		CreatedAt:            row.CreatedAt.UTC().Format(timeRFC3339),
+		UpdatedAt:            row.UpdatedAt.UTC().Format(timeRFC3339),
 	}
 }
 
@@ -823,6 +919,7 @@ func (s *AutoPostService) toDraftItem(row model.AutoPostDraft) dto.AutoPostDraft
 		ContentTitle:     s.contentTitle(row.UserID, row.ContentLibraryID),
 		ContentDirection: row.ContentDirection,
 		ContentHash:      row.ContentHash,
+		SelectedTrends:   decodeTrendTopicItems(row.SelectedTrends),
 		GeneratedContent: row.GeneratedContent,
 		Status:           row.Status,
 		RiskLevel:        row.RiskLevel,
@@ -867,6 +964,7 @@ func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequ
 		plan.Timezone = "UTC"
 	}
 	plan.ContentLengthMode = normalizeAutoPostLengthMode(req.ContentLengthMode, accountTier)
+	plan.ExcludedTrendNames = encodeStringList(normalizeTrendExcludeNames(req.ExcludedTrendNames))
 	if plan.Enabled && plan.NextRunAt == nil {
 		now := time.Now().UTC()
 		next := computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)

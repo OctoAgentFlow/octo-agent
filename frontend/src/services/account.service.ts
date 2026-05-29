@@ -20,6 +20,7 @@ export type AccountListItem = {
   publish_reauth_required?: boolean;
   publish_issue?: "needs_reauth" | "missing_access_token" | "missing_tweet_write" | string;
   missing_scopes?: string[];
+  oauth_scopes?: string[];
 };
 
 export type XSubscriptionTier = "unknown" | "free" | "premium" | "premium_plus";

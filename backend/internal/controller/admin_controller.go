@@ -211,6 +211,82 @@ func (ctl *AdminController) UpdateBillingOrderOpsAction(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) TrendFeedbackSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var query dto.AdminTrendFeedbackQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.TrendFeedbackSummary(userID, query)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ApplyTrendRule(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.AdminApplyTrendRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.ApplyTrendRule(userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) ListTrendRules(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.adminService.ListTrendRules(userID)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AdminController) UpdateTrendRule(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	ruleIDValue, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || ruleIDValue == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid trend rule id")
+		return
+	}
+	var req dto.AdminUpdateTrendOperationRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.adminService.UpdateTrendRule(userID, uint(ruleIDValue), req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) ListPointActivities(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

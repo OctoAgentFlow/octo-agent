@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CheckCircle2, FileText, Send, ShieldCheck } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileText, Radar, Send, ShieldCheck } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
 
@@ -17,6 +17,12 @@ const sampleQueue = [
   { timeKey: "marketing.autoPost.queue.item1.time", textKey: "marketing.autoPost.queue.item1.text", statusKey: "marketing.autoPost.queue.item1.status" },
   { timeKey: "marketing.autoPost.queue.item2.time", textKey: "marketing.autoPost.queue.item2.text", statusKey: "marketing.autoPost.queue.item2.status" },
   { timeKey: "marketing.autoPost.queue.item3.time", textKey: "marketing.autoPost.queue.item3.text", statusKey: "marketing.autoPost.queue.item3.status" },
+];
+
+const trendSignals = [
+  "marketing.autoPost.trends.signal.persona",
+  "marketing.autoPost.trends.signal.explain",
+  "marketing.autoPost.trends.signal.feedback",
 ];
 
 export function AutoPostSection() {
@@ -39,6 +45,24 @@ export function AutoPostSection() {
             <div className="min-w-0">
               <p className="text-base font-semibold text-white">{t("marketing.autoPost.flowTitle")}</p>
               <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.autoPost.flowDesc")}</p>
+            </div>
+          </div>
+          <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4 md:mb-5">
+            <div className="flex items-start gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-cyan-200/20 bg-black/20 text-cyan-100">
+                <Radar className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{t("marketing.autoPost.trends.title")}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/62">{t("marketing.autoPost.trends.description")}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {trendSignals.map((signal) => (
+                    <span key={signal} className="rounded-full border border-cyan-200/15 bg-black/20 px-3 py-1 text-xs text-cyan-50/85">
+                      {t(signal)}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <div className="space-y-2.5 md:space-y-3">

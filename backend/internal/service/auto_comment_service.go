@@ -267,6 +267,18 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 	if err != nil {
 		return nil, err
 	}
+	targetLimit, suggestionLimit, err := s.autoCommentTargetSuggestionQuota(userID, int64(len(targets)))
+	if err != nil {
+		return nil, err
+	}
+	if suggestionLimit <= 0 {
+		return &dto.AutoCommentTargetSuggestionResponse{
+			Items:           []dto.AutoCommentTargetSuggestionItem{},
+			TargetCount:     int64(len(targets)),
+			TargetLimit:     targetLimit,
+			SuggestionLimit: 0,
+		}, nil
+	}
 	contentRows, _ := s.contentRepo.ListActiveForGenerationContext(userID, xAccountID, botIDForUsage(bot), 12)
 	input := autoCommentTargetSuggestionInput(bot, targets, contentRows)
 	generated, err := s.ai.GenerateAutoCommentTargetSuggestions(ctx, input)
@@ -279,8 +291,10 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 	if err != nil {
 		suggestions = nil
 	}
-	suggestions = fillAutoCommentTargetSuggestions(suggestions, input.ExistingTargets, 20)
-	suggestions = s.filterActiveAutoCommentTargetSuggestions(ctx, *acc, suggestions, input.ExistingTargets, 8, now)
+	targetSuggestionCount := int(suggestionLimit)
+	candidateCount := autoCommentSuggestionCandidateLimit(targetSuggestionCount)
+	suggestions = fillAutoCommentTargetSuggestions(suggestions, input.ExistingTargets, candidateCount)
+	suggestions = s.filterActiveAutoCommentTargetSuggestions(ctx, *acc, suggestions, input.ExistingTargets, targetSuggestionCount, candidateCount, now)
 	items := make([]dto.AutoCommentTargetSuggestionItem, 0, len(suggestions))
 	for _, item := range suggestions {
 		items = append(items, dto.AutoCommentTargetSuggestionItem{
@@ -293,7 +307,12 @@ func (s *AutoCommentService) SuggestTargets(ctx context.Context, userID uint, re
 			NeedsVerify: true,
 		})
 	}
-	return &dto.AutoCommentTargetSuggestionResponse{Items: items}, nil
+	return &dto.AutoCommentTargetSuggestionResponse{
+		Items:           items,
+		TargetCount:     int64(len(targets)),
+		TargetLimit:     targetLimit,
+		SuggestionLimit: suggestionLimit,
+	}, nil
 }
 
 func (s *AutoCommentService) UpdateTargetStatus(userID, id uint, status string) (*dto.AutoCommentTargetItem, error) {
@@ -514,8 +533,13 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		ApprovedAt:        approvedAt,
 	}
 	applyAutoCommentDelivery(task, decideAutoCommentDelivery(target.TargetText, displayCommentTargetHandle(*target), target.TargetTweetID, *acc, comment))
-	if err := s.taskRepo.Create(task); err != nil {
+	created, err := s.taskRepo.CreateIfNotExists(task)
+	if err != nil {
 		return nil, err
+	}
+	if !created {
+		item := toAutoCommentTaskItem(*task)
+		return &item, nil
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
@@ -1204,6 +1228,11 @@ func autoCommentHealthSeverityRank(severity string) int {
 
 func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target model.AutoCommentTarget, cfg model.AutomationConfig, tw twitter.UserTweet) (*model.AutoCommentTask, error) {
 	now := time.Now().UTC()
+	if existing, err := s.taskRepo.GetByTargetTweet(target.UserID, target.XAccountID, tw.ID); err == nil {
+		return existing, nil
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, target.UserID, now); err != nil {
 		return nil, err
 	}
@@ -1266,15 +1295,19 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 		task.FailureCategory = "llm_error"
 		task.FailureReason = truncateErrMsg(err.Error())
 		task.Retryable = true
-		if createErr := s.taskRepo.Create(task); createErr != nil {
+		if _, createErr := s.taskRepo.CreateIfNotExists(task); createErr != nil {
 			return nil, createErr
 		}
 		return task, err
 	}
 	task.GeneratedComment = truncateRunes(comment, autoCommentPreviewRunes)
 	task.GeneratedAt = &now
-	if err := s.taskRepo.Create(task); err != nil {
+	created, err := s.taskRepo.CreateIfNotExists(task)
+	if err != nil {
 		return nil, err
+	}
+	if !created {
+		return task, nil
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, target.UserID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
 		return nil, err
@@ -1730,9 +1763,12 @@ func fillAutoCommentTargetSuggestions(items []AutoCommentTargetSuggestion, exist
 	return out
 }
 
-func (s *AutoCommentService) filterActiveAutoCommentTargetSuggestions(ctx context.Context, account model.TwitterAccount, items []AutoCommentTargetSuggestion, existing []string, minCount int, now time.Time) []AutoCommentTargetSuggestion {
+func (s *AutoCommentService) filterActiveAutoCommentTargetSuggestions(ctx context.Context, account model.TwitterAccount, items []AutoCommentTargetSuggestion, existing []string, minCount int, maxChecks int, now time.Time) []AutoCommentTargetSuggestion {
 	if minCount <= 0 {
 		minCount = 8
+	}
+	if maxChecks <= 0 || maxChecks < minCount {
+		maxChecks = autoCommentSuggestionCandidateLimit(minCount)
 	}
 	token := strings.TrimSpace(account.AccessToken)
 	if token == "" {
@@ -1748,7 +1784,7 @@ func (s *AutoCommentService) filterActiveAutoCommentTargetSuggestions(ctx contex
 	seen := map[string]bool{}
 	checked := 0
 	for _, item := range items {
-		if len(out) >= minCount || checked >= 16 {
+		if len(out) >= minCount || checked >= maxChecks {
 			break
 		}
 		handle := normalizeSuggestionHandle(item.Handle)
@@ -1808,6 +1844,41 @@ func firstAutoCommentSuggestions(items []AutoCommentTargetSuggestion, limit int)
 	return items[:limit]
 }
 
+func (s *AutoCommentService) autoCommentTargetSuggestionQuota(userID uint, currentTargets int64) (int64, int64, error) {
+	limit := int64(8)
+	if s.userRepo != nil {
+		u, err := s.userRepo.GetByID(userID)
+		if err != nil {
+			return 0, 0, err
+		}
+		if planLimit := subscription.LimitsForUser(u).AutoCommentTargets; planLimit > 0 {
+			limit = planLimit
+		}
+	}
+	remaining := limit - currentTargets
+	if remaining < 0 {
+		remaining = 0
+	}
+	return limit, remaining, nil
+}
+
+func autoCommentSuggestionCandidateLimit(suggestionLimit int) int {
+	if suggestionLimit <= 0 {
+		return 0
+	}
+	limit := suggestionLimit * 4
+	if min := suggestionLimit + 24; limit < min {
+		limit = min
+	}
+	if limit < 32 {
+		limit = 32
+	}
+	if limit > 240 {
+		limit = 240
+	}
+	return limit
+}
+
 func fallbackAutoCommentTargetSuggestions() []AutoCommentTargetSuggestion {
 	return []AutoCommentTargetSuggestion{
 		{Handle: "BanklessHQ", DisplayName: "Bankless", Category: "media", Priority: 5, Reason: "Large Web3 media audience; suitable for adoption, community, and operations discussions.", SearchQuery: "site:x.com/BanklessHQ Web3 community"},
@@ -1825,6 +1896,87 @@ func fallbackAutoCommentTargetSuggestions() []AutoCommentTargetSuggestion {
 		{Handle: "Foresight_News", DisplayName: "Foresight News", Category: "media", Priority: 4, Reason: "Chinese Web3 media account; useful for Chinese-language exposure and market discussion.", SearchQuery: "site:x.com/Foresight_News Web3 中文"},
 		{Handle: "BlockBeatsAsia", DisplayName: "BlockBeats", Category: "media", Priority: 4, Reason: "Chinese crypto media audience with frequent project and market updates.", SearchQuery: "site:x.com/BlockBeatsAsia crypto 中文"},
 		{Handle: "TechFlowPost", DisplayName: "TechFlow", Category: "media", Priority: 4, Reason: "Chinese Web3 media and research audience with frequent ecosystem and project conversations.", SearchQuery: "site:x.com/TechFlowPost Web3 中文"},
+		{Handle: "ethereum", DisplayName: "Ethereum", Category: "ecosystem", Priority: 5, Reason: "Core Ethereum ecosystem account with broad developer and founder audience overlap.", SearchQuery: "site:x.com/ethereum builders web3"},
+		{Handle: "VitalikButerin", DisplayName: "Vitalik Buterin", Category: "founder", Priority: 5, Reason: "High-signal Ethereum founder audience with strong crypto builder overlap.", SearchQuery: "site:x.com/VitalikButerin Ethereum social"},
+		{Handle: "jessepollak", DisplayName: "Jesse Pollak", Category: "founder", Priority: 5, Reason: "Base founder with active onchain builder and consumer crypto discussions.", SearchQuery: "site:x.com/jessepollak onchain builders"},
+		{Handle: "santiagoroel", DisplayName: "Santiago Roel Santos", Category: "kol", Priority: 5, Reason: "Crypto, AI, and macro commentary with a founder-heavy audience.", SearchQuery: "site:x.com/santiagoroel crypto AI"},
+		{Handle: "cdixon", DisplayName: "Chris Dixon", Category: "investor", Priority: 5, Reason: "Web3 investor audience with strong founder and builder overlap.", SearchQuery: "site:x.com/cdixon web3 builders"},
+		{Handle: "pmarca", DisplayName: "Marc Andreessen", Category: "investor", Priority: 4, Reason: "Large tech and AI audience where agent and automation topics can fit.", SearchQuery: "site:x.com/pmarca AI agents"},
+		{Handle: "naval", DisplayName: "Naval", Category: "kol", Priority: 4, Reason: "Large founder and technology audience for thoughtful automation and community comments.", SearchQuery: "site:x.com/naval startups crypto"},
+		{Handle: "balajis", DisplayName: "Balaji", Category: "kol", Priority: 5, Reason: "Crypto and network-state audience with high visibility for infrastructure and community ideas.", SearchQuery: "site:x.com/balajis crypto network"},
+		{Handle: "punk6529", DisplayName: "6529", Category: "kol", Priority: 5, Reason: "NFT, open metaverse, and community operations audience with strong Web3 overlap.", SearchQuery: "site:x.com/punk6529 NFT community"},
+		{Handle: "dwr", DisplayName: "Dan Romero", Category: "founder", Priority: 5, Reason: "Farcaster founder with social protocol and community-growth audience.", SearchQuery: "site:x.com/dwr farcaster social"},
+		{Handle: "vitalikbuterin", DisplayName: "Vitalik Buterin", Category: "founder", Priority: 5, Reason: "Ethereum founder account with high-quality technical and ecosystem discussion.", SearchQuery: "site:x.com/vitalikbuterin Ethereum"},
+		{Handle: "zksync", DisplayName: "ZKsync", Category: "ecosystem", Priority: 4, Reason: "Active L2 ecosystem account with developer and project announcements.", SearchQuery: "site:x.com/zksync builders"},
+		{Handle: "Starknet", DisplayName: "Starknet", Category: "ecosystem", Priority: 4, Reason: "ZK and L2 ecosystem audience suitable for developer tooling comments.", SearchQuery: "site:x.com/Starknet ecosystem"},
+		{Handle: "0xPolygon", DisplayName: "Polygon", Category: "ecosystem", Priority: 4, Reason: "Large Web3 ecosystem account with project, developer, and consumer crypto updates.", SearchQuery: "site:x.com/0xPolygon ecosystem"},
+		{Handle: "avax", DisplayName: "Avalanche", Category: "ecosystem", Priority: 4, Reason: "L1 ecosystem audience with project and institutional adoption discussions.", SearchQuery: "site:x.com/avax ecosystem"},
+		{Handle: "SuiNetwork", DisplayName: "Sui", Category: "ecosystem", Priority: 4, Reason: "Active L1 ecosystem with consumer app and developer conversation opportunities.", SearchQuery: "site:x.com/SuiNetwork builders"},
+		{Handle: "Aptos", DisplayName: "Aptos", Category: "ecosystem", Priority: 4, Reason: "L1 ecosystem account with developer and project-growth audience.", SearchQuery: "site:x.com/Aptos ecosystem"},
+		{Handle: "cosmos", DisplayName: "Cosmos", Category: "ecosystem", Priority: 4, Reason: "Interchain ecosystem account with developer and governance discussion opportunities.", SearchQuery: "site:x.com/cosmos interchain"},
+		{Handle: "CelestiaOrg", DisplayName: "Celestia", Category: "ecosystem", Priority: 4, Reason: "Modular blockchain audience with infrastructure and developer overlap.", SearchQuery: "site:x.com/CelestiaOrg modular blockchain"},
+		{Handle: "eigenlayer", DisplayName: "EigenLayer", Category: "project", Priority: 4, Reason: "Restaking and infrastructure project with active operator and builder discussions.", SearchQuery: "site:x.com/eigenlayer operators"},
+		{Handle: "chainlink", DisplayName: "Chainlink", Category: "project", Priority: 4, Reason: "Oracle and Web3 infrastructure audience with broad enterprise and developer overlap.", SearchQuery: "site:x.com/chainlink web3 infrastructure"},
+		{Handle: "Uniswap", DisplayName: "Uniswap Labs", Category: "project", Priority: 4, Reason: "DeFi project account with a large trader, builder, and protocol audience.", SearchQuery: "site:x.com/Uniswap DeFi"},
+		{Handle: "aave", DisplayName: "Aave", Category: "project", Priority: 4, Reason: "Major DeFi protocol with governance, liquidity, and community-growth discussions.", SearchQuery: "site:x.com/aave DeFi"},
+		{Handle: "MakerDAO", DisplayName: "MakerDAO", Category: "project", Priority: 4, Reason: "DeFi and stablecoin community with governance and ecosystem updates.", SearchQuery: "site:x.com/MakerDAO DeFi"},
+		{Handle: "pendle_fi", DisplayName: "Pendle", Category: "project", Priority: 4, Reason: "Active DeFi project audience with high-signal market and protocol discussions.", SearchQuery: "site:x.com/pendle_fi DeFi"},
+		{Handle: "ethena_labs", DisplayName: "Ethena Labs", Category: "project", Priority: 4, Reason: "Active DeFi and stablecoin project with strong market conversation overlap.", SearchQuery: "site:x.com/ethena_labs DeFi"},
+		{Handle: "LidoFinance", DisplayName: "Lido", Category: "project", Priority: 4, Reason: "Staking protocol audience with governance, validator, and DeFi overlap.", SearchQuery: "site:x.com/LidoFinance staking"},
+		{Handle: "wormhole", DisplayName: "Wormhole", Category: "project", Priority: 4, Reason: "Interoperability project with ecosystem and cross-chain conversation opportunities.", SearchQuery: "site:x.com/wormhole cross-chain"},
+		{Handle: "LayerZero_Core", DisplayName: "LayerZero", Category: "project", Priority: 4, Reason: "Cross-chain infrastructure account with developer and ecosystem audience.", SearchQuery: "site:x.com/LayerZero_Core developers"},
+		{Handle: "safe", DisplayName: "Safe", Category: "project", Priority: 4, Reason: "Smart account and wallet infrastructure audience relevant to Web3 operations.", SearchQuery: "site:x.com/safe smart accounts"},
+		{Handle: "rainbowdotme", DisplayName: "Rainbow", Category: "project", Priority: 4, Reason: "Consumer wallet audience with social, onboarding, and crypto UX overlap.", SearchQuery: "site:x.com/rainbowdotme crypto wallet"},
+		{Handle: "phantom", DisplayName: "Phantom", Category: "project", Priority: 4, Reason: "Large wallet audience across Solana and multi-chain consumer crypto.", SearchQuery: "site:x.com/phantom wallet"},
+		{Handle: "metamask", DisplayName: "MetaMask", Category: "project", Priority: 4, Reason: "Wallet and onboarding audience with Web3 user-growth relevance.", SearchQuery: "site:x.com/metamask wallet onboarding"},
+		{Handle: "zapper_fi", DisplayName: "Zapper", Category: "project", Priority: 4, Reason: "Onchain portfolio and discovery audience with community and social graph overlap.", SearchQuery: "site:x.com/zapper_fi onchain"},
+		{Handle: "zerion", DisplayName: "Zerion", Category: "project", Priority: 4, Reason: "Wallet and portfolio audience interested in social and user engagement flows.", SearchQuery: "site:x.com/zerion wallet"},
+		{Handle: "Dune", DisplayName: "Dune", Category: "project", Priority: 4, Reason: "Crypto analytics audience with strong data, growth, and dashboard overlap.", SearchQuery: "site:x.com/Dune analytics"},
+		{Handle: "nansen_ai", DisplayName: "Nansen", Category: "project", Priority: 4, Reason: "Onchain analytics audience relevant to growth measurement and social operations.", SearchQuery: "site:x.com/nansen_ai analytics"},
+		{Handle: "tokenterminal", DisplayName: "Token Terminal", Category: "media", Priority: 4, Reason: "Crypto data audience with project, metrics, and market conversation opportunities.", SearchQuery: "site:x.com/tokenterminal crypto data"},
+		{Handle: "TheBlock__", DisplayName: "The Block", Category: "media", Priority: 4, Reason: "Crypto media account with broad news and industry audience.", SearchQuery: "site:x.com/TheBlock__ crypto news"},
+		{Handle: "CoinDesk", DisplayName: "CoinDesk", Category: "media", Priority: 4, Reason: "Large crypto media account with institutional and project discussion opportunities.", SearchQuery: "site:x.com/CoinDesk crypto"},
+		{Handle: "Cointelegraph", DisplayName: "Cointelegraph", Category: "media", Priority: 4, Reason: "Large crypto media audience useful for broad awareness comments.", SearchQuery: "site:x.com/Cointelegraph crypto"},
+		{Handle: "decryptmedia", DisplayName: "Decrypt", Category: "media", Priority: 4, Reason: "Crypto media account with consumer, culture, and Web3 adoption coverage.", SearchQuery: "site:x.com/decryptmedia web3"},
+		{Handle: "WuBlockchain", DisplayName: "Wu Blockchain", Category: "media", Priority: 4, Reason: "Chinese and global crypto news audience with high discussion velocity.", SearchQuery: "site:x.com/WuBlockchain crypto"},
+		{Handle: "PANewsCN", DisplayName: "PANews", Category: "media", Priority: 4, Reason: "Chinese Web3 media with frequent project and market news.", SearchQuery: "site:x.com/PANewsCN Web3 中文"},
+		{Handle: "OdailyChina", DisplayName: "Odaily", Category: "media", Priority: 4, Reason: "Chinese crypto media account with active project and market updates.", SearchQuery: "site:x.com/OdailyChina crypto 中文"},
+		{Handle: "ChainFeeds", DisplayName: "ChainFeeds", Category: "media", Priority: 4, Reason: "Chinese Web3 research and news audience with builder overlap.", SearchQuery: "site:x.com/ChainFeeds Web3 中文"},
+		{Handle: "SevenXVentures", DisplayName: "SevenX Ventures", Category: "investor", Priority: 4, Reason: "Asia-focused crypto investor account with founder and project audience overlap.", SearchQuery: "site:x.com/SevenXVentures Web3"},
+		{Handle: "HashKey_Capital", DisplayName: "HashKey Capital", Category: "investor", Priority: 4, Reason: "Asia Web3 investment audience with project and institutional overlap.", SearchQuery: "site:x.com/HashKey_Capital Web3"},
+		{Handle: "multicoincap", DisplayName: "Multicoin Capital", Category: "investor", Priority: 4, Reason: "Crypto investment audience with infrastructure and market discussion opportunities.", SearchQuery: "site:x.com/multicoincap crypto"},
+		{Handle: "dragonfly_xyz", DisplayName: "Dragonfly", Category: "investor", Priority: 4, Reason: "Crypto venture audience with founder, protocol, and ecosystem overlap.", SearchQuery: "site:x.com/dragonfly_xyz crypto"},
+		{Handle: "ElectricCapital", DisplayName: "Electric Capital", Category: "investor", Priority: 4, Reason: "Web3 developer and venture audience relevant to builder-focused comments.", SearchQuery: "site:x.com/ElectricCapital developers"},
+		{Handle: "cbventures", DisplayName: "Coinbase Ventures", Category: "investor", Priority: 4, Reason: "Venture account with broad Web3 founder and ecosystem audience.", SearchQuery: "site:x.com/cbventures web3"},
+		{Handle: "BinanceLabs", DisplayName: "Binance Labs", Category: "investor", Priority: 4, Reason: "Large crypto venture and incubation audience with project-growth overlap.", SearchQuery: "site:x.com/BinanceLabs web3"},
+		{Handle: "delphi_digital", DisplayName: "Delphi Digital", Category: "analyst", Priority: 4, Reason: "Research audience with protocol, market, and Web3 strategy discussion.", SearchQuery: "site:x.com/delphi_digital crypto research"},
+		{Handle: "tokenterminal", DisplayName: "Token Terminal", Category: "analyst", Priority: 4, Reason: "Data-heavy crypto audience suitable for thoughtful analytics comments.", SearchQuery: "site:x.com/tokenterminal data"},
+		{Handle: "ASvanevik", DisplayName: "Alex Svanevik", Category: "founder", Priority: 4, Reason: "Nansen founder with onchain analytics and crypto data audience overlap.", SearchQuery: "site:x.com/ASvanevik onchain analytics"},
+		{Handle: "hmalviya9", DisplayName: "Hitesh Malviya", Category: "analyst", Priority: 4, Reason: "Crypto analyst audience with market and project discovery conversations.", SearchQuery: "site:x.com/hmalviya9 crypto"},
+		{Handle: "0xResearch", DisplayName: "0xResearch", Category: "media", Priority: 4, Reason: "Crypto research media account with analyst and builder audience.", SearchQuery: "site:x.com/0xResearch crypto research"},
+		{Handle: "MilkRoadDaily", DisplayName: "Milk Road", Category: "media", Priority: 4, Reason: "Crypto newsletter audience with accessible adoption and market conversations.", SearchQuery: "site:x.com/MilkRoadDaily crypto"},
+		{Handle: "blocmatesdotcom", DisplayName: "blocmates", Category: "media", Priority: 4, Reason: "Crypto education and DeFi audience with practical tooling overlap.", SearchQuery: "site:x.com/blocmatesdotcom DeFi"},
+		{Handle: "TheTieIO", DisplayName: "The Tie", Category: "analyst", Priority: 4, Reason: "Crypto data and institutional analytics audience.", SearchQuery: "site:x.com/TheTieIO crypto data"},
+		{Handle: "MessariRyan", DisplayName: "Ryan Selkis", Category: "founder", Priority: 4, Reason: "Crypto media founder audience with broad industry conversation reach.", SearchQuery: "site:x.com/MessariRyan crypto"},
+		{Handle: "ljxie", DisplayName: "Linda Xie", Category: "investor", Priority: 4, Reason: "Crypto investor and builder audience with thoughtful protocol discussion.", SearchQuery: "site:x.com/ljxie crypto"},
+		{Handle: "rleshner", DisplayName: "Robert Leshner", Category: "founder", Priority: 4, Reason: "DeFi founder audience with governance and protocol operator overlap.", SearchQuery: "site:x.com/rleshner DeFi"},
+		{Handle: "haydenzadams", DisplayName: "Hayden Adams", Category: "founder", Priority: 4, Reason: "Uniswap founder with large DeFi builder and protocol audience.", SearchQuery: "site:x.com/haydenzadams DeFi"},
+		{Handle: "StaniKulechov", DisplayName: "Stani Kulechov", Category: "founder", Priority: 4, Reason: "Aave and Lens founder with DeFi and SocialFi audience overlap.", SearchQuery: "site:x.com/StaniKulechov SocialFi"},
+		{Handle: "cdixon", DisplayName: "Chris Dixon", Category: "investor", Priority: 5, Reason: "A16Z crypto leader with founder and AI/Web3 builder audience.", SearchQuery: "site:x.com/cdixon crypto AI"},
+		{Handle: "shawmakesmagic", DisplayName: "Shaw", Category: "developer", Priority: 5, Reason: "AI agent builder audience with direct relevance to autonomous social agents.", SearchQuery: "site:x.com/shawmakesmagic AI agents"},
+		{Handle: "sama", DisplayName: "Sam Altman", Category: "founder", Priority: 4, Reason: "AI founder audience where AI agents and automation topics can resonate.", SearchQuery: "site:x.com/sama AI agents"},
+		{Handle: "gdb", DisplayName: "Greg Brockman", Category: "founder", Priority: 4, Reason: "AI builder audience relevant to agent and automation conversations.", SearchQuery: "site:x.com/gdb AI agents"},
+		{Handle: "karpathy", DisplayName: "Andrej Karpathy", Category: "developer", Priority: 4, Reason: "AI developer audience with interest in agents, workflows, and automation.", SearchQuery: "site:x.com/karpathy AI agents"},
+		{Handle: "swyx", DisplayName: "swyx", Category: "developer", Priority: 4, Reason: "AI engineer and agent builder audience with practical tooling overlap.", SearchQuery: "site:x.com/swyx AI agents"},
+		{Handle: "nearcyan", DisplayName: "Near Cyan", Category: "developer", Priority: 4, Reason: "AI agent and developer-tooling audience relevant to autonomous workflows.", SearchQuery: "site:x.com/nearcyan agents"},
+		{Handle: "levelsio", DisplayName: "Pieter Levels", Category: "founder", Priority: 4, Reason: "Indie founder and AI tool audience with launch and growth discussion overlap.", SearchQuery: "site:x.com/levelsio AI tools"},
+		{Handle: "packyM", DisplayName: "Packy McCormick", Category: "kol", Priority: 4, Reason: "Tech, crypto, and startup audience with long-form narrative discussions.", SearchQuery: "site:x.com/packyM crypto AI"},
+		{Handle: "JasonYanowitz", DisplayName: "Jason Yanowitz", Category: "kol", Priority: 4, Reason: "Crypto media and founder audience with frequent market and project discussion.", SearchQuery: "site:x.com/JasonYanowitz crypto"},
+		{Handle: "jason_chen998", DisplayName: "Jason Chen", Category: "kol", Priority: 4, Reason: "Chinese Web3 audience with project, community, and founder discussions.", SearchQuery: "site:x.com/jason_chen998 Web3 中文"},
+		{Handle: "BMANLead", DisplayName: "BMAN", Category: "kol", Priority: 4, Reason: "Chinese crypto and Web3 audience relevant to growth and project discovery.", SearchQuery: "site:x.com/BMANLead Web3 中文"},
+		{Handle: "Phyrex_Ni", DisplayName: "Phyrex", Category: "kol", Priority: 4, Reason: "Chinese crypto market audience with active discussion and education overlap.", SearchQuery: "site:x.com/Phyrex_Ni crypto 中文"},
+		{Handle: "Oxtodd", DisplayName: "Oxtodd", Category: "kol", Priority: 4, Reason: "Chinese Web3 audience with market and project discussion overlap.", SearchQuery: "site:x.com/Oxtodd Web3 中文"},
+		{Handle: "tmel0211", DisplayName: "tmel", Category: "kol", Priority: 4, Reason: "Chinese crypto community audience with frequent market and ecosystem discussion.", SearchQuery: "site:x.com/tmel0211 crypto 中文"},
 	}
 }
 

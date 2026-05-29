@@ -60,6 +60,7 @@ function mapAccount(item: AccountListItem): ConnectedXAccount {
     publishReauthRequired: item.publish_reauth_required,
     publishIssue: item.publish_issue,
     missingScopes: item.missing_scopes,
+    oauthScopes: item.oauth_scopes,
     ...toLastSyncData(item.last_synced_at),
   };
 }

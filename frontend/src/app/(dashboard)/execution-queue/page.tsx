@@ -13,7 +13,7 @@ import { useT } from "@/i18n/use-t";
 import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { automationService } from "@/services/automation.service";
-import { autoPostService } from "@/services/auto-post.service";
+import { autoPostService, type TrendFeedbackRating, type TrendTopicApi } from "@/services/auto-post.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
 import {
   reviewQueueService,
@@ -566,6 +566,15 @@ export default function ExecutionQueuePage() {
                         )}
                       </div>
 
+                      {item.type === "post" && item.selected_trends?.length ? (
+                        <QueueTrendContext
+                          trends={item.selected_trends}
+                          botID={item.bot_id}
+                          xAccountID={item.twitter_account_id}
+                          sourceID={item.source_id}
+                        />
+                      ) : null}
+
                       {modulePaused ? (
                         <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
                           {modulePausedTip}
@@ -759,6 +768,98 @@ function QueueInfoCard({
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: TrendTopicApi[]; botID: number; xAccountID: number; sourceID: number }) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const [pendingKey, setPendingKey] = useState("");
+  if (!trends.length) return null;
+  async function submitFeedback(trend: TrendTopicApi, rating: TrendFeedbackRating) {
+    const key = `${trend.woeid}-${trend.normalized_name || trend.trend_name}-${rating}`;
+    setPendingKey(key);
+    try {
+      await autoPostService.submitTrendFeedback({
+        bot_id: botID || 0,
+        x_account_id: xAccountID || 0,
+        trend_name: trend.trend_name,
+        normalized_name: trend.normalized_name,
+        woeid: trend.woeid,
+        category: trend.category,
+        rating,
+        source_type: "execution_queue",
+        source_id: sourceID || 0,
+      });
+      pushToast(t("autoPost.trends.feedbackSaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackFailed") : t("autoPost.trends.feedbackFailed"));
+    } finally {
+      setPendingKey("");
+    }
+  }
+  return (
+    <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <Sparkles className="size-4 text-[#1d9bf0]" />
+        <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.trends.title")}</p>
+      </div>
+      <div className="grid gap-2">
+        {trends.slice(0, 3).map((trend) => (
+          <div key={`${trend.woeid}-${trend.normalized_name || trend.trend_name}`} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[#e7e9ea]">{trend.trend_name}</span>
+              <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-[11px] text-[#71767b]">
+                {t(`autoPost.trends.category.${trend.category}`)}
+              </span>
+            </div>
+            {trend.relevance_reason ? (
+              <p className="mt-1 break-words leading-5 text-[#8b98a5]">
+                {t("autoPost.trends.reasonPrefix")} {trend.relevance_reason}
+              </p>
+            ) : null}
+            {trend.matched_keywords?.length ? (
+              <p className="mt-1 break-words leading-5 text-[#71767b]">
+                {t("autoPost.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
+              </p>
+            ) : null}
+            <QueueTrendFeedbackButtons
+              trend={trend}
+              pendingKey={pendingKey}
+              onSubmit={(rating) => void submitFeedback(trend, rating)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QueueTrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: TrendTopicApi; pendingKey: string; onSubmit: (rating: TrendFeedbackRating) => void }) {
+  const { t } = useT();
+  const baseKey = `${trend.woeid}-${trend.normalized_name || trend.trend_name}`;
+  const options: Array<{ rating: TrendFeedbackRating; label: string }> = [
+    { rating: "relevant", label: t("autoPost.trends.feedback.relevant") },
+    { rating: "irrelevant", label: t("autoPost.trends.feedback.irrelevant") },
+    { rating: "too_forced", label: t("autoPost.trends.feedback.tooForced") },
+  ];
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {options.map((option) => {
+        const loading = pendingKey === `${baseKey}-${option.rating}`;
+        return (
+          <button
+            key={option.rating}
+            type="button"
+            onClick={() => onSubmit(option.rating)}
+            disabled={Boolean(pendingKey)}
+            className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-medium text-[#8b98a5] transition hover:border-[#1d9bf0]/50 hover:text-[#d7ebff] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? t("autoPost.trends.feedback.saving") : option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

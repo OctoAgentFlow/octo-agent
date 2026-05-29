@@ -32,6 +32,19 @@ type AIGeneratedAutoCommentCandidates struct {
 	Usage      openaiint.TextUsage
 }
 
+type AutoDMCandidate struct {
+	Type    string `json:"type"`
+	Label   string `json:"label"`
+	Message string `json:"message"`
+}
+
+type AIGeneratedAutoDMCandidates struct {
+	Text             string
+	GenerationReason string
+	Candidates       []AutoDMCandidate
+	Usage            openaiint.TextUsage
+}
+
 type AutoCommentTargetSuggestion struct {
 	Handle      string `json:"handle"`
 	DisplayName string `json:"display_name"`
@@ -160,6 +173,8 @@ type GenerateAutoReplyInput struct {
 
 type GenerateAutoDMInput struct {
 	RecipientUsername string
+	RecipientSegment  string
+	DMStrategy        string
 	RecentInteraction string
 	Tone              string
 	HasBot            bool
@@ -269,53 +284,65 @@ type CompleteOAFBotProfileInput struct {
 }
 
 type GenerateAutoPostInput struct {
-	AccountHandle     string
-	Topic             string
-	ContentDirection  string
-	ContentItemTitle  string
-	ContentItemType   string
-	ContentItemBody   string
-	ContentItemURL    string
-	ContentItemTopics []string
-	ContentItemGoal   string
-	ContentItemCTA    string
-	RecentPosts       []string
-	ContentLengthMode string
-	MaxCharacters     int
-	HasBot            bool
-	Name              string
-	Occupation        string
-	Industry          string
-	AgeRange          string
-	Gender            string
-	Education         string
-	MBTI              string
-	PersonalityTags   []string
-	IdentitySummary   string
-	VoiceTone         string
-	Topics            []string
-	ForbiddenTopics   []string
-	GrowthGoal        string
-	ProjectOneLiner   string
-	TargetAudience    string
-	CoreValueProps    string
-	ProductFeatures   string
-	Differentiators   string
-	ContentPillars    []string
-	ContentObjectives string
-	PreferredCTA      string
-	WebsiteURL        string
-	TelegramURL       string
-	DiscordURL        string
-	DocsURL           string
-	CTAPolicy         string
-	Hashtags          []string
-	Keywords          []string
-	ComplianceNotes   string
-	AvoidClaims       []string
-	SafetyMode        string
-	PrimaryLanguage   string
-	LanguageStrategy  string
+	AccountHandle        string
+	Topic                string
+	ContentDirection     string
+	ContentItemTitle     string
+	ContentItemType      string
+	ContentItemBody      string
+	ContentItemURL       string
+	ContentItemTopics    []string
+	ContentItemGoal      string
+	ContentItemCTA       string
+	SelectedTrends       []TrendPromptItem
+	TrendFeedbackSignals []string
+	RecentPosts          []string
+	ContentLengthMode    string
+	MaxCharacters        int
+	HasBot               bool
+	Name                 string
+	Occupation           string
+	Industry             string
+	AgeRange             string
+	Gender               string
+	Education            string
+	MBTI                 string
+	PersonalityTags      []string
+	IdentitySummary      string
+	VoiceTone            string
+	Topics               []string
+	ForbiddenTopics      []string
+	GrowthGoal           string
+	ProjectOneLiner      string
+	TargetAudience       string
+	CoreValueProps       string
+	ProductFeatures      string
+	Differentiators      string
+	ContentPillars       []string
+	ContentObjectives    string
+	PreferredCTA         string
+	WebsiteURL           string
+	TelegramURL          string
+	DiscordURL           string
+	DocsURL              string
+	CTAPolicy            string
+	Hashtags             []string
+	Keywords             []string
+	ComplianceNotes      string
+	AvoidClaims          []string
+	SafetyMode           string
+	PrimaryLanguage      string
+	LanguageStrategy     string
+}
+
+type TrendPromptItem struct {
+	Name         string
+	RegionName   string
+	Category     string
+	RiskLevel    string
+	TweetCount   int64
+	LanguageHint string
+	Reason       string
 }
 
 func NewAIService(openaiClient *openaiint.Client) *AIService {
@@ -750,18 +777,34 @@ func defaultAutoCommentCandidateLabel(v string) string {
 }
 
 func (s *AIService) GenerateAutoDM(ctx context.Context, in GenerateAutoDMInput) (AIGeneratedText, error) {
+	generated, err := s.GenerateAutoDMCandidates(ctx, in)
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	return AIGeneratedText{Text: generated.Text, Usage: generated.Usage}, nil
+}
+
+func (s *AIService) GenerateAutoDMCandidates(ctx context.Context, in GenerateAutoDMInput) (AIGeneratedAutoDMCandidates, error) {
 	recipient := strings.TrimPrefix(strings.TrimSpace(in.RecipientUsername), "@")
 	if recipient == "" {
 		recipient = "there"
 	}
 	system := strings.Join([]string{
 		"You are Octo-Agent Flow's Auto DM assistant.",
-		"Write one short, polite X/Twitter DM draft for a user who already engaged with the account.",
-		"The DM must feel opt-in, useful, and non-pushy.",
-		"Output only the DM text.",
+		"Write three short, polite X/Twitter DM candidates for a user who already engaged with the account.",
+		"The DMs must feel opt-in, useful, and non-pushy.",
+		"Also explain briefly why these candidates fit the recipient context and persona.",
+		"Return strict JSON only.",
 	}, " ")
 	var user strings.Builder
 	user.WriteString("Recipient: @" + recipient + "\n")
+	if segment := strings.TrimSpace(in.RecipientSegment); segment != "" {
+		user.WriteString("Recipient segment: " + segment + "\n")
+	}
+	if strategy := strings.TrimSpace(in.DMStrategy); strategy != "" {
+		user.WriteString("Segment-specific DM strategy:\n")
+		user.WriteString(strategy + "\n")
+	}
 	if strings.TrimSpace(in.RecentInteraction) != "" {
 		user.WriteString("Recent interaction context:\n")
 		user.WriteString(truncateRunes(in.RecentInteraction, 600))
@@ -806,14 +849,86 @@ func (s *AIService) GenerateAutoDM(ctx context.Context, in GenerateAutoDMInput) 
 	user.WriteString("- Do not promise returns, profits, token prices, or investment outcomes.\n")
 	user.WriteString("- Include at most one link, and only if the CTA policy or content context makes it useful.\n")
 	user.WriteString("- Make it easy to ignore. Do not pressure the recipient.\n")
-	result, err := s.openai.GenerateTextWithUsage(ctx, []openaiint.ChatMessage{
+	user.WriteString("Candidate styles:\n")
+	user.WriteString("- helpful_followup: useful follow-up based on the recent interaction.\n")
+	user.WriteString("- soft_invite: light invitation to check a resource or continue the conversation.\n")
+	user.WriteString("- question_first: starts with a friendly question before any CTA.\n")
+	user.WriteString("Return JSON shape: {\"generation_reason\":\"...\",\"candidates\":[{\"type\":\"helpful_followup\",\"label\":\"Helpful follow-up\",\"message\":\"...\"},{\"type\":\"soft_invite\",\"label\":\"Soft invite\",\"message\":\"...\"},{\"type\":\"question_first\",\"label\":\"Question first\",\"message\":\"...\"}]}\n")
+	result, err := s.openai.GenerateTextWithUsageMaxTokens(ctx, []openaiint.ChatMessage{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user.String()},
-	})
+	}, 620)
 	if err != nil {
-		return AIGeneratedText{}, err
+		return AIGeneratedAutoDMCandidates{}, err
 	}
-	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 240), Usage: result.Usage}, nil
+	reason, candidates := parseAutoDMCandidates(result.Text)
+	if len(candidates) == 0 {
+		return AIGeneratedAutoDMCandidates{}, fmt.Errorf("auto dm candidates response is empty")
+	}
+	return AIGeneratedAutoDMCandidates{
+		Text:             candidates[0].Message,
+		GenerationReason: truncateRunes(reason, 500),
+		Candidates:       candidates,
+		Usage:            result.Usage,
+	}, nil
+}
+
+func parseAutoDMCandidates(raw string) (string, []AutoDMCandidate) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+	var payload struct {
+		GenerationReason string            `json:"generation_reason"`
+		Candidates       []AutoDMCandidate `json:"candidates"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		text := truncateRunes(strings.Trim(raw, "\"“”"), 240)
+		if text == "" {
+			return "", nil
+		}
+		return "Generated from the recipient's recent engagement and the selected OAF Bot persona.", []AutoDMCandidate{{Type: "helpful_followup", Label: "Helpful follow-up", Message: text}}
+	}
+	out := make([]AutoDMCandidate, 0, 3)
+	seen := map[string]bool{}
+	for _, item := range payload.Candidates {
+		message := truncateRunes(strings.TrimSpace(item.Message), 240)
+		if message == "" || seen[strings.ToLower(message)] {
+			continue
+		}
+		seen[strings.ToLower(message)] = true
+		typ := normalizeAutoDMCandidateType(item.Type)
+		out = append(out, AutoDMCandidate{
+			Type:    typ,
+			Label:   firstNonEmpty(strings.TrimSpace(item.Label), defaultAutoDMCandidateLabel(typ)),
+			Message: message,
+		})
+		if len(out) >= 3 {
+			break
+		}
+	}
+	return strings.TrimSpace(payload.GenerationReason), out
+}
+
+func normalizeAutoDMCandidateType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "helpful_followup", "soft_invite", "question_first":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return "helpful_followup"
+	}
+}
+
+func defaultAutoDMCandidateLabel(v string) string {
+	switch v {
+	case "soft_invite":
+		return "Soft invite"
+	case "question_first":
+		return "Question first"
+	default:
+		return "Helpful follow-up"
+	}
 }
 
 func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in GenerateOAFBotSamplesInput) (*dto.OAFBotTestGenerateResponse, openaiint.TextUsage, error) {
@@ -1125,6 +1240,48 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 			user.WriteString("cta_preference_from_content_item: " + strings.TrimSpace(in.ContentItemCTA) + "\n")
 		}
 	}
+	if len(in.SelectedTrends) > 0 {
+		user.WriteString("Relevant cached X trends that may inform this post:\n")
+		for _, trend := range in.SelectedTrends {
+			name := strings.TrimSpace(trend.Name)
+			if name == "" {
+				continue
+			}
+			user.WriteString("- " + name)
+			meta := []string{}
+			if strings.TrimSpace(trend.RegionName) != "" {
+				meta = append(meta, "region="+strings.TrimSpace(trend.RegionName))
+			}
+			if strings.TrimSpace(trend.Category) != "" {
+				meta = append(meta, "category="+strings.TrimSpace(trend.Category))
+			}
+			if trend.TweetCount > 0 {
+				meta = append(meta, fmt.Sprintf("tweet_count=%d", trend.TweetCount))
+			}
+			if strings.TrimSpace(trend.RiskLevel) != "" {
+				meta = append(meta, "risk="+strings.TrimSpace(trend.RiskLevel))
+			}
+			if strings.TrimSpace(trend.Reason) != "" {
+				meta = append(meta, "why="+strings.TrimSpace(trend.Reason))
+			}
+			if len(meta) > 0 {
+				user.WriteString(" (" + strings.Join(meta, ", ") + ")")
+			}
+			user.WriteString("\n")
+		}
+		user.WriteString("Use a trend only when it naturally supports the content source and persona. Do not force unrelated trend-jacking.\n")
+	}
+	if len(in.TrendFeedbackSignals) > 0 {
+		user.WriteString("Trend feedback constraints from previous user reviews:\n")
+		for _, signal := range in.TrendFeedbackSignals {
+			signal = strings.TrimSpace(signal)
+			if signal == "" {
+				continue
+			}
+			user.WriteString("- " + signal + "\n")
+		}
+		user.WriteString("Negative trend feedback should reduce forced topical references and keep the post grounded in the Bot persona and content source.\n")
+	}
 	if in.HasBot {
 		user.WriteString("Use this OAF Bot persona:\n")
 		user.WriteString("internal_bot_name: " + strings.TrimSpace(in.Name) + "\n")
@@ -1190,6 +1347,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	}
 	user.WriteString("- Use at most 2 hashtags, and only when they fit naturally.\n")
 	user.WriteString("- Make it useful and specific, not hype.\n")
+	user.WriteString("- If using a trend, connect it to the product/user pain point with a clear, natural angle.\n")
 	user.WriteString("- Do not mention that you are AI.\n")
 	user.WriteString("- Do not mention the bot name in generated content unless the user explicitly instructed it in identity_summary, voice_tone, or growth_goal.\n")
 	user.WriteString("- Avoid repeating recent posts or using the same opening pattern.\n")

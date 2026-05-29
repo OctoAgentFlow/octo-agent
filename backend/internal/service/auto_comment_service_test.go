@@ -122,6 +122,18 @@ func TestHasRecentAutoCommentCandidateTweet(t *testing.T) {
 	}
 }
 
+func TestAutoCommentSuggestionCandidateLimitScalesWithRemainingSlots(t *testing.T) {
+	if got := autoCommentSuggestionCandidateLimit(2); got != 32 {
+		t.Fatalf("small plans should still validate a useful candidate pool, got %d", got)
+	}
+	if got := autoCommentSuggestionCandidateLimit(30); got != 120 {
+		t.Fatalf("pro plans should scale candidate checks with remaining slots, got %d", got)
+	}
+	if got := autoCommentSuggestionCandidateLimit(80); got != 240 {
+		t.Fatalf("pro+ candidate checks should be capped, got %d", got)
+	}
+}
+
 func TestAutoCommentQueueScorePrioritizesTargetPriorityAndOpportunity(t *testing.T) {
 	highPriority := autoCommentQueueScore(5, 40)
 	highOpportunity := autoCommentQueueScore(2, 90)

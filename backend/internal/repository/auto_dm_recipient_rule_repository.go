@@ -21,6 +21,7 @@ type AutoDMRecipientRuleRepository struct{ DB *gorm.DB }
 type AutoDMRecipientRuleListQuery struct {
 	Search     string
 	Status     string
+	Segment    string
 	XAccountID uint
 	Limit      int
 }
@@ -28,6 +29,12 @@ type AutoDMRecipientRuleListQuery struct {
 type AutoDMRecipientRuleStatusCount struct {
 	Status string
 	Count  int64
+}
+
+type AutoDMRecipientRuleSegmentStatusCount struct {
+	Segment string
+	Status  string
+	Count   int64
 }
 
 func NewAutoDMRecipientRuleRepository(db *gorm.DB) *AutoDMRecipientRuleRepository {
@@ -45,10 +52,13 @@ func (r *AutoDMRecipientRuleRepository) ListByUser(userID uint, query AutoDMReci
 	if IsAutoDMRecipientRuleStatus(query.Status) {
 		q = q.Where("status = ?", strings.TrimSpace(query.Status))
 	}
+	if segment := strings.TrimSpace(query.Segment); segment != "" {
+		q = q.Where("recipient_segment = ?", segment)
+	}
 	search := strings.TrimSpace(query.Search)
 	if search != "" {
 		like := "%" + search + "%"
-		q = q.Where("(recipient_user_id LIKE ? OR recipient_username LIKE ? OR reason LIKE ?)", like, like, like)
+		q = q.Where("(recipient_user_id LIKE ? OR recipient_username LIKE ? OR recipient_segment LIKE ? OR reason LIKE ?)", like, like, like, like)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -108,12 +118,32 @@ func (r *AutoDMRecipientRuleRepository) CountByStatus(userID, accountID uint) ([
 	return rows, err
 }
 
-func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipientUserID, username, status, source, reason, unsubscribeToken string, at time.Time) (*model.AutoDMRecipientRule, error) {
+func (r *AutoDMRecipientRuleRepository) CountBySegmentAndStatusBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMRecipientRuleSegmentStatusCount, error) {
+	segmentExpr := "COALESCE(NULLIF(TRIM(recipient_segment), ''), 'lead')"
+	q := r.DB.Model(&model.AutoDMRecipientRule{}).
+		Select(segmentExpr+" AS segment, status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("updated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("updated_at < ?", to)
+	}
+	var rows []AutoDMRecipientRuleSegmentStatusCount
+	err := q.Group(segmentExpr + ", status").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipientUserID, username, segment, status, source, reason, unsubscribeToken string, at time.Time) (*model.AutoDMRecipientRule, error) {
 	rule := &model.AutoDMRecipientRule{
 		UserID:            userID,
 		XAccountID:        accountID,
 		RecipientUserID:   strings.TrimSpace(recipientUserID),
 		RecipientUsername: strings.TrimSpace(username),
+		RecipientSegment:  strings.TrimSpace(segment),
 		Status:            strings.TrimSpace(status),
 		UnsubscribeToken:  strings.TrimSpace(unsubscribeToken),
 		Source:            strings.TrimSpace(source),
@@ -124,6 +154,7 @@ func (r *AutoDMRecipientRuleRepository) Upsert(userID, accountID uint, recipient
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "x_account_id"}, {Name: "recipient_user_id"}},
 		DoUpdates: clause.Assignments(map[string]any{
 			"recipient_username": rule.RecipientUsername,
+			"recipient_segment":  rule.RecipientSegment,
 			"status":             rule.Status,
 			"unsubscribe_token":  gorm.Expr("CASE WHEN unsubscribe_token = '' OR unsubscribe_token IS NULL THEN ? ELSE unsubscribe_token END", rule.UnsubscribeToken),
 			"source":             rule.Source,
@@ -154,7 +185,7 @@ func (r *AutoDMRecipientRuleRepository) MarkUnsubscribedByToken(token string, at
 	return r.GetByToken(token)
 }
 
-func (r *AutoDMRecipientRuleRepository) UpdateStatusByID(userID, ruleID uint, status, reason, source string, at time.Time) (*model.AutoDMRecipientRule, error) {
+func (r *AutoDMRecipientRuleRepository) UpdateStatusByID(userID, ruleID uint, status, segment, reason, source string, at time.Time) (*model.AutoDMRecipientRule, error) {
 	status = strings.TrimSpace(status)
 	if !IsAutoDMRecipientRuleStatus(status) {
 		return nil, gorm.ErrInvalidData
@@ -164,11 +195,12 @@ func (r *AutoDMRecipientRuleRepository) UpdateStatusByID(userID, ruleID uint, st
 		return nil, err
 	}
 	if err := r.DB.Model(&model.AutoDMRecipientRule{}).Where("id = ? AND user_id = ?", ruleID, userID).Updates(map[string]any{
-		"status":          status,
-		"source":          strings.TrimSpace(source),
-		"reason":          strings.TrimSpace(reason),
-		"last_matched_at": at,
-		"updated_at":      at,
+		"status":            status,
+		"recipient_segment": gorm.Expr("CASE WHEN ? = '' THEN recipient_segment ELSE ? END", strings.TrimSpace(segment), strings.TrimSpace(segment)),
+		"source":            strings.TrimSpace(source),
+		"reason":            strings.TrimSpace(reason),
+		"last_matched_at":   at,
+		"updated_at":        at,
 	}).Error; err != nil {
 		return nil, err
 	}

@@ -45,6 +45,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.AutoDMRecipientRule{},
 		&model.AutoDMRecipientImport{},
 		&model.AutoDMTask{},
+		&model.AutoDMInboundEvent{},
 		&model.Post{},
 		&model.Agent{},
 		&model.OAFBot{},
@@ -57,6 +58,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.BillingLedgerEntry{},
 		&model.SubscriptionChangeEvent{},
 		&model.CostUsageLedger{},
+		&model.TrendTopic{},
+		&model.TrendFeedback{},
+		&model.TrendOperationRule{},
 	); err != nil {
 		return err
 	}
@@ -246,6 +250,7 @@ func ApplyTableComments(db *gorm.DB) error {
 		{&model.BillingLedgerEntry{}, "订阅支付账本事件"},
 		{&model.SubscriptionChangeEvent{}, "订阅套餐变更事件"},
 		{&model.CostUsageLedger{}, "成本用量账本"},
+		{&model.TrendTopic{}, "X热门趋势缓存"},
 	}
 	for _, item := range modelComments {
 		stmt := &gorm.Statement{DB: db}

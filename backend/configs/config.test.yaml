@@ -81,6 +81,18 @@ x_publisher:
     - "octo_agent_flow"
   dry_run: false
 
+x_trends:
+  enabled: true
+  bearer_token: ""
+  interval_hours: 12
+  max_trends: 20
+  retention_days: 14
+  regions:
+    - woeid: "1"
+      name: "Worldwide"
+    - woeid: "23424977"
+      name: "United States"
+
 billing:
   order_ttl_minutes: 30
   scanner:

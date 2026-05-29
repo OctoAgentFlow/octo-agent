@@ -1,0 +1,153 @@
+package service
+
+import (
+	"testing"
+	"time"
+
+	"octo-agent/backend/internal/config"
+	"octo-agent/backend/internal/integration/twitter"
+	"octo-agent/backend/internal/model"
+)
+
+func TestNormalizeTrendName(t *testing.T) {
+	if got := normalizeTrendName("  #AI Agents!!  "); got != "#ai agents" {
+		t.Fatalf("normalized = %q", got)
+	}
+	if got := normalizeTrendName("比特币 牛市"); got != "比特币 牛市" {
+		t.Fatalf("normalized zh = %q", got)
+	}
+}
+
+func TestClassifyTrendTopic(t *testing.T) {
+	category, risk := classifyTrendTopic("Bitcoin ETF")
+	if category != "crypto" || risk != "low" {
+		t.Fatalf("bitcoin classified as %s/%s", category, risk)
+	}
+	category, risk = classifyTrendTopic("Election lawsuit")
+	if category != "politics" || risk != "medium" {
+		t.Fatalf("election classified as %s/%s", category, risk)
+	}
+	category, risk = classifyTrendTopic("earthquake")
+	if risk != "high" {
+		t.Fatalf("earthquake risk = %s", risk)
+	}
+}
+
+func TestTrendTopicFromAPI(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	row := trendTopicFromAPI(twitter.TrendTopic{Name: "NBA Finals", TweetCount: 123}, config.XTrendsRegionConfig{WOEID: "1", Name: "Worldwide"}, now)
+	if row.Category != "sports" || row.RiskLevel != "low" {
+		t.Fatalf("unexpected category/risk: %s/%s", row.Category, row.RiskLevel)
+	}
+	if row.ExpiresAt.Sub(now) != 24*time.Hour {
+		t.Fatalf("expires in %s", row.ExpiresAt.Sub(now))
+	}
+	if row.FetchedBucket != "2026-05-29T12" {
+		t.Fatalf("bucket = %s", row.FetchedBucket)
+	}
+}
+
+func TestSelectRelevantTrendTopics(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	candidates := []model.TrendTopic{
+		{TrendName: "NBA Finals", NormalizedName: "nba finals", Category: "sports", RiskLevel: "low", TweetCount: 9000, FetchedAt: now},
+		{TrendName: "AI Agents", NormalizedName: "ai agents", Category: "tech", RiskLevel: "low", TweetCount: 100, FetchedAt: now},
+		{TrendName: "Crypto Market", NormalizedName: "crypto market", Category: "crypto", RiskLevel: "low", TweetCount: 500, FetchedAt: now},
+		{TrendName: "Election lawsuit", NormalizedName: "election lawsuit", Category: "politics", RiskLevel: "medium", TweetCount: 12000, FetchedAt: now},
+	}
+	selected := selectRelevantTrendTopics(candidates, trendPreference{
+		Categories:           []string{"crypto"},
+		AllowGeneral:         false,
+		SensitiveTrendPolicy: "avoid",
+	}, []string{"AI Agent"}, nil, 3)
+	if len(selected) != 2 {
+		t.Fatalf("selected %d trends, want 2", len(selected))
+	}
+	if selected[0].TrendName != "AI Agents" {
+		t.Fatalf("keyword match should rank first, got %s", selected[0].TrendName)
+	}
+	if selected[1].TrendName != "Crypto Market" {
+		t.Fatalf("category match should rank second, got %s", selected[1].TrendName)
+	}
+}
+
+func TestSelectRelevantTrendTopicsAllowsGeneralWithSensitivePolicy(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	candidates := []model.TrendTopic{
+		{TrendName: "Breaking market news", NormalizedName: "breaking market news", Category: "news", RiskLevel: "low", TweetCount: 1000, FetchedAt: now},
+		{TrendName: "Election lawsuit", NormalizedName: "election lawsuit", Category: "politics", RiskLevel: "medium", TweetCount: 9000, FetchedAt: now},
+		{TrendName: "Earthquake", NormalizedName: "earthquake", Category: "news", RiskLevel: "high", TweetCount: 20000, FetchedAt: now},
+	}
+	selected := selectRelevantTrendTopics(candidates, trendPreference{
+		AllowGeneral:         true,
+		SensitiveTrendPolicy: "review_only",
+	}, nil, nil, 3)
+	if len(selected) != 2 {
+		t.Fatalf("selected %d trends, want 2", len(selected))
+	}
+	for _, row := range selected {
+		if row.RiskLevel == "high" {
+			t.Fatalf("high-risk trend should be skipped: %s", row.TrendName)
+		}
+	}
+}
+
+func TestSelectRelevantTrendTopicsExcludesNames(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	candidates := []model.TrendTopic{
+		{TrendName: "AI Agents", NormalizedName: "ai agents", Category: "tech", RiskLevel: "low", TweetCount: 9000, FetchedAt: now},
+		{TrendName: "Crypto Market", NormalizedName: "crypto market", Category: "crypto", RiskLevel: "low", TweetCount: 500, FetchedAt: now},
+	}
+	selected := selectRelevantTrendTopics(candidates, trendPreference{
+		AllowGeneral:         true,
+		SensitiveTrendPolicy: "avoid",
+		ExcludedNames:        []string{"AI Agents"},
+	}, nil, nil, 3)
+	if len(selected) != 1 {
+		t.Fatalf("selected %d trends, want 1", len(selected))
+	}
+	if selected[0].TrendName != "Crypto Market" {
+		t.Fatalf("excluded trend should not be selected, got %s", selected[0].TrendName)
+	}
+}
+
+func TestSelectRelevantTrendTopicsPenalizesForcedTrend(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	candidates := []model.TrendTopic{
+		{TrendName: "Generic Viral Meme", NormalizedName: "generic viral meme", Category: "meme", RiskLevel: "low", TweetCount: 20000, FetchedAt: now},
+		{TrendName: "AI Agents", NormalizedName: "ai agents", Category: "tech", RiskLevel: "low", TweetCount: 1000, FetchedAt: now},
+	}
+	selected := selectRelevantTrendTopics(candidates, trendPreference{
+		AllowGeneral:         true,
+		SensitiveTrendPolicy: "avoid",
+	}, []string{"AI Agent"}, map[string]trendQualitySignal{
+		"generic viral meme": {TooForced: 3, TotalNegative: 3},
+	}, 3)
+	if len(selected) != 1 {
+		t.Fatalf("selected %d trends, want 1", len(selected))
+	}
+	if selected[0].TrendName != "AI Agents" {
+		t.Fatalf("forced general trend should be skipped, got %s", selected[0].TrendName)
+	}
+}
+
+func TestSelectRelevantTrendTopicsKeepsStrongMatchDespiteFeedback(t *testing.T) {
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	candidates := []model.TrendTopic{
+		{TrendName: "AI Agents", NormalizedName: "ai agents", Category: "tech", RiskLevel: "low", TweetCount: 20000, FetchedAt: now},
+		{TrendName: "Crypto Market", NormalizedName: "crypto market", Category: "crypto", RiskLevel: "low", TweetCount: 1000, FetchedAt: now},
+	}
+	selected := selectRelevantTrendTopics(candidates, trendPreference{
+		Categories:           []string{"tech"},
+		AllowGeneral:         false,
+		SensitiveTrendPolicy: "avoid",
+	}, []string{"AI Agent"}, map[string]trendQualitySignal{
+		"ai agents": {TooForced: 2, TotalNegative: 2},
+	}, 3)
+	if len(selected) != 1 {
+		t.Fatalf("selected %d trends, want 1", len(selected))
+	}
+	if selected[0].TrendName != "AI Agents" {
+		t.Fatalf("strong matched trend should remain selectable, got %s", selected[0].TrendName)
+	}
+}

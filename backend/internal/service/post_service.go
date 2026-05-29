@@ -40,6 +40,7 @@ type PostService struct {
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	ai             *AIService
+	trends         *TrendService
 	xPublisher     config.XPublisherConfig
 }
 
@@ -52,6 +53,7 @@ func NewPostService(
 	oafBotRepo *repository.OAFBotRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	ai *AIService,
+	trends *TrendService,
 	xPublisher config.XPublisherConfig,
 ) *PostService {
 	return &PostService{
@@ -63,6 +65,7 @@ func NewPostService(
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
 		ai:             ai,
+		trends:         trends,
 		xPublisher:     xPublisher,
 	}
 }
@@ -293,11 +296,17 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 			bot = nil
 		}
 	}
-	generated, err := s.ai.GenerateAutoPost(ctx, autoPostInputFromBot(acc, bot, req.Topic))
+	botID := botIDForUsage(bot)
+	selectedTrends := s.selectTrendsForManualPost(userID, botID, req.ExcludedTrendNames, now)
+	input := autoPostInputFromBot(acc, bot, req.Topic)
+	input.SelectedTrends = trendPromptItems(selectedTrends)
+	if s.trends != nil {
+		input.TrendFeedbackSignals = s.trends.FeedbackPromptSignals(userID, botID)
+	}
+	generated, err := s.ai.GenerateAutoPost(ctx, input)
 	if err != nil {
 		return nil, err
 	}
-	botID := botIDForUsage(bot)
 	if err := recordAIGenerationUsage(s.usageRepo, userID, botID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
 		return nil, err
 	}
@@ -307,9 +316,10 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	}
 	limits := subscription.LimitsForUser(user)
 	return &dto.PostGenerateResponse{
-		Content: generated.Text,
-		BotID:   botID,
-		Scene:   repository.AIGenerationSceneAutoPost,
+		Content:        generated.Text,
+		BotID:          botID,
+		Scene:          repository.AIGenerationSceneAutoPost,
+		SelectedTrends: selectedTrends,
 		Usage: dto.PlanUsageData{
 			AIGenerationsMonth: currentAIGenerationUsage(s.usageRepo, userID, now),
 		},
@@ -571,6 +581,20 @@ func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic st
 	in.PrimaryLanguage = bot.PrimaryLanguage
 	in.LanguageStrategy = bot.LanguageStrategy
 	return in
+}
+
+func (s *PostService) selectTrendsForManualPost(userID, botID uint, excluded []string, now time.Time) []dto.TrendTopicItem {
+	if s == nil || s.trends == nil || botID == 0 {
+		return nil
+	}
+	data, err := s.trends.SelectForBot(userID, dto.TrendSelectionQuery{BotID: botID, Limit: 3, ExcludedTrendNames: excluded}, now)
+	if err != nil || data == nil {
+		if err != nil {
+			zap.L().Warn("manual post trend selection failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.Error(err))
+		}
+		return nil
+	}
+	return data.Items
 }
 
 func (s *PostService) schedulerLimitsExceeded(userID uint, now time.Time) (hit bool, reason string) {

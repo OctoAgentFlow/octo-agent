@@ -80,6 +80,7 @@ func (s *AccountService) List(userID uint) (*dto.AccountListResponse, error) {
 			PublishReauthRequired: publishIssue != "",
 			PublishIssue:          publishIssue,
 			MissingScopes:         missingScopes,
+			OAuthScopes:           oauthScopeList(acc.OAuthScopes),
 		}
 		if acc.LastSyncedAt != nil {
 			item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
@@ -275,6 +276,7 @@ func (s *AccountService) accountItem(userID, accountID uint) (*dto.AccountItem, 
 		PublishReauthRequired: publishIssue != "",
 		PublishIssue:          publishIssue,
 		MissingScopes:         missingScopes,
+		OAuthScopes:           oauthScopeList(acc.OAuthScopes),
 	}
 	if acc.LastSyncedAt != nil {
 		item.LastSyncedAt = acc.LastSyncedAt.UTC().Format(time.RFC3339)
@@ -548,4 +550,12 @@ func normalizedOAuthScopes(scope string) string {
 		return ""
 	}
 	return strings.Join(fields, " ")
+}
+
+func oauthScopeList(scope string) []string {
+	normalized := normalizedOAuthScopes(scope)
+	if normalized == "" {
+		return []string{}
+	}
+	return strings.Fields(normalized)
 }

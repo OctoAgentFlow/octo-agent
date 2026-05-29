@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/integration/twitter"
+	"octo-agent/backend/internal/model"
+	"octo-agent/backend/internal/pkg/subscription"
 )
 
 func TestClassifyAutoDMFailureRateLimit(t *testing.T) {
@@ -44,18 +46,87 @@ func TestClassifyAutoDMFailureNetwork(t *testing.T) {
 }
 
 func TestParseAutoDMImportRow(t *testing.T) {
-	recipientID, username, skip, rowErr := parseAutoDMImportRow([]string{"1234567890", "alice"})
-	if skip || rowErr != "" || recipientID != "1234567890" || username != "@alice" {
-		t.Fatalf("unexpected valid row parse: id=%q username=%q skip=%v err=%q", recipientID, username, skip, rowErr)
+	recipientID, username, segment, skip, rowErr := parseAutoDMImportRow([]string{"1234567890", "alice", "partner"})
+	if skip || rowErr != "" || recipientID != "1234567890" || username != "@alice" || segment != "partner" {
+		t.Fatalf("unexpected valid row parse: id=%q username=%q segment=%q skip=%v err=%q", recipientID, username, segment, skip, rowErr)
 	}
 
-	_, _, skip, rowErr = parseAutoDMImportRow([]string{"recipient_user_id", "username"})
+	_, _, _, skip, rowErr = parseAutoDMImportRow([]string{"recipient_user_id", "username"})
 	if !skip || rowErr != "" {
 		t.Fatalf("header row should be silently skipped: skip=%v err=%q", skip, rowErr)
 	}
 
-	_, _, skip, rowErr = parseAutoDMImportRow([]string{"not-a-user", "alice"})
+	_, _, _, skip, rowErr = parseAutoDMImportRow([]string{"not-a-user", "alice"})
 	if !skip || rowErr == "" {
 		t.Fatalf("invalid recipient id should be reported: skip=%v err=%q", skip, rowErr)
+	}
+}
+
+func TestMissingDMSendScopesRequiresTweetRead(t *testing.T) {
+	missing := missingDMSendScopes("dm.read dm.write users.read")
+	if len(missing) != 1 || missing[0] != "tweet.read" {
+		t.Fatalf("expected tweet.read to be required, got %#v", missing)
+	}
+	if got := missingDMSendScopes("dm.read dm.write tweet.read users.read"); len(got) != 0 {
+		t.Fatalf("expected no missing scopes, got %#v", got)
+	}
+}
+
+func TestMissingDMReadScopes(t *testing.T) {
+	missing := missingDMReadScopes("dm.write tweet.read users.read")
+	if len(missing) != 1 || missing[0] != "dm.read" {
+		t.Fatalf("expected dm.read to be required, got %#v", missing)
+	}
+	if got := missingDMReadScopes("dm.read tweet.read users.read"); len(got) != 0 {
+		t.Fatalf("expected no missing scopes, got %#v", got)
+	}
+}
+
+func TestAutoDMOptInSource(t *testing.T) {
+	for _, source := range []string{"inbound_dm", "campaign_keyword", "manual_consent", "manual_consent_import", "site_form", "task"} {
+		if !isAutoDMOptInSource(source) {
+			t.Fatalf("expected %s to be accepted as opt-in source", source)
+		}
+	}
+	for _, source := range []string{"", "csv_import", "scraped_list", "public_reply"} {
+		if isAutoDMOptInSource(source) {
+			t.Fatalf("expected %s to be rejected as opt-in source", source)
+		}
+	}
+}
+
+func TestAutoDMConservativeDailySendLimit(t *testing.T) {
+	cases := []struct {
+		plan string
+		want int64
+	}{
+		{subscription.PlanFreeTrial, 0},
+		{subscription.PlanBasic, 5},
+		{subscription.PlanPlus, 20},
+		{subscription.PlanPro, 80},
+		{subscription.PlanProPlus, 150},
+	}
+	for _, tc := range cases {
+		if got := autoDMConservativeDailySendLimit(&model.User{SubscriptionPlanCode: tc.plan}); got != tc.want {
+			t.Fatalf("plan %s daily send limit = %d, want %d", tc.plan, got, tc.want)
+		}
+	}
+}
+
+func TestFirstInboundReplyEvent(t *testing.T) {
+	sentAt := time.Date(2026, 5, 29, 4, 0, 0, 0, time.UTC)
+	task := &model.AutoDMTask{
+		RecipientUserID: "recipient-1",
+		DMEventID:       "outbound-1",
+		SentAt:          &sentAt,
+	}
+	events := []twitter.DirectMessageEvent{
+		{ID: "old", EventType: "MessageCreate", SenderID: "recipient-1", CreatedAt: sentAt.Add(-time.Minute).Format(time.RFC3339), Text: "before"},
+		{ID: "own", EventType: "MessageCreate", SenderID: "sender-1", CreatedAt: sentAt.Add(time.Minute).Format(time.RFC3339), Text: "own"},
+		{ID: "reply-1", EventType: "MessageCreate", SenderID: "recipient-1", CreatedAt: sentAt.Add(2 * time.Minute).Format(time.RFC3339), Text: "reply"},
+	}
+	reply, repliedAt := firstInboundReplyEvent(events, task, "sender-1")
+	if reply.ID != "reply-1" || !repliedAt.Equal(sentAt.Add(2*time.Minute)) {
+		t.Fatalf("unexpected reply: %#v at %s", reply, repliedAt)
 	}
 }

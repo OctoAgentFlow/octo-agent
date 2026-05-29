@@ -14,6 +14,7 @@ type AccountItem struct {
 	PublishReauthRequired bool     `json:"publish_reauth_required"`
 	PublishIssue          string   `json:"publish_issue,omitempty"`
 	MissingScopes         []string `json:"missing_scopes,omitempty"`
+	OAuthScopes           []string `json:"oauth_scopes,omitempty"`
 }
 
 type AccountListResponse struct {

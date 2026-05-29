@@ -18,4 +18,5 @@ export type ConnectedXAccount = {
   publishReauthRequired?: boolean;
   publishIssue?: string;
   missingScopes?: string[];
+  oauthScopes?: string[];
 };

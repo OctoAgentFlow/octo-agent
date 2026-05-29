@@ -8,6 +8,7 @@ type ApiResponse<T> = {
 
 export type AutoPostExecutionMode = "manual" | "review" | "autopilot";
 export type AutoPostLengthMode = "standard" | "long";
+export type TrendSensitivePolicy = "avoid" | "review_only" | "allow";
 
 export type AutoPostPlanApi = {
   id: number;
@@ -24,6 +25,11 @@ export type AutoPostPlanApi = {
   posting_windows?: string;
   timezone: string;
   content_length_mode: AutoPostLengthMode;
+  trend_regions?: string[];
+  trend_categories?: string[];
+  excluded_trend_names?: string[];
+  allow_general_trends?: boolean;
+  sensitive_trend_policy?: TrendSensitivePolicy;
   last_run_at?: string;
   next_run_at?: string;
   processing_at?: string;
@@ -43,6 +49,7 @@ export type AutoPostDraftApi = {
   account_handle?: string;
   content_direction?: string;
   content_hash?: string;
+  selected_trends?: TrendTopicApi[];
   generated_content: string;
   status: "draft" | "pending_review" | "approved" | "ready_to_publish" | "published" | "rejected" | "failed";
   risk_level: string;
@@ -80,6 +87,7 @@ export type AutoPostGenerationRunApi = {
   status: "completed" | "skipped" | "failed";
   skip_reason?: string;
   generated_draft_id?: number;
+  selected_trends?: TrendTopicApi[];
   error_message?: string;
   created_at: string;
 };
@@ -111,6 +119,70 @@ export type AutoPostPlanPayload = {
   posting_windows: string;
   timezone: string;
   content_length_mode: AutoPostLengthMode;
+  trend_regions?: string[];
+  trend_categories?: string[];
+  excluded_trend_names: string[];
+  allow_general_trends?: boolean;
+  sensitive_trend_policy?: TrendSensitivePolicy;
+};
+
+export type TrendTopicApi = {
+  id: number;
+  trend_name: string;
+  normalized_name: string;
+  woeid: string;
+  region_name: string;
+  tweet_count: number;
+  category: string;
+  risk_level: string;
+  language_hint?: string;
+  source: string;
+  matched_keywords?: string[];
+  relevance_reason?: string;
+  fetched_at: string;
+  expires_at: string;
+};
+
+export type TrendSelectionData = {
+  items: TrendTopicApi[];
+};
+
+export type TrendFeedbackRating = "relevant" | "irrelevant" | "too_forced";
+
+export type TrendFeedbackPayload = {
+  bot_id?: number;
+  x_account_id?: number;
+  trend_name: string;
+  normalized_name?: string;
+  woeid?: string;
+  category?: string;
+  rating: TrendFeedbackRating;
+  source_type?: string;
+  source_id?: number;
+};
+
+export type TrendFeedbackApi = {
+  id: number;
+  bot_id: number;
+  x_account_id: number;
+  trend_name: string;
+  normalized_name: string;
+  woeid: string;
+  category: string;
+  rating: TrendFeedbackRating;
+  source_type: string;
+  source_id: number;
+  created_at: string;
+};
+
+export type TrendFeedbackListData = {
+  items: TrendFeedbackApi[];
+  summary: {
+    total: number;
+    relevant: number;
+    irrelevant: number;
+    too_forced: number;
+  };
 };
 
 export const autoPostService = {
@@ -126,10 +198,40 @@ export const autoPostService = {
     const res = await request.put<ApiResponse<AutoPostPlanApi>>(`/auto-post/plans/${id}`, payload);
     return res.data.data;
   },
-  async generateDraft(planID: number, contentDirection: string, contentLibraryItemID?: number) {
+  async selectedTrends(params: { planID?: number; botID?: number; limit?: number; excludedTrendNames?: string[] }) {
+    const res = await request.get<ApiResponse<TrendSelectionData>>("/trends/selected", {
+      params: {
+        plan_id: params.planID || undefined,
+        bot_id: params.botID || undefined,
+        limit: params.limit || 3,
+        excluded_trend_names: params.excludedTrendNames?.join(",") || undefined,
+      },
+    });
+    return res.data.data;
+  },
+  async submitTrendFeedback(payload: TrendFeedbackPayload) {
+    const res = await request.post<ApiResponse<{ item: unknown }>>("/trends/feedback", payload);
+    return res.data.data;
+  },
+  async trendFeedback(params?: { botID?: number; onlyNegative?: boolean; limit?: number }) {
+    const res = await request.get<ApiResponse<TrendFeedbackListData>>("/trends/feedback", {
+      params: {
+        bot_id: params?.botID || undefined,
+        only_negative: params?.onlyNegative ?? undefined,
+        limit: params?.limit || 20,
+      },
+    });
+    return res.data.data;
+  },
+  async deleteTrendFeedback(id: number) {
+    const res = await request.delete<ApiResponse<{ deleted: boolean }>>(`/trends/feedback/${id}`);
+    return res.data.data;
+  },
+  async generateDraft(planID: number, contentDirection: string, contentLibraryItemID?: number, excludedTrendNames?: string[]) {
     const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/plans/${planID}/generate`, {
       content_direction: contentDirection,
       content_library_item_id: contentLibraryItemID || 0,
+      excluded_trend_names: excludedTrendNames || [],
     });
     return res.data.data;
   },

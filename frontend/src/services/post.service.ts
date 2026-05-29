@@ -1,6 +1,7 @@
 import { request } from "@/lib/request";
 
 import type { PostExecuteResult, PostItem, PostListData } from "@/types/post";
+import type { TrendTopicApi } from "@/services/auto-post.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -27,12 +28,14 @@ export type PostUpdateBody = {
 export type PostGenerateBody = {
   x_account_id: number;
   topic?: string;
+  excluded_trend_names?: string[];
 };
 
 export type PostGenerateResult = {
   content: string;
   bot_id?: number;
   scene: "auto_post";
+  selected_trends?: TrendTopicApi[];
   usage: {
     ai_generations_month: number;
   };

@@ -56,7 +56,10 @@ export type AutoDMTaskApi = {
   recipient_source: string;
   recipient_user_id?: string;
   recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
   message_preview?: string;
+  generation_reason?: string;
+  message_variants?: AutoDMMessageVariantApi[];
   status: "review" | "approved" | "sending" | "blocked" | "failed" | "sent";
   capability_status: string;
   failure_category?: string;
@@ -69,14 +72,61 @@ export type AutoDMTaskApi = {
   activity_log_id?: number;
   dm_conversation_id?: string;
   dm_event_id?: string;
+  last_inbound_scan_at?: string;
+  inbound_reply_at?: string;
+  inbound_reply_event_id?: string;
   generated_at: string;
   approved_at?: string;
   blocked_at?: string;
   sent_at?: string;
+  diagnostics?: AutoDMDiagnosticApi[];
 };
 
 export type AutoDMTasksData = {
   items: AutoDMTaskApi[];
+};
+
+export type AutoDMDiagnosticApi = {
+  key: string;
+  label: string;
+  status: string;
+  severity: "info" | "success" | "warning" | "error" | string;
+  detail?: string;
+};
+
+export type AutoDMMessageVariantApi = {
+  type: string;
+  label: string;
+  message: string;
+};
+
+export type AutoDMOverviewData = {
+  plan_code: string;
+  period_start?: string;
+  period_end?: string;
+  monthly_limit: number;
+  monthly_used: number;
+  monthly_remaining: number;
+  daily_soft_limit: number;
+  daily_used: number;
+  daily_remaining: number;
+  next_reset_at?: string;
+  quota_exhausted: boolean;
+  upgrade_required: boolean;
+  segment_metrics?: AutoDMSegmentMetricApi[];
+};
+
+export type AutoDMSegmentMetricApi = {
+  segment: AutoDMRecipientSegment | string;
+  sent: number;
+  failed: number;
+  blocked: number;
+  review: number;
+  unsubscribed: number;
+  replies: number;
+  send_success_rate_pct: number;
+  reply_rate_pct: number;
+  reply_tracking_available: boolean;
 };
 
 export type AutoDMRecipientRuleApi = {
@@ -84,6 +134,7 @@ export type AutoDMRecipientRuleApi = {
   x_account_id: number;
   recipient_user_id: string;
   recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
   status: "allowlisted" | "blocked" | "unsubscribed";
   unsubscribe_token?: string;
   unsubscribe_url?: string;
@@ -93,6 +144,8 @@ export type AutoDMRecipientRuleApi = {
   updated_at?: string;
 };
 
+export type AutoDMRecipientSegment = "lead" | "partner" | "community" | "investor" | "existing_user";
+
 export type AutoDMRecipientRulesData = {
   items: AutoDMRecipientRuleApi[];
   total: number;
@@ -101,6 +154,7 @@ export type AutoDMRecipientRulesData = {
 export type AutoDMRecipientRulesQuery = {
   search?: string;
   status?: AutoDMRecipientRuleApi["status"] | "";
+  segment?: AutoDMRecipientSegment | "";
   xAccountID?: number;
   limit?: number;
 };
@@ -111,6 +165,26 @@ export type AutoDMRecipientImportData = {
   batch?: AutoDMRecipientImportApi;
   items: AutoDMRecipientRuleApi[];
   errors?: string[];
+};
+
+export type AutoDMRecipientImportPreviewRowApi = {
+  line: number;
+  recipient_user_id?: string;
+  recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
+  status: "ready" | "existing" | "duplicate_in_file" | "invalid" | string;
+  message?: string;
+};
+
+export type AutoDMRecipientImportPreviewData = {
+  valid: number;
+  skipped: number;
+  duplicates_in_file: number;
+  existing: number;
+  will_import: number;
+  rows?: AutoDMRecipientImportPreviewRowApi[];
+  errors?: string[];
+  warnings?: string[];
 };
 
 export type AutoDMRecipientImportApi = {
@@ -189,6 +263,9 @@ export type AutoCommentTargetSuggestionData = {
     search_query?: string;
     needs_verify: boolean;
   }>;
+  target_count: number;
+  target_limit: number;
+  suggestion_limit: number;
 };
 
 export type AutoCommentAnalyticsData = {
@@ -417,10 +494,15 @@ export const automationService = {
     const res = await request.get<ApiResponse<AutoDMTasksData>>("/auto-dm/tasks");
     return res.data.data;
   },
+  async dmOverview() {
+    const res = await request.get<ApiResponse<AutoDMOverviewData>>("/auto-dm/overview");
+    return res.data.data;
+  },
   async dmRecipients(query?: AutoDMRecipientRulesQuery) {
     const params = {
       search: query?.search || undefined,
       status: query?.status || undefined,
+      segment: query?.segment || undefined,
       x_account_id: query?.xAccountID || undefined,
       limit: query?.limit || undefined,
     };
@@ -438,6 +520,13 @@ export const automationService = {
     });
     return res.data.data;
   },
+  async previewDMRecipientImport(csv: string, xAccountID?: number) {
+    const res = await request.post<ApiResponse<AutoDMRecipientImportPreviewData>>("/auto-dm/recipients/import/preview", {
+      csv,
+      x_account_id: xAccountID || 0,
+    });
+    return res.data.data;
+  },
   async approveDMTask(id: number) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/approve`);
     return res.data.data;
@@ -446,16 +535,20 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/block`, { reason });
     return res.data.data;
   },
+  async updateDMTaskMessage(id: number, messagePreview: string) {
+    const res = await request.patch<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}`, { message_preview: messagePreview });
+    return res.data.data;
+  },
   async retryDMTask(id: number) {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/retry`);
     return res.data.data;
   },
-  async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
-    const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason });
+  async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string, segment?: AutoDMRecipientSegment) {
+    const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason, recipient_segment: segment });
     return res.data.data;
   },
-  async updateDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string) {
-    const res = await request.patch<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/recipient-rules/${id}`, { status, reason });
+  async updateDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string, segment?: AutoDMRecipientSegment) {
+    const res = await request.patch<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/recipient-rules/${id}`, { status, reason, recipient_segment: segment });
     return res.data.data;
   },
   async bulkUpdateDMRecipientRules(ids: number[], status: AutoDMRecipientRuleApi["status"], reason: string) {

@@ -314,6 +314,7 @@ func autoPostDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, a
 		TargetSummary:      truncateRunes(target, 120),
 		RiskLevel:          draft.RiskLevel,
 		RiskReasons:        reasons,
+		SelectedTrends:     decodeTrendTopicItems(draft.SelectedTrends),
 		CreatedAt:          draft.CreatedAt.UTC().Format(timeRFC3339),
 		SourceStatus:       draft.Status,
 		SourceID:           draft.ID,

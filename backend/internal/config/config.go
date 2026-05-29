@@ -22,6 +22,7 @@ type Config struct {
 	Alert      AlertConfig      `yaml:"alert"`
 	XOAuth     XOAuthConfig     `yaml:"x_oauth"`
 	XPublisher XPublisherConfig `yaml:"x_publisher"`
+	XTrends    XTrendsConfig    `yaml:"x_trends"`
 	LLM        LLMConfig        `yaml:"llm"`
 	Billing    BillingConfig    `yaml:"billing"`
 }
@@ -136,6 +137,20 @@ type XPublisherConfig struct {
 	UnlimitedUserEmails       []string `yaml:"unlimited_user_emails"`
 	UnlimitedAccountUsernames []string `yaml:"unlimited_account_usernames"`
 	DryRun                    bool     `yaml:"dry_run"`
+}
+
+type XTrendsConfig struct {
+	Enabled       bool                  `yaml:"enabled"`
+	BearerToken   string                `yaml:"bearer_token"`
+	IntervalHours int                   `yaml:"interval_hours"`
+	MaxTrends     int                   `yaml:"max_trends"`
+	RetentionDays int                   `yaml:"retention_days"`
+	Regions       []XTrendsRegionConfig `yaml:"regions"`
+}
+
+type XTrendsRegionConfig struct {
+	WOEID string `yaml:"woeid"`
+	Name  string `yaml:"name"`
 }
 
 // LLMConfig is the shared LLM provider configuration for current and future AI features.
@@ -382,6 +397,7 @@ func Load() (*Config, error) {
 		cfg.XPublisher.ManualPublishEnabled = true
 		cfg.XPublisher.DryRun = true
 	}
+	applyXTrendsConfig(&cfg.XTrends)
 	if cfg.Billing.OrderTTLMinutes <= 0 {
 		cfg.Billing.OrderTTLMinutes = 30
 	}
@@ -541,6 +557,51 @@ func applyAlertConfig(env string, service string, cfg *AlertConfig) {
 		cfg.Levels.Critical = true
 		cfg.Levels.Error = true
 		cfg.Levels.Warning = true
+	}
+}
+
+func applyXTrendsConfig(cfg *XTrendsConfig) {
+	if cfg == nil {
+		return
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_ENABLED")); v != "" {
+		cfg.Enabled = parseBool(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_BEARER_TOKEN")); v != "" {
+		cfg.BearerToken = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_BEARER_TOKEN")); v != "" && strings.TrimSpace(cfg.BearerToken) == "" {
+		cfg.BearerToken = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_INTERVAL_HOURS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.IntervalHours = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_MAX_TRENDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxTrends = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_RETENTION_DAYS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.RetentionDays = n
+		}
+	}
+	if cfg.IntervalHours <= 0 {
+		cfg.IntervalHours = 12
+	}
+	if cfg.MaxTrends <= 0 || cfg.MaxTrends > 50 {
+		cfg.MaxTrends = 20
+	}
+	if cfg.RetentionDays <= 0 {
+		cfg.RetentionDays = 14
+	}
+	if len(cfg.Regions) == 0 {
+		cfg.Regions = []XTrendsRegionConfig{
+			{WOEID: "1", Name: "Worldwide"},
+			{WOEID: "23424977", Name: "United States"},
+		}
 	}
 }
 

@@ -23,6 +23,12 @@ type AutoDMTaskFailureCategoryCount struct {
 	LastAt   *time.Time
 }
 
+type AutoDMSegmentStatusCount struct {
+	Segment string
+	Status  string
+	Count   int64
+}
+
 func NewAutoDMTaskRepository(db *gorm.DB) *AutoDMTaskRepository {
 	return &AutoDMTaskRepository{DB: db}
 }
@@ -167,6 +173,26 @@ func (r *AutoDMTaskRepository) CountFailureCategoriesBetween(userID uint, from, 
 		q = q.Where("generated_at < ?", to)
 	}
 	err := q.Group(categoryExpr).Order("count DESC, last_at DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoDMTaskRepository) CountBySegmentAndStatusBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMSegmentStatusCount, error) {
+	segmentExpr := "COALESCE(NULLIF(TRIM(auto_dm_tasks.recipient_segment), ''), NULLIF(TRIM(auto_dm_recipient_rules.recipient_segment), ''), 'lead')"
+	q := r.DB.Model(&model.AutoDMTask{}).
+		Select(segmentExpr+" AS segment, auto_dm_tasks.status AS status, COUNT(*) AS count").
+		Joins("LEFT JOIN auto_dm_recipient_rules ON auto_dm_recipient_rules.user_id = auto_dm_tasks.user_id AND auto_dm_recipient_rules.x_account_id = auto_dm_tasks.x_account_id AND auto_dm_recipient_rules.recipient_user_id = auto_dm_tasks.recipient_user_id").
+		Where("auto_dm_tasks.user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("auto_dm_tasks.x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("auto_dm_tasks.generated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("auto_dm_tasks.generated_at < ?", to)
+	}
+	var rows []AutoDMSegmentStatusCount
+	err := q.Group(segmentExpr + ", auto_dm_tasks.status").Scan(&rows).Error
 	return rows, err
 }
 

@@ -11,6 +11,7 @@ type AutoDMTask struct {
 	RecipientSource   string     `gorm:"size:32;index;not null;comment:收件人来源规则" json:"recipient_source"`
 	RecipientUserID   string     `gorm:"size:64;index;comment:X收件人ID" json:"recipient_user_id,omitempty"`
 	RecipientUsername string     `gorm:"size:128;comment:X收件人用户名" json:"recipient_username,omitempty"`
+	RecipientSegment  string     `gorm:"size:32;index;default:lead;comment:收件人分组快照" json:"recipient_segment,omitempty"`
 	MessagePreview    string     `gorm:"size:512;comment:待发送私信预览" json:"message_preview,omitempty"`
 	GenerationReason  string     `gorm:"size:1024;comment:私信生成原因说明" json:"generation_reason,omitempty"`
 	MessageVariants   string     `gorm:"type:text;comment:私信候选JSON数组" json:"message_variants,omitempty"`

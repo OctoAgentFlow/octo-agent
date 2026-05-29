@@ -234,6 +234,7 @@ export default function AutoDMsPage() {
         <>
           <AutomationModulePausedNotice type="dm" onEnabledChange={setModuleEnabled} />
           {dmOverview ? <AutoDMQuotaCard overview={dmOverview} timeZone={timeZone} /> : null}
+          {dmOverview?.segment_metrics?.length ? <AutoDMSegmentAnalytics metrics={dmOverview.segment_metrics} /> : null}
           <Card className={dmAuthorizationReady ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
@@ -537,6 +538,50 @@ function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData;
         </div>
       </div>
     </Card>
+  );
+}
+
+function AutoDMSegmentAnalytics({ metrics }: { metrics: NonNullable<AutoDMOverviewData["segment_metrics"]> }) {
+  const { t } = useT();
+  const visible = metrics.filter((item) => item.sent + item.failed + item.blocked + item.review + item.unsubscribed > 0);
+  const rows = visible.length > 0 ? visible : metrics;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">{t("autoDm.segmentAnalytics.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoDm.segmentAnalytics.description")}</p>
+        </div>
+        <span className="text-xs text-[#71767b]">{t("autoDm.segmentAnalytics.replyNote")}</span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-5">
+        {rows.map((item) => (
+          <div key={String(item.segment)} className="rounded-2xl border border-[#2f3336] bg-black p-3">
+            <p className="text-sm font-semibold text-white">{t(`autoDm.segment.${item.segment || "lead"}`)}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <MetricMini label={t("autoDm.segmentAnalytics.sent")} value={item.sent} />
+              <MetricMini label={t("autoDm.segmentAnalytics.failed")} value={item.failed} tone={item.failed > 0 ? "danger" : "default"} />
+              <MetricMini label={t("autoDm.segmentAnalytics.unsubscribed")} value={item.unsubscribed} tone={item.unsubscribed > 0 ? "warn" : "default"} />
+              <MetricMini label={t("autoDm.segmentAnalytics.successRate")} value={`${item.send_success_rate_pct}%`} />
+            </div>
+            <div className="mt-2 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs">
+              <p className="text-[#71767b]">{t("autoDm.segmentAnalytics.replyRate")}</p>
+              <p className="mt-1 font-semibold text-white">{item.reply_tracking_available ? `${item.reply_rate_pct}%` : t("autoDm.segmentAnalytics.notTracked")}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function MetricMini({ label, value, tone = "default" }: { label: string; value: number | string; tone?: "default" | "warn" | "danger" }) {
+  const color = tone === "danger" ? "text-[#ff8a91]" : tone === "warn" ? "text-[#f6d96b]" : "text-white";
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-2.5 py-2">
+      <p className="text-[#71767b]">{label}</p>
+      <p className={`mt-1 font-semibold ${color}`}>{value}</p>
+    </div>
   );
 }
 

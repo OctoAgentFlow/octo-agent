@@ -222,6 +222,7 @@ type AutoDMTaskItem struct {
 	RecipientSource   string                     `json:"recipient_source"`
 	RecipientUserID   string                     `json:"recipient_user_id,omitempty"`
 	RecipientUsername string                     `json:"recipient_username,omitempty"`
+	RecipientSegment  string                     `json:"recipient_segment,omitempty"`
 	MessagePreview    string                     `json:"message_preview,omitempty"`
 	GenerationReason  string                     `json:"generation_reason,omitempty"`
 	MessageVariants   []AutoDMMessageVariantItem `json:"message_variants,omitempty"`
@@ -257,18 +258,32 @@ type AutoDMTasksResponse struct {
 }
 
 type AutoDMOverviewResponse struct {
-	PlanCode        string `json:"plan_code"`
-	PeriodStart     string `json:"period_start,omitempty"`
-	PeriodEnd       string `json:"period_end,omitempty"`
-	MonthlyLimit    int64  `json:"monthly_limit"`
-	MonthlyUsed     int64  `json:"monthly_used"`
-	MonthlyRemain   int64  `json:"monthly_remaining"`
-	DailySoftLimit  int64  `json:"daily_soft_limit"`
-	DailyUsed       int64  `json:"daily_used"`
-	DailyRemaining  int64  `json:"daily_remaining"`
-	NextResetAt     string `json:"next_reset_at,omitempty"`
-	QuotaExhausted  bool   `json:"quota_exhausted"`
-	UpgradeRequired bool   `json:"upgrade_required"`
+	PlanCode        string                `json:"plan_code"`
+	PeriodStart     string                `json:"period_start,omitempty"`
+	PeriodEnd       string                `json:"period_end,omitempty"`
+	MonthlyLimit    int64                 `json:"monthly_limit"`
+	MonthlyUsed     int64                 `json:"monthly_used"`
+	MonthlyRemain   int64                 `json:"monthly_remaining"`
+	DailySoftLimit  int64                 `json:"daily_soft_limit"`
+	DailyUsed       int64                 `json:"daily_used"`
+	DailyRemaining  int64                 `json:"daily_remaining"`
+	NextResetAt     string                `json:"next_reset_at,omitempty"`
+	QuotaExhausted  bool                  `json:"quota_exhausted"`
+	UpgradeRequired bool                  `json:"upgrade_required"`
+	SegmentMetrics  []AutoDMSegmentMetric `json:"segment_metrics,omitempty"`
+}
+
+type AutoDMSegmentMetric struct {
+	Segment                string `json:"segment"`
+	Sent                   int64  `json:"sent"`
+	Failed                 int64  `json:"failed"`
+	Blocked                int64  `json:"blocked"`
+	Review                 int64  `json:"review"`
+	Unsubscribed           int64  `json:"unsubscribed"`
+	Replies                int64  `json:"replies"`
+	SendSuccessRatePct     int    `json:"send_success_rate_pct"`
+	ReplyRatePct           int    `json:"reply_rate_pct"`
+	ReplyTrackingAvailable bool   `json:"reply_tracking_available"`
 }
 
 type AutoDMTaskBlockRequest struct {

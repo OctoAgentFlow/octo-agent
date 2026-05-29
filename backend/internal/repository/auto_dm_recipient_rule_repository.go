@@ -31,6 +31,12 @@ type AutoDMRecipientRuleStatusCount struct {
 	Count  int64
 }
 
+type AutoDMRecipientRuleSegmentStatusCount struct {
+	Segment string
+	Status  string
+	Count   int64
+}
+
 func NewAutoDMRecipientRuleRepository(db *gorm.DB) *AutoDMRecipientRuleRepository {
 	return &AutoDMRecipientRuleRepository{DB: db}
 }
@@ -109,6 +115,25 @@ func (r *AutoDMRecipientRuleRepository) CountByStatus(userID, accountID uint) ([
 		q = q.Where("x_account_id = ?", accountID)
 	}
 	err := q.Group("status").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoDMRecipientRuleRepository) CountBySegmentAndStatusBetween(userID uint, from, to time.Time, accountID uint) ([]AutoDMRecipientRuleSegmentStatusCount, error) {
+	segmentExpr := "COALESCE(NULLIF(TRIM(recipient_segment), ''), 'lead')"
+	q := r.DB.Model(&model.AutoDMRecipientRule{}).
+		Select(segmentExpr+" AS segment, status, COUNT(*) AS count").
+		Where("user_id = ?", userID)
+	if accountID > 0 {
+		q = q.Where("x_account_id = ?", accountID)
+	}
+	if !from.IsZero() {
+		q = q.Where("updated_at >= ?", from)
+	}
+	if !to.IsZero() {
+		q = q.Where("updated_at < ?", to)
+	}
+	var rows []AutoDMRecipientRuleSegmentStatusCount
+	err := q.Group(segmentExpr + ", status").Scan(&rows).Error
 	return rows, err
 }
 

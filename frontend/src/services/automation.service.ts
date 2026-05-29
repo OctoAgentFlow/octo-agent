@@ -56,6 +56,7 @@ export type AutoDMTaskApi = {
   recipient_source: string;
   recipient_user_id?: string;
   recipient_username?: string;
+  recipient_segment?: AutoDMRecipientSegment | string;
   message_preview?: string;
   generation_reason?: string;
   message_variants?: AutoDMMessageVariantApi[];
@@ -109,6 +110,20 @@ export type AutoDMOverviewData = {
   next_reset_at?: string;
   quota_exhausted: boolean;
   upgrade_required: boolean;
+  segment_metrics?: AutoDMSegmentMetricApi[];
+};
+
+export type AutoDMSegmentMetricApi = {
+  segment: AutoDMRecipientSegment | string;
+  sent: number;
+  failed: number;
+  blocked: number;
+  review: number;
+  unsubscribed: number;
+  replies: number;
+  send_success_rate_pct: number;
+  reply_rate_pct: number;
+  reply_tracking_available: boolean;
 };
 
 export type AutoDMRecipientRuleApi = {

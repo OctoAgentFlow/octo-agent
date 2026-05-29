@@ -267,6 +267,7 @@ func (s *AutoDMService) createDMAuditWithCandidate(userID, accountID uint, handl
 		RecipientSource:   recipientSource,
 		RecipientUserID:   recipientUserID,
 		RecipientUsername: recipientUsername,
+		RecipientSegment:  normalizeAutoDMRecipientSegment(autoDMRecipientSegment(candidate)),
 		MessagePreview:    messagePreview,
 		GenerationReason:  autoDMGenerationReason(candidate),
 		MessageVariants:   encodeAutoDMVariants(autoDMCandidates(candidate)),
@@ -377,12 +378,85 @@ func (s *AutoDMService) Overview(userID uint, now time.Time) (*dto.AutoDMOvervie
 		QuotaExhausted:  limits.MonthlyAutoDMs <= 0 || monthlyUsed >= limits.MonthlyAutoDMs || dailyLimit <= 0 || dailyUsed >= dailyLimit,
 		UpgradeRequired: limits.MonthlyAutoDMs <= 0 || monthlyUsed >= limits.MonthlyAutoDMs,
 	}
+	segmentMetrics, err := s.segmentMetrics(userID, periodStart, now, 0)
+	if err != nil {
+		return nil, err
+	}
+	out.SegmentMetrics = segmentMetrics
 	if !periodStart.IsZero() {
 		out.PeriodStart = periodStart.UTC().Format(time.RFC3339)
 	}
 	if !periodEnd.IsZero() {
 		out.PeriodEnd = periodEnd.UTC().Format(time.RFC3339)
 		out.NextResetAt = periodEnd.UTC().Format(time.RFC3339)
+	}
+	return out, nil
+}
+
+func (s *AutoDMService) segmentMetrics(userID uint, from, to time.Time, accountID uint) ([]dto.AutoDMSegmentMetric, error) {
+	segments := []string{"lead", "partner", "community", "investor", "existing_user"}
+	metrics := make(map[string]*dto.AutoDMSegmentMetric, len(segments))
+	for _, segment := range segments {
+		metrics[segment] = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+	}
+	if s.taskRepo != nil {
+		rows, err := s.taskRepo.CountBySegmentAndStatusBetween(userID, from, to, accountID)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			segment := normalizeAutoDMRecipientSegment(row.Segment)
+			item := metrics[segment]
+			if item == nil {
+				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+				metrics[segment] = item
+				segments = append(segments, segment)
+			}
+			switch row.Status {
+			case "sent":
+				item.Sent += row.Count
+			case "failed":
+				item.Failed += row.Count
+			case "blocked":
+				item.Blocked += row.Count
+			case "review", "approved", "sending":
+				item.Review += row.Count
+			}
+		}
+	}
+	if s.ruleRepo != nil {
+		rows, err := s.ruleRepo.CountBySegmentAndStatusBetween(userID, from, to, accountID)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if row.Status != repository.AutoDMRecipientUnsubscribed {
+				continue
+			}
+			segment := normalizeAutoDMRecipientSegment(row.Segment)
+			item := metrics[segment]
+			if item == nil {
+				item = &dto.AutoDMSegmentMetric{Segment: segment, ReplyTrackingAvailable: false}
+				metrics[segment] = item
+				segments = append(segments, segment)
+			}
+			item.Unsubscribed += row.Count
+		}
+	}
+	out := make([]dto.AutoDMSegmentMetric, 0, len(segments))
+	for _, segment := range segments {
+		item := metrics[segment]
+		if item == nil {
+			continue
+		}
+		denom := item.Sent + item.Failed
+		if denom > 0 {
+			item.SendSuccessRatePct = int((item.Sent*100 + denom/2) / denom)
+		}
+		if item.Sent > 0 && item.ReplyTrackingAvailable {
+			item.ReplyRatePct = int((item.Replies*100 + item.Sent/2) / item.Sent)
+		}
+		out = append(out, *item)
 	}
 	return out, nil
 }
@@ -1450,6 +1524,13 @@ func autoDMGenerationReason(candidate *autoDMCandidate) string {
 	return truncateRunes(strings.TrimSpace(candidate.GenerationReason), 1000)
 }
 
+func autoDMRecipientSegment(candidate *autoDMCandidate) string {
+	if candidate == nil {
+		return "lead"
+	}
+	return normalizeAutoDMRecipientSegment(candidate.Segment)
+}
+
 func autoDMCandidates(candidate *autoDMCandidate) []AutoDMCandidate {
 	if candidate == nil {
 		return nil
@@ -1541,6 +1622,7 @@ func autoDMTaskToDTO(task *model.AutoDMTask) dto.AutoDMTaskItem {
 		RecipientSource:   task.RecipientSource,
 		RecipientUserID:   task.RecipientUserID,
 		RecipientUsername: task.RecipientUsername,
+		RecipientSegment:  normalizeAutoDMRecipientSegment(task.RecipientSegment),
 		MessagePreview:    task.MessagePreview,
 		GenerationReason:  task.GenerationReason,
 		MessageVariants:   decodeAutoDMVariants(task.MessageVariants),

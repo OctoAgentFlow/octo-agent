@@ -20,6 +20,7 @@ import {
   Coins,
   UserCog,
   Users,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -34,7 +35,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendCacheStatusApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendCacheStatusApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminTrendTopicApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -154,6 +155,10 @@ function formatBps(value: number) {
   return `${(value / 100).toFixed(1)}%`;
 }
 
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
 function statusVariant(status: string): BadgeVariant {
   const s = status.toLowerCase();
   if (s === "active" || s === "paid" || s === "success" || s === "matched" || s === "reviewed" || s === "confirmed") {
@@ -250,6 +255,7 @@ export default function AdminPage() {
   const [trendFeedbackSummary, setTrendFeedbackSummary] = useState<AdminTrendFeedbackSummaryApi | null>(null);
   const [trendRules, setTrendRules] = useState<AdminTrendOperationRuleApi[]>([]);
   const [trendCacheStatus, setTrendCacheStatus] = useState<AdminTrendCacheStatusApi | null>(null);
+  const [trendTopics, setTrendTopics] = useState<AdminTrendTopicApi[]>([]);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
   const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
@@ -273,7 +279,7 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData, trendCacheStatusData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData, trendCacheStatusData, trendTopicsData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
@@ -285,6 +291,7 @@ export default function AdminPage() {
           adminService.trendFeedbackSummary({ days: 30, limit: 10 }),
           adminService.trendRules(),
           adminService.trendCacheStatus(),
+          adminService.trendTopics({ limit: 100 }),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -298,6 +305,7 @@ export default function AdminPage() {
         setTrendFeedbackSummary(trendFeedbackData);
         setTrendRules(trendRulesData.items);
         setTrendCacheStatus(trendCacheStatusData);
+        setTrendTopics(trendTopicsData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -454,7 +462,9 @@ export default function AdminPage() {
       const result = await adminService.syncTrendsNow();
       setLastTrendSyncResult(result);
       const nextStatus = await adminService.trendCacheStatus();
+      const nextTopics = await adminService.trendTopics({ limit: 100 });
       setTrendCacheStatus(nextStatus);
+      setTrendTopics(nextTopics.items);
       await fetchAdmin({ quiet: true });
       if (result.synced_topics > 0) {
         pushToast(t("admin.trends.syncSuccess", { regions: result.synced_regions, topics: result.synced_topics }));
@@ -544,6 +554,7 @@ export default function AdminPage() {
           trendRules={trendRules}
           syncingTrends={syncingTrends}
           trendCacheStatus={trendCacheStatus}
+          trendTopics={trendTopics}
           lastSyncResult={lastTrendSyncResult}
           timeZone={timeZone}
           onApplyTrendRule={applyTrendRule}
@@ -1720,6 +1731,7 @@ function TrendGovernanceSection({
   trendRules,
   syncingTrends,
   trendCacheStatus,
+  trendTopics,
   lastSyncResult,
   timeZone,
   onApplyTrendRule,
@@ -1731,6 +1743,7 @@ function TrendGovernanceSection({
   trendRules: AdminTrendOperationRuleApi[];
   syncingTrends: boolean;
   trendCacheStatus: AdminTrendCacheStatusApi | null;
+  trendTopics: AdminTrendTopicApi[];
   lastSyncResult: AdminTrendSyncResultApi | null;
   timeZone: string;
   onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
@@ -1789,9 +1802,70 @@ function TrendGovernanceSection({
           </div>
         </div>
       </Card>
+      <TrendCacheTopicsCard topics={trendTopics} cacheStatus={trendCacheStatus} timeZone={timeZone} />
       <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
       <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />
     </div>
+  );
+}
+
+function TrendCacheTopicsCard({
+  topics,
+  cacheStatus,
+  timeZone,
+}: {
+  topics: AdminTrendTopicApi[];
+  cacheStatus: AdminTrendCacheStatusApi | null;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  const regions = cacheStatus?.regions || [];
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("admin.trends.cacheListTitle")}
+        description={t("admin.trends.cacheListDesc")}
+        right={<Badge variant="info">{t("admin.trends.cacheTopicCount", { count: cacheStatus?.total_topics || topics.length })}</Badge>}
+      />
+      {regions.length ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {regions.map((region) => (
+            <Metric
+              key={region.region_name || "unknown"}
+              label={region.region_name || t("admin.trends.unknownRegion")}
+              value={region.total_topics}
+              icon={TrendingUp}
+            />
+          ))}
+        </div>
+      ) : null}
+      <div className="overflow-hidden rounded-2xl border border-[#2f3336]">
+        <div className="grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] gap-3 border-b border-[#2f3336] bg-black px-4 py-3 text-xs font-semibold text-[#71767b]">
+          <span>{t("admin.trends.topicName")}</span>
+          <span>{t("admin.trends.region")}</span>
+          <span>{t("admin.trends.category")}</span>
+          <span>{t("admin.trends.riskLevel")}</span>
+          <span>{t("admin.trends.tweetCount")}</span>
+          <span>{t("admin.trends.fetchedAt")}</span>
+        </div>
+        <div className="divide-y divide-[#2f3336]">
+          {topics.map((topic) => (
+            <div key={`${topic.woeid}:${topic.normalized_name}:${topic.fetched_at}`} className="grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] gap-3 px-4 py-3 text-sm">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-white">{topic.trend_name}</div>
+                <div className="truncate text-xs text-[#71767b]">{topic.normalized_name}</div>
+              </div>
+              <div className="text-[#e7e9ea]">{topic.region_name || topic.woeid}</div>
+              <div><Badge variant="info">{topic.category || "other"}</Badge></div>
+              <div><Badge variant={topic.risk_level === "high" ? "danger" : topic.risk_level === "medium" ? "warning" : "success"}>{topic.risk_level || "low"}</Badge></div>
+              <div className="text-[#e7e9ea]">{formatCompactNumber(topic.tweet_count || 0)}</div>
+              <div className="text-[#71767b]">{formatDate(topic.fetched_at, timeZone)}</div>
+            </div>
+          ))}
+          {topics.length === 0 ? <p className="px-4 py-8 text-center text-sm text-[#71767b]">{t("admin.trends.cacheEmpty")}</p> : null}
+        </div>
+      </div>
+    </Card>
   );
 }
 

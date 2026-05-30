@@ -193,6 +193,25 @@ export type AdminTrendCacheStatusApi = {
   regions: AdminTrendCacheRegionStatusApi[];
 };
 
+export type AdminTrendTopicApi = {
+  id: number;
+  trend_name: string;
+  normalized_name: string;
+  woeid: string;
+  region_name: string;
+  tweet_count: number;
+  category: string;
+  risk_level: string;
+  language_hint?: string;
+  source: string;
+  fetched_at: string;
+  expires_at: string;
+};
+
+export type AdminTrendTopicListApi = {
+  items: AdminTrendTopicApi[];
+};
+
 export type AdminUserQueryApi = {
   page?: number;
   page_size?: number;
@@ -433,6 +452,10 @@ export const adminService = {
   },
   async trendCacheStatus() {
     const res = await request.get<ApiResponse<AdminTrendCacheStatusApi>>("/admin/trends/cache-status");
+    return res.data.data;
+  },
+  async trendTopics(params?: { limit?: number; region?: string; category?: string; risk_level?: string }) {
+    const res = await request.get<ApiResponse<AdminTrendTopicListApi>>("/trends/topics", { params });
     return res.data.data;
   },
   async syncTrendsNow() {

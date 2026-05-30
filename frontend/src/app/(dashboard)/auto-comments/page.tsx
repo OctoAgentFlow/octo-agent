@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clipboard, Database, ExternalLink, ListChecks, Lock, MessageSquare, Pencil, Send, ShieldCheck, Sparkles, Star, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, Bot, CheckCircle2, ChevronDown, Clipboard, Database, ExternalLink, Gauge, ListChecks, Lock, MessageSquare, Pencil, PlusCircle, Send, ShieldCheck, Sparkles, Star, Target, Trash2, UserRound, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -557,6 +557,17 @@ export default function AutoCommentsPage() {
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.comment.name") })
     : undefined;
+  const targetLimit = analytics?.summary.target_limit || 0;
+  const scanLimit = analytics?.summary.monthly_scan_limit || 0;
+  const scanUsed = analytics?.summary.monthly_scans_used || 0;
+  const opsAccountName = selectedAccount ? formatHandle(selectedAccount.username || selectedAccount.display_name) : t("autoComment.ops.noAccount");
+  const opsBotName = selectedBot?.name || t("autoComment.ops.noBot");
+  const opsTargetValue = targetLimit > 0
+    ? t("autoComment.ops.quotaValue", { used: accountTargets.length, limit: formatCompactNumber(targetLimit) })
+    : t("autoComment.ops.countValue", { count: accountTargets.length });
+  const opsScanValue = scanLimit > 0
+    ? t("autoComment.ops.quotaValue", { used: formatCompactNumber(scanUsed), limit: formatCompactNumber(scanLimit) })
+    : t("autoComment.ops.countValue", { count: formatCompactNumber(scanUsed) });
 
   const selectExecutionMode = async (mode: ExecutionMode) => {
     if (mode === "autopilot" && !autopilotAvailable) return;
@@ -687,31 +698,66 @@ export default function AutoCommentsPage() {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div id="auto-comment-target-import">
         <Card className="bg-[#0f1419]">
           <CardHeader title={t("autoComment.target.title")} description={t("autoComment.target.description")} />
           <div className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-3">
-              <WorkbenchSignal
-                icon={Database}
-                label={t("autoComment.signal.input")}
-                title={hasTargetInput ? t("autoComment.signal.inputReady") : t("autoComment.signal.inputWaiting")}
-                description={t("autoComment.signal.inputDesc")}
-                tone="blue"
-              />
-              <WorkbenchSignal
-                icon={Bot}
-                label={t("autoComment.signal.persona")}
-                title={selectedBot ? selectedBot.name : t("autoComment.botStatus.title")}
-                description={selectedBot ? t("autoComment.signal.personaReady") : t("autoComment.botStatus.unbound")}
-                tone="green"
-              />
-              <WorkbenchSignal
-                icon={ListChecks}
-                label={t("autoComment.signal.destination")}
-                title={t("autoComment.signal.queue")}
-                description={t("autoComment.signal.destinationDesc", { mode: t(`autoComment.execution.${executionMode}.title`) })}
-                tone="violet"
-              />
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{t("autoComment.ops.title")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.ops.description")}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <OpsActionLink href="#auto-comment-target-import" icon={PlusCircle} label={t("autoComment.ops.importTargets")} />
+                  <OpsActionLink href="#auto-comment-target-suggestions" icon={Sparkles} label={t("autoComment.ops.generateSuggestions")} />
+                  <OpsActionLink href="#auto-comment-opportunity-queue" icon={ListChecks} label={t("autoComment.ops.openQueue")} />
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <OpsMetricCard
+                  icon={UserRound}
+                  label={t("autoComment.ops.account")}
+                  value={opsAccountName}
+                  helper={selectedAccount ? t("autoComment.ops.accountReady") : t("autoComment.target.noAccounts")}
+                  tone="blue"
+                />
+                <OpsMetricCard
+                  icon={Bot}
+                  label={t("autoComment.ops.bot")}
+                  value={opsBotName}
+                  helper={selectedBot ? t("autoComment.ops.botReady") : t("autoComment.botStatus.unbound")}
+                  tone="green"
+                />
+                <OpsMetricCard
+                  icon={Target}
+                  label={t("autoComment.ops.targets")}
+                  value={opsTargetValue}
+                  helper={t("autoComment.ops.targetsHint")}
+                  tone="violet"
+                />
+                <OpsMetricCard
+                  icon={Gauge}
+                  label={t("autoComment.ops.scans")}
+                  value={opsScanValue}
+                  helper={t("autoComment.quota.periodEnds", { date: quotaPeriodEndsAt })}
+                  tone="blue"
+                />
+                <OpsMetricCard
+                  icon={Activity}
+                  label={t("autoComment.ops.opportunities")}
+                  value={t("autoComment.ops.countValue", { count: activeDrafts.length })}
+                  helper={t("autoComment.ops.opportunitiesHint", { count: queuedDraftCount })}
+                  tone="green"
+                />
+                <OpsMetricCard
+                  icon={ListChecks}
+                  label={t("autoComment.ops.execution")}
+                  value={t(`autoComment.execution.${executionMode}.title`)}
+                  helper={t("autoComment.signal.destinationDesc", { mode: t(`autoComment.execution.${executionMode}.title`) })}
+                  tone="violet"
+                />
+              </div>
             </div>
             <label className="block space-y-2">
               <span className={labelClass}>{t("autoComment.target.account")}</span>
@@ -920,7 +966,7 @@ export default function AutoCommentsPage() {
               <Button className="mt-3 w-full" variant="outline" disabled={!selectedAccount || !bulkHandles.trim() || bulkBusy} onClick={() => void importTargets()}>
                 {bulkBusy ? t("autoComment.bulkImport.importing") : t("autoComment.bulkImport.action")}
               </Button>
-              <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black/35">
+              <div id="auto-comment-target-suggestions" className="mt-4 rounded-2xl border border-[#2f3336] bg-black/35">
                 <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
@@ -987,7 +1033,9 @@ export default function AutoCommentsPage() {
             </div>
           </div>
         </Card>
+        </div>
 
+        <div id="auto-comment-opportunity-queue">
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
             <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
@@ -1274,6 +1322,7 @@ export default function AutoCommentsPage() {
             )}
           </div>
         </Card>
+        </div>
       </div>
 
       <Card className="bg-[#0f1419]">
@@ -1520,17 +1569,17 @@ function AutomationPipelineSummary({
   );
 }
 
-function WorkbenchSignal({
+function OpsMetricCard({
   icon: Icon,
   label,
-  title,
-  description,
+  value,
+  helper,
   tone,
 }: {
   icon: LucideIcon;
   label: string;
-  title: string;
-  description: string;
+  value: string;
+  helper: string;
   tone: "blue" | "green" | "violet";
 }) {
   const toneClass =
@@ -1540,18 +1589,30 @@ function WorkbenchSignal({
         ? "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]"
         : "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
   return (
-    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-3">
+    <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
       <div className="flex min-w-0 items-start gap-3">
         <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
           <Icon className="size-4" />
         </span>
         <span className="min-w-0">
           <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#71767b]">{label}</span>
-          <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{title}</span>
-          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</span>
+          <span className="mt-1 block break-words text-sm font-semibold text-[#e7e9ea]">{value}</span>
+          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{helper}</span>
         </span>
       </div>
     </div>
+  );
+}
+
+function OpsActionLink({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-[#2f3336] bg-[#0f1419] px-3 text-xs font-semibold text-white transition-all hover:border-[#1d9bf0]/45 hover:bg-[#1d9bf0]/10"
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </a>
   );
 }
 

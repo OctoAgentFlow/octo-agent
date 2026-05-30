@@ -32,7 +32,7 @@ func (r *TrendTopicRepository) UpsertBatch(rows []model.TrendTopic) error {
 	return r.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "normalized_name"},
-			{Name: "woeid"},
+			{Name: "woe_id"},
 			{Name: "fetched_bucket"},
 		},
 		DoUpdates: clause.AssignmentColumns([]string{
@@ -57,7 +57,7 @@ func (r *TrendTopicRepository) LatestFetchedAt(woeid string) (*time.Time, error)
 		return nil, nil
 	}
 	var row model.TrendTopic
-	err := r.DB.Where("woeid = ?", woeid).Order("fetched_at DESC").First(&row).Error
+	err := r.DB.Where("woe_id = ?", woeid).Order("fetched_at DESC").First(&row).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -75,7 +75,7 @@ func (r *TrendTopicRepository) List(query TrendTopicListQuery) ([]model.TrendTop
 	}
 	q := r.DB.Model(&model.TrendTopic{})
 	if strings.TrimSpace(query.WOEID) != "" {
-		q = q.Where("woeid = ?", strings.TrimSpace(query.WOEID))
+		q = q.Where("woe_id = ?", strings.TrimSpace(query.WOEID))
 	}
 	if strings.TrimSpace(query.Region) != "" {
 		q = q.Where("region_name = ?", strings.TrimSpace(query.Region))

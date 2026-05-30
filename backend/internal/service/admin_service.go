@@ -414,6 +414,16 @@ func (s *AdminService) TrendCacheStatus(operatorID uint) (*dto.TrendCacheStatusR
 	return out, nil
 }
 
+func (s *AdminService) TrendTopics(operatorID uint, query dto.TrendTopicQuery) (*dto.TrendTopicListResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	if s.trends == nil {
+		return &dto.TrendTopicListResponse{Items: []dto.TrendTopicItem{}}, nil
+	}
+	return s.trends.ListTopics(query, time.Now().UTC())
+}
+
 func (s *AdminService) adminTrendOperationRuleMap() map[string][]string {
 	repo := repository.NewTrendFeedbackRepository(s.db)
 	rows, err := repo.ListActiveOperationRules()

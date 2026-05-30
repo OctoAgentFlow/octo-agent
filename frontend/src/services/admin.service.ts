@@ -455,7 +455,7 @@ export const adminService = {
     return res.data.data;
   },
   async trendTopics(params?: { limit?: number; region?: string; category?: string; risk_level?: string }) {
-    const res = await request.get<ApiResponse<AdminTrendTopicListApi>>("/trends/topics", { params });
+    const res = await request.get<ApiResponse<AdminTrendTopicListApi>>("/admin/trends/topics", { params });
     return res.data.data;
   },
   async syncTrendsNow() {

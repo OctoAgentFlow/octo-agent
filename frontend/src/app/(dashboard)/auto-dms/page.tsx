@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  FileText,
   Inbox,
   MessageCircleReply,
   PlugZap,
@@ -43,6 +44,12 @@ const dmRecipientSegments: AutoDMRecipientSegment[] = ["lead", "partner", "commu
 type AutoDMTaskFilter = "all" | "review" | "approved" | "sent" | "replied" | "risk";
 const X_OAUTH_RESULT_MESSAGE = "octo-x-oauth-result" as const;
 
+function csvCell(value: string) {
+  const text = value.trim();
+  if (!/[",\n]/.test(text)) return text;
+  return `"${text.replaceAll("\"", "\"\"")}"`;
+}
+
 export default function AutoDMsPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -60,6 +67,9 @@ export default function AutoDMsPage() {
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [dmTaskFilter, setDMTaskFilter] = useState<AutoDMTaskFilter>("all");
   const [authRefreshing, setAuthRefreshing] = useState(false);
+  const [dmImportUserID, setDMImportUserID] = useState("");
+  const [dmImportUsername, setDMImportUsername] = useState("");
+  const [dmImportSegment, setDMImportSegment] = useState<AutoDMRecipientSegment>("lead");
   const oauthPopupPollRef = useRef<number | null>(null);
 
   const dmAccount = accounts.find((account) => account.status === "connected") ?? accounts[0] ?? null;
@@ -270,6 +280,33 @@ export default function AutoDMsPage() {
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.import") : t("autoDm.errors.import"));
     }
+  };
+
+  const appendDMRecipientToImport = () => {
+    const recipientID = dmImportUserID.trim();
+    if (!/^\d+$/.test(recipientID)) {
+      pushToast(t("autoDm.importBuilder.invalidUserID"));
+      return;
+    }
+    const username = dmImportUsername.trim().replace(/^@/, "");
+    const nextRow = [recipientID, username, dmImportSegment].map(csvCell).join(",");
+    setDMImportCSV((current) => {
+      const trimmed = current.trim();
+      return trimmed ? `${trimmed}\n${nextRow}` : nextRow;
+    });
+    setDMImportPreview(null);
+    setDMImportUserID("");
+    setDMImportUsername("");
+  };
+
+  const fillDMImportTemplate = () => {
+    setDMImportCSV("recipient_user_id,username,segment\n1234567890,alice,lead\n2345678901,bob,partner\n3456789012,carol,community");
+    setDMImportPreview(null);
+  };
+
+  const clearDMImportDraft = () => {
+    setDMImportCSV("");
+    setDMImportPreview(null);
   };
 
   const previewDMImport = async () => {
@@ -572,16 +609,80 @@ export default function AutoDMsPage() {
 
               <Card className="bg-[#0f1419]">
                 <CardHeader title={t("automation.dmReview.import")} description={t("autoDm.import.description")} />
-                <textarea
-                  value={dmImportCSV}
-                  onChange={(event) => {
-                    setDMImportCSV(event.target.value);
-                    setDMImportPreview(null);
-                  }}
-                  rows={5}
-                  placeholder={t("autoDm.import.segmentPlaceholder")}
-                  className="min-h-32 w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
-                />
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+                    <div className="mb-3 flex items-start gap-3">
+                      <UserCheck className="mt-0.5 size-5 shrink-0 text-[#1d9bf0]" />
+                      <div>
+                        <p className="text-sm font-semibold text-white">{t("autoDm.importBuilder.title")}</p>
+                        <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoDm.importBuilder.description")}</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-3">
+                      <label className="block space-y-2">
+                        <span className="text-xs text-[#71767b]">{t("autoDm.importBuilder.userID")}</span>
+                        <input
+                          value={dmImportUserID}
+                          onChange={(event) => setDMImportUserID(event.target.value)}
+                          placeholder={t("autoDm.importBuilder.userIDPlaceholder")}
+                          className="w-full rounded-xl border border-[#2f3336] bg-[#080a0c] px-3 py-2 text-sm text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs text-[#71767b]">{t("autoDm.importBuilder.username")}</span>
+                        <input
+                          value={dmImportUsername}
+                          onChange={(event) => setDMImportUsername(event.target.value)}
+                          placeholder={t("autoDm.importBuilder.usernamePlaceholder")}
+                          className="w-full rounded-xl border border-[#2f3336] bg-[#080a0c] px-3 py-2 text-sm text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs text-[#71767b]">{t("autoDm.segment.label")}</span>
+                        <select
+                          value={dmImportSegment}
+                          onChange={(event) => setDMImportSegment(event.target.value as AutoDMRecipientSegment)}
+                          className="w-full rounded-xl border border-[#2f3336] bg-[#080a0c] px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]/60"
+                        >
+                          {dmRecipientSegments.map((segment) => (
+                            <option key={segment} value={segment}>{t(`autoDm.segment.${segment}`)}</option>
+                          ))}
+                        </select>
+                        <span className="block text-xs leading-5 text-[#71767b]">{t(`autoDm.segmentStrategy.${dmImportSegment}`)}</span>
+                      </label>
+                    </div>
+                    <Button className="mt-3 w-full" size="sm" onClick={appendDMRecipientToImport} disabled={!dmImportUserID.trim()}>
+                      {t("autoDm.importBuilder.add")}
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <FileText className="mt-0.5 size-5 shrink-0 text-[#8ecdf8]" />
+                        <div>
+                          <p className="text-sm font-semibold text-white">{t("autoDm.importBulk.title")}</p>
+                          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoDm.importBulk.description")}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={fillDMImportTemplate}>{t("autoDm.importBulk.template")}</Button>
+                        <Button size="sm" variant="outline" onClick={clearDMImportDraft} disabled={!dmImportCSV.trim()}>{t("autoDm.importBulk.clear")}</Button>
+                      </div>
+                    </div>
+                    <textarea
+                      value={dmImportCSV}
+                      onChange={(event) => {
+                        setDMImportCSV(event.target.value);
+                        setDMImportPreview(null);
+                      }}
+                      rows={6}
+                      placeholder={t("autoDm.import.segmentPlaceholder")}
+                      className="min-h-40 w-full resize-y rounded-2xl border border-[#2f3336] bg-[#080a0c] px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("autoDm.importBulk.formatHint")}</p>
+                  </div>
+                </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-xs text-[#71767b]">
                     <Upload className="size-3.5" />

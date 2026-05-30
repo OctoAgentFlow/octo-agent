@@ -11,6 +11,7 @@ export type DashboardOverview = {
   trial_days_left: number;
   /** active | expired — same semantics as billing subscription */
   subscription_status: string;
+  subscription_expires_at?: string;
   wallet_bound: boolean;
   connected_x_count: number;
   activity_count_24h: number;

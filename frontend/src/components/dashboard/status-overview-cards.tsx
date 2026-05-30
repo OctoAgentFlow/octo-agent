@@ -4,6 +4,7 @@ import { Activity, Crown, ShieldCheck, UserRound } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
 import type { DashboardOverview } from "@/services/dashboard.service";
+import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
 
 type StatusOverviewCardsProps = {
   overview?: DashboardOverview | null;
@@ -12,8 +13,15 @@ type StatusOverviewCardsProps = {
 
 function planKeyFromCode(plan: string) {
   if (plan === "free_trial") return "dashboard.membership.plan.freeTrial";
-  if (plan === "basic_monthly") return "dashboard.membership.plan.basicMonthly";
+  if (plan === "basic" || plan === "basic_monthly") return "dashboard.membership.plan.basic";
+  if (plan === "plus") return "dashboard.membership.plan.plus";
+  if (plan === "pro") return "dashboard.membership.plan.pro";
+  if (plan === "pro_plus") return "dashboard.membership.plan.proPlus";
   return "dashboard.membership.plan.freeTrial";
+}
+
+function isFreeTrial(plan: string | undefined) {
+  return !plan || plan === "free_trial";
 }
 
 function formatDelta24h(cur: number, prev: number) {
@@ -24,6 +32,7 @@ function formatDelta24h(cur: number, prev: number) {
 
 export function StatusOverviewCards({ overview, loading = false }: StatusOverviewCardsProps) {
   const { t } = useT();
+  const timeZone = usePreferredTimeZone();
   if (loading) {
     return (
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -44,15 +53,23 @@ export function StatusOverviewCards({ overview, loading = false }: StatusOvervie
   const actPrev = overview?.activity_count_prev_24h ?? 0;
   const ratePct = overview?.activity_success_rate_pct ?? 0;
   const subStatus = overview?.subscription_status ?? "active";
+  const plan = overview?.plan || "free_trial";
+  const expiresAt = overview?.subscription_expires_at
+    ? formatDateTimeForZone(overview.subscription_expires_at, timeZone, { year: "numeric", month: "short", day: "numeric" })
+    : "";
   const membershipSub =
     subStatus === "expired"
       ? t("dashboard.membership.subscriptionExpired")
-      : t("dashboard.membership.trialDaysLeft", { days: overview?.trial_days_left ?? 0 });
+      : isFreeTrial(plan)
+        ? t("dashboard.membership.trialDaysLeft", { days: overview?.trial_days_left ?? 0 })
+        : expiresAt
+          ? t("dashboard.membership.expiresAt", { date: expiresAt })
+          : t("dashboard.membership.active");
 
   const stats = [
     {
       titleKey: "dashboard.overview.membership.title",
-      value: t(planKeyFromCode(overview?.plan || "free_trial")),
+      value: t(planKeyFromCode(plan)),
       subValue: membershipSub,
       icon: Crown,
     },

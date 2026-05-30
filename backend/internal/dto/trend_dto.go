@@ -96,3 +96,19 @@ type TrendSyncResponse struct {
 	SkippedReason string `json:"skipped_reason,omitempty"`
 	AttemptedAt   string `json:"attempted_at,omitempty"`
 }
+
+type TrendCacheRegionStatus struct {
+	RegionName      string `json:"region_name"`
+	TotalTopics     int64  `json:"total_topics"`
+	LatestFetchedAt string `json:"latest_fetched_at,omitempty"`
+	LatestUpdatedAt string `json:"latest_updated_at,omitempty"`
+}
+
+type TrendCacheStatusResponse struct {
+	Enabled               bool                     `json:"enabled"`
+	BearerTokenConfigured bool                     `json:"bearer_token_configured"`
+	TotalTopics           int64                    `json:"total_topics"`
+	LatestFetchedAt       string                   `json:"latest_fetched_at,omitempty"`
+	LatestUpdatedAt       string                   `json:"latest_updated_at,omitempty"`
+	Regions               []TrendCacheRegionStatus `json:"regions"`
+}

@@ -34,7 +34,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendCacheStatusApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -249,6 +249,7 @@ export default function AdminPage() {
   const [pointCostSummary, setPointCostSummary] = useState<AdminPointCostSummaryApi | null>(null);
   const [trendFeedbackSummary, setTrendFeedbackSummary] = useState<AdminTrendFeedbackSummaryApi | null>(null);
   const [trendRules, setTrendRules] = useState<AdminTrendOperationRuleApi[]>([]);
+  const [trendCacheStatus, setTrendCacheStatus] = useState<AdminTrendCacheStatusApi | null>(null);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
   const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
@@ -272,7 +273,7 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData, trendCacheStatusData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
@@ -283,6 +284,7 @@ export default function AdminPage() {
           adminService.pointCostSummary(),
           adminService.trendFeedbackSummary({ days: 30, limit: 10 }),
           adminService.trendRules(),
+          adminService.trendCacheStatus(),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -295,6 +297,7 @@ export default function AdminPage() {
         setPointCostSummary(costData);
         setTrendFeedbackSummary(trendFeedbackData);
         setTrendRules(trendRulesData.items);
+        setTrendCacheStatus(trendCacheStatusData);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -450,6 +453,8 @@ export default function AdminPage() {
     try {
       const result = await adminService.syncTrendsNow();
       setLastTrendSyncResult(result);
+      const nextStatus = await adminService.trendCacheStatus();
+      setTrendCacheStatus(nextStatus);
       await fetchAdmin({ quiet: true });
       if (result.synced_topics > 0) {
         pushToast(t("admin.trends.syncSuccess", { regions: result.synced_regions, topics: result.synced_topics }));
@@ -538,6 +543,7 @@ export default function AdminPage() {
           submittingTrendRuleKey={submittingTrendRuleKey}
           trendRules={trendRules}
           syncingTrends={syncingTrends}
+          trendCacheStatus={trendCacheStatus}
           lastSyncResult={lastTrendSyncResult}
           timeZone={timeZone}
           onApplyTrendRule={applyTrendRule}
@@ -1713,6 +1719,7 @@ function TrendGovernanceSection({
   submittingTrendRuleKey,
   trendRules,
   syncingTrends,
+  trendCacheStatus,
   lastSyncResult,
   timeZone,
   onApplyTrendRule,
@@ -1723,6 +1730,7 @@ function TrendGovernanceSection({
   submittingTrendRuleKey: string;
   trendRules: AdminTrendOperationRuleApi[];
   syncingTrends: boolean;
+  trendCacheStatus: AdminTrendCacheStatusApi | null;
   lastSyncResult: AdminTrendSyncResultApi | null;
   timeZone: string;
   onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
@@ -1730,16 +1738,25 @@ function TrendGovernanceSection({
   onSyncTrendsNow: () => Promise<void>;
 }) {
   const { t } = useT();
+  const hasCachedTrends = Boolean(trendCacheStatus?.latest_fetched_at);
   const lastSyncStatus = lastSyncResult
     ? lastSyncResult.synced_topics > 0
       ? t("admin.trends.syncStatusSuccess")
       : t("admin.trends.syncStatusSkipped")
-    : t("admin.trends.syncStatusIdle");
+    : hasCachedTrends
+      ? t("admin.trends.syncStatusSuccess")
+      : t("admin.trends.syncStatusIdle");
+  const lastSyncTime = lastSyncResult?.attempted_at || trendCacheStatus?.latest_fetched_at || "";
   const lastSyncDetail = lastSyncResult
     ? lastSyncResult.synced_topics > 0
       ? t("admin.trends.syncSuccess", { regions: lastSyncResult.synced_regions, topics: lastSyncResult.synced_topics })
       : trendSyncReasonLabel(lastSyncResult.skipped_reason, t)
-    : t("admin.trends.syncIdleDesc");
+    : hasCachedTrends
+      ? t("admin.trends.cacheStatusDetail", {
+          topics: trendCacheStatus?.total_topics || 0,
+          regions: trendCacheStatus?.regions?.length || 0,
+        })
+      : t("admin.trends.syncIdleDesc");
   return (
     <div className="space-y-4">
       <Card className="bg-[#0f1419]">
@@ -1756,14 +1773,14 @@ function TrendGovernanceSection({
         <div className="grid gap-3 border-t border-[#2f3336] px-4 py-4 text-sm md:grid-cols-3">
           <div>
             <div className="text-[#71767b]">{t("admin.trends.lastSyncStatus")}</div>
-            <div className={lastSyncResult?.synced_topics ? "font-semibold text-[#00ba7c]" : "font-semibold text-[#ffd400]"}>
+            <div className={hasCachedTrends || lastSyncResult?.synced_topics ? "font-semibold text-[#00ba7c]" : "font-semibold text-[#ffd400]"}>
               {lastSyncStatus}
             </div>
           </div>
           <div>
             <div className="text-[#71767b]">{t("admin.trends.lastSyncTime")}</div>
             <div className="font-semibold text-white">
-              {lastSyncResult?.attempted_at ? formatDateTimeForZone(lastSyncResult.attempted_at, timeZone) : t("admin.common.none")}
+              {lastSyncTime ? formatDateTimeForZone(lastSyncTime, timeZone) : t("admin.common.none")}
             </div>
           </div>
           <div>

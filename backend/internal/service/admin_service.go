@@ -374,6 +374,46 @@ func (s *AdminService) SyncTrendsNow(ctx context.Context, operatorID uint) (*dto
 	}, nil
 }
 
+func (s *AdminService) TrendCacheStatus(operatorID uint) (*dto.TrendCacheStatusResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	repo := repository.NewTrendTopicRepository(s.db)
+	status, err := repo.CacheStatus()
+	if err != nil {
+		return nil, err
+	}
+	out := &dto.TrendCacheStatusResponse{
+		Enabled:               s.cfg != nil && s.cfg.XTrends.Enabled,
+		BearerTokenConfigured: s.cfg != nil && strings.TrimSpace(s.cfg.XTrends.BearerToken) != "",
+		Regions:               []dto.TrendCacheRegionStatus{},
+	}
+	if status == nil {
+		return out, nil
+	}
+	out.TotalTopics = status.TotalTopics
+	if status.LatestFetchedAt != nil {
+		out.LatestFetchedAt = status.LatestFetchedAt.UTC().Format(time.RFC3339)
+	}
+	if status.LatestUpdatedAt != nil {
+		out.LatestUpdatedAt = status.LatestUpdatedAt.UTC().Format(time.RFC3339)
+	}
+	for _, region := range status.Regions {
+		item := dto.TrendCacheRegionStatus{
+			RegionName:  region.RegionName,
+			TotalTopics: region.TotalTopics,
+		}
+		if region.LatestFetchedAt != nil {
+			item.LatestFetchedAt = region.LatestFetchedAt.UTC().Format(time.RFC3339)
+		}
+		if region.LatestUpdatedAt != nil {
+			item.LatestUpdatedAt = region.LatestUpdatedAt.UTC().Format(time.RFC3339)
+		}
+		out.Regions = append(out.Regions, item)
+	}
+	return out, nil
+}
+
 func (s *AdminService) adminTrendOperationRuleMap() map[string][]string {
 	repo := repository.NewTrendFeedbackRepository(s.db)
 	rows, err := repo.ListActiveOperationRules()

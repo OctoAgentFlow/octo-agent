@@ -177,6 +177,22 @@ export type AdminTrendSyncResultApi = {
   attempted_at?: string;
 };
 
+export type AdminTrendCacheRegionStatusApi = {
+  region_name: string;
+  total_topics: number;
+  latest_fetched_at?: string;
+  latest_updated_at?: string;
+};
+
+export type AdminTrendCacheStatusApi = {
+  enabled: boolean;
+  bearer_token_configured: boolean;
+  total_topics: number;
+  latest_fetched_at?: string;
+  latest_updated_at?: string;
+  regions: AdminTrendCacheRegionStatusApi[];
+};
+
 export type AdminUserQueryApi = {
   page?: number;
   page_size?: number;
@@ -413,6 +429,10 @@ export const adminService = {
   },
   async updateTrendRule(id: number, body: { enabled: boolean }) {
     const res = await request.patch<ApiResponse<AdminTrendOperationRuleApi>>(`/admin/trends/rules/${id}`, body);
+    return res.data.data;
+  },
+  async trendCacheStatus() {
+    const res = await request.get<ApiResponse<AdminTrendCacheStatusApi>>("/admin/trends/cache-status");
     return res.data.data;
   },
   async syncTrendsNow() {

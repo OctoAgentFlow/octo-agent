@@ -62,6 +62,24 @@ export type AdminExecutionSummaryApi = {
   monthly_x_publishes: number;
   monthly_cost_cents: number;
   monthly_cost_amount: string;
+  prompt_guard: AdminPromptGuardSummaryApi;
+};
+
+export type AdminPromptGuardSceneApi = {
+  scene: string;
+  total: number;
+  language_mismatches: number;
+  retry_count: number;
+};
+
+export type AdminPromptGuardSummaryApi = {
+  window_days: number;
+  total_ai_calls: number;
+  guarded_ai_calls: number;
+  system_language_violations: number;
+  language_mismatches: number;
+  retry_count: number;
+  by_scene: AdminPromptGuardSceneApi[];
 };
 
 export type AdminConfigSummaryApi = {

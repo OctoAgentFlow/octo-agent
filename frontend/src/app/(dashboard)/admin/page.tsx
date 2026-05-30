@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
   LayoutDashboard,
+  Languages,
   Radar,
   ReceiptText,
   RefreshCcw,
@@ -723,7 +724,48 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
           </div>
         </Card>
       </section>
+
+      <PromptGuardCard overview={overview} />
     </div>
+  );
+}
+
+function PromptGuardCard({ overview }: { overview: AdminOverviewApi }) {
+  const { t } = useT();
+  const promptGuard = overview.execution.prompt_guard;
+  const mismatchTone = promptGuard.language_mismatches > 0 ? "danger" : "good";
+  const systemTone = promptGuard.system_language_violations > 0 ? "danger" : "good";
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader title={t("admin.promptGuard.title")} description={t("admin.promptGuard.description", { days: promptGuard.window_days })} />
+      <div className="grid gap-3 md:grid-cols-5">
+        <Metric label={t("admin.promptGuard.guardedCalls")} value={`${promptGuard.guarded_ai_calls}/${promptGuard.total_ai_calls}`} icon={ShieldCheck} tone="good" />
+        <Metric label={t("admin.promptGuard.systemViolations")} value={promptGuard.system_language_violations} icon={AlertTriangle} tone={systemTone} />
+        <Metric label={t("admin.promptGuard.languageMismatches")} value={promptGuard.language_mismatches} icon={Languages} tone={mismatchTone} />
+        <Metric label={t("admin.promptGuard.retryCount")} value={promptGuard.retry_count} icon={RefreshCcw} tone={promptGuard.retry_count > 0 ? "warn" : "default"} />
+        <Metric label={t("admin.promptGuard.sceneCount")} value={promptGuard.by_scene.length} icon={Activity} />
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-[#2f3336]">
+        <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-[#2f3336] bg-black px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#71767b]">
+          <span>{t("admin.promptGuard.scene")}</span>
+          <span>{t("admin.promptGuard.total")}</span>
+          <span>{t("admin.promptGuard.mismatch")}</span>
+          <span>{t("admin.promptGuard.retries")}</span>
+        </div>
+        {promptGuard.by_scene.length > 0 ? (
+          promptGuard.by_scene.map((item) => (
+            <div key={item.scene} className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-[#2f3336] px-4 py-3 text-sm last:border-b-0">
+              <span className="truncate font-medium text-white">{item.scene}</span>
+              <span className="text-[#cfd9de]">{item.total}</span>
+              <span className={item.language_mismatches > 0 ? "text-[#ff8a91]" : "text-[#00ba7c]"}>{item.language_mismatches}</span>
+              <span className={item.retry_count > 0 ? "text-[#ffd400]" : "text-[#71767b]"}>{item.retry_count}</span>
+            </div>
+          ))
+        ) : (
+          <p className="px-4 py-6 text-center text-sm text-[#71767b]">{t("admin.promptGuard.empty")}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 

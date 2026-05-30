@@ -1201,6 +1201,7 @@ func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	monthEnd := monthStart.AddDate(0, 1, 0)
 	since24h := now.Add(-24 * time.Hour)
+	promptGuard := s.promptGuardSummary(now.AddDate(0, 0, -7), 7)
 	monthlyCostCents, monthlyAIGenerations := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "openai", monthStart, monthEnd)
 	xCostCents, monthlyXPublishes := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "x", monthStart, monthEnd)
 	monthlyCostCents += xCostCents
@@ -1218,7 +1219,76 @@ func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
 		MonthlyXPublishes:    monthlyXPublishes,
 		MonthlyCostCents:     monthlyCostCents,
 		MonthlyCostAmount:    adminCentsAmountString(monthlyCostCents),
+		PromptGuard:          promptGuard,
 	}
+}
+
+func (s *AdminService) promptGuardSummary(since time.Time, windowDays int) dto.AdminPromptGuardSummary {
+	out := dto.AdminPromptGuardSummary{WindowDays: windowDays}
+	type summaryRow struct {
+		TotalAICalls             int64
+		GuardedAICalls           int64
+		SystemLanguageViolations int64
+		LanguageMismatches       int64
+		RetryCount               int64
+	}
+	var summary summaryRow
+	guardedExpr := "JSON_UNQUOTE(JSON_EXTRACT(details, '$.prompt_guard_enabled')) = 'true'"
+	systemLangExpr := "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details, '$.system_language')), '')"
+	expectedLangExpr := "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details, '$.expected_output_language')), '')"
+	actualLangExpr := "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details, '$.actual_output_language')), '')"
+	retryExpr := "CAST(COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(details, '$.retry_count')), ''), '0') AS UNSIGNED)"
+	if err := s.db.Model(&model.CostUsageLedger{}).
+		Select(fmt.Sprintf(`COALESCE(SUM(quantity), 0) AS total_ai_calls,
+			COALESCE(SUM(CASE WHEN %s THEN quantity ELSE 0 END), 0) AS guarded_ai_calls,
+			COALESCE(SUM(CASE WHEN %s AND %s <> '' AND %s <> 'English' THEN quantity ELSE 0 END), 0) AS system_language_violations,
+			COALESCE(SUM(CASE WHEN %s AND %s <> '' AND %s <> '' AND %s <> %s THEN quantity ELSE 0 END), 0) AS language_mismatches,
+			COALESCE(SUM(CASE WHEN %s THEN %s ELSE 0 END), 0) AS retry_count`,
+			guardedExpr,
+			guardedExpr, systemLangExpr, systemLangExpr,
+			guardedExpr, expectedLangExpr, actualLangExpr, expectedLangExpr, actualLangExpr,
+			guardedExpr, retryExpr)).
+		Where("provider = ? AND source_type = ? AND occurred_at >= ?", "openai", "ai_generation", since.UTC()).
+		Scan(&summary).Error; err != nil {
+		return out
+	}
+	out.TotalAICalls = summary.TotalAICalls
+	out.GuardedAICalls = summary.GuardedAICalls
+	out.SystemLanguageViolations = summary.SystemLanguageViolations
+	out.LanguageMismatches = summary.LanguageMismatches
+	out.RetryCount = summary.RetryCount
+
+	type sceneRow struct {
+		Scene              string
+		Total              int64
+		LanguageMismatches int64
+		RetryCount         int64
+	}
+	var scenes []sceneRow
+	if err := s.db.Model(&model.CostUsageLedger{}).
+		Select(fmt.Sprintf(`COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(details, '$.scene')), ''), 'unknown') AS scene,
+			COALESCE(SUM(quantity), 0) AS total,
+			COALESCE(SUM(CASE WHEN %s AND %s <> '' AND %s <> '' AND %s <> %s THEN quantity ELSE 0 END), 0) AS language_mismatches,
+			COALESCE(SUM(CASE WHEN %s THEN %s ELSE 0 END), 0) AS retry_count`,
+			guardedExpr, expectedLangExpr, actualLangExpr, expectedLangExpr, actualLangExpr,
+			guardedExpr, retryExpr)).
+		Where("provider = ? AND source_type = ? AND occurred_at >= ?", "openai", "ai_generation", since.UTC()).
+		Group("scene").
+		Order("language_mismatches DESC, retry_count DESC, total DESC").
+		Limit(8).
+		Scan(&scenes).Error; err != nil {
+		return out
+	}
+	out.ByScene = make([]dto.AdminPromptGuardSceneItem, 0, len(scenes))
+	for _, row := range scenes {
+		out.ByScene = append(out.ByScene, dto.AdminPromptGuardSceneItem{
+			Scene:              firstNonEmpty(row.Scene, "unknown"),
+			Total:              row.Total,
+			LanguageMismatches: row.LanguageMismatches,
+			RetryCount:         row.RetryCount,
+		})
+	}
+	return out
 }
 
 func (s *AdminService) configSummary() dto.AdminConfigSummary {

@@ -23,7 +23,7 @@ type TrendCacheStatus struct {
 	TotalTopics     int64
 	LatestFetchedAt *time.Time
 	LatestUpdatedAt *time.Time
-	Regions         []TrendCacheRegionStatus
+	Regions         []TrendCacheRegionStatus `gorm:"-"`
 }
 
 type TrendTopicListQuery struct {

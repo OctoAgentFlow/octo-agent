@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -40,6 +40,7 @@ import {
 const requiredDMScopeList = ["dm.read", "dm.write", "tweet.read", "users.read"];
 const dmRecipientSegments: AutoDMRecipientSegment[] = ["lead", "partner", "community", "investor", "existing_user"];
 type AutoDMTaskFilter = "all" | "review" | "approved" | "sent" | "replied" | "risk";
+const X_OAUTH_RESULT_MESSAGE = "octo-x-oauth-result" as const;
 
 export default function AutoDMsPage() {
   const { t } = useT();
@@ -56,6 +57,8 @@ export default function AutoDMsPage() {
   const [dmImportCSV, setDMImportCSV] = useState("");
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [dmTaskFilter, setDMTaskFilter] = useState<AutoDMTaskFilter>("all");
+  const [authRefreshing, setAuthRefreshing] = useState(false);
+  const oauthPopupPollRef = useRef<number | null>(null);
 
   const dmAccount = accounts.find((account) => account.status === "connected") ?? accounts[0] ?? null;
   const dmScopes = new Set((dmAccount?.oauth_scopes || []).map((scope) => scope.toLowerCase()));
@@ -105,15 +108,68 @@ export default function AutoDMsPage() {
     void load();
   }, [load]);
 
+  const refreshDMAuthorizationStatus = useCallback(async () => {
+    try {
+      const accountData = await accountService.list();
+      setAccounts(accountData.items);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoDm.errors.load") : t("autoDm.errors.load"));
+    } finally {
+      setAuthRefreshing(false);
+    }
+  }, [pushToast, t]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; status?: string } | null;
+      if (!data || data.type !== X_OAUTH_RESULT_MESSAGE) return;
+      if (oauthPopupPollRef.current) {
+        window.clearInterval(oauthPopupPollRef.current);
+        oauthPopupPollRef.current = null;
+      }
+      if (data.status === "success") {
+        pushToast(t("accounts.toast.connected"));
+        void refreshDMAuthorizationStatus();
+      } else {
+        setAuthRefreshing(false);
+        pushToast(t("accounts.toast.authorizationFailed"));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [pushToast, refreshDMAuthorizationStatus, t]);
+
+  useEffect(() => {
+    return () => {
+      if (oauthPopupPollRef.current) {
+        window.clearInterval(oauthPopupPollRef.current);
+      }
+    };
+  }, []);
+
   const reconnectXAccount = async () => {
     try {
+      setAuthRefreshing(true);
       const data = await accountService.startXOAuth();
       if (!data.auth_url) throw new Error(t("accounts.toast.oauthUrlMissing"));
       const features = ["popup=yes", "width=560", "height=720", "left=80", "top=80"].join(",");
       const popup = window.open(data.auth_url, "octo_x_oauth", features);
       if (!popup) throw new Error(t("accounts.toast.popupBlocked"));
       popup.focus();
+      if (oauthPopupPollRef.current) {
+        window.clearInterval(oauthPopupPollRef.current);
+      }
+      oauthPopupPollRef.current = window.setInterval(() => {
+        if (!popup.closed) return;
+        if (oauthPopupPollRef.current) {
+          window.clearInterval(oauthPopupPollRef.current);
+          oauthPopupPollRef.current = null;
+        }
+        window.setTimeout(() => void refreshDMAuthorizationStatus(), 800);
+      }, 800);
     } catch (error) {
+      setAuthRefreshing(false);
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("accounts.toast.oauthUrlMissing") : error instanceof Error ? error.message : t("accounts.toast.oauthUrlMissing"));
     }
   };
@@ -273,9 +329,9 @@ export default function AutoDMsPage() {
                   <p className="mt-2 text-xs leading-5 text-amber-100/80">{t("autoDm.auth.missingScopes", { scopes: missingDMScopeList.join(", ") })}</p>
                 ) : null}
               </div>
-              <Button onClick={() => void reconnectXAccount()} variant={dmAuthorizationReady ? "outline" : "default"}>
-                <PlugZap className="size-4" />
-                {t(dmAuthorizationReady ? "autoDm.auth.reconnectAnyway" : "autoDm.auth.reconnect")}
+              <Button onClick={() => void reconnectXAccount()} variant={dmAuthorizationReady ? "outline" : "default"} disabled={authRefreshing}>
+                {authRefreshing ? <RefreshCw className="size-4 animate-spin" /> : <PlugZap className="size-4" />}
+                {authRefreshing ? t("autoDm.auth.refreshing") : t(dmAuthorizationReady ? "autoDm.auth.reconnectAnyway" : "autoDm.auth.reconnect")}
               </Button>
             </div>
           </Card>

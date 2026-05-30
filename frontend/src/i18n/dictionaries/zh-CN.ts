@@ -2323,6 +2323,7 @@ export const dict: I18nDict = {
   "autoDm.auth.missingScopes": "缺少权限：{scopes}",
   "autoDm.auth.reconnect": "重新授权",
   "autoDm.auth.reconnectAnyway": "重新授权",
+  "autoDm.auth.refreshing": "同步授权中...",
   "autoDm.quota.title": "Auto DM 额度",
   "autoDm.quota.description": "本周期 Auto DM 发送额度和保守日发送保护。",
   "autoDm.quota.descriptionWithReset": "本周期额度将在 {reset} 重置，超出后需要升级会员或等待重置。",

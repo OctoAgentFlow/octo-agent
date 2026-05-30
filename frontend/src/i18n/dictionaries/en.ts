@@ -2355,6 +2355,7 @@ export const dict: I18nDict = {
   "autoDm.auth.missingScopes": "Missing scopes: {scopes}",
   "autoDm.auth.reconnect": "Reauthorize",
   "autoDm.auth.reconnectAnyway": "Reauthorize",
+  "autoDm.auth.refreshing": "Syncing authorization...",
   "autoDm.quota.title": "Auto DM quota",
   "autoDm.quota.description": "Auto DM sends in the current subscription period plus a conservative daily safety cap.",
   "autoDm.quota.descriptionWithReset": "This period resets at {reset}. Upgrade or wait for reset after quota is exhausted.",

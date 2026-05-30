@@ -222,6 +222,14 @@ func (s *TrendService) FeedbackPromptSignals(userID, botID uint) []string {
 }
 
 func (s *TrendService) RunTick(ctx context.Context, now time.Time) (*trendSyncResult, error) {
+	return s.runTick(ctx, now, false)
+}
+
+func (s *TrendService) RunManualSync(ctx context.Context, now time.Time) (*trendSyncResult, error) {
+	return s.runTick(ctx, now, true)
+}
+
+func (s *TrendService) runTick(ctx context.Context, now time.Time, force bool) (*trendSyncResult, error) {
 	if s == nil || s.repo == nil {
 		return &trendSyncResult{SkippedReason: "trend service is not configured"}, nil
 	}
@@ -248,7 +256,7 @@ func (s *TrendService) RunTick(ctx context.Context, now time.Time) (*trendSyncRe
 		if err != nil {
 			return result, err
 		}
-		if latest != nil && now.Sub(latest.UTC()) < interval {
+		if !force && latest != nil && now.Sub(latest.UTC()) < interval {
 			continue
 		}
 		topics, err := twitter.ListTrendsByWOEID(ctx, s.cfg.BearerToken, woeid, s.cfg.MaxTrends)

@@ -24,6 +24,7 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.POST("/trends/rules/apply", c.ApplyTrendRule)
 	g.GET("/trends/rules", c.ListTrendRules)
 	g.PATCH("/trends/rules/:id", c.UpdateTrendRule)
+	g.POST("/trends/sync-now", c.SyncTrendsNow)
 	g.GET("/points/activities", c.ListPointActivities)
 	g.PATCH("/points/activities/:id", c.UpdatePointActivity)
 	g.GET("/points/users", c.ListPointUsers)

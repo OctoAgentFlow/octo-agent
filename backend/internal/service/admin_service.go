@@ -33,15 +33,21 @@ type AdminService struct {
 	userRepo         *repository.UserRepository
 	billingOrderRepo *repository.BillingOrderRepository
 	pointRepo        *repository.PointRepository
+	trends           *TrendService
 }
 
-func NewAdminService(db *gorm.DB, cfg *config.Config, userRepo *repository.UserRepository, billingOrderRepo *repository.BillingOrderRepository) *AdminService {
+func NewAdminService(db *gorm.DB, cfg *config.Config, userRepo *repository.UserRepository, billingOrderRepo *repository.BillingOrderRepository, trends ...*TrendService) *AdminService {
+	var trendService *TrendService
+	if len(trends) > 0 {
+		trendService = trends[0]
+	}
 	return &AdminService{
 		db:               db,
 		cfg:              cfg,
 		userRepo:         userRepo,
 		billingOrderRepo: billingOrderRepo,
 		pointRepo:        repository.NewPointRepository(db),
+		trends:           trendService,
 	}
 }
 
@@ -323,6 +329,28 @@ func (s *AdminService) UpdateTrendRule(operatorID, ruleID uint, req dto.AdminUpd
 		return nil, err
 	}
 	return adminTrendOperationRuleDTO(row), nil
+}
+
+func (s *AdminService) SyncTrendsNow(ctx context.Context, operatorID uint) (*dto.TrendSyncResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	if s.trends == nil {
+		return &dto.TrendSyncResponse{Enabled: false, SkippedReason: "trend service is not configured"}, nil
+	}
+	result, err := s.trends.RunManualSync(ctx, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return &dto.TrendSyncResponse{}, nil
+	}
+	return &dto.TrendSyncResponse{
+		Enabled:       result.Enabled,
+		SyncedRegions: result.SyncedRegions,
+		SyncedTopics:  result.SyncedTopics,
+		SkippedReason: result.SkippedReason,
+	}, nil
 }
 
 func (s *AdminService) adminTrendOperationRuleMap() map[string][]string {

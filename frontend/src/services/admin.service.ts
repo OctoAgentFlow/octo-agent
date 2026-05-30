@@ -169,6 +169,13 @@ export type AdminTrendOperationRulesApi = {
   items: AdminTrendOperationRuleApi[];
 };
 
+export type AdminTrendSyncResultApi = {
+  enabled: boolean;
+  synced_regions: number;
+  synced_topics: number;
+  skipped_reason?: string;
+};
+
 export type AdminUserQueryApi = {
   page?: number;
   page_size?: number;
@@ -405,6 +412,10 @@ export const adminService = {
   },
   async updateTrendRule(id: number, body: { enabled: boolean }) {
     const res = await request.patch<ApiResponse<AdminTrendOperationRuleApi>>(`/admin/trends/rules/${id}`, body);
+    return res.data.data;
+  },
+  async syncTrendsNow() {
+    const res = await request.post<ApiResponse<AdminTrendSyncResultApi>>("/admin/trends/sync-now");
     return res.data.data;
   },
   async pointActivities() {

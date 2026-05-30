@@ -242,6 +242,7 @@ export default function AdminPage() {
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
   const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
+  const [syncingTrends, setSyncingTrends] = useState(false);
 
   const userParams = useMemo(
     () => ({
@@ -433,6 +434,23 @@ export default function AdminPage() {
     }
   };
 
+  const syncTrendsNow = async () => {
+    setSyncingTrends(true);
+    try {
+      const result = await adminService.syncTrendsNow();
+      await fetchAdmin({ quiet: true });
+      if (result.synced_topics > 0) {
+        pushToast(t("admin.trends.syncSuccess", { regions: result.synced_regions, topics: result.synced_topics }));
+      } else {
+        pushToast(result.skipped_reason || t("admin.trends.syncSkipped"));
+      }
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.trends.syncFailed")));
+    } finally {
+      setSyncingTrends(false);
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -507,8 +525,10 @@ export default function AdminPage() {
           trendFeedbackSummary={trendFeedbackSummary}
           submittingTrendRuleKey={submittingTrendRuleKey}
           trendRules={trendRules}
+          syncingTrends={syncingTrends}
           onApplyTrendRule={applyTrendRule}
           onUpdateTrendRule={updateTrendRule}
+          onSyncTrendsNow={syncTrendsNow}
         />
       ) : null}
       {activeSection === "system" ? <SystemSection overview={overview} /> : null}
@@ -1678,17 +1698,34 @@ function TrendGovernanceSection({
   trendFeedbackSummary,
   submittingTrendRuleKey,
   trendRules,
+  syncingTrends,
   onApplyTrendRule,
   onUpdateTrendRule,
+  onSyncTrendsNow,
 }: {
   trendFeedbackSummary: AdminTrendFeedbackSummaryApi | null;
   submittingTrendRuleKey: string;
   trendRules: AdminTrendOperationRuleApi[];
+  syncingTrends: boolean;
   onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
   onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
+  onSyncTrendsNow: () => Promise<void>;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-4">
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("admin.trends.syncTitle")}
+          description={t("admin.trends.syncDesc")}
+          right={
+            <Button type="button" size="sm" variant="outline" disabled={syncingTrends} onClick={() => void onSyncTrendsNow()}>
+              <RefreshCcw className={`size-4 ${syncingTrends ? "animate-spin" : ""}`} />
+              {syncingTrends ? t("admin.trends.syncing") : t("admin.trends.syncNow")}
+            </Button>
+          }
+        />
+      </Card>
       <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
       <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />
     </div>

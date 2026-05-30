@@ -13,6 +13,7 @@ import (
 	"octo-agent/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type AutomationController struct {
@@ -517,6 +518,28 @@ func (ctl *AutomationController) RetryDMTask(c *gin.Context) {
 		return
 	}
 	response.OK(c, data)
+}
+
+func (ctl *AutomationController) DeleteDMTask(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid task id")
+		return
+	}
+	if err := ctl.autoDMService.DeleteTask(userID, taskID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "auto dm task not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
 }
 
 func (ctl *AutomationController) SetDMRecipientRule(c *gin.Context) {

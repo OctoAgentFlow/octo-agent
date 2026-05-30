@@ -543,6 +543,9 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoDMTaskApi>>(`/auto-dm/tasks/${id}/retry`);
     return res.data.data;
   },
+  async deleteDMTask(id: number) {
+    await request.delete(`/auto-dm/tasks/${id}`);
+  },
   async setDMRecipientRule(id: number, status: AutoDMRecipientRuleApi["status"], reason: string, segment?: AutoDMRecipientSegment) {
     const res = await request.post<ApiResponse<AutoDMRecipientRuleApi>>(`/auto-dm/tasks/${id}/recipient-rule`, { status, reason, recipient_segment: segment });
     return res.data.data;

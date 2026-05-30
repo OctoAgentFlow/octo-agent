@@ -18,6 +18,7 @@ import {
   UserX,
 } from "lucide-react";
 
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -46,6 +47,7 @@ export default function AutoDMsPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [dmTasks, setDMTasks] = useState<AutoDMTaskApi[]>([]);
   const [dmRecipients, setDMRecipients] = useState<AutoDMRecipientRuleApi[]>([]);
@@ -201,6 +203,23 @@ export default function AutoDMsPage() {
       pushToast(t("autoDm.toast.retry"));
     } catch (error) {
       pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoDm.errors.retry"));
+    }
+  };
+
+  const deleteDMTask = async (id: number) => {
+    const confirmed = await confirm({
+      description: t("autoDm.delete.confirm"),
+      confirmLabel: t("autoDm.delete.action"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    try {
+      await automationService.deleteDMTask(id);
+      setDMTasks((items) => items.filter((item) => item.id !== id));
+      pushToast(t("autoDm.toast.deleted"));
+      void automationService.dmOverview().then(setDMOverview).catch(() => undefined);
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoDm.errors.delete"));
     }
   };
 
@@ -483,6 +502,7 @@ export default function AutoDMsPage() {
                             {canAct ? <Button size="sm" onClick={() => approveDMTask(task.id)} disabled={modulePaused} title={modulePausedActionTip}>{t("automation.dmReview.approve")}</Button> : null}
                             {canRetry ? <Button size="sm" onClick={() => retryDMTask(task.id)} disabled={modulePaused} title={modulePausedActionTip}>{t("automation.dmReview.retry")}</Button> : null}
                             {canAct || canRetry ? <Button size="sm" variant="outline" onClick={() => blockDMTask(task.id)}>{t("automation.dmReview.block")}</Button> : null}
+                            {task.status !== "sent" ? <Button size="sm" variant="destructive" onClick={() => deleteDMTask(task.id)}>{t("autoDm.delete.action")}</Button> : null}
                             {task.recipient_user_id ? (
                               <>
                                 <Button size="sm" variant="outline" onClick={() => setDMRecipientRule(task.id, "allowlisted")}>{t("automation.dmReview.allowlist")}</Button>

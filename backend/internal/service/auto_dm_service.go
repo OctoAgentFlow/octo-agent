@@ -606,6 +606,17 @@ func (s *AutoDMService) RetryTask(userID, taskID uint) (*dto.AutoDMTaskItem, err
 	return &out, nil
 }
 
+func (s *AutoDMService) DeleteTask(userID, taskID uint) error {
+	task, err := s.taskRepo.GetByUserAndID(userID, taskID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(task.Status) == "sent" || strings.TrimSpace(task.DMEventID) != "" || task.SentAt != nil {
+		return errors.New("sent auto dm tasks cannot be deleted")
+	}
+	return s.taskRepo.DeleteUnsentByUserAndID(userID, taskID)
+}
+
 func (s *AutoDMService) SetRecipientRuleFromTask(userID, taskID uint, status, segment, reason string) (*dto.AutoDMRecipientRuleItem, error) {
 	status = strings.TrimSpace(status)
 	if !repository.IsAutoDMRecipientRuleStatus(status) {

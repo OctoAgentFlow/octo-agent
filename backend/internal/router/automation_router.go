@@ -43,6 +43,7 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	dm.PATCH("/tasks/:id", c.UpdateDMTask)
 	dm.POST("/tasks/:id/block", c.BlockDMTask)
 	dm.POST("/tasks/:id/retry", c.RetryDMTask)
+	dm.DELETE("/tasks/:id", c.DeleteDMTask)
 	dm.POST("/tasks/:id/recipient-rule", c.SetDMRecipientRule)
 
 	comment := rg.Group("/auto-comment")

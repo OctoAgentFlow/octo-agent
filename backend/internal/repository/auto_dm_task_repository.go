@@ -80,6 +80,17 @@ func (r *AutoDMTaskRepository) GetByUserAndID(userID, id uint) (*model.AutoDMTas
 	return &task, nil
 }
 
+func (r *AutoDMTaskRepository) DeleteUnsentByUserAndID(userID, id uint) error {
+	tx := r.DB.Where("user_id = ? AND id = ? AND status <> ?", userID, id, "sent").Delete(&model.AutoDMTask{})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (r *AutoDMTaskRepository) HasOpenCapabilityTask(userID, accountID uint, capabilityStatus string) (bool, error) {
 	var n int64
 	err := r.DB.Model(&model.AutoDMTask{}).

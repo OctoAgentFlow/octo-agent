@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type Client struct {
@@ -65,10 +66,16 @@ type ChatMessage struct {
 }
 
 type TextUsage struct {
-	Model        string `json:"model"`
-	InputTokens  int64  `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
-	TotalTokens  int64  `json:"total_tokens"`
+	Model                  string `json:"model"`
+	InputTokens            int64  `json:"input_tokens"`
+	OutputTokens           int64  `json:"output_tokens"`
+	TotalTokens            int64  `json:"total_tokens"`
+	PromptGuardEnabled     bool   `json:"prompt_guard_enabled,omitempty"`
+	SystemLanguage         string `json:"system_language,omitempty"`
+	ContextLanguage        string `json:"context_language,omitempty"`
+	ExpectedOutputLanguage string `json:"expected_output_language,omitempty"`
+	ActualOutputLanguage   string `json:"actual_output_language,omitempty"`
+	RetryCount             int64  `json:"retry_count,omitempty"`
 }
 
 type TextResult struct {
@@ -121,6 +128,9 @@ func (c *Client) GenerateTextWithUsageMaxTokens(ctx context.Context, messages []
 	if len(messages) == 0 {
 		return TextResult{}, fmt.Errorf("openai messages are empty")
 	}
+	if err := ValidatePromptGuard(messages); err != nil {
+		return TextResult{}, err
+	}
 	body := chatCompletionRequest{
 		Model:       c.model,
 		Messages:    messages,
@@ -172,6 +182,27 @@ func (c *Client) GenerateTextWithUsageMaxTokens(ctx context.Context, messages []
 		usage.TotalTokens = out.Usage.TotalTokens
 	}
 	return TextResult{Text: text, Usage: usage}, nil
+}
+
+func ValidatePromptGuard(messages []ChatMessage) error {
+	for _, msg := range messages {
+		if strings.TrimSpace(msg.Role) != "system" {
+			continue
+		}
+		if containsCJK(msg.Content) {
+			return fmt.Errorf("prompt guard: system prompt must be English-only trusted instructions")
+		}
+	}
+	return nil
+}
+
+func containsCJK(text string) bool {
+	for _, r := range text {
+		if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

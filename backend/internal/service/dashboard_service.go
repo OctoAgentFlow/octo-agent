@@ -53,11 +53,12 @@ func (s *DashboardService) Overview(userID uint) (*dto.DashboardOverviewResponse
 
 	now := time.Now()
 	trialLeft := subscription.TrialDaysLeft(user, now)
-	plan := user.SubscriptionPlanCode
-	if plan == "" {
-		plan = "free_trial"
-	}
+	plan := subscription.NormalizePlanCode(user.SubscriptionPlanCode)
 	subSt := subscription.EffectiveStatus(user, now)
+	expiresAt := ""
+	if user.SubscriptionExpiresAt != nil {
+		expiresAt = user.SubscriptionExpiresAt.UTC().Format(time.RFC3339)
+	}
 
 	act24, err := s.activityRepo.CountExecutedBetween(userID, now.Add(-24*time.Hour), now)
 	if err != nil {
@@ -82,11 +83,12 @@ func (s *DashboardService) Overview(userID uint) (*dto.DashboardOverviewResponse
 	}
 
 	return &dto.DashboardOverviewResponse{
-		Plan:               plan,
-		TrialDaysLeft:      trialLeft,
-		SubscriptionStatus: subSt,
-		WalletBound:        walletBound,
-		ConnectedXCount:    connectedCount,
+		Plan:                  plan,
+		TrialDaysLeft:         trialLeft,
+		SubscriptionStatus:    subSt,
+		SubscriptionExpiresAt: expiresAt,
+		WalletBound:           walletBound,
+		ConnectedXCount:       connectedCount,
 
 		ActivityCount24h:       act24,
 		ActivityCountPrev24h:   actPrev24,

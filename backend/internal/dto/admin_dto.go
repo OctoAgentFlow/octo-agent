@@ -48,19 +48,37 @@ type AdminContentSummary struct {
 }
 
 type AdminExecutionSummary struct {
-	PublishPending       int64  `json:"publish_pending"`
-	PublishProcessing    int64  `json:"publish_processing"`
-	PublishFailed        int64  `json:"publish_failed"`
-	PublishedThisMonth   int64  `json:"published_this_month"`
-	AutoPostEnabledPlans int64  `json:"auto_post_enabled_plans"`
-	AutoPostDueNow       int64  `json:"auto_post_due_now"`
-	AutoPostSkipped24h   int64  `json:"auto_post_skipped_24h"`
-	AutoPostFailed24h    int64  `json:"auto_post_failed_24h"`
-	NeedsReauthAccounts  int64  `json:"needs_reauth_accounts"`
-	MonthlyAIGenerations int64  `json:"monthly_ai_generations"`
-	MonthlyXPublishes    int64  `json:"monthly_x_publishes"`
-	MonthlyCostCents     int64  `json:"monthly_cost_cents"`
-	MonthlyCostAmount    string `json:"monthly_cost_amount"`
+	PublishPending       int64                   `json:"publish_pending"`
+	PublishProcessing    int64                   `json:"publish_processing"`
+	PublishFailed        int64                   `json:"publish_failed"`
+	PublishedThisMonth   int64                   `json:"published_this_month"`
+	AutoPostEnabledPlans int64                   `json:"auto_post_enabled_plans"`
+	AutoPostDueNow       int64                   `json:"auto_post_due_now"`
+	AutoPostSkipped24h   int64                   `json:"auto_post_skipped_24h"`
+	AutoPostFailed24h    int64                   `json:"auto_post_failed_24h"`
+	NeedsReauthAccounts  int64                   `json:"needs_reauth_accounts"`
+	MonthlyAIGenerations int64                   `json:"monthly_ai_generations"`
+	MonthlyXPublishes    int64                   `json:"monthly_x_publishes"`
+	MonthlyCostCents     int64                   `json:"monthly_cost_cents"`
+	MonthlyCostAmount    string                  `json:"monthly_cost_amount"`
+	PromptGuard          AdminPromptGuardSummary `json:"prompt_guard"`
+}
+
+type AdminPromptGuardSummary struct {
+	WindowDays               int                         `json:"window_days"`
+	TotalAICalls             int64                       `json:"total_ai_calls"`
+	GuardedAICalls           int64                       `json:"guarded_ai_calls"`
+	SystemLanguageViolations int64                       `json:"system_language_violations"`
+	LanguageMismatches       int64                       `json:"language_mismatches"`
+	RetryCount               int64                       `json:"retry_count"`
+	ByScene                  []AdminPromptGuardSceneItem `json:"by_scene"`
+}
+
+type AdminPromptGuardSceneItem struct {
+	Scene              string `json:"scene"`
+	Total              int64  `json:"total"`
+	LanguageMismatches int64  `json:"language_mismatches"`
+	RetryCount         int64  `json:"retry_count"`
 }
 
 type AdminConfigSummary struct {

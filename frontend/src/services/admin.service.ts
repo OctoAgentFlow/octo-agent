@@ -62,6 +62,24 @@ export type AdminExecutionSummaryApi = {
   monthly_x_publishes: number;
   monthly_cost_cents: number;
   monthly_cost_amount: string;
+  prompt_guard: AdminPromptGuardSummaryApi;
+};
+
+export type AdminPromptGuardSceneApi = {
+  scene: string;
+  total: number;
+  language_mismatches: number;
+  retry_count: number;
+};
+
+export type AdminPromptGuardSummaryApi = {
+  window_days: number;
+  total_ai_calls: number;
+  guarded_ai_calls: number;
+  system_language_violations: number;
+  language_mismatches: number;
+  retry_count: number;
+  by_scene: AdminPromptGuardSceneApi[];
 };
 
 export type AdminConfigSummaryApi = {
@@ -149,6 +167,49 @@ export type AdminTrendFeedbackSummaryApi = {
 
 export type AdminTrendOperationRulesApi = {
   items: AdminTrendOperationRuleApi[];
+};
+
+export type AdminTrendSyncResultApi = {
+  enabled: boolean;
+  synced_regions: number;
+  synced_topics: number;
+  skipped_reason?: string;
+  attempted_at?: string;
+};
+
+export type AdminTrendCacheRegionStatusApi = {
+  region_name: string;
+  total_topics: number;
+  latest_fetched_at?: string;
+  latest_updated_at?: string;
+};
+
+export type AdminTrendCacheStatusApi = {
+  enabled: boolean;
+  bearer_token_configured: boolean;
+  total_topics: number;
+  latest_fetched_at?: string;
+  latest_updated_at?: string;
+  regions: AdminTrendCacheRegionStatusApi[];
+};
+
+export type AdminTrendTopicApi = {
+  id: number;
+  trend_name: string;
+  normalized_name: string;
+  woeid: string;
+  region_name: string;
+  tweet_count: number;
+  category: string;
+  risk_level: string;
+  language_hint?: string;
+  source: string;
+  fetched_at: string;
+  expires_at: string;
+};
+
+export type AdminTrendTopicListApi = {
+  items: AdminTrendTopicApi[];
 };
 
 export type AdminUserQueryApi = {
@@ -387,6 +448,18 @@ export const adminService = {
   },
   async updateTrendRule(id: number, body: { enabled: boolean }) {
     const res = await request.patch<ApiResponse<AdminTrendOperationRuleApi>>(`/admin/trends/rules/${id}`, body);
+    return res.data.data;
+  },
+  async trendCacheStatus() {
+    const res = await request.get<ApiResponse<AdminTrendCacheStatusApi>>("/admin/trends/cache-status");
+    return res.data.data;
+  },
+  async trendTopics(params?: { limit?: number; region?: string; category?: string; risk_level?: string }) {
+    const res = await request.get<ApiResponse<AdminTrendTopicListApi>>("/admin/trends/topics", { params });
+    return res.data.data;
+  },
+  async syncTrendsNow() {
+    const res = await request.post<ApiResponse<AdminTrendSyncResultApi>>("/admin/trends/sync-now");
     return res.data.data;
   },
   async pointActivities() {

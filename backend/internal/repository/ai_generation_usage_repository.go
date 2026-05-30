@@ -71,7 +71,7 @@ func (r *AIGenerationUsageRepository) Increment(userID, botID uint, scene string
 	return r.IncrementWithCost(userID, botID, scene, at, delta, 0, 0, "")
 }
 
-func (r *AIGenerationUsageRepository) IncrementWithCost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string) error {
+func (r *AIGenerationUsageRepository) IncrementWithCost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string, promptGuardDetails ...map[string]any) error {
 	if delta <= 0 {
 		delta = 1
 	}
@@ -96,10 +96,10 @@ func (r *AIGenerationUsageRepository) IncrementWithCost(userID, botID uint, scen
 	}).Create(&row).Error; err != nil {
 		return err
 	}
-	return r.recordEstimatedAICost(userID, botID, scene, at, delta, inputTokens, outputTokens, modelName)
+	return r.recordEstimatedAICost(userID, botID, scene, at, delta, inputTokens, outputTokens, modelName, promptGuardDetails...)
 }
 
-func (r *AIGenerationUsageRepository) recordEstimatedAICost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string) error {
+func (r *AIGenerationUsageRepository) recordEstimatedAICost(userID, botID uint, scene string, at time.Time, delta, inputTokens, outputTokens int64, modelName string, promptGuardDetails ...map[string]any) error {
 	if delta <= 0 {
 		delta = 1
 	}
@@ -109,11 +109,23 @@ func (r *AIGenerationUsageRepository) recordEstimatedAICost(userID, botID uint, 
 		inputTokens = defaultAIInputTokensPerGeneration * delta
 		outputTokens = defaultAIOutputTokensPerGeneration * delta
 	}
-	details, _ := json.Marshal(map[string]any{
-		"scene":      scene,
-		"model":      modelName,
-		"unit_basis": unitBasis,
-	})
+	detailMap := map[string]any{
+		"scene":                    scene,
+		"model":                    modelName,
+		"unit_basis":               unitBasis,
+		"prompt_guard_enabled":     false,
+		"system_language":          "",
+		"context_language":         "",
+		"expected_output_language": "",
+		"actual_output_language":   "",
+		"retry_count":              0,
+	}
+	if len(promptGuardDetails) > 0 {
+		for key, value := range promptGuardDetails[0] {
+			detailMap[key] = value
+		}
+	}
+	details, _ := json.Marshal(detailMap)
 	row := model.CostUsageLedger{
 		UserID:             userID,
 		BotID:              botID,

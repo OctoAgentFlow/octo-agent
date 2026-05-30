@@ -67,7 +67,7 @@ x_oauth:
   client_secret: ""
   redirect_uri: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback"
   state_secret: ""
-  scopes: "tweet.read tweet.write users.read offline.access"
+  scopes: "tweet.read tweet.write users.read dm.read dm.write offline.access"
 
 x_publisher:
   # Test real publishing is enabled for X integration verification.

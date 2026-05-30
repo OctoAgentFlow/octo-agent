@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
   LayoutDashboard,
+  Languages,
   Radar,
   ReceiptText,
   RefreshCcw,
@@ -19,6 +20,7 @@ import {
   Coins,
   UserCog,
   Users,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -33,7 +35,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendCacheStatusApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminTrendTopicApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -112,6 +114,16 @@ function subscriptionLabel(status: string, t: (key: string) => string) {
   return status;
 }
 
+function trendSyncReasonLabel(reason: string | undefined, t: (key: string) => string) {
+  const value = (reason || "").trim().toLowerCase();
+  if (!value) return t("admin.trends.syncNoReason");
+  if (value.includes("bearer token")) return t("admin.trends.syncMissingToken");
+  if (value.includes("disabled")) return t("admin.trends.syncDisabledReason");
+  if (value.includes("not configured")) return t("admin.trends.syncNotConfigured");
+  if (value.includes("fresh")) return t("admin.trends.syncFreshReason");
+  return reason || t("admin.trends.syncNoReason");
+}
+
 function providerLabel(provider: string, t: (key: string) => string) {
   const p = provider.toLowerCase();
   if (p === "local") return t("admin.providers.local");
@@ -141,6 +153,10 @@ function formatDate(value: string | undefined, timeZone: string) {
 
 function formatBps(value: number) {
   return `${(value / 100).toFixed(1)}%`;
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
 function statusVariant(status: string): BadgeVariant {
@@ -238,9 +254,13 @@ export default function AdminPage() {
   const [pointCostSummary, setPointCostSummary] = useState<AdminPointCostSummaryApi | null>(null);
   const [trendFeedbackSummary, setTrendFeedbackSummary] = useState<AdminTrendFeedbackSummaryApi | null>(null);
   const [trendRules, setTrendRules] = useState<AdminTrendOperationRuleApi[]>([]);
+  const [trendCacheStatus, setTrendCacheStatus] = useState<AdminTrendCacheStatusApi | null>(null);
+  const [trendTopics, setTrendTopics] = useState<AdminTrendTopicApi[]>([]);
   const [pointQuery, setPointQuery] = useState("");
   const [submittingPointKey, setSubmittingPointKey] = useState("");
   const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
+  const [syncingTrends, setSyncingTrends] = useState(false);
+  const [lastTrendSyncResult, setLastTrendSyncResult] = useState<AdminTrendSyncResultApi | null>(null);
 
   const userParams = useMemo(
     () => ({
@@ -259,7 +279,7 @@ export default function AdminPage() {
       if (!quiet) setLoadState("loading");
       setErrorMessage(null);
       try {
-        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData] = await Promise.all([
+        const [overviewData, usersData, activitiesData, pointUsersData, pointRiskConfigData, redemptionData, referralData, costData, trendFeedbackData, trendRulesData, trendCacheStatusData, trendTopicsData] = await Promise.all([
           adminService.overview(),
           adminService.users(userParams),
           adminService.pointActivities(),
@@ -270,6 +290,8 @@ export default function AdminPage() {
           adminService.pointCostSummary(),
           adminService.trendFeedbackSummary({ days: 30, limit: 10 }),
           adminService.trendRules(),
+          adminService.trendCacheStatus(),
+          adminService.trendTopics({ limit: 100 }),
         ]);
         setOverview(overviewData);
         setUsers(usersData.items);
@@ -282,6 +304,8 @@ export default function AdminPage() {
         setPointCostSummary(costData);
         setTrendFeedbackSummary(trendFeedbackData);
         setTrendRules(trendRulesData.items);
+        setTrendCacheStatus(trendCacheStatusData);
+        setTrendTopics(trendTopicsData.items);
         setLoadState("ready");
         broadcastDataSynced(Date.now());
       } catch (error) {
@@ -432,6 +456,28 @@ export default function AdminPage() {
     }
   };
 
+  const syncTrendsNow = async () => {
+    setSyncingTrends(true);
+    try {
+      const result = await adminService.syncTrendsNow();
+      setLastTrendSyncResult(result);
+      const nextStatus = await adminService.trendCacheStatus();
+      const nextTopics = await adminService.trendTopics({ limit: 100 });
+      setTrendCacheStatus(nextStatus);
+      setTrendTopics(nextTopics.items);
+      await fetchAdmin({ quiet: true });
+      if (result.synced_topics > 0) {
+        pushToast(t("admin.trends.syncSuccess", { regions: result.synced_regions, topics: result.synced_topics }));
+      } else {
+        pushToast(t("admin.trends.syncSkippedWithReason", { reason: trendSyncReasonLabel(result.skipped_reason, t) }));
+      }
+    } catch (error) {
+      pushToast(getErrorMessage(error, t("admin.trends.syncFailed")));
+    } finally {
+      setSyncingTrends(false);
+    }
+  };
+
   if (loadState === "loading") {
     return <AdminSkeleton />;
   }
@@ -506,8 +552,14 @@ export default function AdminPage() {
           trendFeedbackSummary={trendFeedbackSummary}
           submittingTrendRuleKey={submittingTrendRuleKey}
           trendRules={trendRules}
+          syncingTrends={syncingTrends}
+          trendCacheStatus={trendCacheStatus}
+          trendTopics={trendTopics}
+          lastSyncResult={lastTrendSyncResult}
+          timeZone={timeZone}
           onApplyTrendRule={applyTrendRule}
           onUpdateTrendRule={updateTrendRule}
+          onSyncTrendsNow={syncTrendsNow}
         />
       ) : null}
       {activeSection === "system" ? <SystemSection overview={overview} /> : null}
@@ -723,7 +775,48 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
           </div>
         </Card>
       </section>
+
+      <PromptGuardCard overview={overview} />
     </div>
+  );
+}
+
+function PromptGuardCard({ overview }: { overview: AdminOverviewApi }) {
+  const { t } = useT();
+  const promptGuard = overview.execution.prompt_guard;
+  const mismatchTone = promptGuard.language_mismatches > 0 ? "danger" : "good";
+  const systemTone = promptGuard.system_language_violations > 0 ? "danger" : "good";
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader title={t("admin.promptGuard.title")} description={t("admin.promptGuard.description", { days: promptGuard.window_days })} />
+      <div className="grid gap-3 md:grid-cols-5">
+        <Metric label={t("admin.promptGuard.guardedCalls")} value={`${promptGuard.guarded_ai_calls}/${promptGuard.total_ai_calls}`} icon={ShieldCheck} tone="good" />
+        <Metric label={t("admin.promptGuard.systemViolations")} value={promptGuard.system_language_violations} icon={AlertTriangle} tone={systemTone} />
+        <Metric label={t("admin.promptGuard.languageMismatches")} value={promptGuard.language_mismatches} icon={Languages} tone={mismatchTone} />
+        <Metric label={t("admin.promptGuard.retryCount")} value={promptGuard.retry_count} icon={RefreshCcw} tone={promptGuard.retry_count > 0 ? "warn" : "default"} />
+        <Metric label={t("admin.promptGuard.sceneCount")} value={promptGuard.by_scene.length} icon={Activity} />
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-[#2f3336]">
+        <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-[#2f3336] bg-black px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#71767b]">
+          <span>{t("admin.promptGuard.scene")}</span>
+          <span>{t("admin.promptGuard.total")}</span>
+          <span>{t("admin.promptGuard.mismatch")}</span>
+          <span>{t("admin.promptGuard.retries")}</span>
+        </div>
+        {promptGuard.by_scene.length > 0 ? (
+          promptGuard.by_scene.map((item) => (
+            <div key={item.scene} className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-[#2f3336] px-4 py-3 text-sm last:border-b-0">
+              <span className="truncate font-medium text-white">{item.scene}</span>
+              <span className="text-[#cfd9de]">{item.total}</span>
+              <span className={item.language_mismatches > 0 ? "text-[#ff8a91]" : "text-[#00ba7c]"}>{item.language_mismatches}</span>
+              <span className={item.retry_count > 0 ? "text-[#ffd400]" : "text-[#71767b]"}>{item.retry_count}</span>
+            </div>
+          ))
+        ) : (
+          <p className="px-4 py-6 text-center text-sm text-[#71767b]">{t("admin.promptGuard.empty")}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -1636,20 +1729,143 @@ function TrendGovernanceSection({
   trendFeedbackSummary,
   submittingTrendRuleKey,
   trendRules,
+  syncingTrends,
+  trendCacheStatus,
+  trendTopics,
+  lastSyncResult,
+  timeZone,
   onApplyTrendRule,
   onUpdateTrendRule,
+  onSyncTrendsNow,
 }: {
   trendFeedbackSummary: AdminTrendFeedbackSummaryApi | null;
   submittingTrendRuleKey: string;
   trendRules: AdminTrendOperationRuleApi[];
+  syncingTrends: boolean;
+  trendCacheStatus: AdminTrendCacheStatusApi | null;
+  trendTopics: AdminTrendTopicApi[];
+  lastSyncResult: AdminTrendSyncResultApi | null;
+  timeZone: string;
   onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
   onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
+  onSyncTrendsNow: () => Promise<void>;
 }) {
+  const { t } = useT();
+  const hasCachedTrends = Boolean(trendCacheStatus?.latest_fetched_at);
+  const lastSyncStatus = lastSyncResult
+    ? lastSyncResult.synced_topics > 0
+      ? t("admin.trends.syncStatusSuccess")
+      : t("admin.trends.syncStatusSkipped")
+    : hasCachedTrends
+      ? t("admin.trends.syncStatusSuccess")
+      : t("admin.trends.syncStatusIdle");
+  const lastSyncTime = lastSyncResult?.attempted_at || trendCacheStatus?.latest_fetched_at || "";
+  const lastSyncDetail = lastSyncResult
+    ? lastSyncResult.synced_topics > 0
+      ? t("admin.trends.syncSuccess", { regions: lastSyncResult.synced_regions, topics: lastSyncResult.synced_topics })
+      : trendSyncReasonLabel(lastSyncResult.skipped_reason, t)
+    : hasCachedTrends
+      ? t("admin.trends.cacheStatusDetail", {
+          topics: trendCacheStatus?.total_topics || 0,
+          regions: trendCacheStatus?.regions?.length || 0,
+        })
+      : t("admin.trends.syncIdleDesc");
   return (
     <div className="space-y-4">
+      <Card className="bg-[#0f1419]">
+        <CardHeader
+          title={t("admin.trends.syncTitle")}
+          description={t("admin.trends.syncDesc")}
+          right={
+            <Button type="button" size="sm" variant="outline" disabled={syncingTrends} onClick={() => void onSyncTrendsNow()}>
+              <RefreshCcw className={`size-4 ${syncingTrends ? "animate-spin" : ""}`} />
+              {syncingTrends ? t("admin.trends.syncing") : t("admin.trends.syncNow")}
+            </Button>
+          }
+        />
+        <div className="grid gap-3 border-t border-[#2f3336] px-4 py-4 text-sm md:grid-cols-3">
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncStatus")}</div>
+            <div className={hasCachedTrends || lastSyncResult?.synced_topics ? "font-semibold text-[#00ba7c]" : "font-semibold text-[#ffd400]"}>
+              {lastSyncStatus}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncTime")}</div>
+            <div className="font-semibold text-white">
+              {lastSyncTime ? formatDateTimeForZone(lastSyncTime, timeZone) : t("admin.common.none")}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncDetail")}</div>
+            <div className="font-semibold text-white">{lastSyncDetail}</div>
+          </div>
+        </div>
+      </Card>
+      <TrendCacheTopicsCard topics={trendTopics} cacheStatus={trendCacheStatus} timeZone={timeZone} />
       <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
       <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />
     </div>
+  );
+}
+
+function TrendCacheTopicsCard({
+  topics,
+  cacheStatus,
+  timeZone,
+}: {
+  topics: AdminTrendTopicApi[];
+  cacheStatus: AdminTrendCacheStatusApi | null;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  const regions = cacheStatus?.regions || [];
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("admin.trends.cacheListTitle")}
+        description={t("admin.trends.cacheListDesc")}
+        right={<Badge variant="info">{t("admin.trends.cacheTopicCount", { count: cacheStatus?.total_topics || topics.length })}</Badge>}
+      />
+      {regions.length ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {regions.map((region) => (
+            <Metric
+              key={region.region_name || "unknown"}
+              label={region.region_name || t("admin.trends.unknownRegion")}
+              value={region.total_topics}
+              icon={TrendingUp}
+            />
+          ))}
+        </div>
+      ) : null}
+      <div className="overflow-hidden rounded-2xl border border-[#2f3336]">
+        <div className="grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] gap-3 border-b border-[#2f3336] bg-black px-4 py-3 text-xs font-semibold text-[#71767b]">
+          <span>{t("admin.trends.topicName")}</span>
+          <span>{t("admin.trends.region")}</span>
+          <span>{t("admin.trends.category")}</span>
+          <span>{t("admin.trends.riskLevel")}</span>
+          <span>{t("admin.trends.tweetCount")}</span>
+          <span>{t("admin.trends.fetchedAt")}</span>
+        </div>
+        <div className="divide-y divide-[#2f3336]">
+          {topics.map((topic) => (
+            <div key={`${topic.woeid}:${topic.normalized_name}:${topic.fetched_at}`} className="grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] gap-3 px-4 py-3 text-sm">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-white">{topic.trend_name}</div>
+                <div className="truncate text-xs text-[#71767b]">{topic.normalized_name}</div>
+              </div>
+              <div className="text-[#e7e9ea]">{topic.region_name || topic.woeid}</div>
+              <div><Badge variant="info">{topic.category || "other"}</Badge></div>
+              <div><Badge variant={topic.risk_level === "high" ? "danger" : topic.risk_level === "medium" ? "warning" : "success"}>{topic.risk_level || "low"}</Badge></div>
+              <div className="text-[#e7e9ea]">{formatCompactNumber(topic.tweet_count || 0)}</div>
+              <div className="text-[#71767b]">{formatDate(topic.fetched_at, timeZone)}</div>
+            </div>
+          ))}
+          {topics.length === 0 ? <p className="px-4 py-8 text-center text-sm text-[#71767b]">{t("admin.trends.cacheEmpty")}</p> : null}
+        </div>
+      </div>
+    </Card>
   );
 }
 

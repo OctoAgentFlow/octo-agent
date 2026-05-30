@@ -73,6 +73,18 @@ x_oauth:
   state_secret: "TODO_X_STATE_SECRET"
   scopes: "tweet.read users.read offline.access"
 
+x_trends:
+  enabled: true
+  bearer_token: ""
+  interval_hours: 12
+  max_trends: 20
+  retention_days: 14
+  regions:
+    - woeid: "1"
+      name: "Worldwide"
+    - woeid: "23424977"
+      name: "United States"
+
 billing:
   order_ttl_minutes: 30
   webhook_secret: "TODO_BILLING_WEBHOOK_SECRET"

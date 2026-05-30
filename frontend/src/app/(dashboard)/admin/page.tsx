@@ -34,7 +34,7 @@ import {
   subscribePageRefreshRequest,
 } from "@/lib/app-page-refresh";
 import { formatDateTime as formatDateTimeForZone, usePreferredTimeZone } from "@/lib/timezone";
-import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminUserListItemApi } from "@/services/admin.service";
+import { adminService, type AdminGrossMarginAlertConfigApi, type AdminGrossMarginAlertEventApi, type AdminGrossMarginSummaryApi, type AdminOverviewApi, type AdminPointActivityApi, type AdminPointCostSummaryApi, type AdminPointRedemptionCodeApi, type AdminPointRiskConfigApi, type AdminPointUserApi, type AdminReferralSummaryApi, type AdminTrendFeedbackSummaryApi, type AdminTrendFeedbackTopicApi, type AdminTrendOperationRuleApi, type AdminTrendSyncResultApi, type AdminUserListItemApi } from "@/services/admin.service";
 import type { BillingOpsAction } from "@/types/billing";
 import { useT } from "@/i18n/use-t";
 
@@ -111,6 +111,16 @@ function subscriptionLabel(status: string, t: (key: string) => string) {
   if (s === "expired") return t("admin.subscription.expired");
   if (s === "none" || s === "") return t("admin.subscription.none");
   return status;
+}
+
+function trendSyncReasonLabel(reason: string | undefined, t: (key: string) => string) {
+  const value = (reason || "").trim().toLowerCase();
+  if (!value) return t("admin.trends.syncNoReason");
+  if (value.includes("bearer token")) return t("admin.trends.syncMissingToken");
+  if (value.includes("disabled")) return t("admin.trends.syncDisabledReason");
+  if (value.includes("not configured")) return t("admin.trends.syncNotConfigured");
+  if (value.includes("fresh")) return t("admin.trends.syncFreshReason");
+  return reason || t("admin.trends.syncNoReason");
 }
 
 function providerLabel(provider: string, t: (key: string) => string) {
@@ -243,6 +253,7 @@ export default function AdminPage() {
   const [submittingPointKey, setSubmittingPointKey] = useState("");
   const [submittingTrendRuleKey, setSubmittingTrendRuleKey] = useState("");
   const [syncingTrends, setSyncingTrends] = useState(false);
+  const [lastTrendSyncResult, setLastTrendSyncResult] = useState<AdminTrendSyncResultApi | null>(null);
 
   const userParams = useMemo(
     () => ({
@@ -438,11 +449,12 @@ export default function AdminPage() {
     setSyncingTrends(true);
     try {
       const result = await adminService.syncTrendsNow();
+      setLastTrendSyncResult(result);
       await fetchAdmin({ quiet: true });
       if (result.synced_topics > 0) {
         pushToast(t("admin.trends.syncSuccess", { regions: result.synced_regions, topics: result.synced_topics }));
       } else {
-        pushToast(result.skipped_reason || t("admin.trends.syncSkipped"));
+        pushToast(t("admin.trends.syncSkippedWithReason", { reason: trendSyncReasonLabel(result.skipped_reason, t) }));
       }
     } catch (error) {
       pushToast(getErrorMessage(error, t("admin.trends.syncFailed")));
@@ -526,6 +538,8 @@ export default function AdminPage() {
           submittingTrendRuleKey={submittingTrendRuleKey}
           trendRules={trendRules}
           syncingTrends={syncingTrends}
+          lastSyncResult={lastTrendSyncResult}
+          timeZone={timeZone}
           onApplyTrendRule={applyTrendRule}
           onUpdateTrendRule={updateTrendRule}
           onSyncTrendsNow={syncTrendsNow}
@@ -1699,6 +1713,8 @@ function TrendGovernanceSection({
   submittingTrendRuleKey,
   trendRules,
   syncingTrends,
+  lastSyncResult,
+  timeZone,
   onApplyTrendRule,
   onUpdateTrendRule,
   onSyncTrendsNow,
@@ -1707,11 +1723,23 @@ function TrendGovernanceSection({
   submittingTrendRuleKey: string;
   trendRules: AdminTrendOperationRuleApi[];
   syncingTrends: boolean;
+  lastSyncResult: AdminTrendSyncResultApi | null;
+  timeZone: string;
   onApplyTrendRule: (item: AdminTrendFeedbackTopicApi) => Promise<void>;
   onUpdateTrendRule: (rule: AdminTrendOperationRuleApi, enabled: boolean) => Promise<void>;
   onSyncTrendsNow: () => Promise<void>;
 }) {
   const { t } = useT();
+  const lastSyncStatus = lastSyncResult
+    ? lastSyncResult.synced_topics > 0
+      ? t("admin.trends.syncStatusSuccess")
+      : t("admin.trends.syncStatusSkipped")
+    : t("admin.trends.syncStatusIdle");
+  const lastSyncDetail = lastSyncResult
+    ? lastSyncResult.synced_topics > 0
+      ? t("admin.trends.syncSuccess", { regions: lastSyncResult.synced_regions, topics: lastSyncResult.synced_topics })
+      : trendSyncReasonLabel(lastSyncResult.skipped_reason, t)
+    : t("admin.trends.syncIdleDesc");
   return (
     <div className="space-y-4">
       <Card className="bg-[#0f1419]">
@@ -1725,6 +1753,24 @@ function TrendGovernanceSection({
             </Button>
           }
         />
+        <div className="grid gap-3 border-t border-[#2f3336] px-4 py-4 text-sm md:grid-cols-3">
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncStatus")}</div>
+            <div className={lastSyncResult?.synced_topics ? "font-semibold text-[#00ba7c]" : "font-semibold text-[#ffd400]"}>
+              {lastSyncStatus}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncTime")}</div>
+            <div className="font-semibold text-white">
+              {lastSyncResult?.attempted_at ? formatDateTimeForZone(lastSyncResult.attempted_at, timeZone) : t("admin.common.none")}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#71767b]">{t("admin.trends.lastSyncDetail")}</div>
+            <div className="font-semibold text-white">{lastSyncDetail}</div>
+          </div>
+        </div>
       </Card>
       <TrendFeedbackAdminCard summary={trendFeedbackSummary} submittingRuleKey={submittingTrendRuleKey} onApplyRule={onApplyTrendRule} />
       <TrendRuleManagementCard rules={trendRules} submittingRuleKey={submittingTrendRuleKey} onUpdateRule={onUpdateTrendRule} />

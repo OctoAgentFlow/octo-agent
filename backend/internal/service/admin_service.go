@@ -15,6 +15,7 @@ import (
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/repository"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -335,21 +336,41 @@ func (s *AdminService) SyncTrendsNow(ctx context.Context, operatorID uint) (*dto
 	if _, err := s.requireOperator(operatorID); err != nil {
 		return nil, err
 	}
+	attemptedAt := time.Now().UTC()
 	if s.trends == nil {
-		return &dto.TrendSyncResponse{Enabled: false, SkippedReason: "trend service is not configured"}, nil
+		zap.L().Warn("admin trend sync skipped",
+			zap.Uint("operator_id", operatorID),
+			zap.String("reason", "trend service is not configured"),
+		)
+		return &dto.TrendSyncResponse{Enabled: false, SkippedReason: "trend service is not configured", AttemptedAt: attemptedAt.Format(time.RFC3339)}, nil
 	}
-	result, err := s.trends.RunManualSync(ctx, time.Now().UTC())
+	result, err := s.trends.RunManualSync(ctx, attemptedAt)
 	if err != nil {
+		zap.L().Error("admin trend sync failed", zap.Uint("operator_id", operatorID), zap.Error(err))
 		return nil, err
 	}
 	if result == nil {
-		return &dto.TrendSyncResponse{}, nil
+		zap.L().Warn("admin trend sync returned empty result", zap.Uint("operator_id", operatorID))
+		return &dto.TrendSyncResponse{AttemptedAt: attemptedAt.Format(time.RFC3339)}, nil
+	}
+	fields := []zap.Field{
+		zap.Uint("operator_id", operatorID),
+		zap.Bool("enabled", result.Enabled),
+		zap.Int("synced_regions", result.SyncedRegions),
+		zap.Int("synced_topics", result.SyncedTopics),
+	}
+	if result.SkippedReason != "" {
+		fields = append(fields, zap.String("skipped_reason", result.SkippedReason))
+		zap.L().Warn("admin trend sync skipped", fields...)
+	} else {
+		zap.L().Info("admin trend sync completed", fields...)
 	}
 	return &dto.TrendSyncResponse{
 		Enabled:       result.Enabled,
 		SyncedRegions: result.SyncedRegions,
 		SyncedTopics:  result.SyncedTopics,
 		SkippedReason: result.SkippedReason,
+		AttemptedAt:   attemptedAt.Format(time.RFC3339),
 	}, nil
 }
 

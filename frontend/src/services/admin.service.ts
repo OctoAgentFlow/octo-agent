@@ -174,6 +174,7 @@ export type AdminTrendSyncResultApi = {
   synced_regions: number;
   synced_topics: number;
   skipped_reason?: string;
+  attempted_at?: string;
 };
 
 export type AdminUserQueryApi = {

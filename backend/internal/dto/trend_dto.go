@@ -94,4 +94,5 @@ type TrendSyncResponse struct {
 	SyncedRegions int    `json:"synced_regions"`
 	SyncedTopics  int    `json:"synced_topics"`
 	SkippedReason string `json:"skipped_reason,omitempty"`
+	AttemptedAt   string `json:"attempted_at,omitempty"`
 }

@@ -12,6 +12,7 @@ import { WorkflowSection } from "@/components/marketing/workflow-section";
 import { OAFBotSection } from "@/components/marketing/oaf-bot-section";
 import { AutoPostSection } from "@/components/marketing/auto-post-section";
 import { ComparisonSection } from "@/components/marketing/comparison-section";
+import { GrowthOperationsLoopSection } from "@/components/marketing/growth-operations-loop-section";
 import { OperatingLoopSection } from "@/components/marketing/operating-loop-section";
 
 export default function Home() {
@@ -24,6 +25,7 @@ export default function Home() {
       <MarketingNavbar />
       <main className="pb-20 md:pb-0">
         <HeroSection />
+        <GrowthOperationsLoopSection />
         <OAFBotSection />
         <FeatureCardsSection />
         <WorkflowSection />

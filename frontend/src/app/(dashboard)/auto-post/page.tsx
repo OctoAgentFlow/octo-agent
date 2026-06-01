@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { AutomationModulePausedNotice } from "@/components/automation/automation-module-paused-notice";
+import { OperationalBlockersCard, type OperationalBlocker } from "@/components/operations/operational-blockers-card";
 import { QuotaUpgradeCallout } from "@/components/automation/quota-upgrade-callout";
 import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -120,6 +121,13 @@ type LibraryForm = {
   status: ContentLibraryStatus;
 };
 
+type FirstValueSeed = {
+  title: string;
+  body: string;
+  goal: string;
+  angle: string;
+};
+
 function defaultForm(): PlannerForm {
   return {
     enabled: false,
@@ -130,6 +138,29 @@ function defaultForm(): PlannerForm {
     contentLengthMode: "standard",
     excludedTrendNames: [],
   };
+}
+
+function defaultFirstValueSeeds(): FirstValueSeed[] {
+  return [
+    {
+      title: "核心产品价值",
+      body: "Octo-Agent Flow helps Web3 and AI teams run X with one consistent OAF Bot persona across posts, replies, comments, and opt-in DMs.",
+      goal: "让新访客快速理解产品定位，并引导他们试用 OAF Bot。",
+      angle: "写成一条清晰的产品价值推文，少一点营销感，多一点具体场景。",
+    },
+    {
+      title: "运营痛点",
+      body: "Most teams do not struggle with writing one post. They struggle with showing up every day with a consistent voice, useful context, and safe review controls.",
+      goal: "把用户痛点讲具体，吸引 Web3 growth team 互动。",
+      angle: "写成观点型推文，强调 daily X operations 的真实难点。",
+    },
+    {
+      title: "可控自动化",
+      body: "OAF Bot drafts can go through Execution Queue before publishing, so teams can review, edit, approve, reject, or gradually move low-risk content to autopilot.",
+      goal: "建立用户对 AI 自动化的信任。",
+      angle: "写成教育型推文，解释为什么可审核的 Agent 比普通 AI 文案工具更适合团队。",
+    },
+  ];
 }
 
 function defaultLibraryForm(): LibraryForm {
@@ -270,6 +301,8 @@ export default function AutoPostPage() {
   const [editingLibraryID, setEditingLibraryID] = useState<number | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [contentDirection, setContentDirection] = useState("");
+  const [firstValueSeeds, setFirstValueSeeds] = useState<FirstValueSeed[]>(() => defaultFirstValueSeeds());
+  const [firstValueRunning, setFirstValueRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -370,6 +403,91 @@ export default function AutoPostPage() {
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.post.name") })
     : undefined;
+  const operationalBlockers = useMemo<OperationalBlocker[]>(() => {
+    const blockers: OperationalBlocker[] = [];
+    const accountNeedsReauth = selectedAccount ? selectedAccount.status !== "connected" || selectedAccount.publish_reauth_required : false;
+    if (!selectedAccountID) {
+      blockers.push({
+        id: "account_missing",
+        title: t("autoPost.blockers.accountMissing.title"),
+        description: t("autoPost.blockers.accountMissing.description"),
+        href: "/accounts",
+        actionLabel: t("autoPost.blockers.accountMissing.action"),
+        severity: "danger",
+      });
+    } else if (accountNeedsReauth) {
+      blockers.push({
+        id: "account_reauth",
+        title: t("autoPost.blockers.accountReauth.title"),
+        description: t("autoPost.blockers.accountReauth.description"),
+        href: "/accounts?filter=needs_reauth",
+        actionLabel: t("autoPost.blockers.accountReauth.action"),
+        severity: "danger",
+      });
+    }
+    if (modulePaused) {
+      blockers.push({
+        id: "module_paused",
+        title: t("autoPost.blockers.modulePaused.title"),
+        description: t("autoPost.blockers.modulePaused.description"),
+        href: "/automations?module=post#automation-modules",
+        actionLabel: t("autoPost.blockers.modulePaused.action"),
+        severity: "danger",
+      });
+    }
+    if (!selectedBot) {
+      blockers.push({
+        id: "bot_missing",
+        title: t("autoPost.blockers.botMissing.title"),
+        description: t("autoPost.blockers.botMissing.description"),
+        href: "/oaf-bots",
+        actionLabel: t("autoPost.blockers.botMissing.action"),
+        severity: "warning",
+      });
+    }
+    if (activeContentCount === 0) {
+      blockers.push({
+        id: "content_missing",
+        title: t("autoPost.blockers.contentMissing.title"),
+        description: t("autoPost.blockers.contentMissing.description"),
+        href: selectedAccountID ? `/auto-post?account=${selectedAccountID}&panel=content` : "/auto-post?panel=content",
+        actionLabel: t("autoPost.blockers.contentMissing.action"),
+        severity: "warning",
+      });
+    }
+    if (!selectedPlan?.enabled) {
+      blockers.push({
+        id: "planner_disabled",
+        title: t("autoPost.blockers.plannerDisabled.title"),
+        description: t("autoPost.blockers.plannerDisabled.description"),
+        href: selectedAccountID ? `/auto-post?account=${selectedAccountID}&panel=planner` : "/auto-post?panel=planner",
+        actionLabel: t("autoPost.blockers.plannerDisabled.action"),
+        severity: "warning",
+      });
+    }
+    if (aiLimit > 0 && aiRemaining <= 0) {
+      blockers.push({
+        id: "quota",
+        title: t("autoPost.blockers.quota.title"),
+        description: t("autoPost.blockers.quota.description"),
+        href: "/billing",
+        actionLabel: t("autoPost.blockers.quota.action"),
+        severity: "danger",
+      });
+    }
+    if (queuedDraftCount > 0) {
+      blockers.push({
+        id: "queue",
+        title: t("autoPost.blockers.queue.title", { count: queuedDraftCount }),
+        description: t("autoPost.blockers.queue.description"),
+        href: "/execution-queue?type=post",
+        actionLabel: t("autoPost.blockers.queue.action"),
+        severity: "info",
+        countLabel: String(queuedDraftCount),
+      });
+    }
+    return blockers;
+  }, [activeContentCount, aiLimit, aiRemaining, modulePaused, queuedDraftCount, selectedAccount, selectedAccountID, selectedBot, selectedPlan?.enabled, t]);
 
   useEffect(() => {
     setActivePanel(readWorkbenchPanel(searchParams.get("panel")));
@@ -801,6 +919,87 @@ export default function AutoPostPage() {
     }
   };
 
+  const generateFirstValueDrafts = async () => {
+    if (!selectedAccountID) {
+      pushToast(t("autoPost.errors.needAccount"));
+      return;
+    }
+    if (aiRemaining < 3) {
+      setQuotaUpgradeVisible(true);
+      pushToast(t("autoPost.firstValue.errors.quota"));
+      return;
+    }
+    const usableSeeds = firstValueSeeds.map((seed, index) => {
+      const fallback = defaultFirstValueSeeds()[index] || defaultFirstValueSeeds()[0];
+      return {
+        title: seed.title.trim() || fallback.title,
+        body: seed.body.trim() || fallback.body,
+        goal: seed.goal.trim() || fallback.goal,
+        angle: seed.angle.trim() || fallback.angle,
+      };
+    });
+    setFirstValueRunning(true);
+    try {
+      let plan = selectedPlan;
+      if (!plan) {
+        const saved = await autoPostService.createPlan({
+          x_account_id: selectedAccountID,
+          enabled: false,
+          execution_mode: "review",
+          min_interval_minutes: Number(form.minIntervalMinutes) || 120,
+          posting_windows: form.postingWindows.trim(),
+          timezone: form.timezone.trim() || "UTC",
+          content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
+          excluded_trend_names: form.excludedTrendNames,
+        });
+        plan = saved;
+        setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
+        setForm(formFromPlan(saved));
+      }
+
+      const createdItems: ContentLibraryItemApi[] = [];
+      const createdDrafts: AutoPostDraftApi[] = [];
+      for (const seed of usableSeeds) {
+        const item = await contentLibraryService.create({
+          twitter_account_id: selectedAccountID,
+          bot_id: selectedBot?.id,
+          title: seed.title,
+          item_type: "idea",
+          body: seed.body,
+          topics: splitTopics("AI Agent, X Growth, Web3"),
+          growth_goal: seed.goal,
+          cta_preference: "轻量引导试用，不强推",
+          priority: 70,
+          status: "active",
+        });
+        createdItems.push(item);
+        const direction = `${seed.angle}\n\n增长目标：${seed.goal}`;
+        const draft = await autoPostService.generateDraft(plan.id, direction, item.id, form.excludedTrendNames);
+        createdDrafts.push(draft);
+      }
+
+      setContentItems((current) => [...createdItems, ...current.filter((item) => !createdItems.some((created) => created.id === item.id))]);
+      setDrafts((current) => [...createdDrafts, ...current.filter((draft) => !createdDrafts.some((created) => created.id === draft.id))]);
+      setSelectedContentItemID(createdItems[0]?.id || 0);
+      setQuotaUpgradeVisible(false);
+      pushToast(t("autoPost.firstValue.toast.generated"));
+      setActivePanel("history");
+      void load();
+    } catch (error) {
+      const code = apiErrorCode(error);
+      if (code === "ai_generation_quota_exceeded" || code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
+        setQuotaUpgradeVisible(true);
+        pushToast(t("autoPost.firstValue.errors.quota"));
+      } else if (code === "auto_post_duplicate_content") {
+        pushToast(t("autoPost.errors.duplicateContent"));
+      } else {
+        pushToast(apiErrorMessage(error) || t("autoPost.firstValue.errors.generate"));
+      }
+    } finally {
+      setFirstValueRunning(false);
+    }
+  };
+
   const runPlannerNow = async () => {
     if (!selectedPlan) {
       pushToast(t("autoPost.runNow.needPlanner"));
@@ -871,6 +1070,13 @@ export default function AutoPostPage() {
 
       {loadState === "ready" ? (
         <>
+          <OperationalBlockersCard
+            title={t("autoPost.blockers.title")}
+            description={t("autoPost.blockers.description")}
+            blockers={operationalBlockers}
+            emptyTitle={t("autoPost.blockers.emptyTitle")}
+            emptyDescription={t("autoPost.blockers.emptyDescription")}
+          />
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr_0.9fr]">
             <Card>
               <CardHeader title={t("autoPost.account.title")} description={t("autoPost.account.description")} />
@@ -998,6 +1204,21 @@ export default function AutoPostPage() {
             plannerEnabled={Boolean(selectedPlan?.enabled || form.enabled)}
             autopilotEnabled={canAutopilotPublish}
             onOpenPanel={openPanel}
+          />
+
+          <FirstValueWizard
+            seeds={firstValueSeeds}
+            disabled={!selectedAccountID || firstValueRunning || aiRemaining < 3}
+            running={firstValueRunning}
+            hasBot={Boolean(selectedBot)}
+            hasContent={activeContentCount > 0}
+            aiRemaining={aiRemaining}
+            onSeedChange={(index, patch) =>
+              setFirstValueSeeds((current) => current.map((seed, seedIndex) => (seedIndex === index ? { ...seed, ...patch } : seed)))
+            }
+            onReset={() => setFirstValueSeeds(defaultFirstValueSeeds())}
+            onGenerate={() => void generateFirstValueDrafts()}
+            onOpenQueue={() => router.push("/execution-queue?type=post")}
           />
 
           <AutoPostPipelineSummary
@@ -1701,6 +1922,126 @@ export default function AutoPostPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function FirstValueWizard({
+  seeds,
+  disabled,
+  running,
+  hasBot,
+  hasContent,
+  aiRemaining,
+  onSeedChange,
+  onReset,
+  onGenerate,
+  onOpenQueue,
+}: {
+  seeds: FirstValueSeed[];
+  disabled: boolean;
+  running: boolean;
+  hasBot: boolean;
+  hasContent: boolean;
+  aiRemaining: number;
+  onSeedChange: (index: number, patch: Partial<FirstValueSeed>) => void;
+  onReset: () => void;
+  onGenerate: () => void;
+  onOpenQueue: () => void;
+}) {
+  const { t } = useT();
+  const checks = [
+    { done: hasBot, label: t("autoPost.firstValue.checks.bot") },
+    { done: hasContent, label: t("autoPost.firstValue.checks.content") },
+    { done: aiRemaining >= 3, label: t("autoPost.firstValue.checks.quota", { count: aiRemaining }) },
+  ];
+
+  return (
+    <Card className="border-[#1d9bf0]/25 bg-[#1d9bf0]/10">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-black px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Sparkles className="size-3.5" />
+            {t("autoPost.firstValue.kicker")}
+          </div>
+          <h2 className="mt-3 text-xl font-bold text-[#e7e9ea]">{t("autoPost.firstValue.title")}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#b9cad8]">{t("autoPost.firstValue.description")}</p>
+        </div>
+        <div className="grid gap-2 sm:flex sm:flex-wrap xl:justify-end">
+          <Button type="button" variant="outline" onClick={onReset} disabled={running}>
+            {t("autoPost.firstValue.actions.reset")}
+          </Button>
+          <Button type="button" onClick={onGenerate} disabled={disabled}>
+            {running ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+            {t("autoPost.firstValue.actions.generate")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {checks.map((check) => (
+          <div key={check.label} className="flex items-center gap-2 rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-xs text-[#71767b]">
+            <span className={`inline-flex size-5 items-center justify-center rounded-full border ${check.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
+              {check.done ? <CheckCircle2 className="size-3.5" /> : <span className="size-1.5 rounded-full bg-current" />}
+            </span>
+            <span>{check.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-3">
+        {seeds.map((seed, index) => (
+          <div key={index} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.firstValue.seedTitle", { index: index + 1 })}</p>
+              <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-[11px] text-[#71767b]">
+                {t("autoPost.contentLibrary.itemType.idea")}
+              </span>
+            </div>
+            <label className="block space-y-2">
+              <span className="text-xs font-medium text-[#71767b]">{t("autoPost.firstValue.fields.title")}</span>
+              <input
+                value={seed.title}
+                onChange={(event) => onSeedChange(index, { title: event.target.value })}
+                className="h-10 w-full rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+              />
+            </label>
+            <label className="mt-3 block space-y-2">
+              <span className="text-xs font-medium text-[#71767b]">{t("autoPost.firstValue.fields.body")}</span>
+              <textarea
+                value={seed.body}
+                onChange={(event) => onSeedChange(index, { body: event.target.value })}
+                rows={5}
+                className="w-full resize-y rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+              />
+            </label>
+            <label className="mt-3 block space-y-2">
+              <span className="text-xs font-medium text-[#71767b]">{t("autoPost.firstValue.fields.goal")}</span>
+              <input
+                value={seed.goal}
+                onChange={(event) => onSeedChange(index, { goal: event.target.value })}
+                className="h-10 w-full rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+              />
+            </label>
+            <label className="mt-3 block space-y-2">
+              <span className="text-xs font-medium text-[#71767b]">{t("autoPost.firstValue.fields.angle")}</span>
+              <textarea
+                value={seed.angle}
+                onChange={(event) => onSeedChange(index, { angle: event.target.value })}
+                rows={3}
+                className="w-full resize-y rounded-2xl border border-[#2f3336] bg-[#0f1419] px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 text-sm leading-6 text-[#71767b] lg:flex-row lg:items-center lg:justify-between">
+        <p>{t("autoPost.firstValue.footer")}</p>
+        <button type="button" onClick={onOpenQueue} className="shrink-0 text-left text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {t("autoPost.actions.openQueue")}
+        </button>
+      </div>
+    </Card>
   );
 }
 

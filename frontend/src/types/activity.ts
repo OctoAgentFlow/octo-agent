@@ -22,4 +22,10 @@ export type ActivityRecord = {
   replyToUsername?: string;
   replyToTextPreview?: string;
   replyTextPreview?: string;
+  reviewQueueBulk?: {
+    action?: "approve" | "reject" | "retry" | string;
+    total?: number;
+    succeeded?: number;
+    failed?: number;
+  };
 };

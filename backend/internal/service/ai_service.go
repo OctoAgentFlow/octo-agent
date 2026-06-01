@@ -170,6 +170,7 @@ type GenerateAutoReplyInput struct {
 	PrimaryLanguage   string
 	LanguageStrategy  string
 	ContentContext    []GenerationContentContextItem
+	FeedbackSignals   []string
 }
 
 type GenerateAutoDMInput struct {
@@ -244,6 +245,7 @@ type GenerateOAFBotSamplesInput struct {
 	SafetyMode        string
 	PrimaryLanguage   string
 	LanguageStrategy  string
+	FeedbackSignals   []string
 }
 
 type CompleteOAFBotProfileInput struct {
@@ -297,6 +299,7 @@ type GenerateAutoPostInput struct {
 	ContentItemCTA       string
 	SelectedTrends       []TrendPromptItem
 	TrendFeedbackSignals []string
+	FeedbackSignals      []string
 	RecentPosts          []string
 	ContentLengthMode    string
 	MaxCharacters        int
@@ -334,6 +337,203 @@ type GenerateAutoPostInput struct {
 	SafetyMode           string
 	PrimaryLanguage      string
 	LanguageStrategy     string
+}
+
+func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInput, originalContent string, rewriteMode string, feedback string) (AIGeneratedText, error) {
+	handle := strings.TrimSpace(in.AccountHandle)
+	if handle == "" {
+		handle = "@account"
+	}
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's Auto Post rewrite assistant.",
+		"Rewrite one X/Twitter post for the provided account.",
+		"Output plain text only. Do not include JSON, markdown, labels, field names, or surrounding quotes.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Account: " + handle + "\n")
+	if strings.TrimSpace(in.ContentDirection) != "" {
+		user.WriteString("Original generation direction: " + strings.TrimSpace(in.ContentDirection) + "\n")
+	}
+	if strings.TrimSpace(in.ContentItemTitle) != "" || strings.TrimSpace(in.ContentItemBody) != "" {
+		user.WriteString("Content source:\n")
+		user.WriteString("title: " + strings.TrimSpace(in.ContentItemTitle) + "\n")
+		user.WriteString("type: " + strings.TrimSpace(in.ContentItemType) + "\n")
+		user.WriteString("body: " + strings.TrimSpace(in.ContentItemBody) + "\n")
+		if strings.TrimSpace(in.ContentItemGoal) != "" {
+			user.WriteString("growth_goal: " + strings.TrimSpace(in.ContentItemGoal) + "\n")
+		}
+		if strings.TrimSpace(in.ContentItemCTA) != "" {
+			user.WriteString("cta_preference: " + strings.TrimSpace(in.ContentItemCTA) + "\n")
+		}
+	}
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("internal_bot_name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner:   in.ProjectOneLiner,
+			TargetAudience:    in.TargetAudience,
+			CoreValueProps:    in.CoreValueProps,
+			ProductFeatures:   in.ProductFeatures,
+			Differentiators:   in.Differentiators,
+			ContentPillars:    in.ContentPillars,
+			ContentObjectives: in.ContentObjectives,
+			PreferredCTA:      in.PreferredCTA,
+			WebsiteURL:        in.WebsiteURL,
+			CTAPolicy:         in.CTAPolicy,
+			Hashtags:          in.Hashtags,
+			Keywords:          in.Keywords,
+			ComplianceNotes:   in.ComplianceNotes,
+			AvoidClaims:       in.AvoidClaims,
+		})
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	}
+	if len(in.RecentPosts) > 0 {
+		user.WriteString("Recent generated posts to avoid repeating:\n")
+		for _, post := range in.RecentPosts {
+			post = strings.TrimSpace(post)
+			if post == "" || post == strings.TrimSpace(originalContent) {
+				continue
+			}
+			user.WriteString("- " + truncateRunes(post, 180) + "\n")
+		}
+	}
+	writeGenerationFeedbackSignals(&user, "Recent negative Auto Post feedback to fix:", in.FeedbackSignals)
+	user.WriteString("Original draft:\n")
+	user.WriteString(strings.TrimSpace(originalContent) + "\n")
+	user.WriteString("Rewrite mode: " + normalizeAutoPostRewriteMode(rewriteMode) + "\n")
+	if strings.TrimSpace(feedback) != "" {
+		user.WriteString("Reviewer feedback: " + strings.TrimSpace(feedback) + "\n")
+	}
+	maxCharacters := in.MaxCharacters
+	if maxCharacters <= 0 {
+		maxCharacters = xStandardDraftMax
+	}
+	lengthMode := strings.ToLower(strings.TrimSpace(in.ContentLengthMode))
+	user.WriteString("Hard rules:\n")
+	if lengthMode == autoPostLengthModeLong {
+		user.WriteString(fmt.Sprintf("- X Premium longer-post mode: target 700-1200 characters, hard maximum %d characters.\n", maxCharacters))
+	} else {
+		user.WriteString("- Target 180-220 characters; never write close to the X 280-character limit.\n")
+	}
+	user.WriteString("- Preserve the factual meaning and content source.\n")
+	user.WriteString("- Make the rewrite noticeably different from the original opening and sentence structure.\n")
+	user.WriteString("- Use at most 2 hashtags, and only when they fit naturally.\n")
+	user.WriteString("- Make it useful and specific, not hype.\n")
+	user.WriteString("- Do not mention that you are AI.\n")
+	user.WriteString("- Do not ask for private keys, seed phrases, wallet connections, airdrops, or guaranteed returns.\n")
+
+	result, err := s.generateGuardedText(ctx, system, user.String())
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	text := strings.TrimSpace(result.Text)
+	if lengthMode == autoPostLengthModeLong {
+		text = fitGeneratedTweet(text, maxCharacters)
+	} else {
+		text = fitXStandardPost(text)
+	}
+	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
+}
+
+func normalizeAutoPostRewriteMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "more_specific":
+		return "make the post more concrete with a clearer use case or operational detail"
+	case "shorter":
+		return "make the post shorter and sharper without losing the main point"
+	case "founder_voice":
+		return "make the post sound more like a founder sharing a practical observation"
+	case "announcement":
+		return "make the post read like a concise project or product announcement"
+	case "interactive":
+		return "make the post more likely to invite replies or discussion"
+	case "less_marketing":
+		return "reduce marketing language and make the post more grounded"
+	default:
+		return "improve the draft while keeping the same intent"
+	}
+}
+
+type RewriteSocialDraftInput struct {
+	Scene            string
+	AccountHandle    string
+	TargetAuthor     string
+	TargetText       string
+	OriginalDraft    string
+	RewriteMode      string
+	Feedback         string
+	BotName          string
+	BotIdentity      string
+	BotVoice         string
+	GrowthGoal       string
+	PrimaryLanguage  string
+	LanguageStrategy string
+	FeedbackSignals  []string
+}
+
+func (s *AIService) RewriteSocialDraft(ctx context.Context, in RewriteSocialDraftInput) (AIGeneratedText, error) {
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's rewrite assistant for X/Twitter interactions.",
+		"Rewrite one short comment or reply for the provided account.",
+		"Output plain text only. Do not include JSON, markdown, labels, field names, or surrounding quotes.",
+	}, " ")
+	var user strings.Builder
+	user.WriteString("Scene: " + strings.TrimSpace(in.Scene) + "\n")
+	if strings.TrimSpace(in.AccountHandle) != "" {
+		user.WriteString("Account: " + strings.TrimSpace(in.AccountHandle) + "\n")
+	}
+	if strings.TrimSpace(in.TargetAuthor) != "" {
+		user.WriteString("Target author: " + strings.TrimSpace(in.TargetAuthor) + "\n")
+	}
+	if strings.TrimSpace(in.TargetText) != "" {
+		user.WriteString("Target context:\n" + truncateRunes(strings.TrimSpace(in.TargetText), 1200) + "\n")
+	}
+	if strings.TrimSpace(in.BotName) != "" || strings.TrimSpace(in.BotIdentity) != "" {
+		user.WriteString("OAF Bot persona:\n")
+		user.WriteString("name: " + strings.TrimSpace(in.BotName) + "\n")
+		user.WriteString("identity: " + strings.TrimSpace(in.BotIdentity) + "\n")
+		user.WriteString("voice: " + strings.TrimSpace(in.BotVoice) + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	}
+	writeGenerationFeedbackSignals(&user, "Recent negative interaction feedback to fix:", in.FeedbackSignals)
+	user.WriteString("Original draft:\n" + strings.TrimSpace(in.OriginalDraft) + "\n")
+	user.WriteString("Rewrite mode: " + normalizeSocialRewriteMode(in.RewriteMode) + "\n")
+	if strings.TrimSpace(in.Feedback) != "" {
+		user.WriteString("Reviewer feedback: " + strings.TrimSpace(in.Feedback) + "\n")
+	}
+	user.WriteString("Hard rules:\n")
+	user.WriteString("- Keep it under 220 characters unless target language naturally needs slightly more.\n")
+	user.WriteString("- Sound like a real human in the conversation, not a campaign slogan.\n")
+	user.WriteString("- Preserve the intent and avoid inventing facts not present in the target context.\n")
+	user.WriteString("- Do not mention that you are AI.\n")
+	user.WriteString("- Do not ask for private keys, seed phrases, wallet connections, airdrops, or guaranteed returns.\n")
+	result, err := s.generateGuardedText(ctx, system, user.String())
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	return AIGeneratedText{Text: truncateRunes(strings.TrimSpace(result.Text), 240), Usage: result.Usage}, nil
+}
+
+func normalizeSocialRewriteMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "natural":
+		return "make it more natural and conversational"
+	case "shorter":
+		return "make it shorter and sharper"
+	case "human_reply":
+		return "make it sound like a thoughtful human reply, not brand copy"
+	case "less_marketing":
+		return "remove marketing language and keep it grounded"
+	case "more_specific":
+		return "make it more specific to the target context"
+	default:
+		return "improve the draft while keeping the same intent"
+	}
 }
 
 type TrendPromptItem struct {
@@ -507,6 +707,7 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 		user.WriteString("\n")
 	}
 	writeGenerationContentContext(&user, in.ContentContext, 700)
+	writeGenerationFeedbackSignals(&user, "Recent negative Auto Reply feedback to fix:", in.FeedbackSignals)
 	user.WriteString("Hard rules:\n")
 	user.WriteString("- Maximum 220 characters.\n")
 	user.WriteString("- Directly respond to the comment; do not answer a different question.\n")
@@ -852,6 +1053,24 @@ func writeAutoCommentFeedbackSignals(user *strings.Builder, signals []string) {
 	user.WriteString("Apply this feedback directly: avoid generic comments, hard-selling, off-topic replies, wrong tone, or unrelated promotion when these issues appear above.\n")
 }
 
+func writeGenerationFeedbackSignals(user *strings.Builder, title string, signals []string) {
+	if len(signals) == 0 {
+		return
+	}
+	user.WriteString(title + "\n")
+	for i, signal := range signals {
+		if i >= 6 {
+			break
+		}
+		signal = strings.TrimSpace(signal)
+		if signal == "" {
+			continue
+		}
+		user.WriteString(fmt.Sprintf("- %s\n", truncateRunes(signal, 260)))
+	}
+	user.WriteString("Apply these signals directly: avoid repeating rejected patterns such as being too salesy, wrong tone, weak context, irrelevant targeting, or factual risk.\n")
+}
+
 func normalizeAutoCommentCandidateType(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "professional_view", "engagement_question", "soft_cta":
@@ -1072,6 +1291,7 @@ func (s *AIService) RewriteOAFBotSampleForSafety(ctx context.Context, in Generat
 	user.WriteString("Avoid claims: " + strings.Join(in.AvoidClaims, ", ") + "\n")
 	user.WriteString("Compliance notes: " + strings.TrimSpace(in.ComplianceNotes) + "\n")
 	writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	writeGenerationFeedbackSignals(&user, "High-confidence queue learning signals to apply while rewriting:", in.FeedbackSignals)
 	user.WriteString("Rules:\n")
 	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
 	switch strings.TrimSpace(in.RewriteMode) {
@@ -1173,6 +1393,7 @@ func (s *AIService) GenerateOAFBotSamples(ctx context.Context, in GenerateOAFBot
 	} else {
 		user.WriteString("Use the external sample context as the immediate situation for the requested scene. If language_strategy is follow_context, match the context language when it is clear.\n")
 	}
+	writeGenerationFeedbackSignals(&user, "Recent negative OAF Bot sample feedback to fix:", in.FeedbackSignals)
 	user.WriteString("Rules:\n")
 	user.WriteString(fmt.Sprintf("- Maximum %d characters.\n", maxChars))
 	user.WriteString("- Generate only the requested scene and no other scene.\n")
@@ -1417,6 +1638,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 			user.WriteString("\n")
 		}
 	}
+	writeGenerationFeedbackSignals(&user, "Recent negative Auto Post feedback to fix:", in.FeedbackSignals)
 	maxCharacters := in.MaxCharacters
 	if maxCharacters <= 0 {
 		maxCharacters = xStandardDraftMax

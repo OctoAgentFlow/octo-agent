@@ -57,7 +57,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
       setErrorMessage(msg);
       setLoadState("error");
     }
-  }, [postId, t]);
+  }, [postId, scheduledTimeZone, t]);
 
   useEffect(() => {
     void fetchPost();

@@ -11,4 +11,5 @@ func RegisterDashboard(rg *gin.RouterGroup, c *controller.DashboardController) {
 	group := rg.Group("/dashboard")
 	group.Use(middleware.Auth())
 	group.GET("/overview", c.Overview)
+	group.GET("/workbench", c.Workbench)
 }

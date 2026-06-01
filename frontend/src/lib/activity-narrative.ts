@@ -4,6 +4,14 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 
 /** Human-readable line for dashboard / activity list (prefers structured reply data when present). */
 export function activityNarrativeLine(record: ActivityRecord, t: Translate): string {
+  if (record.previewKey === "activity.preview.reviewQueueBulkAction") {
+    return t("activity.reviewQueueBulk.story", {
+      action: t(`executionQueue.bulk.action.${record.reviewQueueBulk?.action || "approve"}`),
+      total: record.reviewQueueBulk?.total || 0,
+      succeeded: record.reviewQueueBulk?.succeeded || 0,
+      failed: record.reviewQueueBulk?.failed || 0,
+    });
+  }
   if (
     record.type === "reply" &&
     (record.replyToUsername || record.replyToTextPreview || record.replyTextPreview)

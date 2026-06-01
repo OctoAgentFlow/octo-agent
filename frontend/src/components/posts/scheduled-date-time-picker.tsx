@@ -166,7 +166,7 @@ export function ScheduledDateTimePicker({
     value: index,
     label: new Intl.DateTimeFormat(undefined, { month: "short" }).format(new Date(year, index, 1)),
   }));
-  const timezoneOptions = useMemo(() => Array.from(new Set([timeZone, ...scheduledPostTimezones])), [timeZone]);
+  const timezoneOptions = Array.from(new Set([timeZone, ...scheduledPostTimezones]));
 
   const setDatePart = (day: number) => {
     const next = new Date(

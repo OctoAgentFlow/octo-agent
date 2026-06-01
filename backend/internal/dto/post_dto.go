@@ -59,10 +59,11 @@ type PostExecuteResponse struct {
 }
 
 type PostGenerateResponse struct {
-	Content        string           `json:"content"`
-	BotID          uint             `json:"bot_id,omitempty"`
-	Scene          string           `json:"scene"`
-	SelectedTrends []TrendTopicItem `json:"selected_trends,omitempty"`
-	Usage          PlanUsageData    `json:"usage"`
-	Limits         PlanLimitsData   `json:"limits"`
+	Content             string           `json:"content"`
+	BotID               uint             `json:"bot_id,omitempty"`
+	Scene               string           `json:"scene"`
+	SelectedTrends      []TrendTopicItem `json:"selected_trends,omitempty"`
+	FeedbackSignalCount int              `json:"feedback_signal_count"`
+	Usage               PlanUsageData    `json:"usage"`
+	Limits              PlanLimitsData   `json:"limits"`
 }

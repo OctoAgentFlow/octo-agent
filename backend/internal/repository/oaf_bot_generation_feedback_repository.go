@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"octo-agent/backend/internal/model"
 
 	"gorm.io/gorm"
@@ -12,8 +14,27 @@ func NewOAFBotGenerationFeedbackRepository(db *gorm.DB) *OAFBotGenerationFeedbac
 	return &OAFBotGenerationFeedbackRepository{DB: db}
 }
 
+func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserSince(userID uint, since time.Time, limit int) ([]model.OAFBotGenerationFeedback, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	var rows []model.OAFBotGenerationFeedback
+	err := r.DB.Where("user_id = ? AND rating = ? AND created_at >= ?", userID, "negative", since).
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *OAFBotGenerationFeedbackRepository) Create(row *model.OAFBotGenerationFeedback) error {
 	return r.DB.Create(row).Error
+}
+
+func (r *OAFBotGenerationFeedbackRepository) DeleteByUserBotAndID(userID, botID, id uint) error {
+	return r.DB.Where("user_id = ? AND bot_id = ? AND id = ?", userID, botID, id).Delete(&model.OAFBotGenerationFeedback{}).Error
 }
 
 func (r *OAFBotGenerationFeedbackRepository) ListRecentByUserBot(userID, botID uint, limit int) ([]model.OAFBotGenerationFeedback, error) {
@@ -76,6 +97,24 @@ func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserBotScene(us
 	}
 	var rows []model.OAFBotGenerationFeedback
 	err := r.DB.Where("user_id = ? AND bot_id = ? AND scene = ? AND rating = ?", userID, botID, scene, "negative").
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *OAFBotGenerationFeedbackRepository) ListRecentNegativeByUserBotScenes(userID, botID uint, scenes []string, limit int) ([]model.OAFBotGenerationFeedback, error) {
+	if len(scenes) == 0 {
+		return []model.OAFBotGenerationFeedback{}, nil
+	}
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	var rows []model.OAFBotGenerationFeedback
+	err := r.DB.Where("user_id = ? AND bot_id = ? AND scene IN ? AND rating = ?", userID, botID, scenes, "negative").
 		Order("id DESC").
 		Limit(limit).
 		Find(&rows).Error

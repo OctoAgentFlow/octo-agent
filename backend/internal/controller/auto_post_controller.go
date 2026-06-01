@@ -216,6 +216,31 @@ func (ctl *AutoPostController) UpdateDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutoPostController) RewriteDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.AutoPostDraftRewriteRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoPostService.RewriteDraft(c.Request.Context(), userID, draftID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

@@ -40,12 +40,15 @@ type AutoPostService struct {
 	userRepo       *repository.UserRepository
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
+	feedbackRepo   *repository.OAFBotGenerationFeedbackRepository
+	verdictRepo    *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo       *repository.OAFBotLearningRulePreferenceRepository
 	ai             *AIService
 	publishing     *PublishingService
 	trends         *TrendService
 }
 
-func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *AutoPostService {
+func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:    accountRepo,
 		automationRepo: automationRepo,
@@ -57,6 +60,9 @@ func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automa
 		userRepo:       userRepo,
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
+		feedbackRepo:   feedbackRepo,
+		verdictRepo:    verdictRepo,
+		prefRepo:       prefRepo,
 		ai:             ai,
 		publishing:     publishing,
 		trends:         trends,
@@ -279,6 +285,8 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	input.RecentPosts = recent
 	input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
 	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
+	input.FeedbackSignals = s.generationFeedbackSignals(userID, botIDForUsage(bot), "tweet")
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "tweet")
 	selectedTrends := s.selectTrendsForAutoPost(userID, plan.ID, botIDForUsage(bot), req.ExcludedTrendNames, now)
 	input.SelectedTrends = trendPromptItems(selectedTrends)
 	input.TrendFeedbackSignals = s.trendFeedbackSignals(userID, botIDForUsage(bot))
@@ -343,6 +351,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 		}
 	}
 	item := s.toDraftItem(*draft)
+	item.FeedbackSignalCount = len(input.FeedbackSignals)
 	return &item, nil
 }
 
@@ -511,6 +520,118 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 	}
 	item := s.toDraftItem(*draft)
 	return &item, nil
+}
+
+func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req dto.AutoPostDraftRewriteRequest) (*dto.AutoPostDraftItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	draft, err := s.draftRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
+		return nil, fmt.Errorf("draft cannot be rewritten from status %s", draft.Status)
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, draft.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
+	bot, err := s.botForAccount(userID, acc.ID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	recentDrafts, err := s.draftRepo.RecentByAccount(userID, acc.ID, 8)
+	if err != nil {
+		return nil, err
+	}
+	recent := make([]string, 0, len(recentDrafts))
+	for _, row := range recentDrafts {
+		if row.ID == draft.ID || strings.TrimSpace(row.GeneratedContent) == "" {
+			continue
+		}
+		recent = append(recent, row.GeneratedContent)
+	}
+	var contentItem *model.ContentLibraryItem
+	if draft.ContentLibraryID > 0 && s.contentRepo != nil {
+		if item, err := s.contentRepo.GetByUserAndID(userID, draft.ContentLibraryID); err == nil {
+			contentItem = item
+		}
+	}
+	plan, _ := s.planRepo.GetByUserAndID(userID, draft.PlanID)
+	botID := draft.BotID
+	if botID == 0 {
+		botID = botIDForUsage(bot)
+	}
+	feedbackRows := s.generationFeedbackRows(userID, botID, "tweet")
+	input := autoPostInputFromBot(acc, bot, "")
+	input.ContentDirection = strings.TrimSpace(draft.ContentDirection)
+	input.RecentPosts = recent
+	input.FeedbackSignals = feedbackSignalsFromRows(feedbackRows)
+	var learningRules []dto.OAFBotAppliedLearningRule
+	input.FeedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "tweet", req.DisabledLearningIssues)
+	if plan != nil {
+		input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
+	} else {
+		input.ContentLengthMode = autoPostLengthModeStandard
+	}
+	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
+	if contentItem != nil {
+		input.ContentItemTitle = contentItem.Title
+		input.ContentItemType = contentItem.ItemType
+		input.ContentItemBody = contentItem.Body
+		input.ContentItemURL = contentItem.SourceURL
+		input.ContentItemTopics = decodeStringList(contentItem.Topics)
+		input.ContentItemGoal = contentItem.GrowthGoal
+		input.ContentItemCTA = contentItem.CTAPreference
+	}
+	generated, err := s.ai.RewriteAutoPost(ctx, input, draft.GeneratedContent, req.RewriteMode, req.Feedback)
+	if err != nil {
+		return nil, err
+	}
+	content := fitXPostForAutoPost(generated.Text, acc.XSubscriptionTier, input.ContentLengthMode)
+	risk := evaluateAutoCommentRisk(content, bot, nil)
+	draft.GeneratedContent = content
+	draft.ContentHash = autoPostContentHash(content)
+	draft.RiskLevel = risk.Level
+	draft.FailureCategory = risk.Category
+	draft.FailureReason = risk.Reason
+	draft.GeneratedAt = &now
+	if draft.Status == "approved" {
+		draft.Status = "pending_review"
+		draft.ApprovedAt = nil
+		draft.ApprovalRequired = true
+	}
+	if err := s.draftRepo.Save(draft); err != nil {
+		return nil, err
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
+		return nil, err
+	}
+	item := s.toDraftItem(*draft)
+	item.FeedbackSignalCount = len(input.FeedbackSignals)
+	item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(feedbackRows, learningRules)
+	return &item, nil
+}
+
+func (s *AutoPostService) generationFeedbackSignals(userID, botID uint, scene string) []string {
+	return feedbackSignalsFromRows(s.generationFeedbackRows(userID, botID, scene))
+}
+
+func (s *AutoPostService) generationFeedbackRows(userID, botID uint, scene string) []model.OAFBotGenerationFeedback {
+	if s.feedbackRepo == nil || botID == 0 {
+		return nil
+	}
+	rows, err := s.feedbackRepo.ListRecentNegativeByUserBotScene(userID, botID, scene, 6)
+	if err != nil {
+		zap.L().Warn("load auto post rewrite feedback signals failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.String("scene", scene), zap.Error(err))
+		return nil
+	}
+	return rows
 }
 
 func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem, error) {

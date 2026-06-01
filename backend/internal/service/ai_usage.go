@@ -123,3 +123,10 @@ func botIDForUsage(bot *model.OAFBot) uint {
 	}
 	return bot.ID
 }
+
+func botString(bot *model.OAFBot, pick func(*model.OAFBot) string) string {
+	if bot == nil || pick == nil {
+		return ""
+	}
+	return pick(bot)
+}

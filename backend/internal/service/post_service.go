@@ -39,6 +39,9 @@ type PostService struct {
 	userRepo       *repository.UserRepository
 	oafBotRepo     *repository.OAFBotRepository
 	usageRepo      *repository.AIGenerationUsageRepository
+	feedbackRepo   *repository.OAFBotGenerationFeedbackRepository
+	verdictRepo    *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo       *repository.OAFBotLearningRulePreferenceRepository
 	ai             *AIService
 	trends         *TrendService
 	xPublisher     config.XPublisherConfig
@@ -52,6 +55,9 @@ func NewPostService(
 	userRepo *repository.UserRepository,
 	oafBotRepo *repository.OAFBotRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
+	feedbackRepo *repository.OAFBotGenerationFeedbackRepository,
+	verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository,
+	prefRepo *repository.OAFBotLearningRulePreferenceRepository,
 	ai *AIService,
 	trends *TrendService,
 	xPublisher config.XPublisherConfig,
@@ -64,6 +70,9 @@ func NewPostService(
 		userRepo:       userRepo,
 		oafBotRepo:     oafBotRepo,
 		usageRepo:      usageRepo,
+		feedbackRepo:   feedbackRepo,
+		verdictRepo:    verdictRepo,
+		prefRepo:       prefRepo,
 		ai:             ai,
 		trends:         trends,
 		xPublisher:     xPublisher,
@@ -300,6 +309,8 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	selectedTrends := s.selectTrendsForManualPost(userID, botID, req.ExcludedTrendNames, now)
 	input := autoPostInputFromBot(acc, bot, req.Topic)
 	input.SelectedTrends = trendPromptItems(selectedTrends)
+	input.FeedbackSignals = s.generationFeedbackSignals(userID, botID, "tweet")
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "tweet")
 	if s.trends != nil {
 		input.TrendFeedbackSignals = s.trends.FeedbackPromptSignals(userID, botID)
 	}
@@ -316,10 +327,11 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	}
 	limits := subscription.LimitsForUser(user)
 	return &dto.PostGenerateResponse{
-		Content:        generated.Text,
-		BotID:          botID,
-		Scene:          repository.AIGenerationSceneAutoPost,
-		SelectedTrends: selectedTrends,
+		Content:             generated.Text,
+		BotID:               botID,
+		Scene:               repository.AIGenerationSceneAutoPost,
+		SelectedTrends:      selectedTrends,
+		FeedbackSignalCount: len(input.FeedbackSignals),
 		Usage: dto.PlanUsageData{
 			AIGenerationsMonth: currentAIGenerationUsage(s.usageRepo, userID, now),
 		},
@@ -534,6 +546,18 @@ func (s *PostService) executePublish(ctx context.Context, userID, postID uint, a
 		zap.String("account_handle", handle),
 	)...)
 	return &item, tweetID, nil
+}
+
+func (s *PostService) generationFeedbackSignals(userID, botID uint, scene string) []string {
+	if s == nil || s.feedbackRepo == nil || botID == 0 {
+		return nil
+	}
+	rows, err := s.feedbackRepo.ListRecentNegativeByUserBotScene(userID, botID, scene, 6)
+	if err != nil {
+		zap.L().Warn("load manual post generation feedback signals failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.String("scene", scene), zap.Error(err))
+		return nil
+	}
+	return feedbackSignalsFromRows(rows)
 }
 
 func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic string) GenerateAutoPostInput {

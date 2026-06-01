@@ -3,9 +3,11 @@ import type {
   OAFBot,
   OAFBotCompleteProfileResult,
   OAFBotFeedbackProfileSuggestionResult,
+  OAFBotFeedbackSummary,
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackPayload,
   OAFBotGenerationUsage,
+  OAFBotLearningRulePreference,
   OAFBotListData,
   OAFBotMatrixInspectionSummary,
   OAFBotMatrixSignal,
@@ -15,6 +17,7 @@ import type {
   OAFBotSampleScene,
   OAFBotTestGenerateResult,
 } from "@/types/oaf-bot";
+import type { ReviewQueueFeedbackIssueVerdictStatApi } from "@/services/review-queue.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -81,6 +84,20 @@ type OAFBotGenerationFeedbackApi = {
 type OAFBotMatrixSignalsApi = {
   items: OAFBotMatrixSignal[];
   summary?: OAFBotMatrixInspectionSummary;
+};
+
+type OAFBotFeedbackSummaryApi = OAFBotFeedbackSummary;
+type OAFBotLearningRulePreferencesApi = {
+  items: OAFBotLearningRulePreference[];
+};
+type OAFBotDashboardSummaryApi = {
+  bots: OAFBot[];
+  usage: OAFBotListData["usage"];
+  limits: OAFBotListData["limits"];
+  inspection_summary: OAFBotMatrixInspectionSummary;
+  feedback_summary: OAFBotFeedbackSummary;
+  verdict_stats: ReviewQueueFeedbackIssueVerdictStatApi[];
+  learning_rule_preferences: OAFBotLearningRulePreference[];
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {
@@ -154,11 +171,11 @@ export const oafBotService = {
     const res = await request.post<ApiResponse<OAFBotFeedbackProfileSuggestionResult>>(`/oaf-bots/${id}/feedback-profile-suggestion`, {});
     return res.data.data;
   },
-  async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string) {
-    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene, sample_context: sampleContext });
+  async testGenerate(id: number, scene: OAFBotSampleScene, sampleContext?: string, disabledLearningIssues?: string[]) {
+    const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/test-generate`, { scene, sample_context: sampleContext, disabled_learning_issues: disabledLearningIssues || [] });
     return res.data.data;
   },
-  async rewriteSafety(id: number, body: { scene: OAFBotSampleScene; content: string; sample_context?: string; rewrite_mode?: string; matched_hits?: OAFBotSafetyHit[] }) {
+  async rewriteSafety(id: number, body: { scene: OAFBotSampleScene; content: string; sample_context?: string; rewrite_mode?: string; matched_hits?: OAFBotSafetyHit[]; disabled_learning_issues?: string[] }) {
     const res = await request.post<ApiResponse<OAFBotTestGenerateResult>>(`/oaf-bots/${id}/rewrite-safety`, body);
     return res.data.data;
   },
@@ -174,8 +191,31 @@ export const oafBotService = {
     const res = await request.get<ApiResponse<OAFBotMatrixSignalsApi>>("/oaf-bots/matrix-signals");
     return res.data.data;
   },
+  async feedbackSummary(days = 7) {
+    const res = await request.get<ApiResponse<OAFBotFeedbackSummaryApi>>("/oaf-bots/feedback-summary", { params: { days } });
+    return res.data.data;
+  },
+  async dashboardSummary(days = 7) {
+    const res = await request.get<ApiResponse<OAFBotDashboardSummaryApi>>("/oaf-bots/dashboard-summary", { params: { days } });
+    return res.data.data;
+  },
+  async learningRulePreferences(id: number) {
+    const res = await request.get<ApiResponse<OAFBotLearningRulePreferencesApi>>(`/oaf-bots/${id}/learning-rule-preferences`);
+    return res.data.data;
+  },
+  async saveLearningRulePreference(id: number, feedbackIssue: string, status: "enabled" | "disabled") {
+    const res = await request.post<ApiResponse<OAFBotLearningRulePreference>>(`/oaf-bots/${id}/learning-rule-preferences`, {
+      feedback_issue: feedbackIssue,
+      status,
+    });
+    return res.data.data;
+  },
   async createGenerationFeedback(id: number, body: OAFBotGenerationFeedbackPayload) {
     const res = await request.post<ApiResponse<OAFBotGenerationFeedback>>(`/oaf-bots/${id}/generation-feedback`, body);
+    return res.data.data;
+  },
+  async deleteGenerationFeedback(id: number, feedbackID: number) {
+    const res = await request.delete<ApiResponse<{ deleted: boolean }>>(`/oaf-bots/${id}/generation-feedback/${feedbackID}`);
     return res.data.data;
   },
 };

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,11 +36,13 @@ type OAFBotService struct {
 	postDraftRepo   *repository.AutoPostDraftRepository
 	replyDraftRepo  *repository.AutoReplyDraftRepository
 	commentTaskRepo *repository.AutoCommentTaskRepository
+	verdictRepo     *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo        *repository.OAFBotLearningRulePreferenceRepository
 	ai              *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, postDraftRepo *repository.AutoPostDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, planRepo: planRepo, contentRepo: contentRepo, postDraftRepo: postDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, postDraftRepo *repository.AutoPostDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, planRepo: planRepo, contentRepo: contentRepo, postDraftRepo: postDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, verdictRepo: verdictRepo, prefRepo: prefRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -68,6 +71,57 @@ func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
 	}, nil
 }
 
+func (s *OAFBotService) DashboardSummary(userID uint, days int) (*dto.OAFBotDashboardSummaryResponse, error) {
+	list, err := s.List(userID)
+	if err != nil {
+		return nil, err
+	}
+	bots, err := s.botRepo.ListByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	botIDs := make([]uint, 0, len(bots))
+	for _, bot := range bots {
+		botIDs = append(botIDs, bot.ID)
+	}
+	feedbackRows := []model.OAFBotGenerationFeedback{}
+	if s.feedbackRepo != nil && len(botIDs) > 0 {
+		feedbackRows, err = s.feedbackRepo.ListRecentByUserBots(userID, botIDs, 10)
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, inspectionSummary, err := s.matrixInspectionByBot(userID, bots, feedbackRows)
+	if err != nil {
+		return nil, err
+	}
+	feedbackSummary, err := s.FeedbackSummary(userID, days)
+	if err != nil {
+		return nil, err
+	}
+	verdictStats, err := s.dashboardVerdictStats(userID)
+	if err != nil {
+		return nil, err
+	}
+	learningRulePreferences := []dto.OAFBotLearningRulePreferenceItem{}
+	if len(bots) > 0 {
+		preferences, err := s.LearningRulePreferences(userID, bots[0].ID)
+		if err != nil {
+			return nil, err
+		}
+		learningRulePreferences = preferences.Items
+	}
+	return &dto.OAFBotDashboardSummaryResponse{
+		Bots:                    list.Items,
+		Usage:                   list.Usage,
+		Limits:                  list.Limits,
+		InspectionSummary:       inspectionSummary,
+		FeedbackSummary:         *feedbackSummary,
+		VerdictStats:            verdictStats,
+		LearningRulePreferences: learningRulePreferences,
+	}, nil
+}
+
 func (s *OAFBotService) Get(userID, id uint) (*dto.OAFBotItem, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
@@ -75,6 +129,52 @@ func (s *OAFBotService) Get(userID, id uint) (*dto.OAFBotItem, error) {
 	}
 	item := oafBotToDTO(*bot)
 	return &item, nil
+}
+
+func (s *OAFBotService) LearningRulePreferences(userID, id uint) (*dto.OAFBotLearningRulePreferenceResponse, error) {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return nil, err
+	}
+	if s.prefRepo == nil {
+		return &dto.OAFBotLearningRulePreferenceResponse{Items: []dto.OAFBotLearningRulePreferenceItem{}}, nil
+	}
+	rows, err := s.prefRepo.ListByUserBot(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.OAFBotLearningRulePreferenceItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, dto.OAFBotLearningRulePreferenceItem{
+			BotID:         row.BotID,
+			FeedbackIssue: row.FeedbackIssue,
+			Status:        normalizeLearningRulePreferenceStatus(row.Status),
+		})
+	}
+	return &dto.OAFBotLearningRulePreferenceResponse{Items: items}, nil
+}
+
+func (s *OAFBotService) UpsertLearningRulePreference(userID, id uint, req dto.OAFBotLearningRulePreferenceRequest) (*dto.OAFBotLearningRulePreferenceItem, error) {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return nil, err
+	}
+	if s.prefRepo == nil {
+		return nil, fmt.Errorf("learning rule preference repository is not configured")
+	}
+	issue := strings.ToLower(strings.TrimSpace(req.FeedbackIssue))
+	if issue == "" {
+		return nil, fmt.Errorf("feedback_issue is required")
+	}
+	status := normalizeLearningRulePreferenceStatus(req.Status)
+	row := &model.OAFBotLearningRulePreference{
+		UserID:        userID,
+		BotID:         id,
+		FeedbackIssue: issue,
+		Status:        status,
+	}
+	if err := s.prefRepo.Upsert(row); err != nil {
+		return nil, err
+	}
+	return &dto.OAFBotLearningRulePreferenceItem{BotID: id, FeedbackIssue: issue, Status: status}, nil
 }
 
 func (s *OAFBotService) Create(userID uint, req dto.OAFBotUpsertRequest) (*dto.OAFBotItem, error) {
@@ -176,12 +276,12 @@ func (s *OAFBotService) SuggestProfileFromFeedback(ctx context.Context, userID, 
 	}, nil
 }
 
-func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene string, sampleContext string) (*dto.OAFBotTestGenerateResponse, error) {
+func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, req dto.OAFBotTestGenerateRequest) (*dto.OAFBotTestGenerateResponse, error) {
 	bot, err := s.botRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
 	}
-	scene = normalizeOAFBotSampleScene(scene)
+	scene := normalizeOAFBotSampleScene(req.Scene)
 	if scene == "" {
 		return nil, fmt.Errorf("invalid sample scene")
 	}
@@ -189,7 +289,12 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
 		return nil, err
 	}
-	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, oafBotSampleInput(bot, scene, sampleContext))
+	input := oafBotSampleInput(bot, scene, req.SampleContext)
+	feedbackRows := s.sampleFeedbackRows(userID, bot.ID, scene)
+	input.FeedbackSignals = feedbackSignalsFromRows(feedbackRows)
+	var learningRules []dto.OAFBotAppliedLearningRule
+	input.FeedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, bot.ID, scene, req.DisabledLearningIssues)
+	out, usage, err := s.ai.GenerateOAFBotSamples(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -198,8 +303,25 @@ func (s *OAFBotService) TestGenerate(ctx context.Context, userID, id uint, scene
 	}
 	out.BotID = bot.ID
 	out.UsageConsumed = 1
+	out.FeedbackSignalCount = len(input.FeedbackSignals)
+	out.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(feedbackRows, learningRules)
 	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
 	return out, nil
+}
+
+func (s *OAFBotService) sampleFeedbackSignals(userID, botID uint, scene string) []string {
+	return feedbackSignalsFromRows(s.sampleFeedbackRows(userID, botID, scene))
+}
+
+func (s *OAFBotService) sampleFeedbackRows(userID, botID uint, scene string) []model.OAFBotGenerationFeedback {
+	if s.feedbackRepo == nil || botID == 0 {
+		return nil
+	}
+	rows, err := s.feedbackRepo.ListRecentNegativeByUserBotScenes(userID, botID, sampleFeedbackScenes(scene), 6)
+	if err != nil {
+		return nil
+	}
+	return rows
 }
 
 func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id uint, req dto.OAFBotRewriteSafetyRequest) (*dto.OAFBotTestGenerateResponse, error) {
@@ -223,6 +345,8 @@ func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id u
 	input.UnsafeContent = content
 	input.RewriteMode = normalizeSafetyRewriteMode(req.RewriteMode)
 	input.SafetyHits = req.MatchedHits
+	var learningRules []dto.OAFBotAppliedLearningRule
+	input.FeedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, bot.ID, scene, req.DisabledLearningIssues)
 	out, usage, err := s.ai.RewriteOAFBotSampleForSafety(ctx, input)
 	if err != nil {
 		return nil, err
@@ -232,6 +356,8 @@ func (s *OAFBotService) RewriteSampleForSafety(ctx context.Context, userID, id u
 	}
 	out.BotID = bot.ID
 	out.UsageConsumed = 1
+	out.FeedbackSignalCount = len(input.FeedbackSignals)
+	out.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(nil, learningRules)
 	out.SafetyEvaluation = evaluateOAFBotSampleSafety(out.Content, bot)
 	return out, nil
 }
@@ -495,7 +621,7 @@ func (s *OAFBotService) GenerationFeedback(userID, id uint) (*dto.OAFBotGenerati
 	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
 		return nil, err
 	}
-	rows, err := s.feedbackRepo.ListRecentByUserBot(userID, id, 10)
+	rows, err := s.feedbackRepo.ListRecentByUserBot(userID, id, 30)
 	if err != nil {
 		return nil, err
 	}
@@ -504,6 +630,187 @@ func (s *OAFBotService) GenerationFeedback(userID, id uint) (*dto.OAFBotGenerati
 		items = append(items, oafBotGenerationFeedbackToDTO(row))
 	}
 	return &dto.OAFBotGenerationFeedbackResponse{Items: items}, nil
+}
+
+func (s *OAFBotService) DeleteGenerationFeedback(userID, id, feedbackID uint) error {
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return err
+	}
+	if s.feedbackRepo == nil {
+		return nil
+	}
+	return s.feedbackRepo.DeleteByUserBotAndID(userID, id, feedbackID)
+}
+
+func (s *OAFBotService) FeedbackSummary(userID uint, days int) (*dto.OAFBotFeedbackSummaryResponse, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 30 {
+		days = 30
+	}
+	if s.feedbackRepo == nil {
+		return &dto.OAFBotFeedbackSummaryResponse{Days: days}, nil
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days)
+	rows, err := s.feedbackRepo.ListRecentNegativeByUserSince(userID, since, 500)
+	if err != nil {
+		return nil, err
+	}
+	issueCounts := map[string]int{}
+	sceneCounts := map[string]int{}
+	lastFeedbackAt := ""
+	for index, row := range rows {
+		if index == 0 {
+			lastFeedbackAt = row.CreatedAt.UTC().Format(time.RFC3339)
+		}
+		scene := strings.TrimSpace(row.Scene)
+		if scene == "" {
+			scene = "unknown"
+		}
+		sceneCounts[scene]++
+		tags := decodeStringList(row.IssueTags)
+		if len(tags) == 0 {
+			issueCounts["other"]++
+			continue
+		}
+		for _, tag := range tags {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			issueCounts[tag]++
+		}
+	}
+	topIssues := make([]dto.OAFBotFeedbackSummaryIssue, 0, len(issueCounts))
+	for tag, count := range issueCounts {
+		topIssues = append(topIssues, dto.OAFBotFeedbackSummaryIssue{Tag: tag, Count: count})
+	}
+	sort.Slice(topIssues, func(i, j int) bool {
+		if topIssues[i].Count == topIssues[j].Count {
+			return topIssues[i].Tag < topIssues[j].Tag
+		}
+		return topIssues[i].Count > topIssues[j].Count
+	})
+	if len(topIssues) > 5 {
+		topIssues = topIssues[:5]
+	}
+	scenes := make([]dto.OAFBotFeedbackSummaryScene, 0, len(sceneCounts))
+	for scene, count := range sceneCounts {
+		scenes = append(scenes, dto.OAFBotFeedbackSummaryScene{Scene: scene, Count: count})
+	}
+	sort.Slice(scenes, func(i, j int) bool {
+		if scenes[i].Count == scenes[j].Count {
+			return scenes[i].Scene < scenes[j].Scene
+		}
+		return scenes[i].Count > scenes[j].Count
+	})
+	return &dto.OAFBotFeedbackSummaryResponse{
+		Days:           days,
+		NegativeCount:  len(rows),
+		TopIssues:      topIssues,
+		Scenes:         scenes,
+		LastFeedbackAt: lastFeedbackAt,
+	}, nil
+}
+
+func (s *OAFBotService) dashboardVerdictStats(userID uint) ([]dto.ReviewQueueFeedbackIssueVerdictStat, error) {
+	if s.verdictRepo == nil {
+		return []dto.ReviewQueueFeedbackIssueVerdictStat{}, nil
+	}
+	rows, err := s.verdictRepo.ListRecentByUser(userID, 500)
+	if err != nil {
+		return nil, err
+	}
+	type reasonCounter struct {
+		accurate   int
+		irrelevant int
+	}
+	type issueCounter struct {
+		accurate   int
+		irrelevant int
+		reasons    map[string]*reasonCounter
+	}
+	counters := map[string]*issueCounter{}
+	for _, row := range rows {
+		issue := strings.TrimSpace(row.FeedbackIssue)
+		if issue == "" {
+			continue
+		}
+		counter := counters[issue]
+		if counter == nil {
+			counter = &issueCounter{reasons: map[string]*reasonCounter{}}
+			counters[issue] = counter
+		}
+		isAccurate := row.Verdict == "accurate"
+		if isAccurate {
+			counter.accurate++
+		} else if row.Verdict == "irrelevant" {
+			counter.irrelevant++
+		}
+		for _, reason := range decodeStringList(row.Reasons) {
+			reason = strings.TrimSpace(reason)
+			if reason == "" {
+				continue
+			}
+			reasonStats := counter.reasons[reason]
+			if reasonStats == nil {
+				reasonStats = &reasonCounter{}
+				counter.reasons[reason] = reasonStats
+			}
+			if isAccurate {
+				reasonStats.accurate++
+			} else if row.Verdict == "irrelevant" {
+				reasonStats.irrelevant++
+			}
+		}
+	}
+	issues := make([]dto.ReviewQueueFeedbackIssueVerdictStat, 0, len(counters))
+	for issue, counter := range counters {
+		total := counter.accurate + counter.irrelevant
+		if total == 0 {
+			continue
+		}
+		reasons := make([]dto.ReviewQueueFeedbackIssueReasonStat, 0, len(counter.reasons))
+		for reason, reasonStats := range counter.reasons {
+			reasonTotal := reasonStats.accurate + reasonStats.irrelevant
+			if reasonTotal == 0 {
+				continue
+			}
+			reasons = append(reasons, dto.ReviewQueueFeedbackIssueReasonStat{
+				Reason:          reason,
+				Accurate:        reasonStats.accurate,
+				Irrelevant:      reasonStats.irrelevant,
+				Total:           reasonTotal,
+				AccuracyRate:    ratio(reasonStats.accurate, reasonTotal),
+				ScoreAdjustment: verdictScoreAdjustment(reasonStats.accurate, reasonStats.irrelevant),
+			})
+		}
+		sort.SliceStable(reasons, func(i, j int) bool {
+			if reasons[i].Total != reasons[j].Total {
+				return reasons[i].Total > reasons[j].Total
+			}
+			return reasons[i].Reason < reasons[j].Reason
+		})
+		if len(reasons) > 5 {
+			reasons = reasons[:5]
+		}
+		issues = append(issues, dto.ReviewQueueFeedbackIssueVerdictStat{
+			FeedbackIssue: issue,
+			Accurate:      counter.accurate,
+			Irrelevant:    counter.irrelevant,
+			Total:         total,
+			AccuracyRate:  ratio(counter.accurate, total),
+			Reasons:       reasons,
+		})
+	}
+	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].Total != issues[j].Total {
+			return issues[i].Total > issues[j].Total
+		}
+		return issues[i].FeedbackIssue < issues[j].FeedbackIssue
+	})
+	return issues, nil
 }
 
 func (s *OAFBotService) assertTwitterAccountBinding(userID uint, currentBotID uint, accountID uint) error {
@@ -674,6 +981,97 @@ func feedbackSignalsFromRows(rows []model.OAFBotGenerationFeedback) []string {
 		out = append(out, strings.Join(parts, " | "))
 	}
 	return out
+}
+
+func feedbackSignalSummaryFromRows(rows []model.OAFBotGenerationFeedback) *dto.OAFBotFeedbackSignalSummary {
+	return feedbackSignalSummaryFromRowsAndRules(rows, nil)
+}
+
+func feedbackSignalSummaryFromRowsAndRules(rows []model.OAFBotGenerationFeedback, learningRules []dto.OAFBotAppliedLearningRule) *dto.OAFBotFeedbackSignalSummary {
+	if len(rows) == 0 {
+		if len(learningRules) == 0 {
+			return nil
+		}
+		return &dto.OAFBotFeedbackSignalSummary{
+			Count:                len(learningRules),
+			IssueTags:            learningRuleIssues(learningRules),
+			AppliedLearningRules: learningRules,
+		}
+	}
+	sceneCounts := map[string]int{}
+	issueCounts := map[string]int{}
+	latestComment := ""
+	for _, row := range rows {
+		if scene := strings.TrimSpace(row.Scene); scene != "" {
+			sceneCounts[scene]++
+		}
+		for _, tag := range decodeStringList(row.IssueTags) {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				issueCounts[tag]++
+			}
+		}
+		if latestComment == "" && strings.TrimSpace(row.Comment) != "" {
+			latestComment = limitString(strings.TrimSpace(row.Comment), 160)
+		}
+	}
+	return &dto.OAFBotFeedbackSignalSummary{
+		Count:                len(rows) + len(learningRules),
+		Scenes:               topFeedbackKeys(sceneCounts, 3),
+		IssueTags:            mergeFeedbackKeys(topFeedbackKeys(issueCounts, 4), learningRuleIssues(learningRules), 5),
+		LatestComment:        latestComment,
+		AppliedLearningRules: learningRules,
+	}
+}
+
+func learningRuleIssues(rules []dto.OAFBotAppliedLearningRule) []string {
+	out := make([]string, 0, len(rules))
+	seen := map[string]bool{}
+	for _, rule := range rules {
+		issue := strings.TrimSpace(rule.Issue)
+		if issue == "" || seen[issue] {
+			continue
+		}
+		seen[issue] = true
+		out = append(out, issue)
+	}
+	return out
+}
+
+func mergeFeedbackKeys(primary []string, secondary []string, limit int) []string {
+	out := make([]string, 0, len(primary)+len(secondary))
+	seen := map[string]bool{}
+	for _, key := range append(primary, secondary...) {
+		key = strings.TrimSpace(key)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, key)
+		if limit > 0 && len(out) >= limit {
+			return out
+		}
+	}
+	return out
+}
+
+func topFeedbackKeys(counts map[string]int, limit int) []string {
+	if len(counts) == 0 || limit <= 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] == counts[keys[j]] {
+			return keys[i] < keys[j]
+		}
+		return counts[keys[i]] > counts[keys[j]]
+	})
+	if len(keys) > limit {
+		keys = keys[:limit]
+	}
+	return keys
 }
 
 func evaluateOAFBotSampleSafety(content string, bot *model.OAFBot) dto.OAFBotSafetyEvaluationResult {
@@ -1004,6 +1402,19 @@ func normalizeOAFBotSampleScene(value string) string {
 		return v
 	default:
 		return ""
+	}
+}
+
+func sampleFeedbackScenes(scene string) []string {
+	switch normalizeOAFBotSampleScene(scene) {
+	case "comment":
+		return []string{"comment", "auto_comment"}
+	case "reply":
+		return []string{"reply"}
+	case "dm":
+		return []string{"dm"}
+	default:
+		return []string{"tweet"}
 	}
 }
 

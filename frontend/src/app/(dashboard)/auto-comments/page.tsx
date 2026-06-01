@@ -709,9 +709,9 @@ export default function AutoCommentsPage() {
                   <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.ops.description")}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <OpsActionLink href="#auto-comment-target-import" icon={PlusCircle} label={t("autoComment.ops.importTargets")} />
-                  <OpsActionLink href="#auto-comment-target-suggestions" icon={Sparkles} label={t("autoComment.ops.generateSuggestions")} />
-                  <OpsActionLink href="#auto-comment-opportunity-queue" icon={ListChecks} label={t("autoComment.ops.openQueue")} />
+                  <OpsActionLink href="/auto-comments#auto-comment-target-import" icon={PlusCircle} label={t("autoComment.ops.importTargets")} />
+                  <OpsActionLink href="/auto-comments#auto-comment-target-suggestions" icon={Sparkles} label={t("autoComment.ops.generateSuggestions")} />
+                  <OpsActionLink href="/auto-comments#auto-comment-opportunity-queue" icon={ListChecks} label={t("autoComment.ops.openQueue")} />
                 </div>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -50,6 +50,9 @@ type AutoReplyService struct {
 	oafBotRepo     *repository.OAFBotRepository
 	contentRepo    *repository.ContentLibraryRepository
 	usageRepo      *repository.AIGenerationUsageRepository
+	feedbackRepo   *repository.OAFBotGenerationFeedbackRepository
+	verdictRepo    *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo       *repository.OAFBotLearningRulePreferenceRepository
 	ai             *AIService
 	publishing     *PublishingService
 }
@@ -64,6 +67,9 @@ func NewAutoReplyService(
 	oafBotRepo *repository.OAFBotRepository,
 	contentRepo *repository.ContentLibraryRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
+	feedbackRepo *repository.OAFBotGenerationFeedbackRepository,
+	verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository,
+	prefRepo *repository.OAFBotLearningRulePreferenceRepository,
 	ai *AIService,
 	publishing *PublishingService,
 ) *AutoReplyService {
@@ -77,13 +83,22 @@ func NewAutoReplyService(
 		oafBotRepo:     oafBotRepo,
 		contentRepo:    contentRepo,
 		usageRepo:      usageRepo,
+		feedbackRepo:   feedbackRepo,
+		verdictRepo:    verdictRepo,
+		prefRepo:       prefRepo,
 		ai:             ai,
 		publishing:     publishing,
 	}
 }
 
-func (s *AutoReplyService) ListDrafts(userID uint) (*dto.AutoReplyDraftsResponse, error) {
-	rows, err := s.replyDraftRepo.ListByUser(userID, 50)
+func (s *AutoReplyService) ListDrafts(userID uint, limit int) (*dto.AutoReplyDraftsResponse, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := s.replyDraftRepo.ListByUser(userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +159,8 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 	blocked := blockedWordsFromConfig(cfg)
 	input := autoReplyInputFromValues(req.CommentAuthorHandle, req.RootTweetText, req.CommentText, cfg.Tone, blocked, bot)
 	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), req.RootTweetText, req.CommentText, bot)
+	input.FeedbackSignals = s.generationFeedbackSignals(userID, botIDForUsage(bot), "reply")
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "reply")
 	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		return nil, err
@@ -187,6 +204,7 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 		}
 	}
 	item := toAutoReplyDraftItem(*draft)
+	item.FeedbackSignalCount = len(input.FeedbackSignals)
 	return &item, nil
 }
 
@@ -208,6 +226,98 @@ func (s *AutoReplyService) UpdateDraft(userID, id uint, content string) (*dto.Au
 	}
 	item := toAutoReplyDraftItem(*draft)
 	return &item, nil
+}
+
+func (s *AutoReplyService) RewriteDraft(ctx context.Context, userID, id uint, req dto.SocialDraftRewriteRequest) (*dto.AutoReplyDraftItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	draft, err := s.replyDraftRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
+		return nil, fmt.Errorf("draft cannot be rewritten from status %s", draft.Status)
+	}
+	if s.ai == nil {
+		return nil, fmt.Errorf("AI service is not configured")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	bot, err := s.botForAccount(userID, draft.XAccountID)
+	if err != nil {
+		return nil, err
+	}
+	accountHandle := ""
+	if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, draft.XAccountID); err == nil && acc != nil {
+		accountHandle = acc.Username
+	}
+	botID := draft.BotID
+	if botID == 0 {
+		botID = botIDForUsage(bot)
+	}
+	feedbackRows := s.generationFeedbackRows(userID, botID, "reply")
+	feedbackSignals := feedbackSignalsFromRows(feedbackRows)
+	var learningRules []dto.OAFBotAppliedLearningRule
+	feedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(feedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "reply", req.DisabledLearningIssues)
+	generated, err := s.ai.RewriteSocialDraft(ctx, RewriteSocialDraftInput{
+		Scene:            "auto_reply",
+		AccountHandle:    accountHandle,
+		TargetAuthor:     draft.CommentAuthorHandle,
+		TargetText:       firstNonEmpty(draft.CommentText, draft.RootTweetText),
+		OriginalDraft:    draft.GeneratedReply,
+		RewriteMode:      req.RewriteMode,
+		Feedback:         req.Feedback,
+		BotName:          botString(bot, func(b *model.OAFBot) string { return b.Name }),
+		BotIdentity:      botString(bot, func(b *model.OAFBot) string { return b.IdentitySummary }),
+		BotVoice:         botString(bot, func(b *model.OAFBot) string { return b.VoiceTone }),
+		GrowthGoal:       botString(bot, func(b *model.OAFBot) string { return b.GrowthGoal }),
+		PrimaryLanguage:  botString(bot, func(b *model.OAFBot) string { return b.PrimaryLanguage }),
+		LanguageStrategy: botString(bot, func(b *model.OAFBot) string { return b.LanguageStrategy }),
+		FeedbackSignals:  feedbackSignals,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cfg, _ := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeReply)
+	risk := evaluateAutoCommentRisk(generated.Text, bot, blockedWordsFromConfig(cfg))
+	draft.GeneratedReply = truncateRunes(generated.Text, autoReplyPreviewRunes)
+	draft.RiskLevel = risk.Level
+	draft.FailureCategory = risk.Category
+	draft.FailureReason = risk.Reason
+	draft.GeneratedAt = &now
+	if draft.Status == "approved" {
+		draft.Status = "pending_review"
+		draft.ApprovedAt = nil
+	}
+	if err := s.replyDraftRepo.Save(draft); err != nil {
+		return nil, err
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoReply, now, generated.Usage); err != nil {
+		return nil, err
+	}
+	item := toAutoReplyDraftItem(*draft)
+	item.FeedbackSignalCount = len(feedbackSignals)
+	item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(feedbackRows, learningRules)
+	return &item, nil
+}
+
+func (s *AutoReplyService) generationFeedbackSignals(userID, botID uint, scene string) []string {
+	return feedbackSignalsFromRows(s.generationFeedbackRows(userID, botID, scene))
+}
+
+func (s *AutoReplyService) generationFeedbackRows(userID, botID uint, scene string) []model.OAFBotGenerationFeedback {
+	if s.feedbackRepo == nil || botID == 0 {
+		return nil
+	}
+	rows, err := s.feedbackRepo.ListRecentNegativeByUserBotScene(userID, botID, scene, 6)
+	if err != nil {
+		zap.L().Warn("load auto reply rewrite feedback signals failed", zap.Uint("user_id", userID), zap.Uint("bot_id", botID), zap.String("scene", scene), zap.Error(err))
+		return nil
+	}
+	return rows
 }
 
 func (s *AutoReplyService) ApproveDraft(userID, id uint) (*dto.AutoReplyDraftItem, error) {
@@ -318,6 +428,8 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 	blocked := blockedWordsFromConfig(cfg)
 	input := autoReplyInputFromValues(draft.CommentAuthorHandle, draft.RootTweetText, draft.CommentText, cfg.Tone, blocked, bot)
 	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), draft.RootTweetText, draft.CommentText, bot)
+	input.FeedbackSignals = s.generationFeedbackSignals(userID, botIDForUsage(bot), "reply")
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "reply")
 	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		if s.replyResRepo != nil {
@@ -348,6 +460,7 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 			_ = s.replyResRepo.Release(userID, commentTweetID)
 		}
 		item := toAutoReplyDraftItem(*draft)
+		item.FeedbackSignalCount = len(input.FeedbackSignals)
 		return &item, fmt.Errorf("AI generated reply was blocked by safety rules: %s", firstNonEmpty(risk.Reason, risk.Category, "high risk"))
 	}
 	if err := recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoReply, now, generated.Usage); err != nil {
@@ -408,6 +521,7 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 			return nil, err
 		}
 		item := toAutoReplyDraftItem(*draft)
+		item.FeedbackSignalCount = len(input.FeedbackSignals)
 		return &item, nil
 	}
 	ref := commentTweetID
@@ -440,6 +554,7 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 	}
 	zap.L().Info("auto reply: manually retried", zap.Uint("user_id", userID), zap.String("comment_tweet_id", commentTweetID), zap.String("reply_tweet_id", tweetID))
 	item := toAutoReplyDraftItem(*draft)
+	item.FeedbackSignalCount = len(input.FeedbackSignals)
 	return &item, nil
 }
 
@@ -766,6 +881,8 @@ func (s *AutoReplyService) generateAutopilotReply(ctx context.Context, userID ui
 	blocked := blockedWordsFromConfig(&cfg)
 	input := autoReplyInputFromValues(reply.AuthorUsername, rootTweet, reply.Text, cfg.Tone, blocked, bot)
 	input.ContentContext = s.contentContextForReply(userID, acc.ID, botIDForUsage(bot), rootTweet, reply.Text, bot)
+	input.FeedbackSignals = s.generationFeedbackSignals(userID, botIDForUsage(bot), "reply")
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "reply")
 	generated, err := s.ai.GenerateAutoReply(ctx, input)
 	if err != nil {
 		return "", nil, err

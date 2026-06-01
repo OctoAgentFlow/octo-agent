@@ -349,6 +349,21 @@ export type AutoCommentTaskApi = {
   target_tweet_text?: string;
   target_tweet_author?: string;
   generated_comment?: string;
+  feedback_signal_count?: number;
+  feedback_signal_summary?: {
+    count: number;
+    scenes: string[];
+    issue_tags: string[];
+    latest_comment?: string;
+    applied_learning_rules?: Array<{
+      issue: string;
+      confidence: number;
+      accurate_judgments: number;
+      instruction: string;
+      evidence?: string[];
+      preference_status?: string;
+    }>;
+  };
   opportunity_score: number;
   generation_reason?: string;
   matched_keywords?: string[];
@@ -403,6 +418,21 @@ export type AutoReplyDraftApi = {
   root_tweet_text?: string;
   comment_text: string;
   generated_reply?: string;
+  feedback_signal_count?: number;
+  feedback_signal_summary?: {
+    count: number;
+    scenes: string[];
+    issue_tags: string[];
+    latest_comment?: string;
+    applied_learning_rules?: Array<{
+      issue: string;
+      confidence: number;
+      accurate_judgments: number;
+      instruction: string;
+      evidence?: string[];
+      preference_status?: string;
+    }>;
+  };
   status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "failed" | "sent";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
@@ -630,6 +660,10 @@ export const automationService = {
     });
     return res.data.data;
   },
+  async rewriteCommentDraft(id: number, payload: { rewrite_mode: string; feedback?: string; disabled_learning_issues?: string[] }) {
+    const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comments/drafts/${id}/rewrite`, payload);
+    return res.data.data;
+  },
   async deleteCommentDraft(id: number) {
     await request.delete(`/auto-comments/drafts/${id}`);
   },
@@ -653,8 +687,10 @@ export const automationService = {
     const res = await request.post<ApiResponse<AutoCommentTaskApi>>(`/auto-comment/tasks/${id}/retry`);
     return res.data.data;
   },
-  async replyDrafts() {
-    const res = await request.get<ApiResponse<AutoReplyDraftsData>>("/auto-replies/drafts");
+  async replyDrafts(query?: { pageSize?: number }) {
+    const res = await request.get<ApiResponse<AutoReplyDraftsData>>("/auto-replies/drafts", {
+      params: { page_size: query?.pageSize },
+    });
     return res.data.data;
   },
   async generateReplyDraft(payload: AutoReplyDraftPayload) {
@@ -665,6 +701,10 @@ export const automationService = {
     const res = await request.patch<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}`, {
       generated_reply: generatedReply,
     });
+    return res.data.data;
+  },
+  async rewriteReplyDraft(id: number, payload: { rewrite_mode: string; feedback?: string; disabled_learning_issues?: string[] }) {
+    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/rewrite`, payload);
     return res.data.data;
   },
   async approveReplyDraft(id: number) {

@@ -36,6 +36,7 @@ export type PostGenerateResult = {
   bot_id?: number;
   scene: "auto_post";
   selected_trends?: TrendTopicApi[];
+  feedback_signal_count?: number;
   usage: {
     ai_generations_month: number;
   };

@@ -27,6 +27,7 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
   WalletCards,
   Workflow,
 } from "lucide-react";
@@ -43,7 +44,7 @@ import { automationService, type AutomationModuleApi } from "@/services/automati
 import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
 import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
-import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
+import { reviewQueueService, type ReviewQueueFeedbackIssueVerdictStatApi, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type {
   OAFBot,
@@ -52,6 +53,7 @@ import type {
   OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackRating,
   OAFBotGenerationUsage,
+  OAFBotLearningRulePreference,
   OAFBotMatrixInspectionSummary,
   OAFBotPayload,
   OAFBotProfileAssistMode,
@@ -422,6 +424,10 @@ export default function OAFBotsPage() {
   const [safetyRewriteMode, setSafetyRewriteMode] = useState<SafetyRewriteMode>("natural");
   const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
+  const [learningComparison, setLearningComparison] = useState<OAFBotTestGenerateResult | null>(null);
+  const [disabledLearningIssues, setDisabledLearningIssues] = useState<string[]>([]);
+  const [learningRulePreferences, setLearningRulePreferences] = useState<OAFBotLearningRulePreference[]>([]);
+  const [learningVerdictStats, setLearningVerdictStats] = useState<ReviewQueueFeedbackIssueVerdictStatApi[]>([]);
   const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
   const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
   const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
@@ -432,6 +438,7 @@ export default function OAFBotsPage() {
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackDeletingID, setFeedbackDeletingID] = useState<number | null>(null);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
   const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
   const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
@@ -440,6 +447,7 @@ export default function OAFBotsPage() {
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [comparingLearning, setComparingLearning] = useState(false);
   const [rewritingSafety, setRewritingSafety] = useState(false);
   const [completingProfile, setCompletingProfile] = useState(false);
   const [profileAssistMode, setProfileAssistMode] = useState<OAFBotProfileAssistMode>("fill_missing_only");
@@ -673,6 +681,24 @@ export default function OAFBotsPage() {
     () => optionKeys("feedbackIssues", ["offPersona", "tooGeneric", "tooSalesy", "unsafeClaim", "wrongLanguage", "tooLong", "weakCTA", "missingContext"], t),
     [t],
   );
+  const productizedLearningRules = useMemo(() => {
+    const learned = learningVerdictStats
+      .filter((stat) => stat.accurate > 0 && stat.accuracy_rate >= 0.66)
+      .sort((a, b) => b.accuracy_rate - a.accuracy_rate || b.accurate - a.accurate)
+      .slice(0, 6);
+    const learnedIssues = new Set(learned.map((item) => item.feedback_issue));
+    const preferenceOnly = learningRulePreferences
+      .filter((item) => !learnedIssues.has(item.feedback_issue))
+      .map((item) => ({
+        feedback_issue: item.feedback_issue,
+        accurate: 0,
+        irrelevant: 0,
+        total: 0,
+        accuracy_rate: 0,
+        reasons: [],
+      }));
+    return [...learned, ...preferenceOnly].slice(0, 8);
+  }, [learningRulePreferences, learningVerdictStats]);
 
   const ageOptions = useMemo<SelectOption[]>(
     () => [
@@ -834,6 +860,26 @@ export default function OAFBotsPage() {
     }
   }, [pushToast, t]);
 
+  const loadLearningRulePreferences = useCallback(async (botID: number) => {
+    try {
+      const data = await oafBotService.learningRulePreferences(botID);
+      setLearningRulePreferences(data.items);
+      setDisabledLearningIssues(data.items.filter((item) => item.status === "disabled").map((item) => item.feedback_issue));
+    } catch {
+      setLearningRulePreferences([]);
+      setDisabledLearningIssues([]);
+    }
+  }, []);
+
+  const loadLearningVerdictStats = useCallback(async () => {
+    try {
+      const data = await reviewQueueService.feedbackIssueVerdictStats();
+      setLearningVerdictStats(data.issues || []);
+    } catch {
+      setLearningVerdictStats([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedID) {
       setGenerationUsages([]);
@@ -849,6 +895,19 @@ export default function OAFBotsPage() {
     }
     void loadGenerationFeedback(selectedID);
   }, [loadGenerationFeedback, selectedID]);
+
+  useEffect(() => {
+    if (!selectedID) {
+      setDisabledLearningIssues([]);
+      setLearningRulePreferences([]);
+      return;
+    }
+    void loadLearningRulePreferences(selectedID);
+  }, [loadLearningRulePreferences, selectedID]);
+
+  useEffect(() => {
+    void loadLearningVerdictStats();
+  }, [loadLearningVerdictStats]);
 
   const loadMatrixSignals = useCallback(async (items: OAFBot[]) => {
     if (items.length === 0) {
@@ -903,12 +962,14 @@ export default function OAFBotsPage() {
     setForm(botToPayload(bot, defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
+    setLearningComparison(null);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
     setSafetyRewritePreview(null);
     setPendingAppliedFormChange(null);
+    void loadLearningRulePreferences(bot.id);
   };
 
   const startCreate = () => {
@@ -916,8 +977,11 @@ export default function OAFBotsPage() {
     setForm(createEmptyForm(defaultPrimaryLanguage));
     setActiveStep("identity");
     setSamples(null);
+    setLearningComparison(null);
     setGenerationUsages([]);
     setGenerationFeedback([]);
+    setDisabledLearningIssues([]);
+    setLearningRulePreferences([]);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
     setCompleteProfilePreview(null);
@@ -933,6 +997,29 @@ export default function OAFBotsPage() {
 
   const goTestStep = () => {
     setActiveStep("test");
+  };
+
+  const toggleLearningIssue = async (issue: string) => {
+    const key = issue.trim();
+    if (!key) return;
+    if (!selectedID) return;
+    const nextStatus = disabledLearningIssues.includes(key) ? "enabled" : "disabled";
+    setDisabledLearningIssues((current) => (nextStatus === "disabled" ? [...new Set([...current, key])] : current.filter((item) => item !== key)));
+    setLearningRulePreferences((current) => {
+      const rest = current.filter((item) => item.feedback_issue !== key);
+      return [...rest, { bot_id: selectedID, feedback_issue: key, status: nextStatus }];
+    });
+    try {
+      await oafBotService.saveLearningRulePreference(selectedID, key, nextStatus);
+      pushToast(t(nextStatus === "disabled" ? "oafBots.samples.learningRuleSavedDisabled" : "oafBots.samples.learningRuleSavedEnabled"));
+    } catch (error) {
+      setDisabledLearningIssues((current) => (nextStatus === "disabled" ? current.filter((item) => item !== key) : [...new Set([...current, key])]));
+      setLearningRulePreferences((current) => {
+        const rest = current.filter((item) => item.feedback_issue !== key);
+        return nextStatus === "disabled" ? rest : [...rest, { bot_id: selectedID, feedback_issue: key, status: "disabled" }];
+      });
+      pushToast(errorMessage(error, t("oafBots.samples.learningRuleSaveFailed")));
+    }
   };
 
   const save = async () => {
@@ -1013,8 +1100,9 @@ export default function OAFBotsPage() {
     }
     setGenerating(true);
     try {
-      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene]);
+      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene], disabledLearningIssues);
       setSamples(result);
+      setLearningComparison(null);
       setSafetyRewritePreview(null);
       setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
       await loadGenerationUsages(selectedID);
@@ -1034,6 +1122,33 @@ export default function OAFBotsPage() {
     }
   };
 
+  const compareWithoutLearningRules = async () => {
+    if (!selectedID || !samples) return;
+    const appliedIssues = (samples.feedback_signal_summary?.applied_learning_rules || []).map((rule) => rule.issue).filter(Boolean);
+    if (appliedIssues.length === 0) {
+      pushToast(t("oafBots.learningCompare.noRules"));
+      return;
+    }
+    setComparingLearning(true);
+    try {
+      const disabledForCompare = Array.from(new Set([...disabledLearningIssues, ...appliedIssues]));
+      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene], disabledForCompare);
+      setLearningComparison(result);
+      await loadGenerationUsages(selectedID);
+      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
+      pushToast(t("oafBots.learningCompare.ready"));
+    } catch (error) {
+      const body = getErrorBody(error);
+      if (body?.error_code === "ai_generation_quota_exceeded") {
+        pushToast(t("oafBots.test.quotaExceeded"));
+      } else {
+        pushToast(body?.message || t("oafBots.learningCompare.failed"));
+      }
+    } finally {
+      setComparingLearning(false);
+    }
+  };
+
   const rewriteSampleForSafety = async () => {
     if (!selectedID || !samples) return;
     const content = normalizeSampleContent(samples, sampleScene);
@@ -1049,6 +1164,7 @@ export default function OAFBotsPage() {
         sample_context: sampleContexts[sampleScene] || "",
         rewrite_mode: safetyRewriteMode,
         matched_hits: samples.safety_evaluation?.matched_hits || [],
+        disabled_learning_issues: disabledLearningIssues,
       });
       setSafetyRewritePreview({ before: content, result });
       setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
@@ -1124,6 +1240,21 @@ export default function OAFBotsPage() {
     }
   };
 
+  const deleteGenerationFeedback = async (feedbackID: number) => {
+    if (!selectedID) return;
+    setFeedbackDeletingID(feedbackID);
+    try {
+      await oafBotService.deleteGenerationFeedback(selectedID, feedbackID);
+      setGenerationFeedback((items) => items.filter((item) => item.id !== feedbackID));
+      setMatrixFeedbackByBot((prev) => ({ ...prev, [selectedID]: (prev[selectedID] || []).filter((item) => item.id !== feedbackID) }));
+      pushToast(t("oafBots.feedback.deleted"));
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.feedback.deleteFailed")));
+    } finally {
+      setFeedbackDeletingID(null);
+    }
+  };
+
   const generateFeedbackProfileSuggestion = async () => {
     if (!selectedID) return;
     if (generationFeedback.filter((item) => item.rating === "negative").length === 0) {
@@ -1162,6 +1293,7 @@ export default function OAFBotsPage() {
   const handleSampleSceneChange = (scene: SampleScene) => {
     setSampleScene(scene);
     setSamples(null);
+    setLearningComparison(null);
     setSafetyRewritePreview(null);
   };
 
@@ -1700,18 +1832,29 @@ export default function OAFBotsPage() {
 
             {activeStep === "test" ? (
               <WizardPanel title={t("oafBots.section.test")} description={t("oafBots.section.testDesc")}>
+                <LearningRulesCenter
+                  rules={productizedLearningRules}
+                  preferences={learningRulePreferences}
+                  disabledLearningIssues={disabledLearningIssues}
+                  issueOptions={feedbackIssueOptions}
+                  selectedBotName={selectedBot?.name || ""}
+                  onToggleLearningIssue={toggleLearningIssue}
+                />
                 <SamplePanel
                   t={t}
                   samples={samples}
+                  learningComparison={learningComparison}
                   scene={sampleScene}
                   onSceneChange={handleSampleSceneChange}
                   sampleContext={sampleContexts[sampleScene] || ""}
                   onSampleContextChange={(value) => setSampleContexts((prev) => ({ ...prev, [sampleScene]: value }))}
                   generating={generating}
+                  comparingLearning={comparingLearning}
                   rewritingSafety={rewritingSafety}
                   safetyRewriteMode={safetyRewriteMode}
                   onSafetyRewriteModeChange={setSafetyRewriteMode}
                   onGenerate={testGenerate}
+                  onCompareWithoutLearning={compareWithoutLearningRules}
                   onRewriteSafety={rewriteSampleForSafety}
                   selectedID={selectedID}
                   formChanged={formChanged}
@@ -1725,19 +1868,23 @@ export default function OAFBotsPage() {
                   languageStrategyOptions={languageStrategyOptions}
                   feedbackItems={generationFeedback}
                   feedbackLoading={feedbackLoading}
+                  feedbackDeletingID={feedbackDeletingID}
                   feedbackDraft={feedbackDraft}
                   feedbackSaving={feedbackSaving}
                   feedbackSuggestionLoading={feedbackSuggestionLoading}
                   feedbackSuggestionPreview={feedbackSuggestionPreview}
                   safetyRewritePreview={safetyRewritePreview}
                   feedbackIssueOptions={feedbackIssueOptions}
+                  disabledLearningIssues={disabledLearningIssues}
                   onFeedbackDraftChange={setFeedbackDraft}
                   onFeedbackSubmit={submitGenerationFeedback}
+                  onFeedbackDelete={deleteGenerationFeedback}
                   onFeedbackProfileSuggestion={generateFeedbackProfileSuggestion}
                   onApplyFeedbackSuggestion={applyFeedbackProfileSuggestion}
                   onDismissFeedbackSuggestion={() => setFeedbackSuggestionPreview(null)}
                   onApplySafetyRewrite={applySafetyRewritePreview}
                   onDismissSafetyRewrite={() => setSafetyRewritePreview(null)}
+                  onToggleLearningIssue={toggleLearningIssue}
                 />
               </WizardPanel>
             ) : null}
@@ -3278,6 +3425,31 @@ function getChipLabel(value: string, options: ChipOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
+function getFeedbackIssueLabel(value: string, options: ChipOption[]) {
+  const direct = getChipLabel(value, options);
+  if (direct !== value) return direct;
+  const normalized = value.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+  const normalizedLabel = getChipLabel(normalized, options);
+  if (normalizedLabel !== normalized) return normalizedLabel;
+  return value.replace(/_/g, " ");
+}
+
+function topFeedbackCount(values: string[]): { key: string; count: number } | null {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    const key = value.trim();
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  let top: { key: string; count: number } | null = null;
+  for (const [key, count] of counts.entries()) {
+    if (!top || count > top.count || (count === top.count && key < top.key)) {
+      top = { key, count };
+    }
+  }
+  return top;
+}
+
 function getSelectLabel(value: string, options: SelectOption[]) {
   return options.find((option) => option.value === value)?.label ?? value;
 }
@@ -3491,17 +3663,117 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function LearningRulesCenter({
+  rules,
+  preferences,
+  disabledLearningIssues,
+  issueOptions,
+  selectedBotName,
+  onToggleLearningIssue,
+}: {
+  rules: ReviewQueueFeedbackIssueVerdictStatApi[];
+  preferences: OAFBotLearningRulePreference[];
+  disabledLearningIssues: string[];
+  issueOptions: ChipOption[];
+  selectedBotName: string;
+  onToggleLearningIssue: (issue: string) => void;
+}) {
+  const { t } = useT();
+  const preferenceByIssue = new Map(preferences.map((item) => [item.feedback_issue, item.status]));
+  const enabledCount = rules.filter((rule) => !disabledLearningIssues.includes(rule.feedback_issue) && preferenceByIssue.get(rule.feedback_issue) !== "disabled").length;
+  return (
+    <div className="mb-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-[#8ecdf8]" />
+            <p className="text-sm font-semibold text-[#d7ebff]">{t("oafBots.learningCenter.title")}</p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
+            {selectedBotName ? t("oafBots.learningCenter.descriptionForBot", { name: selectedBotName }) : t("oafBots.learningCenter.description")}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <div className="rounded-xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-2">
+            <p className="text-lg font-semibold text-[#7ee0b5]">{enabledCount}</p>
+            <p className="text-[11px] text-[#8b98a5]">{t("oafBots.learningCenter.enabled")}</p>
+          </div>
+          <div className="rounded-xl border border-[#f59e0b]/25 bg-[#f59e0b]/10 px-3 py-2">
+            <p className="text-lg font-semibold text-[#facc15]">{disabledLearningIssues.length}</p>
+            <p className="text-[11px] text-[#8b98a5]">{t("oafBots.learningCenter.disabled")}</p>
+          </div>
+        </div>
+      </div>
+      {rules.length > 0 ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {rules.map((rule) => {
+            const disabled = disabledLearningIssues.includes(rule.feedback_issue) || preferenceByIssue.get(rule.feedback_issue) === "disabled";
+            const confidence = rule.total > 0 ? Math.round(rule.accuracy_rate * 100) : 0;
+            return (
+              <div key={rule.feedback_issue} className={`rounded-xl border p-3 ${disabled ? "border-[#2f3336] bg-black/30 opacity-70" : "border-[#1d9bf0]/20 bg-black/35"}`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{learningIssueLabel(rule.feedback_issue, issueOptions, t)}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
+                      {rule.total > 0
+                        ? t("oafBots.learningCenter.ruleMeta", { confidence, count: rule.accurate })
+                        : t("oafBots.learningCenter.preferenceOnly")}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => onToggleLearningIssue(rule.feedback_issue)} className={`h-8 shrink-0 rounded-full border px-3 text-xs font-semibold transition ${disabled ? "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#facc15]" : "border-[#00ba7c]/40 bg-[#00ba7c]/10 text-[#9ff2c9]"}`}>
+                    {disabled ? t("oafBots.samples.learningRuleDisabled") : t("oafBots.samples.learningRuleEnabled")}
+                  </button>
+                </div>
+                {rule.reasons?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {rule.reasons.slice(0, 3).map((reason) => (
+                      <span key={reason.reason} className="rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] text-[#8b98a5]">
+                        {reason.reason.startsWith("executionQueue.") ? t(reason.reason) : reason.reason}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-dashed border-[#2f3336] bg-black/25 px-3 py-4 text-xs leading-5 text-[#71767b]">
+          {t("oafBots.learningCenter.empty")}
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link href="/dashboard" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          {t("oafBots.learningCenter.openDashboard")}
+        </Link>
+        <Link href="/execution-queue?status=pending_review" className="inline-flex h-8 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#1d9bf0]/15">
+          {t("oafBots.learningCenter.openQueue")}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function learningIssueLabel(issue: string, issueOptions: ChipOption[], t: (key: string, params?: Record<string, string | number>) => string) {
+  const mapped = getFeedbackIssueLabel(issue, issueOptions);
+  if (mapped !== issue && mapped !== issue.replace(/_/g, " ")) return mapped;
+  return t(`dashboard.feedbackLearning.issue.${issue}`);
+}
+
 function SamplePanel({
   t,
   samples,
+  learningComparison,
   scene,
   onSceneChange,
   sampleContext,
   onSampleContextChange,
   generating,
+  comparingLearning,
   rewritingSafety,
   safetyRewriteMode,
   onGenerate,
+  onCompareWithoutLearning,
   onSafetyRewriteModeChange,
   onRewriteSafety,
   selectedID,
@@ -3516,30 +3788,37 @@ function SamplePanel({
   languageStrategyOptions,
   feedbackItems,
   feedbackLoading,
+  feedbackDeletingID,
   feedbackDraft,
   feedbackSaving,
   feedbackSuggestionLoading,
   feedbackSuggestionPreview,
   safetyRewritePreview,
   feedbackIssueOptions,
+  disabledLearningIssues,
   onFeedbackDraftChange,
   onFeedbackSubmit,
+  onFeedbackDelete,
   onFeedbackProfileSuggestion,
   onApplyFeedbackSuggestion,
   onDismissFeedbackSuggestion,
   onApplySafetyRewrite,
   onDismissSafetyRewrite,
+  onToggleLearningIssue,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   samples: OAFBotTestGenerateResult | null;
+  learningComparison: OAFBotTestGenerateResult | null;
   scene: SampleScene;
   onSceneChange: (scene: SampleScene) => void;
   sampleContext: string;
   onSampleContextChange: (value: string) => void;
   generating: boolean;
+  comparingLearning: boolean;
   rewritingSafety: boolean;
   safetyRewriteMode: SafetyRewriteMode;
   onGenerate: () => void;
+  onCompareWithoutLearning: () => void;
   onSafetyRewriteModeChange: (mode: SafetyRewriteMode) => void;
   onRewriteSafety: () => void;
   selectedID: number | null;
@@ -3554,19 +3833,23 @@ function SamplePanel({
   languageStrategyOptions: SelectOption[];
   feedbackItems: OAFBotGenerationFeedback[];
   feedbackLoading: boolean;
+  feedbackDeletingID: number | null;
   feedbackDraft: FeedbackDraft;
   feedbackSaving: boolean;
   feedbackSuggestionLoading: boolean;
   feedbackSuggestionPreview: OAFBotFeedbackProfileSuggestionResult | null;
   safetyRewritePreview: SafetyRewritePreview | null;
   feedbackIssueOptions: ChipOption[];
+  disabledLearningIssues: string[];
   onFeedbackDraftChange: (draft: FeedbackDraft) => void;
   onFeedbackSubmit: () => void;
+  onFeedbackDelete: (feedbackID: number) => void;
   onFeedbackProfileSuggestion: () => void;
   onApplyFeedbackSuggestion: () => void;
   onDismissFeedbackSuggestion: () => void;
   onApplySafetyRewrite: () => void;
   onDismissSafetyRewrite: () => void;
+  onToggleLearningIssue: (issue: string) => void;
 }) {
   const sceneItems: Array<{ id: SampleScene; icon: ReactNode; title: string; description: string }> = [
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
@@ -3577,7 +3860,9 @@ function SamplePanel({
   const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, languageOptions, languageStrategyOptions, t);
   const selectedSceneItem = sceneItems.find((item) => item.id === scene) ?? sceneItems[0];
   const selectedContent = useMemo(() => normalizeSampleContent(samples, scene), [samples, scene]);
+  const comparisonContent = useMemo(() => normalizeSampleContent(learningComparison, scene), [learningComparison, scene]);
   const providerLabel = samples?.provider ? providerSourceLabel(samples.provider, t) : "";
+  const appliedLearningRuleIssues = (samples?.feedback_signal_summary?.applied_learning_rules || []).map((rule) => rule.issue).filter(Boolean);
   const suggestionDiffs = useMemo(
     () => (feedbackSuggestionPreview ? getFeedbackSuggestionDiffs(form, feedbackSuggestionPreview.profile) : []),
     [feedbackSuggestionPreview, form],
@@ -3639,12 +3924,24 @@ function SamplePanel({
         <div>
           <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.test.panelTitle")}</p>
           <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.test.panelDescription")}</p>
+          <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{t("oafBots.test.feedbackLearningHint")}</p>
         </div>
         <Button type="button" onClick={onGenerate} disabled={generating || previewDisabled}>
           {generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {generating ? t("oafBots.test.loadingShort") : t("oafBots.actions.generate")}
         </Button>
       </div>
+
+      <GenerationFeedbackHistory
+        t={t}
+        items={feedbackItems}
+        loading={feedbackLoading}
+        deletingID={feedbackDeletingID}
+        issueOptions={feedbackIssueOptions}
+        suggestionLoading={feedbackSuggestionLoading}
+        onDelete={onFeedbackDelete}
+        onSuggestProfile={onFeedbackProfileSuggestion}
+      />
 
       {samples ? (
         <div className="grid min-w-0 grid-cols-1 gap-4">
@@ -3653,10 +3950,26 @@ function SamplePanel({
               title={selectedSceneItem.title}
               text={selectedContent || t("oafBots.samples.empty")}
               providerLabel={providerLabel}
+              feedbackSignalCount={samples.feedback_signal_count || 0}
+              feedbackSignalSummary={samples.feedback_signal_summary}
+              issueOptions={feedbackIssueOptions}
+              disabledLearningIssues={disabledLearningIssues}
               highlight
               onRegenerate={onGenerate}
+              onToggleLearningIssue={onToggleLearningIssue}
               t={t}
             />
+            {appliedLearningRuleIssues.length > 0 ? (
+              <LearningImpactCompare
+                t={t}
+                currentText={selectedContent}
+                comparisonText={comparisonContent}
+                issues={appliedLearningRuleIssues}
+                issueOptions={feedbackIssueOptions}
+                comparing={comparingLearning}
+                onCompare={onCompareWithoutLearning}
+              />
+            ) : null}
           </div>
           <SampleSafetyExplanation
             t={t}
@@ -3680,14 +3993,6 @@ function SamplePanel({
             issueOptions={feedbackIssueOptions}
             onChange={onFeedbackDraftChange}
             onSubmit={onFeedbackSubmit}
-          />
-          <GenerationFeedbackHistory
-            t={t}
-            items={feedbackItems}
-            loading={feedbackLoading}
-            issueOptions={feedbackIssueOptions}
-            suggestionLoading={feedbackSuggestionLoading}
-            onSuggestProfile={onFeedbackProfileSuggestion}
           />
           <ProfileDiffPreview
             t={t}
@@ -3719,15 +4024,25 @@ function SampleCard({
   title,
   text,
   providerLabel,
+  feedbackSignalCount = 0,
+  feedbackSignalSummary,
+  issueOptions,
+  disabledLearningIssues,
   highlight = false,
   onRegenerate,
+  onToggleLearningIssue,
   t,
 }: {
   title: string;
   text: string;
   providerLabel?: string;
+  feedbackSignalCount?: number;
+  feedbackSignalSummary?: OAFBotTestGenerateResult["feedback_signal_summary"];
+  issueOptions: ChipOption[];
+  disabledLearningIssues: string[];
   highlight?: boolean;
   onRegenerate: () => void;
+  onToggleLearningIssue: (issue: string) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -3735,6 +4050,9 @@ function SampleCard({
   const content = cleanupGeneratedText(text);
   const isLong = content.length > 260;
   const visibleText = !expanded && isLong ? `${content.slice(0, 260).trim()}...` : content;
+  const summaryIssueLabels = (feedbackSignalSummary?.issue_tags || []).map((tag) => getFeedbackIssueLabel(tag, issueOptions)).filter(Boolean);
+  const summarySceneLabels = (feedbackSignalSummary?.scenes || []).map((item) => t(`oafBots.samples.${item}`)).filter(Boolean);
+  const learningRules = feedbackSignalSummary?.applied_learning_rules || [];
   const copy = async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(content);
@@ -3750,12 +4068,58 @@ function SampleCard({
           <p className="mt-1 text-xs text-[#71767b]">
             {t("oafBots.samples.characters", { count: content.length })}
             {providerLabel ? ` · ${t("oafBots.samples.providerMeta", { provider: providerLabel })}` : ""}
+            {feedbackSignalCount > 0 ? ` · ${t("oafBots.samples.feedbackSignalMeta", { count: feedbackSignalCount })}` : ""}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
           {highlight ? t("oafBots.samples.selected") : t("oafBots.samples.generated")}
         </span>
       </div>
+      {feedbackSignalSummary && feedbackSignalSummary.count > 0 ? (
+        <div className="mt-3 rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
+          <p className="text-xs font-semibold text-[#8ecdf8]">{t("oafBots.samples.feedbackSignalSummaryTitle", { count: feedbackSignalSummary.count })}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {summaryIssueLabels.length > 0 ? (
+              <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">
+                {t("oafBots.samples.feedbackSignalIssues", { issues: summaryIssueLabels.join(", ") })}
+              </span>
+            ) : null}
+            {summarySceneLabels.length > 0 ? (
+              <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">
+                {t("oafBots.samples.feedbackSignalScenes", { scenes: summarySceneLabels.join(", ") })}
+              </span>
+            ) : null}
+          </div>
+          {feedbackSignalSummary.latest_comment ? (
+            <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#71767b]">{t("oafBots.samples.feedbackSignalLatest", { comment: feedbackSignalSummary.latest_comment })}</p>
+          ) : null}
+          {learningRules.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-[#d7ebff]">{t("oafBots.samples.learningRulesTitle")}</p>
+              {learningRules.map((rule) => {
+                const disabled = disabledLearningIssues.includes(rule.issue) || rule.preference_status === "disabled";
+                return (
+                  <div key={rule.issue} className={`rounded-lg border px-3 py-2 ${disabled ? "border-[#2f3336] bg-black/20 opacity-60" : "border-[#1d9bf0]/20 bg-black/30"}`}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[#e7e9ea]">
+                          {getFeedbackIssueLabel(rule.issue, issueOptions) || rule.issue} · {t("oafBots.samples.learningRuleMeta", { confidence: rule.confidence, count: rule.accurate_judgments })}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#8b98a5]">{rule.instruction}</p>
+                      </div>
+                      <button type="button" onClick={() => onToggleLearningIssue(rule.issue)} className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition ${disabled ? "border-[#2f3336] text-[#71767b] hover:text-[#e7e9ea]" : "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5] hover:bg-[#00ba7c]/15"}`}>
+                        {disabled ? t("oafBots.samples.learningRuleDisabled") : t("oafBots.samples.learningRuleEnabled")}
+                      </button>
+                    </div>
+                    {rule.evidence?.length ? <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.samples.learningRuleEvidence", { evidence: rule.evidence.join(" / ") })}</p> : null}
+                  </div>
+                );
+              })}
+              <p className="text-xs leading-5 text-[#71767b]">{t("oafBots.samples.learningRuleToggleHint")}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-4 max-w-full flex-1 overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
         <p className="max-h-[280px] whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere] overflow-y-auto">{visibleText || t("oafBots.samples.empty")}</p>
         {isLong ? (
@@ -3866,6 +4230,62 @@ function SampleSafetyExplanation({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function LearningImpactCompare({
+  t,
+  currentText,
+  comparisonText,
+  issues,
+  issueOptions,
+  comparing,
+  onCompare,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  currentText: string;
+  comparisonText: string;
+  issues: string[];
+  issueOptions: ChipOption[];
+  comparing: boolean;
+  onCompare: () => void;
+}) {
+  const issueLabels = Array.from(new Set(issues)).map((issue) => getFeedbackIssueLabel(issue, issueOptions));
+  return (
+    <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("oafBots.learningCompare.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.learningCompare.description", { issues: issueLabels.join(", ") })}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" disabled={comparing} onClick={onCompare}>
+          {comparing ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          {comparing ? t("oafBots.learningCompare.running") : t("oafBots.learningCompare.action")}
+        </Button>
+      </div>
+      <p className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/25 px-3 py-2 text-xs leading-5 text-[#8ecdf8]">
+        {t("oafBots.learningCompare.costHint")}
+      </p>
+      {comparisonText ? (
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <LearningComparePane title={t("oafBots.learningCompare.withRules")} text={currentText} />
+          <LearningComparePane title={t("oafBots.learningCompare.withoutRules")} text={comparisonText} />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl border border-dashed border-[#2f3336] bg-black/25 px-3 py-4 text-xs leading-5 text-[#71767b]">
+          {t("oafBots.learningCompare.empty")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LearningComparePane({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs font-semibold text-[#8ecdf8]">{title}</p>
+      <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea] [overflow-wrap:anywhere]">{text || "—"}</p>
     </div>
   );
 }
@@ -4048,19 +4468,27 @@ function GenerationFeedbackHistory({
   t,
   items,
   loading,
+  deletingID,
   issueOptions,
   suggestionLoading,
+  onDelete,
   onSuggestProfile,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   items: OAFBotGenerationFeedback[];
   loading: boolean;
+  deletingID: number | null;
   issueOptions: ChipOption[];
   suggestionLoading: boolean;
+  onDelete: (feedbackID: number) => void;
   onSuggestProfile: () => void;
 }) {
   const timeZone = usePreferredTimeZone();
   const negativeCount = items.filter((item) => item.rating === "negative").length;
+  const negativeItems = items.filter((item) => item.rating === "negative");
+  const topIssue = topFeedbackCount(negativeItems.flatMap((item) => item.issue_tags.length ? item.issue_tags : ["other"]));
+  const topScene = topFeedbackCount(negativeItems.map((item) => item.scene || "unknown"));
+  const latestAt = items[0]?.created_at ? formatFeedbackDate(items[0].created_at, timeZone) : "";
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -4081,20 +4509,32 @@ function GenerationFeedbackHistory({
       <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#71767b]">
         {negativeCount > 0 ? t("oafBots.feedbackSuggestion.hint", { count: negativeCount }) : t("oafBots.feedbackSuggestion.emptyHint")}
       </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <FeedbackLearningMetric label={t("oafBots.feedback.learning.negative")} value={String(negativeCount)} />
+        <FeedbackLearningMetric label={t("oafBots.feedback.learning.topIssue")} value={topIssue ? getChipLabel(topIssue.key, issueOptions) : t("oafBots.feedback.learning.none")} />
+        <FeedbackLearningMetric label={t("oafBots.feedback.learning.topScene")} value={topScene ? t(`oafBots.samples.${topScene.key}`) : t("oafBots.feedback.learning.none")} />
+        <FeedbackLearningMetric label={t("oafBots.feedback.learning.latest")} value={latestAt || t("oafBots.feedback.learning.none")} />
+      </div>
       {loading ? (
         <p className="mt-4 text-sm text-[#71767b]">{t("oafBots.feedback.loading")}</p>
       ) : items.length === 0 ? (
         <p className="mt-4 text-sm leading-6 text-[#71767b]">{t("oafBots.feedback.empty")}</p>
       ) : (
         <div className="mt-4 space-y-3">
-          {items.slice(0, 5).map((item) => (
+          {items.slice(0, 8).map((item) => (
             <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
-                <span className={`rounded-full border px-2 py-0.5 ${item.rating === "positive" ? "border-emerald-300/20 text-emerald-100" : "border-amber-300/20 text-amber-100"}`}>
-                  {t(`oafBots.feedback.rating.${item.rating}`)}
-                </span>
-                <span>{t(`oafBots.samples.${item.scene}`)}</span>
-                <span>{formatFeedbackDate(item.created_at, timeZone)}</span>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
+                  <span className={`rounded-full border px-2 py-0.5 ${item.rating === "positive" ? "border-emerald-300/20 text-emerald-100" : "border-amber-300/20 text-amber-100"}`}>
+                    {t(`oafBots.feedback.rating.${item.rating}`)}
+                  </span>
+                  <span>{t(`oafBots.samples.${item.scene}`)}</span>
+                  <span>{formatFeedbackDate(item.created_at, timeZone)}</span>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={() => onDelete(item.id)} disabled={deletingID === item.id}>
+                  {deletingID === item.id ? <RefreshCw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                  {t("oafBots.feedback.ignore")}
+                </Button>
               </div>
               {item.issue_tags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -4110,6 +4550,15 @@ function GenerationFeedbackHistory({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FeedbackLearningMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="truncate text-[11px] font-semibold uppercase text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-[#e7e9ea]">{value}</p>
     </div>
   );
 }

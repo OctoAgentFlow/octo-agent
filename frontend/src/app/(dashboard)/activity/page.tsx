@@ -84,7 +84,7 @@ export default function ActivityPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recordsRaw, setRecordsRaw] = useState<ActivityRecord[]>([]);
   const [page, setPage] = useState(() => readPage(searchParams.get("page")));
-  const [pageSize] = useState(20);
+  const [pageSize] = useState(12);
   const [total, setTotal] = useState(0);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [filters, setFilters] = useState<Filters>(() => ({
@@ -134,6 +134,7 @@ export default function ActivityPage() {
           replyToUsername: item.reply_to_username,
           replyToTextPreview: item.reply_to_text_preview,
           replyTextPreview: item.reply_text_preview,
+          reviewQueueBulk: item.review_queue_bulk,
         }))
       );
       setTotal(data.pagination.total);

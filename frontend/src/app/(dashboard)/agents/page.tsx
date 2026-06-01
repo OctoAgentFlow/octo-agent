@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
 import { ArrowRight, FileText, ListChecks, Mail, MessageCircle, MessagesSquare, ShieldCheck } from "lucide-react";
 
 import { useToast } from "@/components/providers/toast-provider";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
+import { OperationalBlockersCard, type OperationalBlocker } from "@/components/operations/operational-blockers-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import {
@@ -110,6 +112,8 @@ function mapRuntime(data: AutomationRuntimeStatusApi, timeZone: string): Automat
 export default function AgentsPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
+  const searchParams = useSearchParams();
+  const focusedModule = searchParams.get("module");
   const { pushToast } = useToast();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -136,6 +140,56 @@ export default function AgentsPage() {
     if (modules.every((m) => !m.config.enabled)) return "Paused" as const;
     return "Running" as const;
   }, [modules]);
+  const operationalBlockers = useMemo<OperationalBlocker[]>(() => {
+    const pausedModules = modules.filter((module) => !module.config.enabled);
+    const blockers: OperationalBlocker[] = [];
+    if (accountCount === 0) {
+      blockers.push({
+        id: "no_account",
+        title: t("automation.blockers.noAccount.title"),
+        description: t("automation.blockers.noAccount.description"),
+        href: "/accounts",
+        actionLabel: t("automation.blockers.noAccount.action"),
+        severity: "danger",
+      });
+    }
+    if (pausedModules.length > 0) {
+      blockers.push({
+        id: "paused_modules",
+        title: t("automation.blockers.pausedModules.title", { count: pausedModules.length }),
+        description: t("automation.blockers.pausedModules.description", {
+          modules: pausedModules.map((module) => t(`automation.module.${module.type}.name`)).join(" / "),
+        }),
+        href: "/automations#automation-modules",
+        actionLabel: t("automation.blockers.pausedModules.action"),
+        severity: pausedModules.length === modules.length ? "danger" : "warning",
+        countLabel: String(pausedModules.length),
+      });
+    }
+    if (runtimeStatus.needsReview > 0) {
+      blockers.push({
+        id: "needs_review",
+        title: t("automation.blockers.needsReview.title", { count: runtimeStatus.needsReview }),
+        description: t("automation.blockers.needsReview.description"),
+        href: "/execution-queue?status=pending_review",
+        actionLabel: t("automation.blockers.needsReview.action"),
+        severity: "warning",
+        countLabel: String(runtimeStatus.needsReview),
+      });
+    }
+    if (runtimeStatus.queueDepth > 50) {
+      blockers.push({
+        id: "queue_depth",
+        title: t("automation.blockers.queueDepth.title", { count: runtimeStatus.queueDepth }),
+        description: t("automation.blockers.queueDepth.description"),
+        href: "/execution-queue",
+        actionLabel: t("automation.blockers.queueDepth.action"),
+        severity: "info",
+        countLabel: String(runtimeStatus.queueDepth),
+      });
+    }
+    return blockers;
+  }, [accountCount, modules, runtimeStatus.needsReview, runtimeStatus.queueDepth, t]);
 
   const fetchAll = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -247,6 +301,20 @@ export default function AgentsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (loadState !== "ready" || !focusedModule) return;
+    const target = document.getElementById(`automation-module-${focusedModule}`) || document.getElementById("automation-modules");
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setModulesHighlighted(true);
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setModulesHighlighted(false);
+      highlightTimeoutRef.current = null;
+    }, 1800);
+  }, [focusedModule, loadState]);
+
   const onConfigureAutomation = useCallback(() => {
     document.getElementById("automation-modules")?.scrollIntoView({ behavior: "smooth", block: "start" });
     setModulesHighlighted(true);
@@ -303,6 +371,15 @@ export default function AgentsPage() {
         onConfigureAutomation={onConfigureAutomation}
       />
 
+      <OperationalBlockersCard
+        title={t("automation.blockers.title")}
+        description={t("automation.blockers.description")}
+        loading={loadState === "loading"}
+        blockers={operationalBlockers}
+        emptyTitle={t("automation.blockers.emptyTitle")}
+        emptyDescription={t("automation.blockers.emptyDescription")}
+      />
+
       <AutomationEntryGrid
         commentTargetCount={commentTargets.length}
         commentTaskCount={commentTasks.length}
@@ -318,7 +395,9 @@ export default function AgentsPage() {
         }`}
       >
         {modules.map((module) => (
-          <AutomationModuleCard key={module.type} module={module} onToggle={onToggle} />
+          <div key={module.type} id={`automation-module-${module.type}`} className="scroll-mt-24">
+            <AutomationModuleCard module={module} onToggle={onToggle} />
+          </div>
         ))}
       </div>
 

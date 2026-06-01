@@ -154,7 +154,13 @@ func (ctl *AutomationController) ListReplyDrafts(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoReplyService.ListDrafts(userID)
+	pageSize := 50
+	if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			pageSize = parsed
+		}
+	}
+	data, err := ctl.autoReplyService.ListDrafts(userID, pageSize)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -207,6 +213,31 @@ func (ctl *AutomationController) UpdateReplyDraft(c *gin.Context) {
 	}
 	data, err := ctl.autoReplyService.UpdateDraft(userID, draftID, req.GeneratedReply)
 	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RewriteReplyDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	draftID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.SocialDraftRewriteRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoReplyService.RewriteDraft(c.Request.Context(), userID, draftID, req)
+	if err != nil {
+		if strings.Contains(err.Error(), "monthly AI generation quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -889,6 +920,31 @@ func (ctl *AutomationController) UpdateCommentDraft(c *gin.Context) {
 	}
 	data, err := ctl.autoCommentService.UpdateDraft(userID, taskID, req.GeneratedComment)
 	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) RewriteCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	taskID, ok := getUintParam(c, "id")
+	if !ok {
+		response.Fail(c, http.StatusBadRequest, "invalid draft id")
+		return
+	}
+	var req dto.SocialDraftRewriteRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoCommentService.RewriteDraft(c.Request.Context(), userID, taskID, req)
+	if err != nil {
+		if strings.Contains(err.Error(), "monthly AI generation quota exceeded") {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}

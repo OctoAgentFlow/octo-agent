@@ -30,3 +30,17 @@ func (ctl *DashboardController) Overview(c *gin.Context) {
 	}
 	response.OK(c, data)
 }
+
+func (ctl *DashboardController) Workbench(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	data, err := ctl.dashboardService.Workbench(userID)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}

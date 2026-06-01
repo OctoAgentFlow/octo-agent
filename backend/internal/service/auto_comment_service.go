@@ -61,6 +61,8 @@ type AutoCommentService struct {
 	contentRepo    *repository.ContentLibraryRepository
 	usageRepo      *repository.AIGenerationUsageRepository
 	feedbackRepo   *repository.OAFBotGenerationFeedbackRepository
+	verdictRepo    *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo       *repository.OAFBotLearningRulePreferenceRepository
 	ai             *AIService
 	publishing     *PublishingService
 }
@@ -77,6 +79,8 @@ func NewAutoCommentService(
 	contentRepo *repository.ContentLibraryRepository,
 	usageRepo *repository.AIGenerationUsageRepository,
 	feedbackRepo *repository.OAFBotGenerationFeedbackRepository,
+	verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository,
+	prefRepo *repository.OAFBotLearningRulePreferenceRepository,
 	ai *AIService,
 	publishing *PublishingService,
 ) *AutoCommentService {
@@ -92,6 +96,8 @@ func NewAutoCommentService(
 		contentRepo:    contentRepo,
 		usageRepo:      usageRepo,
 		feedbackRepo:   feedbackRepo,
+		verdictRepo:    verdictRepo,
+		prefRepo:       prefRepo,
 		ai:             ai,
 		publishing:     publishing,
 	}
@@ -494,6 +500,7 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	contentContext := contentContextForGeneration(s.contentRepo, userID, target.XAccountID, botIDForUsage(bot), target.TargetText, target.TargetUsername, bot)
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(userID, botIDForUsage(bot))
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "comment")
 	opportunity := evaluateAutoCommentOpportunity(target.TargetText, target.TargetUsername, bot, contentContext, blocked)
 	if opportunity.Score < autoCommentMinimumOpportunityScore {
 		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
@@ -712,6 +719,82 @@ func (s *AutoCommentService) UpdateDraft(userID, id uint, content string) (*dto.
 	return &item, nil
 }
 
+func (s *AutoCommentService) RewriteDraft(ctx context.Context, userID, id uint, req dto.SocialDraftRewriteRequest) (*dto.AutoCommentTaskItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	task, err := s.taskRepo.GetByUserAndID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status != "review" && task.Status != "pending_review" && task.Status != "draft" && task.Status != "approved" {
+		return nil, fmt.Errorf("draft cannot be rewritten from status %s", task.Status)
+	}
+	if s.ai == nil {
+		return nil, fmt.Errorf("AI service is not configured")
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	bot, err := s.botForAccount(userID, task.XAccountID)
+	if err != nil {
+		return nil, err
+	}
+	accountHandle := ""
+	if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, task.XAccountID); err == nil && acc != nil {
+		accountHandle = acc.Username
+	}
+	feedbackRows := s.autoCommentFeedbackRows(userID, task.BotID)
+	feedbackSignals := feedbackSignalsFromRows(feedbackRows)
+	botID := task.BotID
+	if botID == 0 {
+		botID = botIDForUsage(bot)
+	}
+	var learningRules []dto.OAFBotAppliedLearningRule
+	feedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(feedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "comment", req.DisabledLearningIssues)
+	generated, err := s.ai.RewriteSocialDraft(ctx, RewriteSocialDraftInput{
+		Scene:            "auto_comment",
+		AccountHandle:    accountHandle,
+		TargetAuthor:     firstNonEmpty(task.TargetTweetAuthor, task.TargetUsername),
+		TargetText:       task.TargetTweetText,
+		OriginalDraft:    firstNonEmpty(task.GeneratedComment, task.QuotePostCandidate),
+		RewriteMode:      req.RewriteMode,
+		Feedback:         req.Feedback,
+		BotName:          botString(bot, func(b *model.OAFBot) string { return b.Name }),
+		BotIdentity:      botString(bot, func(b *model.OAFBot) string { return b.IdentitySummary }),
+		BotVoice:         botString(bot, func(b *model.OAFBot) string { return b.VoiceTone }),
+		GrowthGoal:       botString(bot, func(b *model.OAFBot) string { return b.GrowthGoal }),
+		PrimaryLanguage:  botString(bot, func(b *model.OAFBot) string { return b.PrimaryLanguage }),
+		LanguageStrategy: botString(bot, func(b *model.OAFBot) string { return b.LanguageStrategy }),
+		FeedbackSignals:  feedbackSignals,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cfg := s.commentConfig(userID)
+	risk := evaluateAutoCommentRisk(generated.Text, bot, blockedWordsFromConfig(cfg))
+	task.GeneratedComment = truncateRunes(generated.Text, autoCommentPreviewRunes)
+	task.RiskLevel = risk.Level
+	task.FailureCategory = risk.Category
+	task.FailureReason = risk.Reason
+	task.GeneratedAt = &now
+	if task.Status == "approved" {
+		task.Status = "pending_review"
+		task.ApprovedAt = nil
+	}
+	if err := s.taskRepo.Save(task); err != nil {
+		return nil, err
+	}
+	if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
+		return nil, err
+	}
+	item := toAutoCommentTaskItem(*task)
+	item.FeedbackSignalCount = len(feedbackSignals)
+	item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(feedbackRows, learningRules)
+	return &item, nil
+}
+
 func (s *AutoCommentService) CreateFeedback(userID, id uint, req dto.AutoCommentFeedbackRequest) (*dto.OAFBotGenerationFeedbackItem, error) {
 	if s.feedbackRepo == nil {
 		return nil, fmt.Errorf("feedback repository is not configured")
@@ -819,6 +902,7 @@ func (s *AutoCommentService) regenerateTaskComment(ctx context.Context, task *mo
 	contentContext := contentContextForGeneration(s.contentRepo, task.UserID, task.XAccountID, botIDForUsage(bot), task.TargetTweetText, task.TargetUsername, bot)
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(task.UserID, botIDForUsage(bot))
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, task.UserID, botIDForUsage(bot), "comment")
 	opportunity := evaluateAutoCommentOpportunity(task.TargetTweetText, task.TargetUsername, bot, contentContext, blocked)
 	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
 	if err != nil {
@@ -1255,6 +1339,7 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	contentContext := contentContextForGeneration(s.contentRepo, target.UserID, target.XAccountID, botIDForUsage(bot), tw.Text, target.TargetUsername, bot)
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(target.UserID, botIDForUsage(bot))
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, target.UserID, botIDForUsage(bot), "comment")
 	opportunity := evaluateAutoCommentOpportunity(tw.Text, target.TargetUsername, bot, contentContext, blocked)
 	if opportunity.Score < autoCommentMinimumOpportunityScore {
 		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
@@ -2266,6 +2351,10 @@ func decodeAutoCommentVariants(raw string) []dto.AutoCommentVariantItem {
 }
 
 func (s *AutoCommentService) autoCommentFeedbackSignals(userID, botID uint) []string {
+	return feedbackSignalsFromRows(s.autoCommentFeedbackRows(userID, botID))
+}
+
+func (s *AutoCommentService) autoCommentFeedbackRows(userID, botID uint) []model.OAFBotGenerationFeedback {
 	if s == nil || s.feedbackRepo == nil || botID == 0 {
 		return nil
 	}
@@ -2273,24 +2362,7 @@ func (s *AutoCommentService) autoCommentFeedbackSignals(userID, botID uint) []st
 	if err != nil || len(rows) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(rows))
-	for _, row := range rows {
-		parts := []string{}
-		tags := decodeStringList(row.IssueTags)
-		if len(tags) > 0 {
-			parts = append(parts, "issue_tags="+strings.Join(tags, ", "))
-		}
-		if strings.TrimSpace(row.Comment) != "" {
-			parts = append(parts, "comment="+strings.TrimSpace(row.Comment))
-		}
-		if strings.TrimSpace(row.GeneratedContent) != "" {
-			parts = append(parts, "previous_comment="+truncateRunes(row.GeneratedContent, 180))
-		}
-		if len(parts) > 0 {
-			out = append(out, strings.Join(parts, " | "))
-		}
-	}
-	return out
+	return rows
 }
 
 func normalizeAutoCommentFeedbackRating(value string) string {

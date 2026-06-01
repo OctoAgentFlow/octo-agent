@@ -23,6 +23,7 @@ const PATHS_WITH_DATA_REFRESH = new Set([
   "/auto-replies",
   "/auto-comments",
   "/auto-dms",
+  "/opportunities",
   "/execution-queue",
   "/oaf-bots",
   "/activity",

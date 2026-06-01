@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +102,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 			ReplyToUsername:     item.ReplyToUsername,
 			ReplyToTextPreview:  item.ReplyToTextPreview,
 			ReplyTextPreview:    item.ReplyTextPreview,
+			ReviewQueueBulk:     reviewQueueBulkActivityData(item.PreviewKey, item.ErrorMessage),
 		})
 	}
 
@@ -111,6 +114,27 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 			Total:    total,
 		},
 	}, nil
+}
+
+var reviewQueueBulkActivityPattern = regexp.MustCompile(`^Bulk ([a-z_]+) completed: ([0-9]+) succeeded, ([0-9]+) failed, ([0-9]+) total\.`)
+
+func reviewQueueBulkActivityData(previewKey string, message string) *dto.ReviewQueueBulkActionActivityData {
+	if previewKey != "activity.preview.reviewQueueBulkAction" {
+		return nil
+	}
+	matches := reviewQueueBulkActivityPattern.FindStringSubmatch(strings.TrimSpace(message))
+	if len(matches) != 5 {
+		return &dto.ReviewQueueBulkActionActivityData{}
+	}
+	succeeded, _ := strconv.Atoi(matches[2])
+	failed, _ := strconv.Atoi(matches[3])
+	total, _ := strconv.Atoi(matches[4])
+	return &dto.ReviewQueueBulkActionActivityData{
+		Action:    matches[1],
+		Total:     total,
+		Succeeded: succeeded,
+		Failed:    failed,
+	}
 }
 
 func activityRangeBounds(value string, now time.Time) (time.Time, time.Time, error) {

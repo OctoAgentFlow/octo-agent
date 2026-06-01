@@ -71,27 +71,29 @@ type AutoReplyDraftRequest struct {
 }
 
 type AutoReplyDraftItem struct {
-	ID                  uint   `json:"id"`
-	BotID               uint   `json:"bot_id"`
-	XAccountID          uint   `json:"x_account_id"`
-	CommentTweetID      string `json:"comment_tweet_id,omitempty"`
-	CommentURL          string `json:"comment_url,omitempty"`
-	CommentAuthorHandle string `json:"comment_author_handle"`
-	RootTweetText       string `json:"root_tweet_text,omitempty"`
-	CommentText         string `json:"comment_text"`
-	GeneratedReply      string `json:"generated_reply,omitempty"`
-	Status              string `json:"status"`
-	RiskLevel           string `json:"risk_level"`
-	CapabilityStatus    string `json:"capability_status"`
-	FailureCategory     string `json:"failure_category,omitempty"`
-	FailureReason       string `json:"failure_reason,omitempty"`
-	ApprovalRequired    bool   `json:"approval_required"`
-	ActivityLogID       uint   `json:"activity_log_id,omitempty"`
-	CreatedAt           string `json:"created_at"`
-	GeneratedAt         string `json:"generated_at,omitempty"`
-	ApprovedAt          string `json:"approved_at,omitempty"`
-	RejectedAt          string `json:"rejected_at,omitempty"`
-	SentAt              string `json:"sent_at,omitempty"`
+	ID                    uint                         `json:"id"`
+	BotID                 uint                         `json:"bot_id"`
+	XAccountID            uint                         `json:"x_account_id"`
+	CommentTweetID        string                       `json:"comment_tweet_id,omitempty"`
+	CommentURL            string                       `json:"comment_url,omitempty"`
+	CommentAuthorHandle   string                       `json:"comment_author_handle"`
+	RootTweetText         string                       `json:"root_tweet_text,omitempty"`
+	CommentText           string                       `json:"comment_text"`
+	GeneratedReply        string                       `json:"generated_reply,omitempty"`
+	FeedbackSignalCount   int                          `json:"feedback_signal_count"`
+	FeedbackSignalSummary *OAFBotFeedbackSignalSummary `json:"feedback_signal_summary,omitempty"`
+	Status                string                       `json:"status"`
+	RiskLevel             string                       `json:"risk_level"`
+	CapabilityStatus      string                       `json:"capability_status"`
+	FailureCategory       string                       `json:"failure_category,omitempty"`
+	FailureReason         string                       `json:"failure_reason,omitempty"`
+	ApprovalRequired      bool                         `json:"approval_required"`
+	ActivityLogID         uint                         `json:"activity_log_id,omitempty"`
+	CreatedAt             string                       `json:"created_at"`
+	GeneratedAt           string                       `json:"generated_at,omitempty"`
+	ApprovedAt            string                       `json:"approved_at,omitempty"`
+	RejectedAt            string                       `json:"rejected_at,omitempty"`
+	SentAt                string                       `json:"sent_at,omitempty"`
 }
 
 type AutoReplyDraftsResponse struct {
@@ -100,6 +102,12 @@ type AutoReplyDraftsResponse struct {
 
 type AutoReplyDraftUpdateRequest struct {
 	GeneratedReply string `json:"generated_reply" binding:"required"`
+}
+
+type SocialDraftRewriteRequest struct {
+	RewriteMode            string   `json:"rewrite_mode"`
+	Feedback               string   `json:"feedback"`
+	DisabledLearningIssues []string `json:"disabled_learning_issues"`
 }
 
 type AutoPostPlanRequest struct {
@@ -126,6 +134,12 @@ type AutoPostGenerateRequest struct {
 
 type AutoPostDraftUpdateRequest struct {
 	GeneratedContent string `json:"generated_content" binding:"required"`
+}
+
+type AutoPostDraftRewriteRequest struct {
+	RewriteMode            string   `json:"rewrite_mode"`
+	Feedback               string   `json:"feedback"`
+	DisabledLearningIssues []string `json:"disabled_learning_issues"`
 }
 
 type AutoPostDraftRejectRequest struct {
@@ -159,31 +173,33 @@ type AutoPostPlanItem struct {
 }
 
 type AutoPostDraftItem struct {
-	ID               uint             `json:"id"`
-	UserID           uint             `json:"user_id"`
-	PlanID           uint             `json:"plan_id"`
-	BotID            uint             `json:"bot_id"`
-	BotName          string           `json:"bot_name,omitempty"`
-	XAccountID       uint             `json:"x_account_id"`
-	ContentLibraryID uint             `json:"content_library_item_id,omitempty"`
-	ContentTitle     string           `json:"content_title,omitempty"`
-	AccountHandle    string           `json:"account_handle,omitempty"`
-	ContentDirection string           `json:"content_direction,omitempty"`
-	ContentHash      string           `json:"content_hash,omitempty"`
-	SelectedTrends   []TrendTopicItem `json:"selected_trends,omitempty"`
-	GeneratedContent string           `json:"generated_content"`
-	Status           string           `json:"status"`
-	RiskLevel        string           `json:"risk_level"`
-	CapabilityStatus string           `json:"capability_status"`
-	FailureCategory  string           `json:"failure_category,omitempty"`
-	FailureReason    string           `json:"failure_reason,omitempty"`
-	ApprovalRequired bool             `json:"approval_required"`
-	ActivityLogID    uint             `json:"activity_log_id,omitempty"`
-	CreatedAt        string           `json:"created_at"`
-	GeneratedAt      string           `json:"generated_at,omitempty"`
-	ApprovedAt       string           `json:"approved_at,omitempty"`
-	RejectedAt       string           `json:"rejected_at,omitempty"`
-	PublishedAt      string           `json:"published_at,omitempty"`
+	ID                    uint                         `json:"id"`
+	UserID                uint                         `json:"user_id"`
+	PlanID                uint                         `json:"plan_id"`
+	BotID                 uint                         `json:"bot_id"`
+	BotName               string                       `json:"bot_name,omitempty"`
+	XAccountID            uint                         `json:"x_account_id"`
+	ContentLibraryID      uint                         `json:"content_library_item_id,omitempty"`
+	ContentTitle          string                       `json:"content_title,omitempty"`
+	AccountHandle         string                       `json:"account_handle,omitempty"`
+	ContentDirection      string                       `json:"content_direction,omitempty"`
+	ContentHash           string                       `json:"content_hash,omitempty"`
+	SelectedTrends        []TrendTopicItem             `json:"selected_trends,omitempty"`
+	GeneratedContent      string                       `json:"generated_content"`
+	FeedbackSignalCount   int                          `json:"feedback_signal_count"`
+	FeedbackSignalSummary *OAFBotFeedbackSignalSummary `json:"feedback_signal_summary,omitempty"`
+	Status                string                       `json:"status"`
+	RiskLevel             string                       `json:"risk_level"`
+	CapabilityStatus      string                       `json:"capability_status"`
+	FailureCategory       string                       `json:"failure_category,omitempty"`
+	FailureReason         string                       `json:"failure_reason,omitempty"`
+	ApprovalRequired      bool                         `json:"approval_required"`
+	ActivityLogID         uint                         `json:"activity_log_id,omitempty"`
+	CreatedAt             string                       `json:"created_at"`
+	GeneratedAt           string                       `json:"generated_at,omitempty"`
+	ApprovedAt            string                       `json:"approved_at,omitempty"`
+	RejectedAt            string                       `json:"rejected_at,omitempty"`
+	PublishedAt           string                       `json:"published_at,omitempty"`
 }
 
 type AutoPostPlansResponse struct {
@@ -500,44 +516,46 @@ type AutoCommentVariantItem struct {
 }
 
 type AutoCommentTaskItem struct {
-	ID                  uint                     `json:"id"`
-	BotID               uint                     `json:"bot_id"`
-	XAccountID          uint                     `json:"x_account_id"`
-	TargetID            uint                     `json:"target_id"`
-	TargetUserID        string                   `json:"target_user_id,omitempty"`
-	TargetUsername      string                   `json:"target_username"`
-	TargetTweetID       string                   `json:"target_tweet_id"`
-	TargetTweetText     string                   `json:"target_tweet_text,omitempty"`
-	TargetTweetAuthor   string                   `json:"target_tweet_author,omitempty"`
-	GeneratedComment    string                   `json:"generated_comment,omitempty"`
-	OpportunityScore    int                      `json:"opportunity_score"`
-	GenerationReason    string                   `json:"generation_reason,omitempty"`
-	MatchedKeywords     []string                 `json:"matched_keywords,omitempty"`
-	ReferencedContent   []string                 `json:"referenced_content,omitempty"`
-	CommentVariants     []AutoCommentVariantItem `json:"comment_variants,omitempty"`
-	DeliveryMode        string                   `json:"delivery_mode"`
-	DeliveryReason      string                   `json:"delivery_reason,omitempty"`
-	APIReplyEligible    bool                     `json:"api_reply_eligible"`
-	APIReplyBlockReason string                   `json:"api_reply_block_reason,omitempty"`
-	ManualActionURL     string                   `json:"manual_action_url,omitempty"`
-	QuotePostCandidate  string                   `json:"quote_post_candidate,omitempty"`
-	Status              string                   `json:"status"`
-	RiskLevel           string                   `json:"risk_level"`
-	CapabilityStatus    string                   `json:"capability_status"`
-	FailureCategory     string                   `json:"failure_category,omitempty"`
-	FailureReason       string                   `json:"failure_reason,omitempty"`
-	Retryable           bool                     `json:"retryable"`
-	RetryAfterAt        string                   `json:"retry_after_at,omitempty"`
-	AttemptCount        int                      `json:"attempt_count"`
-	LastAttemptAt       string                   `json:"last_attempt_at,omitempty"`
-	ApprovalRequired    bool                     `json:"approval_required"`
-	ActivityLogID       uint                     `json:"activity_log_id,omitempty"`
-	CommentTweetID      string                   `json:"comment_tweet_id,omitempty"`
-	DetectedAt          string                   `json:"detected_at"`
-	GeneratedAt         string                   `json:"generated_at,omitempty"`
-	ApprovedAt          string                   `json:"approved_at,omitempty"`
-	BlockedAt           string                   `json:"blocked_at,omitempty"`
-	SentAt              string                   `json:"sent_at,omitempty"`
+	ID                    uint                         `json:"id"`
+	BotID                 uint                         `json:"bot_id"`
+	XAccountID            uint                         `json:"x_account_id"`
+	TargetID              uint                         `json:"target_id"`
+	TargetUserID          string                       `json:"target_user_id,omitempty"`
+	TargetUsername        string                       `json:"target_username"`
+	TargetTweetID         string                       `json:"target_tweet_id"`
+	TargetTweetText       string                       `json:"target_tweet_text,omitempty"`
+	TargetTweetAuthor     string                       `json:"target_tweet_author,omitempty"`
+	GeneratedComment      string                       `json:"generated_comment,omitempty"`
+	FeedbackSignalCount   int                          `json:"feedback_signal_count"`
+	FeedbackSignalSummary *OAFBotFeedbackSignalSummary `json:"feedback_signal_summary,omitempty"`
+	OpportunityScore      int                          `json:"opportunity_score"`
+	GenerationReason      string                       `json:"generation_reason,omitempty"`
+	MatchedKeywords       []string                     `json:"matched_keywords,omitempty"`
+	ReferencedContent     []string                     `json:"referenced_content,omitempty"`
+	CommentVariants       []AutoCommentVariantItem     `json:"comment_variants,omitempty"`
+	DeliveryMode          string                       `json:"delivery_mode"`
+	DeliveryReason        string                       `json:"delivery_reason,omitempty"`
+	APIReplyEligible      bool                         `json:"api_reply_eligible"`
+	APIReplyBlockReason   string                       `json:"api_reply_block_reason,omitempty"`
+	ManualActionURL       string                       `json:"manual_action_url,omitempty"`
+	QuotePostCandidate    string                       `json:"quote_post_candidate,omitempty"`
+	Status                string                       `json:"status"`
+	RiskLevel             string                       `json:"risk_level"`
+	CapabilityStatus      string                       `json:"capability_status"`
+	FailureCategory       string                       `json:"failure_category,omitempty"`
+	FailureReason         string                       `json:"failure_reason,omitempty"`
+	Retryable             bool                         `json:"retryable"`
+	RetryAfterAt          string                       `json:"retry_after_at,omitempty"`
+	AttemptCount          int                          `json:"attempt_count"`
+	LastAttemptAt         string                       `json:"last_attempt_at,omitempty"`
+	ApprovalRequired      bool                         `json:"approval_required"`
+	ActivityLogID         uint                         `json:"activity_log_id,omitempty"`
+	CommentTweetID        string                       `json:"comment_tweet_id,omitempty"`
+	DetectedAt            string                       `json:"detected_at"`
+	GeneratedAt           string                       `json:"generated_at,omitempty"`
+	ApprovedAt            string                       `json:"approved_at,omitempty"`
+	BlockedAt             string                       `json:"blocked_at,omitempty"`
+	SentAt                string                       `json:"sent_at,omitempty"`
 }
 
 type AutoCommentTasksResponse struct {
@@ -661,6 +679,10 @@ type ReviewQueueItem struct {
 	TargetSummary      string           `json:"target_summary,omitempty"`
 	RiskLevel          string           `json:"risk_level"`
 	RiskReasons        []string         `json:"risk_reasons"`
+	PlanID             uint             `json:"plan_id,omitempty"`
+	ContentLibraryID   uint             `json:"content_library_item_id,omitempty"`
+	ContentTitle       string           `json:"content_title,omitempty"`
+	ContentDirection   string           `json:"content_direction,omitempty"`
 	SelectedTrends     []TrendTopicItem `json:"selected_trends,omitempty"`
 	PublishJobID       uint             `json:"publish_job_id,omitempty"`
 	PublishStatus      string           `json:"publish_status,omitempty"`
@@ -678,6 +700,91 @@ type ReviewQueueResponse struct {
 	Page     int               `json:"page"`
 	PageSize int               `json:"page_size"`
 	Stats    ReviewQueueStats  `json:"stats"`
+}
+
+type ReviewQueueBulkActionItemRequest struct {
+	QueueType    string `json:"queue_type" binding:"required"`
+	SourceID     uint   `json:"source_id" binding:"required"`
+	PublishJobID uint   `json:"publish_job_id,omitempty"`
+}
+
+type ReviewQueueBulkActionRequest struct {
+	Action       string                             `json:"action" binding:"required"`
+	RejectReason string                             `json:"reject_reason,omitempty"`
+	Items        []ReviewQueueBulkActionItemRequest `json:"items" binding:"required"`
+}
+
+type ReviewQueueBulkActionResult struct {
+	QueueType    string `json:"queue_type"`
+	SourceID     uint   `json:"source_id"`
+	PublishJobID uint   `json:"publish_job_id,omitempty"`
+	Success      bool   `json:"success"`
+	Error        string `json:"error,omitempty"`
+}
+
+type ReviewQueueBulkActionResponse struct {
+	Action          string                        `json:"action"`
+	Total           int                           `json:"total"`
+	Succeeded       int                           `json:"succeeded"`
+	Failed          int                           `json:"failed"`
+	AuditActivityID uint                          `json:"audit_activity_id,omitempty"`
+	AuditPreviewKey string                        `json:"audit_preview_key,omitempty"`
+	Results         []ReviewQueueBulkActionResult `json:"results"`
+}
+
+type ReviewQueueFeedbackIssueVerdictRequest struct {
+	QueueType     string   `json:"queue_type" binding:"required"`
+	SourceID      uint     `json:"source_id" binding:"required"`
+	BotID         uint     `json:"bot_id"`
+	FeedbackIssue string   `json:"feedback_issue" binding:"required"`
+	Verdict       string   `json:"verdict" binding:"required"`
+	Reasons       []string `json:"reasons"`
+}
+
+type ReviewQueueFeedbackIssueVerdictResponse struct {
+	ID    uint `json:"id"`
+	Saved bool `json:"saved"`
+}
+
+type ReviewQueueFeedbackIssueReasonStat struct {
+	Reason          string  `json:"reason"`
+	Accurate        int     `json:"accurate"`
+	Irrelevant      int     `json:"irrelevant"`
+	Total           int     `json:"total"`
+	AccuracyRate    float64 `json:"accuracy_rate"`
+	ScoreAdjustment int     `json:"score_adjustment"`
+}
+
+type ReviewQueueFeedbackIssueVerdictStat struct {
+	FeedbackIssue string                               `json:"feedback_issue"`
+	Accurate      int                                  `json:"accurate"`
+	Irrelevant    int                                  `json:"irrelevant"`
+	Total         int                                  `json:"total"`
+	AccuracyRate  float64                              `json:"accuracy_rate"`
+	Reasons       []ReviewQueueFeedbackIssueReasonStat `json:"reasons"`
+}
+
+type ReviewQueueFeedbackIssueVerdictStatsResponse struct {
+	Issues []ReviewQueueFeedbackIssueVerdictStat `json:"issues"`
+}
+
+type ReviewQueueFeedbackIssueVerdictDetail struct {
+	ID                uint     `json:"id"`
+	QueueType         string   `json:"queue_type"`
+	SourceID          uint     `json:"source_id"`
+	BotID             uint     `json:"bot_id,omitempty"`
+	FeedbackIssue     string   `json:"feedback_issue"`
+	Verdict           string   `json:"verdict"`
+	Reasons           []string `json:"reasons"`
+	ContentPreview    string   `json:"content_preview,omitempty"`
+	TargetSummary     string   `json:"target_summary,omitempty"`
+	SourceStatus      string   `json:"source_status,omitempty"`
+	CreatedAt         string   `json:"created_at"`
+	ExecutionQueueURL string   `json:"execution_queue_url"`
+}
+
+type ReviewQueueFeedbackIssueVerdictDetailsResponse struct {
+	Items []ReviewQueueFeedbackIssueVerdictDetail `json:"items"`
 }
 
 type PublishJobItem struct {

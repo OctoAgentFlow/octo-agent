@@ -21,6 +21,14 @@ export type ActivityItemApi = {
   reply_to_username?: string;
   reply_to_text_preview?: string;
   reply_text_preview?: string;
+  review_queue_bulk?: ReviewQueueBulkActivityApi;
+};
+
+export type ReviewQueueBulkActivityApi = {
+  action?: "approve" | "reject" | "retry" | string;
+  total?: number;
+  succeeded?: number;
+  failed?: number;
 };
 
 export type ActivityListData = {

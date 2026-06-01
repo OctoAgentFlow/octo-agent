@@ -36,6 +36,36 @@ func (ctl *OAFBotController) List(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) FeedbackSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	data, err := ctl.oafBotService.FeedbackSummary(userID, days)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *OAFBotController) DashboardSummary(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	data, err := ctl.oafBotService.DashboardSummary(userID, days)
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *OAFBotController) Get(c *gin.Context) {
 	userID, id, ok := ctl.userAndBotID(c)
 	if !ok {
@@ -48,6 +78,45 @@ func (ctl *OAFBotController) Get(c *gin.Context) {
 			return
 		}
 		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *OAFBotController) LearningRulePreferences(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	data, err := ctl.oafBotService.LearningRulePreferences(userID, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *OAFBotController) UpsertLearningRulePreference(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	var req dto.OAFBotLearningRulePreferenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.oafBotService.UpsertLearningRulePreference(userID, id, req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.OK(c, data)
@@ -162,7 +231,7 @@ func (ctl *OAFBotController) TestGenerate(c *gin.Context) {
 			return
 		}
 	}
-	data, err := ctl.oafBotService.TestGenerate(c.Request.Context(), userID, id, req.Scene, req.SampleContext)
+	data, err := ctl.oafBotService.TestGenerate(c.Request.Context(), userID, id, req)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "oaf bot not found")
@@ -272,6 +341,27 @@ func (ctl *OAFBotController) GenerationFeedback(c *gin.Context) {
 		return
 	}
 	response.OK(c, data)
+}
+
+func (ctl *OAFBotController) DeleteGenerationFeedback(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	feedbackID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("feedbackID")), 10, 64)
+	if err != nil || feedbackID64 == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid feedback id")
+		return
+	}
+	if err := ctl.oafBotService.DeleteGenerationFeedback(userID, id, uint(feedbackID64)); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
 }
 
 func (ctl *OAFBotController) userAndBotID(c *gin.Context) (uint, uint, bool) {

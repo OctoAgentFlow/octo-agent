@@ -1661,7 +1661,6 @@ function PointsAdminSection({
 
 function RiskInput({ label, value, disabled, onSave }: { label: string; value: number; disabled?: boolean; onSave: (value: number) => void }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
   return (
     <label className="rounded-2xl border border-[#2f3336] bg-black p-4 text-xs text-[#71767b]">
       {label}

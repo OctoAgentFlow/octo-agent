@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useToast } from "@/components/providers/toast-provider";
 import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
+import { OperationalBlockersCard, type OperationalBlocker } from "@/components/operations/operational-blockers-card";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -264,6 +265,58 @@ export function AccountsClient() {
     () => (showNeedsReauthOnly ? accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired) : accounts),
     [accounts, showNeedsReauthOnly]
   );
+  const operationalBlockers = useMemo<OperationalBlocker[]>(() => {
+    const blockers: OperationalBlocker[] = [];
+    const reauthCount = accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired).length;
+    const unboundBotCount = accounts.filter((account) => !bots.some((bot) => Number(account.id) === bot.twitter_account_id)).length;
+    const pausedAutomationCount = automationModules.filter((module) => !module.config.enabled).length;
+    const queueAttentionCount = queueItems.filter((item) => item.status === "pending_review" || item.status === "ready_to_publish" || item.status === "failed").length;
+    if (reauthCount > 0) {
+      blockers.push({
+        id: "reauth",
+        title: t("accounts.blockers.reauth.title", { count: reauthCount }),
+        description: t("accounts.blockers.reauth.description"),
+        href: "/accounts?filter=needs_reauth",
+        actionLabel: t("accounts.blockers.reauth.action"),
+        severity: "danger",
+        countLabel: String(reauthCount),
+      });
+    }
+    if (unboundBotCount > 0) {
+      blockers.push({
+        id: "unbound_bot",
+        title: t("accounts.blockers.unboundBot.title", { count: unboundBotCount }),
+        description: t("accounts.blockers.unboundBot.description"),
+        href: "/oaf-bots",
+        actionLabel: t("accounts.blockers.unboundBot.action"),
+        severity: "warning",
+        countLabel: String(unboundBotCount),
+      });
+    }
+    if (pausedAutomationCount > 0) {
+      blockers.push({
+        id: "paused_automation",
+        title: t("accounts.blockers.pausedAutomation.title", { count: pausedAutomationCount }),
+        description: t("accounts.blockers.pausedAutomation.description"),
+        href: "/automations#automation-modules",
+        actionLabel: t("accounts.blockers.pausedAutomation.action"),
+        severity: "warning",
+        countLabel: String(pausedAutomationCount),
+      });
+    }
+    if (queueAttentionCount > 0) {
+      blockers.push({
+        id: "queue",
+        title: t("accounts.blockers.queue.title", { count: queueAttentionCount }),
+        description: t("accounts.blockers.queue.description"),
+        href: "/execution-queue",
+        actionLabel: t("accounts.blockers.queue.action"),
+        severity: "info",
+        countLabel: String(queueAttentionCount),
+      });
+    }
+    return blockers;
+  }, [accounts, automationModules, bots, queueItems, t]);
 
   const startOAuth = useCallback(async (options?: { bypassFreeLimit?: boolean }) => {
     if (isFreeAccountLimitReached && !options?.bypassFreeLimit) {
@@ -334,6 +387,13 @@ export function AccountsClient() {
             <AccountMetricCard label={t("accounts.overview.needsAction")} value={String(needsActionCount)} tone={needsActionCount > 0 ? "warning" : "success"} />
             <AccountMetricCard label={t("accounts.overview.automationReady")} value={String(accounts.filter((account) => account.status === "connected" && account.publishReady).length)} />
           </div>
+          <OperationalBlockersCard
+            title={t("accounts.blockers.title")}
+            description={t("accounts.blockers.description")}
+            blockers={operationalBlockers}
+            emptyTitle={t("accounts.blockers.emptyTitle")}
+            emptyDescription={t("accounts.blockers.emptyDescription")}
+          />
           {showNeedsReauthOnly ? (
             <Card className="border-amber-300/25 bg-amber-500/10 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

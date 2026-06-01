@@ -83,8 +83,31 @@ export type OAFBotTestGenerateResult = Partial<OAFBotSamples> & {
   content: string;
   provider: string;
   usage_consumed: number;
+  feedback_signal_count?: number;
+  feedback_signal_summary?: {
+    count: number;
+    scenes: string[];
+    issue_tags: string[];
+    latest_comment?: string;
+    applied_learning_rules?: OAFBotAppliedLearningRule[];
+  };
   raw_result?: string;
   safety_evaluation?: OAFBotSafetyEvaluation;
+};
+
+export type OAFBotAppliedLearningRule = {
+  issue: string;
+  confidence: number;
+  accurate_judgments: number;
+  instruction: string;
+  evidence?: string[];
+  preference_status?: "enabled" | "disabled" | string;
+};
+
+export type OAFBotLearningRulePreference = {
+  bot_id: number;
+  feedback_issue: string;
+  status: "enabled" | "disabled" | string;
 };
 
 export type OAFBotCompleteProfileResult = {
@@ -126,6 +149,14 @@ export type OAFBotGenerationFeedback = OAFBotGenerationFeedbackPayload & {
   id: number;
   bot_id: number;
   created_at: string;
+};
+
+export type OAFBotFeedbackSummary = {
+  days: number;
+  negative_count: number;
+  top_issues: Array<{ tag: string; count: number }>;
+  scenes: Array<{ scene: OAFBotSampleScene | string; count: number }>;
+  last_feedback_at?: string;
 };
 
 export type OAFBotMatrixSignal = {

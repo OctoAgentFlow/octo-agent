@@ -29,8 +29,8 @@ export function AutomationModulePausedNotice({
   const loadStatus = useCallback(async () => {
     try {
       const data = await automationService.list();
-      const module = data.modules.find((item) => item.type === type);
-      const nextEnabled = module?.config.enabled ?? true;
+      const automationModule = data.modules.find((item) => item.type === type);
+      const nextEnabled = automationModule?.config.enabled ?? true;
       setEnabled(nextEnabled);
       onEnabledChange?.(nextEnabled);
     } catch {

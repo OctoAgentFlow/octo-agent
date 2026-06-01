@@ -15,3 +15,21 @@ type DashboardOverviewResponse struct {
 	ActivitySuccessRatePct int        `json:"activity_success_rate_pct"`
 	LastActivityAt         *time.Time `json:"last_activity_at,omitempty"`
 }
+
+type DashboardWorkbenchResponse struct {
+	Opportunities []DashboardWorkbenchItem `json:"opportunities"`
+	Reviews       []DashboardWorkbenchItem `json:"reviews"`
+	Stats         ReviewQueueStats         `json:"stats"`
+}
+
+type DashboardWorkbenchItem struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	SourceID    uint   `json:"source_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status,omitempty"`
+	Href        string `json:"href"`
+	Tone        string `json:"tone"`
+	Score       int    `json:"score,omitempty"`
+}

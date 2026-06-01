@@ -24,10 +24,18 @@ type ActivityItemData struct {
 	ErrorMessage    string `json:"error_message,omitempty"`
 	FailureCategory string `json:"failure_category,omitempty"`
 	// Reply-specific (type=reply)
-	ReplyCommentTweetID string `json:"reply_comment_tweet_id,omitempty"`
-	ReplyToUsername     string `json:"reply_to_username,omitempty"`
-	ReplyToTextPreview  string `json:"reply_to_text_preview,omitempty"`
-	ReplyTextPreview    string `json:"reply_text_preview,omitempty"`
+	ReplyCommentTweetID string                             `json:"reply_comment_tweet_id,omitempty"`
+	ReplyToUsername     string                             `json:"reply_to_username,omitempty"`
+	ReplyToTextPreview  string                             `json:"reply_to_text_preview,omitempty"`
+	ReplyTextPreview    string                             `json:"reply_text_preview,omitempty"`
+	ReviewQueueBulk     *ReviewQueueBulkActionActivityData `json:"review_queue_bulk,omitempty"`
+}
+
+type ReviewQueueBulkActionActivityData struct {
+	Action    string `json:"action"`
+	Total     int    `json:"total"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
 }
 
 type ActivityPagination struct {

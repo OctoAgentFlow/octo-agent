@@ -67,6 +67,20 @@ function relativeTime(iso: string, t: (key: string, params?: Record<string, stri
   return t("activity.relative.daysAgo", { days });
 }
 
+function reviewQueueBulkHref(record: ActivityRecord) {
+  if (record.previewKey !== "activity.preview.reviewQueueBulkAction") return "/execution-queue";
+  if ((record.reviewQueueBulk?.failed || 0) > 0) return "/execution-queue?status=failed";
+  if (record.reviewQueueBulk?.action === "approve") return "/execution-queue?status=ready_to_publish";
+  if (record.reviewQueueBulk?.action === "reject") return "/execution-queue?status=rejected";
+  return "/execution-queue";
+}
+
+function compactActivityError(message: string) {
+  const normalized = message.trim();
+  if (normalized.length <= 180) return normalized;
+  return `${normalized.slice(0, 180).trimEnd()}...`;
+}
+
 export function ActivityItem({ record }: { record: ActivityRecord }) {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -74,7 +88,8 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
   const [expanded, setExpanded] = useState(false);
   const meta = typeMeta(record.type);
   const Icon = meta.icon;
-  const canInspect = record.status !== "success" || Boolean(record.errorMessage);
+  const isReviewQueueBulk = record.previewKey === "activity.preview.reviewQueueBulkAction";
+  const canInspect = record.status !== "success" || Boolean(record.errorMessage) || isReviewQueueBulk;
 
   const copyError = async () => {
     if (!record.errorMessage) return;
@@ -109,7 +124,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             <p className="line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]">{activityNarrativeLine(record, t)}</p>
             {record.errorMessage ? (
               <p className="rounded-2xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-3 py-2 text-xs leading-relaxed text-[#ffb6bb]">
-                {record.errorMessage}
+                {compactActivityError(record.errorMessage)}
               </p>
             ) : null}
             <div className="flex flex-wrap items-center gap-2 text-xs text-[#71767b]">
@@ -119,8 +134,8 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {record.status === "review" ? (
-            <Link href="/execution-queue" className="text-sm font-semibold text-[#1d9bf0] hover:underline">
+          {record.status === "review" || isReviewQueueBulk ? (
+            <Link href={reviewQueueBulkHref(record)} className="text-sm font-semibold text-[#1d9bf0] hover:underline">
               {t("activity.actions.openQueue")}
             </Link>
           ) : null}
@@ -192,6 +207,14 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             <div className="grid gap-3 md:grid-cols-2">
               <DetailText label={t("activity.detail.reply.incoming")} value={record.replyToTextPreview || "—"} />
               <DetailText label={t("activity.detail.reply.outgoing")} value={record.replyTextPreview || "—"} />
+            </div>
+          ) : null}
+          {isReviewQueueBulk ? (
+            <div className="grid gap-3 md:grid-cols-4">
+              <DetailField label={t("activity.reviewQueueBulk.action")} value={t(`executionQueue.bulk.action.${record.reviewQueueBulk?.action || "approve"}`)} />
+              <DetailField label={t("activity.reviewQueueBulk.total")} value={String(record.reviewQueueBulk?.total || 0)} />
+              <DetailField label={t("activity.reviewQueueBulk.succeeded")} value={String(record.reviewQueueBulk?.succeeded || 0)} />
+              <DetailField label={t("activity.reviewQueueBulk.failed")} value={String(record.reviewQueueBulk?.failed || 0)} />
             </div>
           ) : null}
         </div>

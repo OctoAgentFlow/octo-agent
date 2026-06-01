@@ -51,6 +51,21 @@ export type AutoPostDraftApi = {
   content_hash?: string;
   selected_trends?: TrendTopicApi[];
   generated_content: string;
+  feedback_signal_count?: number;
+  feedback_signal_summary?: {
+    count: number;
+    scenes: string[];
+    issue_tags: string[];
+    latest_comment?: string;
+    applied_learning_rules?: Array<{
+      issue: string;
+      confidence: number;
+      accurate_judgments: number;
+      instruction: string;
+      evidence?: string[];
+      preference_status?: string;
+    }>;
+  };
   status: "draft" | "pending_review" | "approved" | "ready_to_publish" | "published" | "rejected" | "failed";
   risk_level: string;
   capability_status: string;
@@ -64,6 +79,8 @@ export type AutoPostDraftApi = {
   rejected_at?: string;
   published_at?: string;
 };
+
+export type AutoPostRewriteMode = "more_specific" | "shorter" | "founder_voice" | "announcement" | "interactive" | "less_marketing";
 
 export type AutoPostPlansData = {
   items: AutoPostPlanApi[];
@@ -261,6 +278,10 @@ export const autoPostService = {
     const res = await request.patch<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}`, {
       generated_content: generatedContent,
     });
+    return res.data.data;
+  },
+  async rewriteDraft(id: number, payload: { rewrite_mode: AutoPostRewriteMode; feedback?: string; disabled_learning_issues?: string[] }) {
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/rewrite`, payload);
     return res.data.data;
   },
   async approveDraft(id: number) {

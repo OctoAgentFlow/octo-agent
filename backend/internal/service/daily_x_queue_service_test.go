@@ -98,8 +98,14 @@ func TestDailyXQueueDirectionsUseDistinctBatchAngles(t *testing.T) {
 	if !strings.Contains(directions[1], "only batch draft allowed") {
 		t.Fatalf("workflow direction should be the only review-first centered draft, got %q", directions[1])
 	}
+	if !strings.Contains(directions[0], "first sentence must not mention Daily X Queue") {
+		t.Fatalf("operator pain direction should keep product language out of the first sentence, got %q", directions[0])
+	}
 	if !strings.Contains(directions[2], "trusted source material remains the factual base") {
 		t.Fatalf("memory direction should distinguish memory from facts, got %q", directions[2])
+	}
+	if !strings.Contains(directions[2], "not product documentation") {
+		t.Fatalf("memory direction should ask for operator language, got %q", directions[2])
 	}
 }
 

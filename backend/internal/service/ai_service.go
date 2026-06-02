@@ -1767,6 +1767,8 @@ func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateAuto
 	user.WriteString("- You are writing one draft inside a 3-draft Daily X Queue batch; follow the Draft angle exactly.\n")
 	user.WriteString("- Across the batch, only one draft may center on generic control, review-first, or style-learning framing.\n")
 	user.WriteString("- If this Draft angle is not Workflow proof, do not make review-first control the main claim.\n")
+	user.WriteString("- If the Draft angle is Operator pain, the first sentence must describe the pain only; do not mention Daily X Queue, OAF Bot, bot memory, edits/rejections, review-first, control, or style-learning until the pain is concrete.\n")
+	user.WriteString("- If the Draft angle is OAF Bot memory boundary, explain the boundary as a practical operator lesson: memory learns voice/style, trusted sources supply facts.\n")
 	user.WriteString("- For non-workflow angles, use a different primary angle: account operating pain, memory-vs-source boundary, human decision-making before publishing, or how edit/reject feedback changes future queues.\n")
 	user.WriteString("- Do not reuse the same opening, product noun sequence, or claim structure from rejected/recent drafts.\n")
 	user.WriteString("Daily X Queue writing rules:\n")

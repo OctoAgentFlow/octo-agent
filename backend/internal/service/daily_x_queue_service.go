@@ -788,9 +788,9 @@ func dailyXQueueDirections(sourceTitle string) []string {
 		source = "the provided source material"
 	}
 	return []string{
-		"Operator pain: identify one concrete daily X operating problem the target audience feels, using " + source + " as context. Avoid generic control/review-first/style-learning framing.",
+		"Operator pain: start with one concrete daily X operating problem the target audience feels, using " + source + " as context. The first sentence must not mention Daily X Queue, OAF Bot, bot memory, edits, rejections, review-first, control, or style-learning.",
 		"Workflow proof: show one concrete review-first operating loop from " + source + " as a publishable X post. This is the only batch draft allowed to center on review-first control.",
-		"OAF Bot memory boundary: explain how OAF Bot memory uses edits/rejections as voice and style signals while trusted source material remains the factual base.",
+		"OAF Bot memory boundary: explain how OAF Bot memory uses edits/rejections as voice and style signals while trusted source material remains the factual base. Write it like a practical operator point, not product documentation.",
 	}
 }
 

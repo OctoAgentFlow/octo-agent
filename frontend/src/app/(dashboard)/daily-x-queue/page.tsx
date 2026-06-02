@@ -51,14 +51,15 @@ function knownDailyXQueueErrorKey(message: string) {
 
 function directionKey(value?: string) {
   const text = (value || "").trim();
-  if (text.startsWith("Product value:")) return "dailyXQueue.direction.productValue";
-  if (text.startsWith("User pain point:")) return "dailyXQueue.direction.userPain";
-  if (text.startsWith("Operational proof:")) return "dailyXQueue.direction.operationalProof";
-  if (text.startsWith("Operator pain:")) return "dailyXQueue.direction.operatorPain";
-  if (text.startsWith("Operator insight:")) return "dailyXQueue.direction.operatorInsight";
-  if (text.startsWith("Workflow proof:")) return "dailyXQueue.direction.workflowProof";
-  if (text.startsWith("OAF Bot memory boundary:")) return "dailyXQueue.direction.oafBotMemoryBoundary";
-  if (text.startsWith("Founder/operator note:")) return "dailyXQueue.direction.founderOperatorNote";
+  const normalized = text.toLowerCase();
+  if (normalized.startsWith("product value:")) return "dailyXQueue.direction.productValue";
+  if (normalized.startsWith("user pain point:")) return "dailyXQueue.direction.userPain";
+  if (normalized.startsWith("operational proof:")) return "dailyXQueue.direction.operationalProof";
+  if (normalized.startsWith("operator pain:") || normalized.includes("operator pain")) return "dailyXQueue.direction.operatorPain";
+  if (normalized.startsWith("operator insight:")) return "dailyXQueue.direction.operatorInsight";
+  if (normalized.startsWith("workflow proof:") || normalized.includes("workflow proof")) return "dailyXQueue.direction.workflowProof";
+  if (normalized.startsWith("oaf bot memory boundary:") || normalized.includes("memory boundary")) return "dailyXQueue.direction.oafBotMemoryBoundary";
+  if (normalized.startsWith("founder/operator note:")) return "dailyXQueue.direction.founderOperatorNote";
   return "";
 }
 

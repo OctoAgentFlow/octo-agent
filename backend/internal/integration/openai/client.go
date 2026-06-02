@@ -70,6 +70,7 @@ type TextUsage struct {
 	InputTokens            int64  `json:"input_tokens"`
 	OutputTokens           int64  `json:"output_tokens"`
 	TotalTokens            int64  `json:"total_tokens"`
+	FinishReason           string `json:"finish_reason,omitempty"`
 	PromptGuardEnabled     bool   `json:"prompt_guard_enabled,omitempty"`
 	SystemLanguage         string `json:"system_language,omitempty"`
 	ContextLanguage        string `json:"context_language,omitempty"`
@@ -93,7 +94,8 @@ type chatCompletionRequest struct {
 type chatCompletionResponse struct {
 	Model   string `json:"model"`
 	Choices []struct {
-		Message ChatMessage `json:"message"`
+		Message      ChatMessage `json:"message"`
+		FinishReason string      `json:"finish_reason,omitempty"`
 	} `json:"choices"`
 	Usage *struct {
 		PromptTokens     int64 `json:"prompt_tokens"`
@@ -175,7 +177,7 @@ func (c *Client) GenerateTextWithUsageMaxTokens(ctx context.Context, messages []
 	if text == "" {
 		return TextResult{}, fmt.Errorf("openai response is empty")
 	}
-	usage := TextUsage{Model: firstNonEmpty(out.Model, c.model)}
+	usage := TextUsage{Model: firstNonEmpty(out.Model, c.model), FinishReason: strings.TrimSpace(out.Choices[0].FinishReason)}
 	if out.Usage != nil {
 		usage.InputTokens = out.Usage.PromptTokens
 		usage.OutputTokens = out.Usage.CompletionTokens

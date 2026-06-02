@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -257,6 +258,75 @@ func TestDailyXQueueRejectRequiresReasonAndCreatesNegativeFeedback(t *testing.T)
 	}
 	if !strings.Contains(feedback.IssueTags, "too_salesy") {
 		t.Fatalf("expected too_salesy feedback, got %s", feedback.IssueTags)
+	}
+}
+
+func TestDailyXQueueStoresCompleteDraftsWhenGeneratorReturnsLongText(t *testing.T) {
+	svc, _ := newDailyXQueueTestService(t)
+	userID := uint(31)
+	setupDailyXQueueFixture(t, svc, userID)
+	svc.generateText = func(_ context.Context, _ GenerateAutoPostInput) (AIGeneratedText, error) {
+		return AIGeneratedText{Text: strings.Repeat("Daily X Queue keeps review first. ", 12) + "Trailing unfinished fragment"}, nil
+	}
+
+	generated, err := svc.Generate(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for _, draft := range generated.Drafts {
+		if !endsLikeCompleteSentence(draft.GeneratedContent) {
+			t.Fatalf("expected complete sentence, got %q", draft.GeneratedContent)
+		}
+		if xPostCharacterCount(draft.GeneratedContent) > 220 {
+			t.Fatalf("expected Daily X Queue draft <= 220 weighted chars, got %d: %q", xPostCharacterCount(draft.GeneratedContent), draft.GeneratedContent)
+		}
+		if strings.Contains(draft.GeneratedContent, "Trailing unfinished fragment") {
+			t.Fatalf("expected trailing unfinished fragment to be removed, got %q", draft.GeneratedContent)
+		}
+	}
+}
+
+func TestDailyXQueueNextGenerationUsesRejectedDraftsAndFeedbackToAvoidRepeating(t *testing.T) {
+	svc, _ := newDailyXQueueTestService(t)
+	userID := uint(32)
+	setupDailyXQueueFixture(t, svc, userID)
+	calls := 0
+	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+		calls++
+		return AIGeneratedText{Text: fmt.Sprintf("Rejected template draft %d for %s.", calls, in.ContentDirection)}, nil
+	}
+	first, err := svc.Generate(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("first generate: %v", err)
+	}
+	for _, draft := range first.Drafts {
+		if _, err := svc.RejectDraft(userID, draft.ID, "duplicate"); err != nil {
+			t.Fatalf("reject: %v", err)
+		}
+	}
+
+	var captured GenerateAutoPostInput
+	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+		if captured.ContentDirection == "" {
+			captured = in
+		}
+		return AIGeneratedText{Text: "A better Daily X Queue post starts with the operator problem, then shows the review loop."}, nil
+	}
+	if _, err := svc.Generate(context.Background(), userID); err != nil {
+		t.Fatalf("second generate: %v", err)
+	}
+	if len(captured.RecentPosts) == 0 {
+		t.Fatal("expected rejected/recent drafts to be passed into next generation")
+	}
+	if !strings.Contains(strings.Join(captured.RecentPosts, "\n"), "Rejected template draft") {
+		t.Fatalf("expected previous rejected draft text in recent posts, got %#v", captured.RecentPosts)
+	}
+	signals := strings.Join(captured.FeedbackSignals, "\n")
+	if !strings.Contains(signals, "duplicate") {
+		t.Fatalf("expected duplicate feedback signal, got %q", signals)
+	}
+	if !strings.Contains(signals, "different opening") {
+		t.Fatalf("expected actionable duplicate learning instruction, got %q", signals)
 	}
 }
 

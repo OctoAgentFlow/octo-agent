@@ -187,14 +187,16 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 	feedbackSignals, learningRules := appendFeedbackLearningSignalsWithRules(baseSignals, s.verdictRepo, s.prefRepo, userID, bot.ID, dailyXQueueSceneTweet, nil)
 	directions := dailyXQueueDirections(content.Title)
 	drafts := make([]dto.DailyXQueueDraftItem, 0, dailyXQueueDraftCount)
+	recentPosts := s.recentDailyDraftTexts(userID, bot.ID, 6)
 	for i, direction := range directions {
 		in := s.generateInput(ctxRow, bot, content, direction, feedbackSignals)
+		in.RecentPosts = append(append([]string{}, recentPosts...), generatedDailyDraftTexts(drafts)...)
 		generated, err := s.callGenerateText(ctx, in)
 		if err != nil {
 			return nil, err
 		}
 		now := time.Now().UTC()
-		text := fitXPostForAutoPost(generated.Text, xSubscriptionTierUnknown, autoPostLengthModeStandard)
+		text := fitDailyXQueueGeneratedPost(generated.Text)
 		risk := evaluateAutoCommentRisk(text, bot, nil)
 		draft := &model.AutoPostDraft{
 			UserID:           userID,
@@ -287,7 +289,7 @@ func (s *DailyXQueueService) RejectDraft(userID, id uint, reason string) (*dto.D
 	if err := s.draftRepo.Save(draft); err != nil {
 		return nil, err
 	}
-	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized}, "Rejected from Daily X Queue: "+normalized, draft.ContentDirection, draft.GeneratedContent)
+	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized}, dailyRejectFeedbackComment(normalized), draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewRejected, "", fmt.Sprintf("Daily X Queue draft rejected; draft_id=%d; reason=%s", draft.ID, normalized))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -472,6 +474,42 @@ func (s *DailyXQueueService) contentTitle(userID, contentID uint) string {
 	return ""
 }
 
+func (s *DailyXQueueService) recentDailyDraftTexts(userID, botID uint, limit int) []string {
+	if limit <= 0 {
+		limit = 6
+	}
+	rows, err := s.draftRepo.ListByUser(userID, 30)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, limit)
+	for _, row := range rows {
+		if row.PlanID != 0 || row.XAccountID != 0 || (botID > 0 && row.BotID != botID) {
+			continue
+		}
+		text := strings.TrimSpace(row.GeneratedContent)
+		if text == "" {
+			continue
+		}
+		out = append(out, text)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func generatedDailyDraftTexts(drafts []dto.DailyXQueueDraftItem) []string {
+	out := make([]string, 0, len(drafts))
+	for _, draft := range drafts {
+		text := strings.TrimSpace(draft.GeneratedContent)
+		if text != "" {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
 func (s *DailyXQueueService) contextForDraft(userID, botID uint) (*model.DailyXQueueContext, error) {
 	ctxRow, err := s.latestContext(userID)
 	if err == nil && (botID == 0 || ctxRow.BotID == botID) {
@@ -545,7 +583,7 @@ func (s *DailyXQueueService) callGenerateText(ctx context.Context, in GenerateAu
 	if s.ai == nil {
 		return AIGeneratedText{}, fmt.Errorf("ai service is not configured")
 	}
-	return s.ai.GenerateAutoPost(ctx, in)
+	return s.ai.GenerateDailyXQueuePost(ctx, in)
 }
 
 func (s *DailyXQueueService) callRewriteText(ctx context.Context, in GenerateAutoPostInput, original string, mode string, feedback string) (AIGeneratedText, error) {
@@ -707,9 +745,28 @@ func dailyXQueueDirections(sourceTitle string) []string {
 		source = "the provided source material"
 	}
 	return []string{
-		"Product value: explain the concrete value in " + source + " for the target audience.",
-		"User pain point: name the daily X operations problem this product helps solve.",
-		"Operational proof: show how the workflow works using the provided source material.",
+		"Operator insight: write a practical observation about the daily X operations problem addressed by " + source + ". Avoid product-manual phrasing.",
+		"Workflow proof: show one concrete review-first operating loop from " + source + " as a publishable X post.",
+		"Founder/operator note: make a concise point about why controlled social operations matters for the target audience.",
+	}
+}
+
+func dailyRejectFeedbackComment(reason string) string {
+	switch normalizeDailyRejectReason(reason) {
+	case "duplicate":
+		return "Rejected from Daily X Queue because it felt duplicate or template-like. Next queue must use a different opening, structure, and angle; avoid repeating product-manual steps."
+	case "too_salesy":
+		return "Rejected from Daily X Queue because it was too salesy. Make the next draft more useful, specific, and operator-led; avoid hard CTA language."
+	case "wrong_tone":
+		return "Rejected from Daily X Queue because the tone was wrong. Match the concise founder/operator voice and avoid stiff product documentation."
+	case "fact_risk":
+		return "Rejected from Daily X Queue because of fact risk. Avoid unsupported claims, guarantees, and invented details."
+	case "weak_context":
+		return "Rejected from Daily X Queue because context usage was weak. Ground the next draft in the provided source material and target audience."
+	case "irrelevant":
+		return "Rejected from Daily X Queue because it was not relevant enough. Stay tightly connected to the source material and account context."
+	default:
+		return "Rejected from Daily X Queue. Next queue should visibly change the angle, opening, and structure instead of repeating the same product explanation."
 	}
 }
 

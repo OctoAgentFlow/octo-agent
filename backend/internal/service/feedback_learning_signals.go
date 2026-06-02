@@ -273,6 +273,8 @@ func feedbackLearningInstruction(issue string) string {
 		return "Ground the draft in the provided source, target, or content library context; do not invent details or write vague copy."
 	case "irrelevant":
 		return "Stay tightly related to the target post, audience, and growth goal; avoid unrelated product promotion."
+	case "duplicate":
+		return "Avoid repeating the same opening, structure, and product explanation; choose a clearly different angle and phrasing."
 	default:
 		return "Avoid repeating the pattern that reviewers marked as accurate for this issue."
 	}

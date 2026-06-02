@@ -602,6 +602,9 @@ func combineTextUsage(values ...openaiint.TextUsage) openaiint.TextUsage {
 		if strings.TrimSpace(value.Model) != "" {
 			out.Model = value.Model
 		}
+		if strings.TrimSpace(value.FinishReason) != "" {
+			out.FinishReason = value.FinishReason
+		}
 		out.InputTokens += value.InputTokens
 		out.OutputTokens += value.OutputTokens
 		out.TotalTokens += value.TotalTokens
@@ -1673,6 +1676,113 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
 }
 
+func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	handle := strings.TrimSpace(in.AccountHandle)
+	if handle == "" {
+		handle = "@account"
+	}
+	direction := strings.TrimSpace(firstNonEmpty(in.ContentDirection, in.Topic))
+	system := strings.Join([]string{
+		"You are Octo-Agent Flow's Daily X Queue post generator.",
+		"Write one publishable X/Twitter post for the provided account.",
+		"The post should feel like a real founder/operator social post, not product documentation.",
+		"Output plain text only. Do not include JSON, markdown, labels, field names, or surrounding quotes.",
+	}, " ")
+
+	var user strings.Builder
+	user.WriteString("Account: " + handle + "\n")
+	if direction != "" {
+		user.WriteString("Draft angle: " + direction + "\n")
+	}
+	if strings.TrimSpace(in.ContentItemTitle) != "" || strings.TrimSpace(in.ContentItemBody) != "" {
+		user.WriteString("Source material for today's queue:\n")
+		user.WriteString("title: " + strings.TrimSpace(in.ContentItemTitle) + "\n")
+		user.WriteString("type: " + strings.TrimSpace(in.ContentItemType) + "\n")
+		user.WriteString("body: " + strings.TrimSpace(in.ContentItemBody) + "\n")
+		if strings.TrimSpace(in.ContentItemURL) != "" {
+			user.WriteString("source_url: " + strings.TrimSpace(in.ContentItemURL) + "\n")
+		}
+		if len(in.ContentItemTopics) > 0 {
+			user.WriteString("topics: " + strings.Join(in.ContentItemTopics, ", ") + "\n")
+		}
+		if strings.TrimSpace(in.ContentItemGoal) != "" {
+			user.WriteString("goal: " + strings.TrimSpace(in.ContentItemGoal) + "\n")
+		}
+		if strings.TrimSpace(in.ContentItemCTA) != "" {
+			user.WriteString("cta_preference: " + strings.TrimSpace(in.ContentItemCTA) + "\n")
+		}
+	}
+	if in.HasBot {
+		user.WriteString("Use this OAF Bot persona:\n")
+		user.WriteString("internal_bot_name: " + strings.TrimSpace(in.Name) + "\n")
+		user.WriteString("identity_summary: " + strings.TrimSpace(in.IdentitySummary) + "\n")
+		user.WriteString("voice_tone: " + strings.TrimSpace(in.VoiceTone) + "\n")
+		user.WriteString("topics: " + strings.Join(in.Topics, ", ") + "\n")
+		user.WriteString("forbidden_topics: " + strings.Join(in.ForbiddenTopics, ", ") + "\n")
+		user.WriteString("growth_goal: " + strings.TrimSpace(in.GrowthGoal) + "\n")
+		writeOAFBotStrategyContext(&user, oafBotStrategyContext{
+			ProjectOneLiner:   in.ProjectOneLiner,
+			TargetAudience:    in.TargetAudience,
+			CoreValueProps:    in.CoreValueProps,
+			ProductFeatures:   in.ProductFeatures,
+			Differentiators:   in.Differentiators,
+			ContentPillars:    in.ContentPillars,
+			ContentObjectives: in.ContentObjectives,
+			PreferredCTA:      in.PreferredCTA,
+			WebsiteURL:        in.WebsiteURL,
+			TelegramURL:       in.TelegramURL,
+			DiscordURL:        in.DiscordURL,
+			DocsURL:           in.DocsURL,
+			CTAPolicy:         in.CTAPolicy,
+			Hashtags:          in.Hashtags,
+			Keywords:          in.Keywords,
+			ComplianceNotes:   in.ComplianceNotes,
+			AvoidClaims:       in.AvoidClaims,
+		})
+		user.WriteString("safety_mode: " + strings.TrimSpace(in.SafetyMode) + "\n")
+		writeLanguageConfig(&user, in.PrimaryLanguage, in.LanguageStrategy)
+	}
+	if len(in.RecentPosts) > 0 {
+		user.WriteString("Rejected or recent drafts to avoid repeating:\n")
+		for _, post := range in.RecentPosts {
+			post = strings.TrimSpace(post)
+			if post == "" {
+				continue
+			}
+			user.WriteString("- " + truncateRunes(post, 220) + "\n")
+		}
+	}
+	writeGenerationFeedbackSignals(&user, "Recent Daily X Queue edit/reject signals to apply:", in.FeedbackSignals)
+	user.WriteString("Daily X Queue writing rules:\n")
+	user.WriteString("- Target 120-200 characters; hard maximum 220 characters.\n")
+	user.WriteString("- End with a complete sentence. Never end mid-phrase or mid-list.\n")
+	user.WriteString("- Do not write a feature checklist unless the angle explicitly asks for workflow proof.\n")
+	user.WriteString("- Do not start with generic product-manual openings such as \"The Daily X Queue lets\", \"Simplify your daily X posting\", or \"Managing daily X posts\".\n")
+	user.WriteString("- Make the three daily drafts meaningfully different in opening, structure, and angle.\n")
+	user.WriteString("- Prefer a concrete operator insight, before/after contrast, or review-first workflow proof over promotional copy.\n")
+	user.WriteString("- Mention no-OAuth only when it is the main useful point; do not repeat it in every draft.\n")
+	user.WriteString("- Avoid guaranteed growth, spam language, financial promises, or autopilot claims.\n")
+	user.WriteString("- If feedback says duplicate, wrong_tone, too_salesy, weak_context, or other, visibly correct that pattern in this draft.\n")
+	user.WriteString("- Use at most one CTA, and omit the CTA when the post is stronger without it.\n")
+
+	result, err := s.generateGuardedTextMaxTokens(ctx, system, user.String(), 320)
+	if err != nil {
+		return AIGeneratedText{}, err
+	}
+	text := fitDailyXQueueGeneratedPost(result.Text)
+	if shouldRetryDailyXQueuePost(result.Usage.FinishReason, text) {
+		retryUser := user.String() + "\nRegenerate because the previous output was incomplete or too template-like. Return one complete X post under 200 characters with a different opening.\n"
+		retry, retryErr := s.generateGuardedTextMaxTokens(ctx, system, retryUser, 360)
+		if retryErr == nil {
+			retryText := fitDailyXQueueGeneratedPost(retry.Text)
+			if !shouldRetryDailyXQueuePost(retry.Usage.FinishReason, retryText) {
+				return AIGeneratedText{Text: retryText, Usage: combineTextUsage(result.Usage, retry.Usage)}, nil
+			}
+		}
+	}
+	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
+}
+
 type oafBotStrategyContext struct {
 	ProjectOneLiner   string
 	TargetAudience    string
@@ -2112,4 +2222,78 @@ func fitGeneratedTweet(s string, max int) string {
 	}
 	cut = strings.TrimRight(cut, "#,;:，；：.!?。！？-— ")
 	return cut
+}
+
+func fitDailyXQueueGeneratedPost(s string) string {
+	text := cleanupGeneratedPayload(s)
+	text = strings.Trim(text, "\"“”")
+	text = stripGeneratedLabel(text)
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" {
+		return ""
+	}
+	if xPostCharacterCount(text) <= 220 && endsLikeCompleteSentence(text) {
+		return strings.TrimSpace(text)
+	}
+	cut := fitGeneratedTweet(text, 220)
+	if sentence := completeSentencePrefix(cut); sentence != "" {
+		return sentence
+	}
+	if xPostCharacterCount(cut+".") <= 220 {
+		return strings.TrimSpace(cut) + "."
+	}
+	return cut
+}
+
+func shouldRetryDailyXQueuePost(finishReason string, text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(finishReason), "length") {
+		return true
+	}
+	return !endsLikeCompleteSentence(text)
+}
+
+func stripGeneratedLabel(text string) string {
+	text = strings.TrimSpace(text)
+	lower := strings.ToLower(text)
+	for _, prefix := range []string{"tweet:", "post:", "draft:", "content:"} {
+		if strings.HasPrefix(lower, prefix) {
+			return strings.TrimSpace(text[len(prefix):])
+		}
+	}
+	return text
+}
+
+func endsLikeCompleteSentence(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	runes := []rune(text)
+	last := runes[len(runes)-1]
+	return strings.ContainsRune(".!?。！？", last)
+}
+
+func completeSentencePrefix(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	bestEnd := -1
+	for i, r := range text {
+		if strings.ContainsRune(".!?。！？", r) {
+			bestEnd = i + len(string(r))
+		}
+	}
+	if bestEnd < 0 {
+		return ""
+	}
+	prefix := strings.TrimSpace(text[:bestEnd])
+	if len([]rune(prefix)) < 40 {
+		return ""
+	}
+	return prefix
 }

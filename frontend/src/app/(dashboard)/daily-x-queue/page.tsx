@@ -246,7 +246,11 @@ export default function DailyXQueuePage() {
   };
 
   const handleReject = async (draft: DailyXQueueDraftApi) => {
-    const reason = rejectByDraft[draft.id] || "weak_context";
+    const reason = rejectByDraft[draft.id] || "";
+    if (!reason) {
+      pushToast(t("dailyXQueue.toast.error.rejectReasonRequired"));
+      return;
+    }
     setBusy(`reject-${draft.id}`);
     try {
       const data = await dailyXQueueService.rejectDraft(draft.id, reason);
@@ -424,12 +428,13 @@ export default function DailyXQueuePage() {
                 <div className="flex min-w-0 gap-2">
                   <select
                     className="form-input h-10 min-w-0 py-0 text-sm"
-                    value={rejectByDraft[draft.id] || "weak_context"}
+                    value={rejectByDraft[draft.id] || ""}
                     onChange={(event) => setRejectByDraft((current) => ({ ...current, [draft.id]: event.target.value }))}
                   >
+                    <option value="" disabled>{t("dailyXQueue.rejectReason.placeholder")}</option>
                     {rejectReasons.map((reason) => <option key={reason} value={reason}>{t(`dailyXQueue.rejectReason.${reason}`)}</option>)}
                   </select>
-                  <Button type="button" variant="destructive" disabled={busy === `reject-${draft.id}`} onClick={() => void handleReject(draft)}>
+                  <Button type="button" variant="destructive" disabled={busy === `reject-${draft.id}` || !rejectByDraft[draft.id]} onClick={() => void handleReject(draft)}>
                     {busy === `reject-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <ThumbsDown className="size-4" />}
                     {t("dailyXQueue.actions.reject")}
                   </Button>

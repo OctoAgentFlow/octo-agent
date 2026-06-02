@@ -102,12 +102,8 @@ func (s *DailyXQueueService) Setup(ctx context.Context, userID uint, req dto.Dai
 		LanguageStrategy:  "follow_context",
 		ContentObjectives: "Create reviewable X post drafts grounded in the provided product context.",
 	}
-	if s.oafBot != nil {
-		if completed, err := s.oafBot.CompleteProfile(ctx, userID, dto.OAFBotCompleteProfileRequest{Draft: draft, Mode: oafBotProfileAssistModeFillMissing}); err == nil {
-			draft = completed.Profile
-			draft.TwitterAccountID = 0
-		}
-	}
+	// Setup is the first-value save step. Keep it deterministic and fast; LLM calls
+	// happen during queue generation/rewrite where waiting is expected.
 	bot, err := s.upsertDailyBot(userID, handle, draft)
 	if err != nil {
 		return nil, err

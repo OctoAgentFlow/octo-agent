@@ -449,6 +449,7 @@ export const dict: I18nDict = {
 
   // sidebar
   "sidebar.nav.dashboard": "Dashboard",
+  "sidebar.nav.dailyXQueue": "Daily X Queue",
   "sidebar.nav.activity": "Activity",
   "sidebar.nav.executionQueue": "Execution Queue",
   "sidebar.nav.automations": "Automations",
@@ -2092,6 +2093,9 @@ export const dict: I18nDict = {
   "onboarding.step.account.title": "Connect an X account",
   "onboarding.step.account.description": "Authorize one account so posting, replies, and DMs have an execution target.",
   "onboarding.step.account.cta": "Connect account",
+  "onboarding.step.dailyXQueue.title": "Generate today's X queue",
+  "onboarding.step.dailyXQueue.description": "Enter a handle, paste product context, generate 3 reviewable X post drafts, and approve or copy useful output.",
+  "onboarding.step.dailyXQueue.cta": "Generate today's X queue",
   "onboarding.step.oafBot.title": "Create an OAF Bot",
   "onboarding.step.oafBot.description": "Configure persona, language, guardrails, and growth goals so generated content stays consistent.",
   "onboarding.step.oafBot.cta": "Create OAF Bot",
@@ -2104,6 +2108,9 @@ export const dict: I18nDict = {
   "onboarding.step.executionQueue.title": "Review execution queue",
   "onboarding.step.executionQueue.description": "Handle pending review, ready-to-publish, failed, and autopilot content in the execution queue.",
   "onboarding.step.executionQueue.cta": "View execution queue",
+  "dashboard.firstUse.dailyXQueue.title": "Generate today's X queue",
+  "dashboard.firstUse.dailyXQueue.description": "Start with one manual X handle, one source material item, and 3 reviewable post drafts. X OAuth is optional later.",
+  "dashboard.firstUse.dailyXQueue.cta": "Generate today's X queue",
   "dashboard.activity.act1.title": "Posted launch teaser thread",
   "dashboard.activity.act1.detail": "Auto Post published 4 tweets",
   "dashboard.activity.act2.title": "Processed mention replies",

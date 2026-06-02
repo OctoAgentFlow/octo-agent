@@ -120,6 +120,9 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		}
 		postIDs := make([]uint, 0, len(postDrafts))
 		for _, draft := range postDrafts {
+			if isDailyXQueueDraft(draft) {
+				continue
+			}
 			postIDs = append(postIDs, draft.ID)
 		}
 		jobs, err = s.publishJobRepo.ListBySources(userID, repository.PublishSourcePost, postIDs)
@@ -168,6 +171,9 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		allItems = append(allItems, item)
 	}
 	for _, draft := range postDrafts {
+		if isDailyXQueueDraft(draft) {
+			continue
+		}
 		item := s.autoPostDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
 		applyPublishJobToReviewQueueItem(&item, postJobs[draft.ID])
 		incrementReviewQueueStats(&stats, item.Status)

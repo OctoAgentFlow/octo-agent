@@ -291,6 +291,9 @@ func (s *PublishingService) EnsurePostJob(draft *model.AutoPostDraft, now time.T
 	if draft == nil || (draft.Status != "ready_to_publish" && draft.Status != "approved") {
 		return nil, false, nil
 	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, false, fmt.Errorf("daily x queue drafts cannot enter publishing pipeline")
+	}
 	content := strings.TrimSpace(draft.GeneratedContent)
 	if s.accountRepo != nil {
 		if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(draft.UserID, draft.XAccountID); err == nil {

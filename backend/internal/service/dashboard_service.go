@@ -185,6 +185,9 @@ func (s *DashboardService) Workbench(userID uint) (*dto.DashboardWorkbenchRespon
 		}
 	}
 	for _, draft := range postDrafts {
+		if isDailyXQueueDraft(draft) {
+			continue
+		}
 		item := dashboardPostDraftToReviewQueueItem(draft)
 		applyPublishJobToReviewQueueItem(&item, postJobs[draft.ID])
 		incrementReviewQueueStats(&stats, item.Status)

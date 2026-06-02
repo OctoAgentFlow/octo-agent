@@ -14,6 +14,7 @@ import {
   Radar,
   ReceiptText,
   Settings,
+  Sparkles,
   ShieldCheck,
   UserCircle,
   Users,
@@ -23,6 +24,7 @@ import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
+  { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },

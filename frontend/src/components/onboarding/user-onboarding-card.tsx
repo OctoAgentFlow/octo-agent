@@ -37,8 +37,6 @@ export function UserOnboardingCard({
   oafBotCreated,
   autoPostConfigured,
   executionQueueChecked,
-  onConnectAccount,
-  onConfigureAutomation,
 }: UserOnboardingCardProps) {
   const { t } = useT();
   const hasOAFBot = oafBotCreated ?? postCreated;
@@ -46,41 +44,11 @@ export function UserOnboardingCard({
   const hasCheckedQueue = executionQueueChecked ?? activityObserved;
   const steps: Step[] = [
     {
-      done: accountConnected,
-      titleKey: "onboarding.step.account.title",
-      descriptionKey: "onboarding.step.account.description",
-      ctaKey: "onboarding.step.account.cta",
-      href: onConnectAccount ? undefined : "/accounts",
-      onClick: onConnectAccount,
-    },
-    {
-      done: hasOAFBot,
-      titleKey: "onboarding.step.oafBot.title",
-      descriptionKey: "onboarding.step.oafBot.description",
-      ctaKey: "onboarding.step.oafBot.cta",
-      href: "/oaf-bots",
-    },
-    {
-      done: hasAutoPostConfigured,
-      titleKey: "onboarding.step.autoPost.title",
-      descriptionKey: "onboarding.step.autoPost.description",
-      ctaKey: "onboarding.step.autoPost.cta",
-      href: "/auto-post",
-    },
-    {
-      done: automationEnabled,
-      titleKey: "onboarding.step.automation.title",
-      descriptionKey: "onboarding.step.automation.description",
-      ctaKey: "onboarding.step.automation.cta",
-      href: onConfigureAutomation ? undefined : "/automations",
-      onClick: onConfigureAutomation,
-    },
-    {
-      done: hasCheckedQueue,
-      titleKey: "onboarding.step.executionQueue.title",
-      descriptionKey: "onboarding.step.executionQueue.description",
-      ctaKey: "onboarding.step.executionQueue.cta",
-      href: "/execution-queue",
+      done: accountConnected && hasOAFBot && hasAutoPostConfigured && automationEnabled && hasCheckedQueue,
+      titleKey: "onboarding.step.dailyXQueue.title",
+      descriptionKey: "onboarding.step.dailyXQueue.description",
+      ctaKey: "onboarding.step.dailyXQueue.cta",
+      href: "/daily-x-queue",
     },
   ];
   const completed = steps.filter((step) => step.done).length;

@@ -421,6 +421,7 @@ export const dict: I18nDict = {
 
   // sidebar
   "sidebar.nav.dashboard": "仪表板",
+  "sidebar.nav.dailyXQueue": "Daily X Queue",
   "sidebar.nav.activity": "活动",
   "sidebar.nav.executionQueue": "执行队列",
   "sidebar.nav.automations": "自动化",
@@ -2064,6 +2065,9 @@ export const dict: I18nDict = {
   "onboarding.step.account.title": "连接 X 账号",
   "onboarding.step.account.description": "授权一个账号后，发布、回复和私信才有执行对象。",
   "onboarding.step.account.cta": "连接账号",
+  "onboarding.step.dailyXQueue.title": "生成今天的 X 队列",
+  "onboarding.step.dailyXQueue.description": "输入 handle、粘贴产品上下文，生成 3 条可审核的 X 帖子草稿，并批准或复制有用输出。",
+  "onboarding.step.dailyXQueue.cta": "生成今天的 X 队列",
   "onboarding.step.oafBot.title": "创建 OAF Bot",
   "onboarding.step.oafBot.description": "配置账号人设、语言、边界和增长目标，让后续内容保持一致。",
   "onboarding.step.oafBot.cta": "创建 OAF Bot",
@@ -2076,6 +2080,9 @@ export const dict: I18nDict = {
   "onboarding.step.executionQueue.title": "查看执行队列",
   "onboarding.step.executionQueue.description": "在执行队列里处理待审核、待发布、失败和全托管内容。",
   "onboarding.step.executionQueue.cta": "查看执行队列",
+  "dashboard.firstUse.dailyXQueue.title": "生成今天的 X 队列",
+  "dashboard.firstUse.dailyXQueue.description": "从一个手动 X handle、一条素材和 3 条可审核帖子草稿开始。X OAuth 可以之后再连接。",
+  "dashboard.firstUse.dailyXQueue.cta": "生成今天的 X 队列",
   "dashboard.activity.act1.title": "发布启动预告推文串",
   "dashboard.activity.act1.detail": "自动发推已发布 4 条推文",
   "dashboard.activity.act2.title": "处理提及回复",

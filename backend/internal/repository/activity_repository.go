@@ -60,6 +60,32 @@ func (r *ActivityRepository) CountPostPublishSuccessBetween(userID uint, from, t
 	return n, err
 }
 
+func (r *ActivityRepository) CountByPreviewKeysSince(userID uint, previewKeys []string, since time.Time) (int64, error) {
+	if len(previewKeys) == 0 {
+		return 0, nil
+	}
+	q := r.DB.Model(&model.ActivityLog{}).
+		Where("user_id = ? AND preview_key IN ?", userID, previewKeys)
+	if !since.IsZero() {
+		q = q.Where("executed_at >= ?", since)
+	}
+	var n int64
+	err := q.Count(&n).Error
+	return n, err
+}
+
+func (r *ActivityRepository) ExistsByPreviewKeySince(userID uint, previewKey string, since time.Time) (bool, error) {
+	var n int64
+	q := r.DB.Model(&model.ActivityLog{}).Where("user_id = ? AND preview_key = ?", userID, previewKey)
+	if !since.IsZero() {
+		q = q.Where("executed_at >= ?", since)
+	}
+	if err := q.Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // CountReplySuccessBetween counts successful reply activities with executed_at in [from, to] (inclusive bounds, UTC).
 func (r *ActivityRepository) CountReplySuccessBetween(userID uint, from, to time.Time) (int64, error) {
 	var n int64

@@ -149,6 +149,9 @@ func (s *AutoPostService) ListDrafts(userID uint) (*dto.AutoPostDraftsResponse, 
 	}
 	items := make([]dto.AutoPostDraftItem, 0, len(rows))
 	for _, row := range rows {
+		if isDailyXQueueDraft(row) {
+			continue
+		}
 		items = append(items, s.toDraftItem(row))
 	}
 	return &dto.AutoPostDraftsResponse{Items: items}, nil
@@ -498,6 +501,9 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 	if err != nil {
 		return nil, err
 	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, fmt.Errorf("daily x queue drafts must be edited from Daily X Queue")
+	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be edited from status %s", draft.Status)
 	}
@@ -529,6 +535,9 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 	draft, err := s.draftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
+	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, fmt.Errorf("daily x queue drafts must be rewritten from Daily X Queue")
 	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be rewritten from status %s", draft.Status)
@@ -642,6 +651,9 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 	if err != nil {
 		return nil, err
 	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, fmt.Errorf("daily x queue drafts cannot be approved from Auto Post")
+	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be approved from status %s", draft.Status)
 	}
@@ -669,6 +681,9 @@ func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftIte
 	if err != nil {
 		return nil, err
 	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, fmt.Errorf("daily x queue drafts cannot be prepared for publishing")
+	}
 	if draft.Status != "ready_to_publish" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot prepare publish from status %s", draft.Status)
 	}
@@ -687,6 +702,9 @@ func (s *AutoPostService) RejectDraft(userID, id uint, reason string) (*dto.Auto
 	if err != nil {
 		return nil, err
 	}
+	if isDailyXQueueDraft(*draft) {
+		return nil, fmt.Errorf("daily x queue drafts must be rejected from Daily X Queue")
+	}
 	now := time.Now().UTC()
 	draft.Status = "rejected"
 	draft.RejectedAt = &now
@@ -699,6 +717,10 @@ func (s *AutoPostService) RejectDraft(userID, id uint, reason string) (*dto.Auto
 	}
 	item := s.toDraftItem(*draft)
 	return &item, nil
+}
+
+func isDailyXQueueDraft(draft model.AutoPostDraft) bool {
+	return draft.PlanID == 0 || draft.XAccountID == 0 || draft.CapabilityStatus == "daily_x_queue_review"
 }
 
 func (s *AutoPostService) assertMonthlyQuota(userID uint, now time.Time) error {

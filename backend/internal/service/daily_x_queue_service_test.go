@@ -330,6 +330,54 @@ func TestDailyXQueueNextGenerationUsesRejectedDraftsAndFeedbackToAvoidRepeating(
 	}
 }
 
+func TestDailyXQueueApproveAndCopyCreateOAFBotMemoryForNextGeneration(t *testing.T) {
+	svc, db := newDailyXQueueTestService(t)
+	userID := uint(33)
+	setupDailyXQueueFixture(t, svc, userID)
+	generated, err := svc.Generate(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if _, err := svc.ApproveDraft(userID, generated.Drafts[0].ID); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if _, err := svc.CopyDraft(userID, generated.Drafts[1].ID); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	var feedbackRows []model.OAFBotGenerationFeedback
+	if err := db.Where("user_id = ? AND rating = ?", userID, "positive").Order("id ASC").Find(&feedbackRows).Error; err != nil {
+		t.Fatalf("load positive feedback: %v", err)
+	}
+	joinedTags := ""
+	for _, row := range feedbackRows {
+		joinedTags += row.IssueTags + "\n"
+	}
+	if !strings.Contains(joinedTags, "approved_example") {
+		t.Fatalf("expected approved_example memory, got %s", joinedTags)
+	}
+	if !strings.Contains(joinedTags, "useful_output") {
+		t.Fatalf("expected useful_output memory, got %s", joinedTags)
+	}
+
+	var captured GenerateAutoPostInput
+	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+		if captured.ContentDirection == "" {
+			captured = in
+		}
+		return AIGeneratedText{Text: "A queue that learns from approved and copied examples keeps the account voice sharper."}, nil
+	}
+	if _, err := svc.Generate(context.Background(), userID); err != nil {
+		t.Fatalf("second generate: %v", err)
+	}
+	signals := strings.Join(captured.FeedbackSignals, "\n")
+	if !strings.Contains(signals, "approved_example") || !strings.Contains(signals, "useful_output") {
+		t.Fatalf("expected approved/copied memory signals, got %q", signals)
+	}
+	if !strings.Contains(signals, "voice_style_reference_only") || !strings.Contains(signals, "do_not_treat_as_fact_source=true") {
+		t.Fatalf("expected style-only memory guardrails, got %q", signals)
+	}
+}
+
 func TestDailyXQueueEditCopyAndActivationEvent(t *testing.T) {
 	svc, db := newDailyXQueueTestService(t)
 	userID := uint(4)

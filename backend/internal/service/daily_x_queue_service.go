@@ -181,9 +181,9 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 	if err != nil {
 		return nil, err
 	}
-	feedbackRows := s.feedbackRows(userID, bot.ID)
+	memoryRows := s.memoryRows(userID, bot.ID)
 	var learningRules []dto.OAFBotAppliedLearningRule
-	baseSignals := feedbackSignalsFromRows(feedbackRows)
+	baseSignals := dailyXQueueMemorySignals(memoryRows)
 	feedbackSignals, learningRules := appendFeedbackLearningSignalsWithRules(baseSignals, s.verdictRepo, s.prefRepo, userID, bot.ID, dailyXQueueSceneTweet, nil)
 	directions := dailyXQueueDirections(content.Title)
 	drafts := make([]dto.DailyXQueueDraftItem, 0, dailyXQueueDraftCount)
@@ -224,7 +224,7 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 		item := s.toDailyDraftItem(*draft)
 		item.WhyGenerated = directions[i]
 		item.FeedbackSignalCount = len(feedbackSignals)
-		item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(feedbackRows, learningRules)
+		item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(memoryRows, learningRules)
 		drafts = append(drafts, item)
 	}
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewGenerated, "@"+ctxRow.XHandle, "Daily X Queue generated exactly 3 post drafts.")
@@ -232,7 +232,7 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 		Context:              dailyXContextToDTO(*ctxRow),
 		Drafts:               drafts,
 		LearningAppliedCount: len(feedbackSignals),
-		LearningSummary:      dailyLearningSummary(feedbackRows, learningRules),
+		LearningSummary:      dailyLearningSummary(memoryRows, learningRules),
 	}, nil
 }
 
@@ -252,9 +252,9 @@ func (s *DailyXQueueService) UpdateDraft(userID, id uint, content string) (*dto.
 	if err := s.draftRepo.Save(draft); err != nil {
 		return nil, err
 	}
-	_ = s.createFeedback(userID, draft.BotID, "negative", []string{"edited"}, "User edited this draft. Prefer the edited version in future queues.", original, draft.GeneratedContent)
-	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewEdited, "", fmt.Sprintf("Daily X Queue draft edited; draft_id=%d; edit captured for future queues.", draft.ID))
-	return s.actionResponse(userID, *draft, "Edit captured for future queues.")
+	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"edited_example", "voice_example"}, "OAF Bot memory: user edited this Daily X Queue draft. Treat the edited version as a voice/style example, not a trusted factual source.", original, draft.GeneratedContent)
+	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewEdited, "", fmt.Sprintf("Daily X Queue draft edited; draft_id=%d; OAF Bot memory captured for future queues.", draft.ID))
+	return s.actionResponse(userID, *draft, "OAF Bot memory captured from this edit.")
 }
 
 func (s *DailyXQueueService) ApproveDraft(userID, id uint) (*dto.DailyXQueueActionResponse, error) {
@@ -269,6 +269,7 @@ func (s *DailyXQueueService) ApproveDraft(userID, id uint) (*dto.DailyXQueueActi
 	if err := s.draftRepo.Save(draft); err != nil {
 		return nil, err
 	}
+	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"approved_example"}, "OAF Bot memory: user approved this Daily X Queue draft. Use it as an acceptable style/example only; do not treat generated claims as trusted source material.", draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "success", dailyXQueuePreviewApproved, "", fmt.Sprintf("Daily X Queue draft approved; draft_id=%d. No publish job was created.", draft.ID))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -289,7 +290,7 @@ func (s *DailyXQueueService) RejectDraft(userID, id uint, reason string) (*dto.D
 	if err := s.draftRepo.Save(draft); err != nil {
 		return nil, err
 	}
-	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized}, dailyRejectFeedbackComment(normalized), draft.ContentDirection, draft.GeneratedContent)
+	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized, "negative_pattern"}, dailyRejectFeedbackComment(normalized), draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewRejected, "", fmt.Sprintf("Daily X Queue draft rejected; draft_id=%d; reason=%s", draft.ID, normalized))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -311,7 +312,7 @@ func (s *DailyXQueueService) RewriteDraft(ctx context.Context, userID, id uint, 
 	if draft.ContentLibraryID > 0 {
 		content, _ = s.contentRepo.GetByUserAndID(userID, draft.ContentLibraryID)
 	}
-	in := s.generateInput(ctxRow, bot, content, draft.ContentDirection, feedbackSignalsFromRows(s.feedbackRows(userID, bot.ID)))
+	in := s.generateInput(ctxRow, bot, content, draft.ContentDirection, dailyXQueueMemorySignals(s.memoryRows(userID, bot.ID)))
 	generated, err := s.callRewriteText(ctx, in, draft.GeneratedContent, firstNonEmpty(req.RewriteMode, "more_specific"), req.Feedback)
 	if err != nil {
 		return nil, err
@@ -334,6 +335,9 @@ func (s *DailyXQueueService) RewriteDraft(ctx context.Context, userID, id uint, 
 		return nil, err
 	}
 	_ = recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, generated.Usage)
+	if strings.TrimSpace(req.Feedback) != "" {
+		_ = s.createFeedback(userID, draft.BotID, "positive", []string{"rewrite_instruction"}, "OAF Bot memory: rewrite feedback from Daily X Queue reviewer: "+strings.TrimSpace(req.Feedback), draft.ContentDirection, text)
+	}
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewRewritten, "", fmt.Sprintf("Daily X Queue draft rewritten; draft_id=%d.", draft.ID))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -343,6 +347,7 @@ func (s *DailyXQueueService) CopyDraft(userID, id uint) (*dto.DailyXQueueActionR
 	if err != nil {
 		return nil, err
 	}
+	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"useful_output", "copied_example"}, "OAF Bot memory: user copied this Daily X Queue draft. Treat it as a useful voice/style example, not trusted factual source material.", draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "success", dailyXQueuePreviewCopied, "", fmt.Sprintf("Daily X Queue draft copied; draft_id=%d.", draft.ID))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -379,8 +384,8 @@ func (s *DailyXQueueService) overviewForContext(userID uint, ctxRow *model.Daily
 		ReviewActionsCount:   reviewActions,
 		ApprovedOrCopied:     approvedOrCopied,
 		Activated:            ctxRow.Activated,
-		LearningAppliedCount: len(feedbackSignalsFromRows(s.feedbackRows(userID, ctxRow.BotID))),
-		LearningSummary:      dailyLearningSummary(s.feedbackRows(userID, ctxRow.BotID), nil),
+		LearningAppliedCount: len(dailyXQueueMemorySignals(s.memoryRows(userID, ctxRow.BotID))),
+		LearningSummary:      dailyLearningSummary(s.memoryRows(userID, ctxRow.BotID), nil),
 	}, nil
 }
 
@@ -565,11 +570,11 @@ func (s *DailyXQueueService) generateInput(ctxRow *model.DailyXQueueContext, bot
 	return in
 }
 
-func (s *DailyXQueueService) feedbackRows(userID, botID uint) []model.OAFBotGenerationFeedback {
+func (s *DailyXQueueService) memoryRows(userID, botID uint) []model.OAFBotGenerationFeedback {
 	if s.feedbackRepo == nil || botID == 0 {
 		return nil
 	}
-	rows, err := s.feedbackRepo.ListRecentNegativeByUserBotScene(userID, botID, dailyXQueueSceneTweet, 8)
+	rows, err := s.feedbackRepo.ListRecentByUserBotScene(userID, botID, dailyXQueueSceneTweet, 12)
 	if err != nil {
 		return nil
 	}
@@ -611,6 +616,44 @@ func (s *DailyXQueueService) createFeedback(userID, botID uint, rating string, i
 		GeneratedContent: truncateRunes(generatedContent, 2000),
 		Provider:         "daily_x_queue",
 	})
+}
+
+func dailyXQueueMemorySignals(rows []model.OAFBotGenerationFeedback) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		signal := dailyXQueueMemorySignal(row)
+		if signal != "" {
+			out = append(out, signal)
+		}
+	}
+	return out
+}
+
+func dailyXQueueMemorySignal(row model.OAFBotGenerationFeedback) string {
+	tags := decodeStringList(row.IssueTags)
+	rating := strings.TrimSpace(row.Rating)
+	parts := []string{
+		"oaf_bot_memory",
+		"source=daily_x_queue",
+		"rating=" + rating,
+		"tags=" + strings.Join(tags, ", "),
+	}
+	if rating == "positive" {
+		parts = append(parts, "usage=voice_style_reference_only")
+		parts = append(parts, "do_not_treat_as_fact_source=true")
+	} else if rating == "negative" {
+		parts = append(parts, "usage=avoid_negative_pattern")
+	}
+	if strings.TrimSpace(row.Comment) != "" {
+		parts = append(parts, "instruction="+truncateRunes(row.Comment, 260))
+	}
+	if strings.TrimSpace(row.SampleContext) != "" {
+		parts = append(parts, "context="+truncateRunes(row.SampleContext, 160))
+	}
+	if strings.TrimSpace(row.GeneratedContent) != "" {
+		parts = append(parts, "example="+truncateRunes(row.GeneratedContent, 260))
+	}
+	return strings.Join(parts, " | ")
 }
 
 func (s *DailyXQueueService) actionResponse(userID uint, draft model.AutoPostDraft, message string) (*dto.DailyXQueueActionResponse, error) {
@@ -784,5 +827,5 @@ func dailyLearningSummary(rows []model.OAFBotGenerationFeedback, rules []dto.OAF
 	if count == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Applied %d learning signal(s) from prior edits or rejections.", count)
+	return fmt.Sprintf("Applied %d OAF Bot memory signal(s) from prior Daily X Queue reviews.", count)
 }

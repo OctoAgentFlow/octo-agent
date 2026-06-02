@@ -54,6 +54,9 @@ function directionKey(value?: string) {
   if (text.startsWith("Product value:")) return "dailyXQueue.direction.productValue";
   if (text.startsWith("User pain point:")) return "dailyXQueue.direction.userPain";
   if (text.startsWith("Operational proof:")) return "dailyXQueue.direction.operationalProof";
+  if (text.startsWith("Operator insight:")) return "dailyXQueue.direction.operatorInsight";
+  if (text.startsWith("Workflow proof:")) return "dailyXQueue.direction.workflowProof";
+  if (text.startsWith("Founder/operator note:")) return "dailyXQueue.direction.founderOperatorNote";
   return "";
 }
 
@@ -87,6 +90,7 @@ export default function DailyXQueuePage() {
   const setupReady = Boolean(overview?.context?.bot_id);
   const sourceReady = Boolean(overview?.context?.content_library_id);
   const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
+  const botName = overview?.bot?.name || "OAF Bot";
   const localizedError = useCallback((error: unknown, fallbackKey: string) => {
     const message = apiErrorMessage(error);
     const knownKey = message ? knownDailyXQueueErrorKey(message) : "";
@@ -392,7 +396,8 @@ export default function DailyXQueuePage() {
                 value={draftEdits[draft.id] ?? draft.generated_content}
                 onChange={(event) => setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))}
               />
-              <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#8b98a5] md:grid-cols-3">
+              <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#8b98a5] md:grid-cols-2 xl:grid-cols-4">
+                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.generatedByLabel")}</span> {botName}</p>
                 <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.sourceLabel")}</span> {draft.source_used || draft.content_title || t("dailyXQueue.fallback.source")}</p>
                 <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.whyLabel")}</span> {directionLabel(draft.why_generated)}</p>
                 <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.riskReasonsLabel")}</span> {draft.failure_reason || t("dailyXQueue.risk.none")}</p>

@@ -1694,6 +1694,11 @@ func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateAuto
 	if direction != "" {
 		user.WriteString("Draft angle: " + direction + "\n")
 	}
+	user.WriteString("Account identity rules:\n")
+	user.WriteString("- Generate for the provided X account identity; do not assume it is an official brand account.\n")
+	user.WriteString("- If the context implies a founder, KOL, creator, agency, community, or project account, match that account type and voice.\n")
+	user.WriteString("- First person is acceptable for founder/KOL/creator voices; product/team voice is acceptable for official/project accounts.\n")
+	user.WriteString("- Use the OAF Bot profile and source material to infer the account voice instead of forcing OctoAgentFlow's own brand voice.\n")
 	if strings.TrimSpace(in.ContentItemTitle) != "" || strings.TrimSpace(in.ContentItemBody) != "" {
 		user.WriteString("Source material for today's queue:\n")
 		user.WriteString("title: " + strings.TrimSpace(in.ContentItemTitle) + "\n")
@@ -1752,7 +1757,12 @@ func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateAuto
 			user.WriteString("- " + truncateRunes(post, 220) + "\n")
 		}
 	}
-	writeGenerationFeedbackSignals(&user, "Recent Daily X Queue edit/reject signals to apply:", in.FeedbackSignals)
+	writeGenerationFeedbackSignals(&user, "Recent OAF Bot memory from Daily X Queue reviews to apply:", in.FeedbackSignals)
+	user.WriteString("OAF Bot memory usage rules:\n")
+	user.WriteString("- User-provided source material is the trusted factual source.\n")
+	user.WriteString("- Approved, copied, or edited Daily X Queue outputs are voice/style references only.\n")
+	user.WriteString("- Rejected outputs are negative patterns to avoid.\n")
+	user.WriteString("- Do not launder generated outputs into new factual claims.\n")
 	user.WriteString("Daily X Queue writing rules:\n")
 	user.WriteString("- Target 120-200 characters; hard maximum 220 characters.\n")
 	user.WriteString("- End with a complete sentence. Never end mid-phrase or mid-list.\n")

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
+import { useT } from "@/i18n/use-t";
 import { apiErrorMessage } from "@/lib/request";
 import { dailyXQueueService, type DailyXQueueDraftApi, type DailyXQueueOverviewApi } from "@/services/daily-x-queue.service";
 
@@ -14,6 +15,7 @@ type LoadState = "loading" | "ready" | "error";
 type BusyAction = "setup" | "source" | "generate" | `edit-${number}` | `approve-${number}` | `reject-${number}` | `rewrite-${number}` | `copy-${number}` | "";
 
 const rejectReasons = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "duplicate", "other"];
+const defaultVoicePreferences = ["Concise founder/operator voice", "简洁的创始人 / 运营者语气"];
 
 function statusTone(status: string) {
   if (status === "approved") return "border-emerald-300/25 bg-emerald-500/10 text-emerald-100";
@@ -36,8 +38,29 @@ function splitTopics(value: string) {
     .slice(0, 8);
 }
 
+function knownDailyXQueueErrorKey(message: string) {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized.includes("setup is required")) return "dailyXQueue.toast.error.setupRequired";
+  if (normalized.includes("source material is required")) return "dailyXQueue.toast.error.sourceRequired";
+  if (normalized.includes("reject reason is required")) return "dailyXQueue.toast.error.rejectReasonRequired";
+  if (normalized.includes("x_handle is required")) return "dailyXQueue.toast.error.handleRequired";
+  if (normalized.includes("openai api key is empty")) return "dailyXQueue.toast.error.llmConfig";
+  return "";
+}
+
+function directionKey(value?: string) {
+  const text = (value || "").trim();
+  if (text.startsWith("Product value:")) return "dailyXQueue.direction.productValue";
+  if (text.startsWith("User pain point:")) return "dailyXQueue.direction.userPain";
+  if (text.startsWith("Operational proof:")) return "dailyXQueue.direction.operationalProof";
+  return "";
+}
+
 export default function DailyXQueuePage() {
+  const { t } = useT();
   const { pushToast } = useToast();
+  const defaultVoicePreference = t("dailyXQueue.defaults.voicePreference");
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<DailyXQueueOverviewApi | null>(null);
   const [busy, setBusy] = useState<BusyAction>("");
@@ -46,7 +69,7 @@ export default function DailyXQueuePage() {
     website_url: "",
     product_context: "",
     target_audience: "",
-    voice_preference: "Concise founder/operator voice",
+    voice_preference: defaultVoicePreference,
     guardrails: "",
   });
   const [sourceForm, setSourceForm] = useState({
@@ -64,6 +87,16 @@ export default function DailyXQueuePage() {
   const setupReady = Boolean(overview?.context?.bot_id);
   const sourceReady = Boolean(overview?.context?.content_library_id);
   const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
+  const localizedError = useCallback((error: unknown, fallbackKey: string) => {
+    const message = apiErrorMessage(error);
+    const knownKey = message ? knownDailyXQueueErrorKey(message) : "";
+    return knownKey ? t(knownKey) : t(fallbackKey);
+  }, [t]);
+
+  const directionLabel = useCallback((value?: string) => {
+    const key = directionKey(value);
+    return key ? t(key) : value || t("dailyXQueue.fallback.direction");
+  }, [t]);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -76,7 +109,7 @@ export default function DailyXQueuePage() {
           website_url: data.context.website_url || "",
           product_context: data.context.product_context || "",
           target_audience: data.context.target_audience || "",
-          voice_preference: data.context.voice_preference || "Concise founder/operator voice",
+          voice_preference: data.context.voice_preference || defaultVoicePreference,
           guardrails: data.context.guardrails || "",
         });
       }
@@ -92,14 +125,21 @@ export default function DailyXQueuePage() {
       }
       setLoadState("ready");
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to load Daily X Queue.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.load"));
       setLoadState("error");
     }
-  }, [pushToast]);
+  }, [defaultVoicePreference, localizedError, pushToast]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setSetupForm((current) => {
+      if (current.voice_preference && !defaultVoicePreferences.includes(current.voice_preference)) return current;
+      return { ...current, voice_preference: defaultVoicePreference };
+    });
+  }, [defaultVoicePreference]);
 
   useEffect(() => {
     const next: Record<number, string> = {};
@@ -128,9 +168,9 @@ export default function DailyXQueuePage() {
     try {
       const data = await dailyXQueueService.setup(setupForm);
       setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, bot: data.bot }));
-      pushToast("OAF Bot profile saved for Daily X Queue.");
+      pushToast(t("dailyXQueue.toast.setupSaved"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to save setup.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.setup"));
     } finally {
       setBusy("");
     }
@@ -148,9 +188,9 @@ export default function DailyXQueuePage() {
         cta_preference: sourceForm.cta_preference,
       });
       setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, source_material: data.source_material }));
-      pushToast("Source material saved.");
+      pushToast(t("dailyXQueue.toast.sourceSaved"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to save source material.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.source"));
     } finally {
       setBusy("");
     }
@@ -167,9 +207,9 @@ export default function DailyXQueuePage() {
         learning_applied_count: data.learning_applied_count,
         learning_summary: data.learning_summary,
       }));
-      pushToast("Generated exactly 3 X post drafts.");
+      pushToast(t("dailyXQueue.toast.generated"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to generate Daily X Queue.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.generate"));
     } finally {
       setBusy("");
     }
@@ -180,9 +220,9 @@ export default function DailyXQueuePage() {
     try {
       const data = await dailyXQueueService.updateDraft(draft.id, draftEdits[draft.id] || draft.generated_content);
       upsertDraft(data.draft, data);
-      pushToast(data.message || "Edit captured for future queues.");
+      pushToast(t("dailyXQueue.toast.editCaptured"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to save edit.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.edit"));
     } finally {
       setBusy("");
     }
@@ -193,9 +233,9 @@ export default function DailyXQueuePage() {
     try {
       const data = await dailyXQueueService.approveDraft(draft.id);
       upsertDraft(data.draft, data);
-      pushToast("Approved for copy or optional publishing later. Nothing was published.");
+      pushToast(t("dailyXQueue.toast.approved"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to approve draft.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.approve"));
     } finally {
       setBusy("");
     }
@@ -207,9 +247,9 @@ export default function DailyXQueuePage() {
     try {
       const data = await dailyXQueueService.rejectDraft(draft.id, reason);
       upsertDraft(data.draft, data);
-      pushToast("Rejection saved as a learning signal.");
+      pushToast(t("dailyXQueue.toast.feedbackCaptured"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to reject draft.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.reject"));
     } finally {
       setBusy("");
     }
@@ -220,9 +260,9 @@ export default function DailyXQueuePage() {
     try {
       const data = await dailyXQueueService.rewriteDraft(draft.id, "more_specific", rewriteFeedback[draft.id]);
       upsertDraft(data.draft, data);
-      pushToast("Draft rewritten.");
+      pushToast(t("dailyXQueue.toast.rewritten"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to rewrite draft.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.rewrite"));
     } finally {
       setBusy("");
     }
@@ -234,9 +274,9 @@ export default function DailyXQueuePage() {
       await navigator.clipboard.writeText(draftEdits[draft.id] || draft.generated_content);
       const data = await dailyXQueueService.copyDraft(draft.id);
       upsertDraft(data.draft, data);
-      pushToast("Copied and tracked as first-value output.");
+      pushToast(t("dailyXQueue.toast.copied"));
     } catch (error) {
-      pushToast(apiErrorMessage(error) || "Failed to copy draft.");
+      pushToast(localizedError(error, "dailyXQueue.toast.error.copy"));
     } finally {
       setBusy("");
     }
@@ -251,6 +291,7 @@ export default function DailyXQueuePage() {
     return (
       <div className="grid min-h-[60vh] place-items-center">
         <Loader2 className="size-6 animate-spin text-[#1d9bf0]" />
+        <span className="sr-only">{t("dailyXQueue.loading")}</span>
       </div>
     );
   }
@@ -259,15 +300,15 @@ export default function DailyXQueuePage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#1d9bf0]">Daily X Queue</p>
-          <h1 className="mt-1 text-2xl font-bold text-[#e7e9ea] md:text-3xl">Generate today&apos;s reviewable X posts</h1>
+          <p className="text-sm font-semibold text-[#1d9bf0]">{t("dailyXQueue.eyebrow")}</p>
+          <h1 className="mt-1 text-2xl font-bold text-[#e7e9ea] md:text-3xl">{t("dailyXQueue.title")}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#8b98a5]">
-            Enter minimal context, add one source, generate exactly 3 post drafts, then review them here. X OAuth is not required for first value.
+            {t("dailyXQueue.subtitle")}
           </p>
         </div>
         <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-sm text-[#8b98a5]">
-          <span className="font-semibold text-[#e7e9ea]">{progress}/5</span> activation steps
-          {overview?.activated ? <span className="ml-3 text-emerald-200">Activated</span> : null}
+          <span className="font-semibold text-[#e7e9ea]">{progress}/5</span> {t("dailyXQueue.activationSteps")}
+          {overview?.activated ? <span className="ml-3 text-emerald-200">{t("dailyXQueue.activated")}</span> : null}
         </div>
       </header>
 
@@ -275,40 +316,40 @@ export default function DailyXQueuePage() {
         <Card className="border-emerald-300/20 bg-emerald-400/10">
           <div className="flex items-start gap-3 text-sm text-emerald-50">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            <p>{overview.learning_summary}</p>
+            <p>{t("dailyXQueue.learning.applied", { count: overview.learning_applied_count || 0 })}</p>
           </div>
         </Card>
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="border-[#2f3336] bg-black">
-          <CardHeader title="1. Account and product context" description="This creates a manual Daily Queue context, not a connected X account." />
+          <CardHeader title={t("dailyXQueue.setup.title")} description={t("dailyXQueue.setup.description")} />
           <div className="grid gap-3">
-            <Input placeholder="X handle, e.g. octo_agent_flow" value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
-            <Input placeholder="Product website URL (optional)" value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
-            <textarea className="form-input min-h-28 resize-y" placeholder="Product description" value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
-            <Input placeholder="Target audience" value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
-            <Input placeholder="Voice preference" value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
-            <textarea className="form-input min-h-20 resize-y" placeholder="Guardrails / blocked claims" value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
+            <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
+            <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
             <Button type="button" disabled={busy === "setup" || !setupForm.x_handle.trim() || !setupForm.product_context.trim()} onClick={handleSetup}>
               {busy === "setup" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              Save setup
+              {t("dailyXQueue.setup.save")}
             </Button>
           </div>
         </Card>
 
         <Card className="border-[#2f3336] bg-black">
-          <CardHeader title="2. Source material" description="Paste one source item for today's queue." />
+          <CardHeader title={t("dailyXQueue.source.title")} description={t("dailyXQueue.source.description")} />
           <div className="grid gap-3">
-            <Input placeholder="Source title" value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
-            <textarea className="form-input min-h-32 resize-y" placeholder="Paste notes, product update, FAQ, or positioning" value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
-            <Input placeholder="Source URL (optional)" value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
-            <Input placeholder="Topics, comma-separated" value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
-            <Input placeholder="Goal for this material" value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
-            <Input placeholder="CTA preference" value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.source.titlePlaceholder")} value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
+            <textarea className="form-input min-h-32 resize-y" placeholder={t("dailyXQueue.source.bodyPlaceholder")} value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.source.urlPlaceholder")} value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.source.topicsPlaceholder")} value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.source.goalPlaceholder")} value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
+            <Input placeholder={t("dailyXQueue.source.ctaPlaceholder")} value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
             <Button type="button" disabled={busy === "source" || !setupReady || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={handleSource}>
               {busy === "source" ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
-              Save source
+              {t("dailyXQueue.source.save")}
             </Button>
           </div>
         </Card>
@@ -317,12 +358,12 @@ export default function DailyXQueuePage() {
       <Card className="border-[#1d9bf0]/25 bg-[#06111d]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#e7e9ea]">3. Generate today&apos;s queue</h2>
-            <p className="mt-1 text-sm text-[#8b98a5]">Generates exactly 3 X post drafts. Nothing is published or scheduled.</p>
+            <h2 className="text-lg font-bold text-[#e7e9ea]">{t("dailyXQueue.generate.title")}</h2>
+            <p className="mt-1 text-sm text-[#8b98a5]">{t("dailyXQueue.generate.description")}</p>
           </div>
           <Button type="button" disabled={busy === "generate" || !setupReady || !sourceReady} onClick={handleGenerate}>
             {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            Generate 3 drafts
+            {t("dailyXQueue.generate.button")}
           </Button>
         </div>
       </Card>
@@ -330,7 +371,7 @@ export default function DailyXQueuePage() {
       <section className="grid gap-4">
         {drafts.length === 0 ? (
           <Card className="border-[#2f3336] bg-black">
-            <p className="text-sm text-[#8b98a5]">No Daily X Queue drafts yet.</p>
+            <p className="text-sm text-[#8b98a5]">{t("dailyXQueue.empty")}</p>
           </Card>
         ) : null}
         {drafts.slice(0, 3).map((draft, index) => (
@@ -338,12 +379,12 @@ export default function DailyXQueuePage() {
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-[#e7e9ea]">Draft {index + 1}</p>
-                  <p className="mt-1 text-xs text-[#71767b]">{draft.why_generated || draft.content_direction}</p>
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.draft.title", { number: index + 1 })}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{directionLabel(draft.why_generated || draft.content_direction)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(draft.status)}`}>{draft.status}</span>
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${riskTone(draft.risk_level)}`}>risk: {draft.risk_level || "low"}</span>
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(draft.status)}`}>{t(`dailyXQueue.status.${draft.status}`)}</span>
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${riskTone(draft.risk_level)}`}>{t("dailyXQueue.risk.label", { level: t(`dailyXQueue.risk.${draft.risk_level || "low"}`) })}</span>
                 </div>
               </div>
               <textarea
@@ -352,27 +393,27 @@ export default function DailyXQueuePage() {
                 onChange={(event) => setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))}
               />
               <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#8b98a5] md:grid-cols-3">
-                <p><span className="text-[#e7e9ea]">Source:</span> {draft.source_used || draft.content_title || "Source material"}</p>
-                <p><span className="text-[#e7e9ea]">Why:</span> {draft.why_generated || "Daily queue direction"}</p>
-                <p><span className="text-[#e7e9ea]">Risk reasons:</span> {draft.failure_reason || "None"}</p>
+                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.sourceLabel")}</span> {draft.source_used || draft.content_title || t("dailyXQueue.fallback.source")}</p>
+                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.whyLabel")}</span> {directionLabel(draft.why_generated)}</p>
+                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.riskReasonsLabel")}</span> {draft.failure_reason || t("dailyXQueue.risk.none")}</p>
               </div>
               <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" disabled={busy === `edit-${draft.id}`} onClick={() => void handleEdit(draft)}>
                     {busy === `edit-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
-                    Edit
+                    {t("dailyXQueue.actions.edit")}
                   </Button>
                   <Button type="button" disabled={busy === `approve-${draft.id}`} onClick={() => void handleApprove(draft)}>
                     {busy === `approve-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                    Approve
+                    {t("dailyXQueue.actions.approve")}
                   </Button>
                   <Button type="button" variant="outline" disabled={busy === `rewrite-${draft.id}`} onClick={() => void handleRewrite(draft)}>
                     {busy === `rewrite-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
-                    Rewrite
+                    {t("dailyXQueue.actions.rewrite")}
                   </Button>
                   <Button type="button" variant="outline" disabled={busy === `copy-${draft.id}`} onClick={() => void handleCopy(draft)}>
                     {busy === `copy-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Clipboard className="size-4" />}
-                    Copy
+                    {t("dailyXQueue.actions.copy")}
                   </Button>
                 </div>
                 <div className="flex min-w-0 gap-2">
@@ -381,16 +422,16 @@ export default function DailyXQueuePage() {
                     value={rejectByDraft[draft.id] || "weak_context"}
                     onChange={(event) => setRejectByDraft((current) => ({ ...current, [draft.id]: event.target.value }))}
                   >
-                    {rejectReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
+                    {rejectReasons.map((reason) => <option key={reason} value={reason}>{t(`dailyXQueue.rejectReason.${reason}`)}</option>)}
                   </select>
                   <Button type="button" variant="destructive" disabled={busy === `reject-${draft.id}`} onClick={() => void handleReject(draft)}>
                     {busy === `reject-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <ThumbsDown className="size-4" />}
-                    Reject
+                    {t("dailyXQueue.actions.reject")}
                   </Button>
                 </div>
               </div>
               <Input
-                placeholder="Optional rewrite feedback"
+                placeholder={t("dailyXQueue.rewriteFeedbackPlaceholder")}
                 value={rewriteFeedback[draft.id] || ""}
                 onChange={(event) => setRewriteFeedback((current) => ({ ...current, [draft.id]: event.target.value }))}
               />

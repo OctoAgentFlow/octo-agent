@@ -84,6 +84,25 @@ func setupDailyXQueueFixture(t *testing.T, svc *DailyXQueueService, userID uint)
 	}
 }
 
+func TestDailyXQueueDirectionsUseDistinctBatchAngles(t *testing.T) {
+	directions := dailyXQueueDirections("Daily X Queue as OAF Bot workflow")
+	if len(directions) != dailyXQueueDraftCount {
+		t.Fatalf("expected %d directions, got %d", dailyXQueueDraftCount, len(directions))
+	}
+	expectedPrefixes := []string{"Operator pain:", "Workflow proof:", "OAF Bot memory boundary:"}
+	for i, prefix := range expectedPrefixes {
+		if !strings.HasPrefix(directions[i], prefix) {
+			t.Fatalf("direction %d should start with %q, got %q", i, prefix, directions[i])
+		}
+	}
+	if !strings.Contains(directions[1], "only batch draft allowed") {
+		t.Fatalf("workflow direction should be the only review-first centered draft, got %q", directions[1])
+	}
+	if !strings.Contains(directions[2], "trusted source material remains the factual base") {
+		t.Fatalf("memory direction should distinguish memory from facts, got %q", directions[2])
+	}
+}
+
 func TestDailyXQueueFreshUserWithoutOAuthCanSetupSourceAndGenerateExactlyThreeDrafts(t *testing.T) {
 	svc, db := newDailyXQueueTestService(t)
 	userID := uint(1)

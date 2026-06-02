@@ -54,8 +54,10 @@ function directionKey(value?: string) {
   if (text.startsWith("Product value:")) return "dailyXQueue.direction.productValue";
   if (text.startsWith("User pain point:")) return "dailyXQueue.direction.userPain";
   if (text.startsWith("Operational proof:")) return "dailyXQueue.direction.operationalProof";
+  if (text.startsWith("Operator pain:")) return "dailyXQueue.direction.operatorPain";
   if (text.startsWith("Operator insight:")) return "dailyXQueue.direction.operatorInsight";
   if (text.startsWith("Workflow proof:")) return "dailyXQueue.direction.workflowProof";
+  if (text.startsWith("OAF Bot memory boundary:")) return "dailyXQueue.direction.oafBotMemoryBoundary";
   if (text.startsWith("Founder/operator note:")) return "dailyXQueue.direction.founderOperatorNote";
   return "";
 }

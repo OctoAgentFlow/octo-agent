@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -406,6 +407,7 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
 export default function OAFBotsPage() {
   const { t, lang } = useT();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
   const defaultPrimaryLanguage = lang === "en" ? "en" : "zh-CN";
   const [loading, setLoading] = useState(true);
   const [bots, setBots] = useState<OAFBot[]>([]);
@@ -1058,7 +1060,13 @@ export default function OAFBotsPage() {
   const deleteSelectedBot = async () => {
     if (!selectedBot || deletingBot) return;
     const name = selectedBot.name || t("oafBots.preview.unnamed");
-    if (!window.confirm(t("oafBots.delete.confirm", { name }))) return;
+    const confirmed = await confirm({
+      title: t("oafBots.delete.confirmTitle"),
+      description: t("oafBots.delete.confirm", { name }),
+      confirmLabel: t("oafBots.delete.action"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
     setDeletingBot(true);
     try {
       await oafBotService.delete(selectedBot.id);

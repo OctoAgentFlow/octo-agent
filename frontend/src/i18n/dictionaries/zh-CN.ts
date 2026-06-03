@@ -4209,6 +4209,7 @@ export const dict: I18nDict = {
   "oafBots.feedback.learning.none": "暂无",
   "oafBots.delete.action": "删除 Bot",
   "oafBots.delete.loading": "删除中...",
+  "oafBots.delete.confirmTitle": "删除 OAF Bot",
   "oafBots.delete.confirm": "确认删除 OAF Bot「{name}」吗？使用它的 Auto Post 计划会被停用，待发布任务会被取消，这个 Bot 的学习记录会被移除。此操作不可撤销。",
   "oafBots.delete.deleted": "OAF Bot 已删除。相关自动化已停用，待发布任务已取消。",
   "oafBots.delete.failed": "删除 OAF Bot 失败。",

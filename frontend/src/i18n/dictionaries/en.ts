@@ -4241,6 +4241,7 @@ export const dict: I18nDict = {
   "oafBots.feedback.learning.none": "None",
   "oafBots.delete.action": "Delete Bot",
   "oafBots.delete.loading": "Deleting...",
+  "oafBots.delete.confirmTitle": "Delete OAF Bot",
   "oafBots.delete.confirm": "Delete OAF Bot \"{name}\"? Auto Post plans using it will be disabled, pending publish jobs will be cancelled, and learning records for this Bot will be removed. This cannot be undone.",
   "oafBots.delete.deleted": "OAF Bot deleted. Related automation was disabled and pending publish jobs were cancelled.",
   "oafBots.delete.failed": "Failed to delete OAF Bot.",

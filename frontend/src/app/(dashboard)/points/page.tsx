@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Coins, Copy, Gift, History, Lock } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowRight, Bot, CalendarCheck, CheckCircle2, Circle, Coins, Copy, FileText, Gift, History, ListChecks, Lock, Sparkles, type LucideIcon } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
 import { useToast } from "@/components/providers/toast-provider";
@@ -13,8 +14,31 @@ import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { pointService, type PointCenterApi } from "@/services/point.service";
 import { referralService, type ReferralInfoApi } from "@/services/referral.service";
 
+type ActivityTone = "blue" | "green" | "yellow" | "purple";
+
+const activityMeta: Record<string, { icon: LucideIcon; href?: string; categoryKey: string; tone: ActivityTone }> = {
+  daily_check_in: { icon: CalendarCheck, categoryKey: "points.activities.category.routine", tone: "yellow" },
+  bind_x_account: { icon: Circle, href: "/accounts", categoryKey: "points.activities.category.setup", tone: "blue" },
+  create_oaf_bot: { icon: Bot, href: "/oaf-bots", categoryKey: "points.activities.category.setup", tone: "purple" },
+  add_source_material: { icon: FileText, href: "/daily-x-queue", categoryKey: "points.activities.category.product", tone: "green" },
+  generate_daily_x_queue: { icon: Sparkles, href: "/daily-x-queue", categoryKey: "points.activities.category.product", tone: "blue" },
+  review_daily_x_queue: { icon: ListChecks, href: "/daily-x-queue", categoryKey: "points.activities.category.product", tone: "green" },
+  activate_daily_x_queue: { icon: CheckCircle2, href: "/daily-x-queue", categoryKey: "points.activities.category.product", tone: "purple" },
+};
+
+function toneClasses(tone: ActivityTone) {
+  if (tone === "green") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (tone === "yellow") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+  if (tone === "purple") return "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]";
+  return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+}
+
+function localizedActivityText(dict: Record<string, string>, code: string, field: "title" | "description", fallback: string) {
+  return dict[`points.activity.${code}.${field}`] || fallback;
+}
+
 export default function PointsPage() {
-  const { t } = useT();
+  const { t, dict } = useT();
   const timeZone = usePreferredTimeZone();
   const { pushToast } = useToast();
   const [data, setData] = useState<PointCenterApi | null>(null);
@@ -83,21 +107,50 @@ export default function PointsPage() {
     }
   };
 
+  const account = data?.account;
+  const positiveEvents = new Set(["earn", "release", "refund"]);
+  const activities = useMemo(() => data?.activities || [], [data?.activities]);
+  const claimableActivities = useMemo(() => activities.filter((activity) => activity.claimable), [activities]);
+  const activeActivities = useMemo(
+    () => activities
+      .filter((activity) => !activity.claimed)
+      .sort((a, b) => Number(b.claimable) - Number(a.claimable) || b.points - a.points),
+    [activities]
+  );
+  const claimedActivities = useMemo(() => activities.filter((activity) => activity.claimed), [activities]);
+  const discountValue = Math.floor((account?.balance || 0) / 10);
+
   if (loading && !data) {
     return <Card><CardHeader title={t("points.loading.title")} description={t("points.loading.description")} /></Card>;
   }
 
-  const account = data?.account;
-  const positiveEvents = new Set(["earn", "release", "refund"]);
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm text-[#1d9bf0]"><Coins className="size-4" /> {t("points.page.eyebrow")}</p>
-          <h1 className="mt-2 text-2xl font-bold text-[#e7e9ea]">{t("points.page.title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#71767b]">{t("points.page.subtitle")}</p>
+      <section className="rounded-2xl border border-[#2f3336] bg-black p-5 md:p-6">
+        <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr] lg:items-end">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold text-[#1d9bf0]"><Coins className="size-4" /> {t("points.page.eyebrow")}</p>
+            <h1 className="mt-2 text-2xl font-bold text-[#e7e9ea] md:text-3xl">{t("points.page.title")}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("points.page.subtitle")}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/billing" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+                {t("points.hero.usePoints")}
+                <ArrowRight className="size-4" />
+              </Link>
+              <Link href="/daily-x-queue" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                {t("points.hero.earnWithQueue")}
+                <Sparkles className="size-4" />
+              </Link>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+            <p className="text-xs text-[#8b98a5]">{t("points.hero.available")}</p>
+            <p className="mt-2 text-4xl font-bold text-white">{account?.balance ?? 0}</p>
+            <p className="mt-2 text-sm text-[#8ecdf8]">{t("points.hero.discountValue", { value: discountValue })}</p>
+            <p className="mt-1 text-xs text-[#71767b]">{account?.exchange_rate || t("points.hero.exchangeRate")}</p>
+          </div>
         </div>
-      </div>
+      </section>
 
       <div className="grid gap-3 md:grid-cols-4">
         <PointMetric label={t("points.metrics.balance")} value={account?.balance ?? 0} />
@@ -136,35 +189,35 @@ export default function PointsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title={t("points.activities.title")} description={t("points.activities.description")}>
-        <div className="grid gap-3 md:grid-cols-3">
-          {(data?.activities || []).map((activity) => (
-            <div key={activity.code} className="rounded-2xl border border-[#2f3336] bg-black p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#1d9bf0]">
-                    <Gift className="size-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-[#e7e9ea]">{activity.title}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{activity.description}</p>
-                  </div>
-                </div>
-                <span className="shrink-0 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 py-1 text-xs text-[#7ee0b5]">
-                  +{activity.points}
-                </span>
-              </div>
-              <Button
-                type="button"
-                className="mt-4 w-full"
-                variant={activity.claimable ? "default" : "outline"}
-                disabled={!activity.claimable || claiming === activity.code}
-                onClick={() => void claim(activity.code)}
-              >
-                {activity.claimed ? <Lock className="size-4" /> : <Gift className="size-4" />}
-                {activity.claimed ? t("points.activities.claimed") : claiming === activity.code ? t("points.activities.claiming") : t("points.activities.claim")}
-              </Button>
-            </div>
+      <SectionCard
+        title={t("points.activities.title")}
+        description={t("points.activities.description", { count: claimableActivities.length })}
+      >
+        {claimableActivities.length > 0 ? (
+          <div className="mb-4 rounded-2xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 p-4 text-sm text-[#7ee0b5]">
+            {t("points.activities.readyBanner", { count: claimableActivities.length })}
+          </div>
+        ) : null}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {activeActivities.map((activity) => (
+            <ActivityCard
+              key={activity.code}
+              activity={activity}
+              dict={dict}
+              claiming={claiming === activity.code}
+              onClaim={() => void claim(activity.code)}
+              t={t}
+            />
+          ))}
+          {claimedActivities.map((activity) => (
+            <ActivityCard
+              key={activity.code}
+              activity={activity}
+              dict={dict}
+              claiming={claiming === activity.code}
+              onClaim={() => void claim(activity.code)}
+              t={t}
+            />
           ))}
         </div>
       </SectionCard>
@@ -203,6 +256,76 @@ function PointMetric({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
       <p className="text-xs text-[#71767b]">{label}</p>
       <p className="mt-2 text-2xl font-bold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function ActivityCard({
+  activity,
+  dict,
+  claiming,
+  onClaim,
+  t,
+}: {
+  activity: NonNullable<PointCenterApi["activities"]>[number];
+  dict: Record<string, string>;
+  claiming: boolean;
+  onClaim: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const meta = activityMeta[activity.code] || { icon: Gift, categoryKey: "points.activities.category.other", tone: "blue" as ActivityTone };
+  const Icon = meta.icon;
+  const title = localizedActivityText(dict, activity.code, "title", activity.title);
+  const description = localizedActivityText(dict, activity.code, "description", activity.description);
+  const statusKey = activity.claimed ? "points.activities.status.claimed" : activity.claimable ? "points.activities.status.ready" : "points.activities.status.locked";
+  const statusTone = activity.claimed ? "border-[#2f3336] bg-[#16181c] text-[#8b98a5]" : activity.claimable ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-full border ${toneClasses(meta.tone)}`}>
+            <Icon className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-[#e7e9ea]">{title}</p>
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] ${statusTone}`}>{t(statusKey)}</span>
+            </div>
+            <p className="mt-1 text-sm leading-6 text-[#71767b]">{description}</p>
+          </div>
+        </div>
+        <span className="shrink-0 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 py-1 text-xs font-semibold text-[#7ee0b5]">
+          +{activity.points}
+        </span>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#8b98a5]">{t(meta.categoryKey)}</span>
+          <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-[#8b98a5]">{t(`points.activities.period.${activity.claim_period || "once"}`)}</span>
+        </div>
+        {activity.claimable ? (
+          <Button type="button" disabled={claiming} onClick={onClaim}>
+            <Gift className="size-4" />
+            {claiming ? t("points.activities.claiming") : t("points.activities.claim")}
+          </Button>
+        ) : activity.claimed ? (
+          <Button type="button" variant="outline" disabled>
+            <Lock className="size-4" />
+            {t("points.activities.claimed")}
+          </Button>
+        ) : meta.href ? (
+          <Link href={meta.href} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("points.activities.go")}
+            <ArrowRight className="size-4" />
+          </Link>
+        ) : (
+          <Button type="button" variant="outline" disabled>
+            <Lock className="size-4" />
+            {t("points.activities.locked")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

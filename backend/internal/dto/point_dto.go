@@ -13,6 +13,7 @@ type PointActivityData struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Points      int64  `json:"points"`
+	ClaimPeriod string `json:"claim_period"`
 	Claimed     bool   `json:"claimed"`
 	Claimable   bool   `json:"claimable"`
 }

@@ -126,6 +126,42 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 			Enabled:     true,
 			SortOrder:   30,
 		},
+		{
+			Code:        "add_source_material",
+			Title:       "Add source material",
+			Description: "Claim after adding at least one source item to the content library.",
+			Points:      8,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   40,
+		},
+		{
+			Code:        "generate_daily_x_queue",
+			Title:       "Generate today's Daily X Queue",
+			Description: "Claim once per day after generating a Daily X Queue.",
+			Points:      3,
+			ClaimPeriod: "daily",
+			Enabled:     true,
+			SortOrder:   50,
+		},
+		{
+			Code:        "review_daily_x_queue",
+			Title:       "Review 3 Daily X drafts",
+			Description: "Claim once per day after completing at least 3 Daily X Queue review actions.",
+			Points:      5,
+			ClaimPeriod: "daily",
+			Enabled:     true,
+			SortOrder:   60,
+		},
+		{
+			Code:        "activate_daily_x_queue",
+			Title:       "Activate Daily X Queue",
+			Description: "Claim after completing the first-value Daily X Queue activation loop.",
+			Points:      20,
+			ClaimPeriod: "once",
+			Enabled:     true,
+			SortOrder:   70,
+		},
 	}
 	for _, activity := range defaults {
 		var existing model.PointActivity

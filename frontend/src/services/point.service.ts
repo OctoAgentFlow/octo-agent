@@ -19,6 +19,7 @@ export type PointActivityApi = {
   title: string;
   description: string;
   points: number;
+  claim_period: "once" | "daily" | "monthly" | string;
   claimed: boolean;
   claimable: boolean;
 };

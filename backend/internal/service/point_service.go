@@ -14,9 +14,11 @@ import (
 )
 
 type PointService struct {
-	pointRepo   *repository.PointRepository
-	oafBotRepo  *repository.OAFBotRepository
-	accountRepo *repository.TwitterAccountRepository
+	pointRepo    *repository.PointRepository
+	oafBotRepo   *repository.OAFBotRepository
+	accountRepo  *repository.TwitterAccountRepository
+	contentRepo  *repository.ContentLibraryRepository
+	activityRepo *repository.ActivityRepository
 }
 
 type pointActivityDefinition struct {
@@ -28,8 +30,8 @@ type pointActivityDefinition struct {
 	Claimable   func(*PointService, uint) bool
 }
 
-func NewPointService(pointRepo *repository.PointRepository, oafBotRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository) *PointService {
-	return &PointService{pointRepo: pointRepo, oafBotRepo: oafBotRepo, accountRepo: accountRepo}
+func NewPointService(pointRepo *repository.PointRepository, oafBotRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository) *PointService {
+	return &PointService{pointRepo: pointRepo, oafBotRepo: oafBotRepo, accountRepo: accountRepo, contentRepo: contentRepo, activityRepo: activityRepo}
 }
 
 func (s *PointService) Center(userID uint) (*dto.PointCenterResponse, error) {
@@ -58,6 +60,7 @@ func (s *PointService) Center(userID uint) (*dto.PointCenterResponse, error) {
 			Title:       activity.Title,
 			Description: activity.Description,
 			Points:      activity.Points,
+			ClaimPeriod: activity.ClaimPeriod,
 			Claimed:     claimed[activity.Code+":"+key],
 			Claimable:   !claimed[activity.Code+":"+key] && activity.Claimable(s, userID),
 		})
@@ -189,6 +192,38 @@ func defaultPointActivities() []pointActivityDefinition {
 			ClaimPeriod: "once",
 			Claimable:   pointActivityClaimable("create_oaf_bot"),
 		},
+		{
+			Code:        "add_source_material",
+			Title:       "Add source material",
+			Description: "Claim after adding at least one source item to the content library.",
+			Points:      8,
+			ClaimPeriod: "once",
+			Claimable:   pointActivityClaimable("add_source_material"),
+		},
+		{
+			Code:        "generate_daily_x_queue",
+			Title:       "Generate today's Daily X Queue",
+			Description: "Claim once per day after generating a Daily X Queue.",
+			Points:      3,
+			ClaimPeriod: "daily",
+			Claimable:   pointActivityClaimable("generate_daily_x_queue"),
+		},
+		{
+			Code:        "review_daily_x_queue",
+			Title:       "Review 3 Daily X drafts",
+			Description: "Claim once per day after completing at least 3 Daily X Queue review actions.",
+			Points:      5,
+			ClaimPeriod: "daily",
+			Claimable:   pointActivityClaimable("review_daily_x_queue"),
+		},
+		{
+			Code:        "activate_daily_x_queue",
+			Title:       "Activate Daily X Queue",
+			Description: "Claim after completing the first-value Daily X Queue activation loop.",
+			Points:      20,
+			ClaimPeriod: "once",
+			Claimable:   pointActivityClaimable("activate_daily_x_queue"),
+		},
 	}
 }
 
@@ -211,6 +246,44 @@ func pointActivityClaimable(code string) func(*PointService, uint) bool {
 			}
 			n, err := s.oafBotRepo.CountByUserID(userID)
 			return err == nil && n > 0
+		}
+	case "add_source_material":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.contentRepo == nil {
+				return false
+			}
+			n, err := s.contentRepo.CountByUserID(userID)
+			return err == nil && n > 0
+		}
+	case "generate_daily_x_queue":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.activityRepo == nil {
+				return false
+			}
+			ok, err := s.activityRepo.ExistsByPreviewKeySince(userID, "activity.preview.dailyXQueueGenerated", startOfUTCDay(time.Now().UTC()))
+			return err == nil && ok
+		}
+	case "review_daily_x_queue":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.activityRepo == nil {
+				return false
+			}
+			n, err := s.activityRepo.CountByPreviewKeysSince(userID, []string{
+				"activity.preview.dailyXQueueDraftEdited",
+				"activity.preview.dailyXQueueDraftApproved",
+				"activity.preview.dailyXQueueDraftRejected",
+				"activity.preview.dailyXQueueDraftRewritten",
+				"activity.preview.dailyXQueueDraftCopied",
+			}, startOfUTCDay(time.Now().UTC()))
+			return err == nil && n >= 3
+		}
+	case "activate_daily_x_queue":
+		return func(s *PointService, userID uint) bool {
+			if s == nil || s.activityRepo == nil {
+				return false
+			}
+			ok, err := s.activityRepo.ExistsByPreviewKeySince(userID, "daily_x_queue_activated", time.Time{})
+			return err == nil && ok
 		}
 	default:
 		return func(_ *PointService, _ uint) bool { return false }

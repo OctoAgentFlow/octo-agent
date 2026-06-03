@@ -53,6 +53,14 @@ func (r *ContentLibraryRepository) ListActiveByUser(userID uint) ([]model.Conten
 	return rows, err
 }
 
+func (r *ContentLibraryRepository) CountByUserID(userID uint) (int64, error) {
+	var n int64
+	err := r.DB.Model(&model.ContentLibraryItem{}).
+		Where("user_id = ? AND status <> ?", userID, "archived").
+		Count(&n).Error
+	return n, err
+}
+
 func (r *ContentLibraryRepository) GetByUserAndID(userID, id uint) (*model.ContentLibraryItem, error) {
 	var row model.ContentLibraryItem
 	err := r.DB.Where("user_id = ? AND id = ?", userID, id).First(&row).Error

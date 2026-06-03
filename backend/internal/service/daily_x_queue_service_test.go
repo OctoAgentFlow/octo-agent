@@ -44,6 +44,7 @@ func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 	svc := NewDailyXQueueService(
 		repository.NewDailyXQueueContextRepository(db),
 		repository.NewOAFBotRepository(db),
+		repository.NewTwitterAccountRepository(db),
 		repository.NewContentLibraryRepository(db),
 		repository.NewAutoPostDraftRepository(db),
 		repository.NewAIGenerationUsageRepository(db),
@@ -61,6 +62,71 @@ func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 		return AIGeneratedText{Text: "Rewritten draft with " + mode}, nil
 	}
 	return svc, db
+}
+
+func TestDailyXQueueSetupCanUseExistingOAFBotWithoutCreatingDuplicate(t *testing.T) {
+	svc, db := newDailyXQueueTestService(t)
+	userID := uint(34)
+	bot := &model.OAFBot{
+		UserID:          userID,
+		Name:            "Founder Operator Bot",
+		ProjectOneLiner: "OctoAgentFlow runs AI social operations through OAF Bot memory and review queues.",
+		TargetAudience:  "SaaS founders",
+		VoiceTone:       "concise founder/operator",
+		ComplianceNotes: "no guaranteed growth",
+		SafetyMode:      "balanced",
+	}
+	if err := db.Create(bot).Error; err != nil {
+		t.Fatalf("create bot: %v", err)
+	}
+
+	setup, err := svc.Setup(context.Background(), userID, dto.DailyXQueueSetupRequest{
+		BotID:   bot.ID,
+		XHandle: "octo_agent_flow",
+	})
+	if err != nil {
+		t.Fatalf("setup with existing bot: %v", err)
+	}
+	if setup.Context.BotID != bot.ID {
+		t.Fatalf("expected context to use existing bot %d, got %d", bot.ID, setup.Context.BotID)
+	}
+	if setup.Context.ProductContext != bot.ProjectOneLiner {
+		t.Fatalf("expected product context from selected bot, got %q", setup.Context.ProductContext)
+	}
+	var botCount int64
+	if err := db.Model(&model.OAFBot{}).Where("user_id = ?", userID).Count(&botCount).Error; err != nil {
+		t.Fatalf("count bots: %v", err)
+	}
+	if botCount != 1 {
+		t.Fatalf("expected no duplicate OAF Bot, got %d bots", botCount)
+	}
+
+	if _, err := svc.SaveSourceMaterial(userID, dto.DailyXQueueSourceMaterialRequest{
+		Title: "Daily source",
+		Body:  "A trusted source for today's queue.",
+	}); err != nil {
+		t.Fatalf("source material: %v", err)
+	}
+	var captured GenerateAutoPostInput
+	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+		if captured.Name == "" {
+			captured = in
+		}
+		return AIGeneratedText{Text: "Selected bot generated this daily draft."}, nil
+	}
+	generated, err := svc.Generate(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if len(generated.Drafts) != 3 {
+		t.Fatalf("expected exactly 3 drafts, got %d", len(generated.Drafts))
+	}
+	if generated.Drafts[0].BotID != bot.ID {
+		t.Fatalf("expected generated draft to use selected bot %d, got %d", bot.ID, generated.Drafts[0].BotID)
+	}
+	if captured.Name != bot.Name || captured.ProjectOneLiner != bot.ProjectOneLiner {
+		t.Fatalf("expected generation input from selected bot, got name=%q one_liner=%q", captured.Name, captured.ProjectOneLiner)
+	}
 }
 
 func setupDailyXQueueFixture(t *testing.T, svc *DailyXQueueService, userID uint) {

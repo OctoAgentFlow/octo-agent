@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clipboard, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { Bot, CheckCircle2, Clipboard, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -9,7 +10,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorMessage } from "@/lib/request";
+import { accountService, type AccountListItem } from "@/services/account.service";
 import { dailyXQueueService, type DailyXQueueDraftApi, type DailyXQueueOverviewApi } from "@/services/daily-x-queue.service";
+import { oafBotService } from "@/services/oaf-bot.service";
+import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type BusyAction = "setup" | "source" | "generate" | `edit-${number}` | `approve-${number}` | `reject-${number}` | `rewrite-${number}` | `copy-${number}` | "";
@@ -36,6 +40,25 @@ function splitTopics(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 8);
+}
+
+function joinBotGuardrails(bot: OAFBot) {
+  return [bot.compliance_notes, ...(bot.avoid_claims || [])]
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function botProductContext(bot: OAFBot) {
+  return [bot.project_one_liner, bot.core_value_props, bot.product_features]
+    .map((item) => item.trim())
+    .find(Boolean) || "";
+}
+
+function botAccountHandle(bot: OAFBot | null, accounts: AccountListItem[]) {
+  if (!bot?.twitter_account_id) return "";
+  const account = accounts.find((item) => item.id === bot.twitter_account_id);
+  return account?.username || "";
 }
 
 function knownDailyXQueueErrorKey(message: string) {
@@ -69,6 +92,9 @@ export default function DailyXQueuePage() {
   const defaultVoicePreference = t("dailyXQueue.defaults.voicePreference");
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [overview, setOverview] = useState<DailyXQueueOverviewApi | null>(null);
+  const [bots, setBots] = useState<OAFBot[]>([]);
+  const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  const [selectedBotID, setSelectedBotID] = useState<number>(0);
   const [busy, setBusy] = useState<BusyAction>("");
   const [setupForm, setSetupForm] = useState({
     x_handle: "",
@@ -90,10 +116,18 @@ export default function DailyXQueuePage() {
   const [rejectByDraft, setRejectByDraft] = useState<Record<number, string>>({});
   const [rewriteFeedback, setRewriteFeedback] = useState<Record<number, string>>({});
 
+  const selectedBot = useMemo(() => {
+    if (!selectedBotID) return null;
+    return bots.find((bot) => bot.id === selectedBotID) || (overview?.bot?.id === selectedBotID ? overview.bot : null);
+  }, [bots, overview?.bot, selectedBotID]);
+  const selectedBotHandle = useMemo(() => botAccountHandle(selectedBot, accounts), [accounts, selectedBot]);
   const setupReady = Boolean(overview?.context?.bot_id);
   const sourceReady = Boolean(overview?.context?.content_library_id);
   const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
-  const botName = overview?.bot?.name || "OAF Bot";
+  const botName = selectedBot?.name || overview?.bot?.name || "OAF Bot";
+  const setupCanSave = selectedBotID
+    ? Boolean((setupForm.x_handle || selectedBotHandle).trim())
+    : Boolean(setupForm.x_handle.trim() && setupForm.product_context.trim());
   const localizedError = useCallback((error: unknown, fallbackKey: string) => {
     const message = apiErrorMessage(error);
     const knownKey = message ? knownDailyXQueueErrorKey(message) : "";
@@ -105,12 +139,40 @@ export default function DailyXQueuePage() {
     return key ? t(key) : value || t("dailyXQueue.fallback.direction");
   }, [t]);
 
+  const applySelectedBotToSetup = useCallback((bot: OAFBot | null) => {
+    if (!bot) return;
+    const accountHandle = botAccountHandle(bot, accounts);
+    setSetupForm((current) => ({
+      ...current,
+      x_handle: accountHandle || current.x_handle,
+      website_url: bot.website_url || current.website_url,
+      product_context: botProductContext(bot) || current.product_context,
+      target_audience: bot.target_audience || current.target_audience,
+      voice_preference: bot.voice_tone || current.voice_preference || defaultVoicePreference,
+      guardrails: joinBotGuardrails(bot) || current.guardrails,
+    }));
+  }, [accounts, defaultVoicePreference]);
+
+  const handleSelectBot = useCallback((value: string) => {
+    const id = Number(value);
+    setSelectedBotID(id);
+    const bot = bots.find((item) => item.id === id) || null;
+    applySelectedBotToSetup(bot);
+  }, [applySelectedBotToSetup, bots]);
+
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const data = await dailyXQueueService.overview();
+      const [data, botData, accountData] = await Promise.all([
+        dailyXQueueService.overview(),
+        oafBotService.list().catch(() => ({ items: [] as OAFBot[] })),
+        accountService.list().catch(() => ({ items: [] as AccountListItem[] })),
+      ]);
       setOverview(data);
+      setBots(botData.items);
+      setAccounts(accountData.items);
       if (data.context) {
+        setSelectedBotID(data.context.bot_id || 0);
         setSetupForm({
           x_handle: data.context.x_handle || "",
           website_url: data.context.website_url || "",
@@ -173,8 +235,13 @@ export default function DailyXQueuePage() {
   const handleSetup = async () => {
     setBusy("setup");
     try {
-      const data = await dailyXQueueService.setup(setupForm);
+      const data = await dailyXQueueService.setup({
+        ...setupForm,
+        bot_id: selectedBotID || undefined,
+        x_handle: setupForm.x_handle || selectedBotHandle,
+      });
       setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, bot: data.bot }));
+      setSelectedBotID(data.bot.id);
       pushToast(t("dailyXQueue.toast.setupSaved"));
     } catch (error) {
       pushToast(localizedError(error, "dailyXQueue.toast.error.setup"));
@@ -336,13 +403,43 @@ export default function DailyXQueuePage() {
         <Card className="border-[#2f3336] bg-black">
           <CardHeader title={t("dailyXQueue.setup.title")} description={t("dailyXQueue.setup.description")} />
           <div className="grid gap-3">
+            <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <label className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.setup.botSelectLabel")}</label>
+              <select
+                className="form-input mt-2 h-11 py-0"
+                value={selectedBotID || ""}
+                onChange={(event) => handleSelectBot(event.target.value)}
+              >
+                <option value="">{t("dailyXQueue.setup.botSelectPlaceholder")}</option>
+                {bots.map((bot) => (
+                  <option key={bot.id} value={bot.id}>
+                    {bot.name}
+                  </option>
+                ))}
+              </select>
+              {selectedBot ? (
+                <div className="mt-3 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-3">
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.selectedBot")}</span> {selectedBot.name}</p>
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botVoice")}</span> {selectedBot.voice_tone || t("dailyXQueue.setup.notSet")}</p>
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botAudience")}</span> {selectedBot.target_audience || t("dailyXQueue.setup.notSet")}</p>
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2 text-xs leading-5 text-[#8b98a5] sm:flex-row sm:items-center sm:justify-between">
+                  <span>{bots.length ? t("dailyXQueue.setup.chooseBotHint") : t("dailyXQueue.setup.noBotsHint")}</span>
+                  <Link href="/oaf-bots" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:underline">
+                    <Bot className="size-3.5" />
+                    {t("dailyXQueue.setup.manageBots")}
+                  </Link>
+                </div>
+              )}
+            </div>
             <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
             <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
             <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
             <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
             <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
             <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
-            <Button type="button" disabled={busy === "setup" || !setupForm.x_handle.trim() || !setupForm.product_context.trim()} onClick={handleSetup}>
+            <Button type="button" disabled={busy === "setup" || !setupCanSave} onClick={handleSetup}>
               {busy === "setup" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {t("dailyXQueue.setup.save")}
             </Button>

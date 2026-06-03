@@ -41,6 +41,7 @@ export type DailyXQueueOverviewApi = {
 };
 
 export type DailyXQueueSetupPayload = {
+  bot_id?: number;
   x_handle: string;
   website_url?: string;
   product_context: string;

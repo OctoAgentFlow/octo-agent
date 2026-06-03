@@ -95,7 +95,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	trendService := service.NewTrendService(trendTopicRepo, trendFeedbackRepo, oafBotRepo, autoPostPlanRepo, contentLibraryRepo, cfg.XTrends)
 	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, trendService, cfg.XPublisher)
 	autoPostService := service.NewAutoPostService(twitterAccountRepo, automationRepo, autoPostPlanRepo, autoPostDraftRepo, autoPostRunRepo, contentLibraryRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, publishingService, trendService)
-	dailyXQueueService := service.NewDailyXQueueService(dailyXQueueContextRepo, oafBotRepo, contentLibraryRepo, autoPostDraftRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, activityRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, oafBotService, aiService)
+	dailyXQueueService := service.NewDailyXQueueService(dailyXQueueContextRepo, oafBotRepo, twitterAccountRepo, contentLibraryRepo, autoPostDraftRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, activityRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, oafBotService, aiService)
 	reviewQueueService := service.NewReviewQueueService(autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, publishJobRepo, oafBotRepo, twitterAccountRepo, contentLibraryRepo, reviewQueueVerdictRepo, activityRepo, autoCommentService, autoReplyService, autoPostService, publishingService)
 	a := controller.NewAuthController(authService)
 	wc := controller.NewWalletController(walletService)

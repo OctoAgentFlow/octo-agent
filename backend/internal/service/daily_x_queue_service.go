@@ -41,6 +41,7 @@ type dailyXQueueRewriteGenerator func(context.Context, GenerateAutoPostInput, st
 type DailyXQueueService struct {
 	contextRepo  *repository.DailyXQueueContextRepository
 	botRepo      *repository.OAFBotRepository
+	accountRepo  *repository.TwitterAccountRepository
 	contentRepo  *repository.ContentLibraryRepository
 	draftRepo    *repository.AutoPostDraftRepository
 	usageRepo    *repository.AIGenerationUsageRepository
@@ -55,10 +56,11 @@ type DailyXQueueService struct {
 	rewriteText  dailyXQueueRewriteGenerator
 }
 
-func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, botRepo *repository.OAFBotRepository, contentRepo *repository.ContentLibraryRepository, draftRepo *repository.AutoPostDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
+func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, draftRepo *repository.AutoPostDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
 	return &DailyXQueueService{
 		contextRepo:  contextRepo,
 		botRepo:      botRepo,
+		accountRepo:  accountRepo,
 		contentRepo:  contentRepo,
 		draftRepo:    draftRepo,
 		usageRepo:    usageRepo,
@@ -83,9 +85,15 @@ func (s *DailyXQueueService) Overview(userID uint) (*dto.DailyXQueueOverviewResp
 }
 
 func (s *DailyXQueueService) Setup(ctx context.Context, userID uint, req dto.DailyXQueueSetupRequest) (*dto.DailyXQueueSetupResponse, error) {
+	if req.BotID > 0 {
+		return s.setupWithExistingBot(userID, req)
+	}
 	handle := normalizeDailyXHandleForService(req.XHandle)
 	if handle == "" {
 		return nil, fmt.Errorf("x_handle is required")
+	}
+	if strings.TrimSpace(req.ProductContext) == "" {
+		return nil, fmt.Errorf("product_context is required")
 	}
 	draft := dto.OAFBotUpsertRequest{
 		Name:              defaultDailyBotName(handle),
@@ -126,6 +134,41 @@ func (s *DailyXQueueService) Setup(ctx context.Context, userID uint, req dto.Dai
 		return nil, err
 	}
 	_ = s.recordActivity(userID, 0, "system", "review", dailyXQueuePreviewSetup, "@"+handle, "Daily X Queue setup saved.")
+	return &dto.DailyXQueueSetupResponse{Context: dailyXContextToDTO(*row), Bot: oafBotToDTO(*bot)}, nil
+}
+
+func (s *DailyXQueueService) setupWithExistingBot(userID uint, req dto.DailyXQueueSetupRequest) (*dto.DailyXQueueSetupResponse, error) {
+	bot, err := s.botRepo.GetByUserAndID(userID, req.BotID)
+	if err != nil {
+		return nil, err
+	}
+	handle := normalizeDailyXHandleForService(req.XHandle)
+	if handle == "" && bot.TwitterAccountID > 0 && s.accountRepo != nil {
+		if account, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, bot.TwitterAccountID); err == nil {
+			handle = normalizeDailyXHandleForService(account.Username)
+		}
+	}
+	if handle == "" {
+		return nil, fmt.Errorf("x_handle is required")
+	}
+	row := &model.DailyXQueueContext{
+		UserID:          userID,
+		XHandle:         handle,
+		WebsiteURL:      firstNonEmpty(strings.TrimSpace(req.WebsiteURL), bot.WebsiteURL),
+		ProductContext:  firstNonEmpty(strings.TrimSpace(req.ProductContext), bot.ProjectOneLiner, bot.CoreValueProps, bot.ProductFeatures),
+		TargetAudience:  firstNonEmpty(strings.TrimSpace(req.TargetAudience), bot.TargetAudience),
+		VoicePreference: firstNonEmpty(strings.TrimSpace(req.VoicePreference), bot.VoiceTone),
+		Guardrails:      firstNonEmpty(strings.TrimSpace(req.Guardrails), bot.ComplianceNotes, strings.Join(decodeStringList(bot.AvoidClaims), "\n")),
+		BotID:           bot.ID,
+	}
+	if err := s.contextRepo.Upsert(row); err != nil {
+		return nil, err
+	}
+	row, err = s.contextRepo.GetByUserAndHandle(userID, handle)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.recordActivity(userID, 0, "system", "review", dailyXQueuePreviewSetup, "@"+handle, "Daily X Queue OAF Bot selected.")
 	return &dto.DailyXQueueSetupResponse{Context: dailyXContextToDTO(*row), Bot: oafBotToDTO(*bot)}, nil
 }
 

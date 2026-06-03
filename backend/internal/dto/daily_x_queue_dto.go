@@ -1,9 +1,10 @@
 package dto
 
 type DailyXQueueSetupRequest struct {
-	XHandle         string `json:"x_handle" binding:"required"`
+	BotID           uint   `json:"bot_id"`
+	XHandle         string `json:"x_handle"`
 	WebsiteURL      string `json:"website_url"`
-	ProductContext  string `json:"product_context" binding:"required"`
+	ProductContext  string `json:"product_context"`
 	TargetAudience  string `json:"target_audience"`
 	VoicePreference string `json:"voice_preference"`
 	Guardrails      string `json:"guardrails"`

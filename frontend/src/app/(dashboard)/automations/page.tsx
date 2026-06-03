@@ -5,8 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   AlertTriangle,
-  ArrowRight,
-  Bot,
   FileText,
   ListChecks,
   Mail,
@@ -14,7 +12,6 @@ import {
   MessagesSquare,
   ShieldCheck,
   SlidersHorizontal,
-  type LucideIcon,
 } from "lucide-react";
 
 import { AutomationModuleCard } from "@/components/automation/automation-module-card";
@@ -47,20 +44,6 @@ type RelativeTimeLabel = {
 };
 
 const moduleOrder: AutomationModuleType[] = ["post", "reply", "comment", "dm"];
-
-const workspaceHref: Record<AutomationModuleType, string> = {
-  post: "/auto-post",
-  reply: "/auto-replies",
-  comment: "/auto-comments",
-  dm: "/auto-dms",
-};
-
-const workspaceIcon: Record<AutomationModuleType, LucideIcon> = {
-  post: FileText,
-  reply: MessageCircle,
-  comment: MessagesSquare,
-  dm: Mail,
-};
 
 function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
   if (!iso) return { key: "automation.time.paused" };
@@ -321,7 +304,10 @@ export default function AutomationsPage() {
         emptyDescription={t("automation.blockers.emptyDescription")}
       />
 
-      <AutomationWorkflows modules={modules} loading={loadState === "loading"} />
+      <div className="flex items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm leading-6 text-amber-50/80">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-100" />
+        <p>{t("automation.control.guardrailNote")}</p>
+      </div>
 
       <div id="automation-modules" className="scroll-mt-24 grid gap-4 xl:grid-cols-2">
         {modules.map((module) => (
@@ -429,71 +415,5 @@ function AutomationTabs() {
         ))}
       </div>
     </div>
-  );
-}
-
-function AutomationWorkflows({ modules, loading }: { modules: AutomationModule[]; loading: boolean }) {
-  const { t } = useT();
-
-  return (
-    <Card>
-      <CardHeader
-        title={t("automation.control.workflowTitle")}
-        description={t("automation.control.workflowDescription")}
-        right={
-          <Link href="/oaf-bots" className="inline-flex">
-            <Button type="button" variant="outline">
-              <Bot className="size-4" />
-              {t("automation.control.botCta")}
-            </Button>
-          </Link>
-        }
-      />
-      {loading ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="min-h-36 rounded-xl border border-white/10 bg-white/[0.035] p-4">
-              <span className="block h-4 w-24 animate-pulse rounded-full bg-[#2f3336]" />
-              <span className="mt-6 block h-3 w-full animate-pulse rounded-full bg-[#2f3336]" />
-              <span className="mt-2 block h-3 w-2/3 animate-pulse rounded-full bg-[#2f3336]" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {modules.map((module) => {
-            const Icon = workspaceIcon[module.type];
-            return (
-              <Link
-                key={module.type}
-                href={workspaceHref[module.type]}
-                className="group rounded-xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-blue-300/25 hover:bg-white/[0.065]"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2">
-                    <span className="grid size-9 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
-                      <Icon className="size-4" />
-                    </span>
-                    <span className="text-sm font-semibold text-[#e7e9ea]">{t(module.nameKey)}</span>
-                  </span>
-                  <Badge variant={module.config.enabled ? "success" : "default"}>
-                    {t(module.config.enabled ? "automation.summary.enabled" : "automation.summary.disabled")}
-                  </Badge>
-                </div>
-                <p className="mt-3 min-h-10 text-sm leading-5 text-[#8b98a5]">{t(`automation.control.workflow.${module.type}`)}</p>
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-100 transition group-hover:text-white">
-                  {t("automation.control.openWorkspace")}
-                  <ArrowRight className="size-4" />
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-      <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm leading-6 text-amber-50/80">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-100" />
-        <p>{t("automation.control.guardrailNote")}</p>
-      </div>
-    </Card>
   );
 }

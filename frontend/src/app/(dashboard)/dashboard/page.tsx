@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
-import { AlertTriangle, Bot, CheckCircle2, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, Gift, Inbox, MessageCircle, PlayCircle, Reply, Send, ShieldAlert, Sparkles, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, Gift, Inbox, MessageCircle, Reply, Send, ShieldAlert, Sparkles, type LucideIcon } from "lucide-react";
 
 import { AutomationOverview } from "@/components/dashboard/automation-overview";
 import { RecentActivityList } from "@/components/dashboard/recent-activity-list";
@@ -12,7 +12,6 @@ import { StatusOverviewCards } from "@/components/dashboard/status-overview-card
 import { TrialUpgradeBanner } from "@/components/dashboard/trial-upgrade-banner";
 import { XAccountStatus } from "@/components/dashboard/x-account-status";
 import { OperationalBlockersCard, type OperationalBlocker } from "@/components/operations/operational-blockers-card";
-import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -513,15 +512,12 @@ export default function DashboardPage() {
   const readyBotCount = oafBotDashboard?.bots.filter(isBotReady).length ?? 0;
   const notReadyBotCount = Math.max(0, botCount - readyBotCount);
   const autoPostNotReadyCount = oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0;
-  const autoPostConfigured = botCount > 0 && autoPostNotReadyCount < botCount;
   const pendingReviewCount = (reviewStats?.pending_review ?? 0) + (reviewStats?.ready_to_publish ?? 0);
   const failedQueueCount = reviewStats?.failed ?? 0;
   const approvedQueueCount = reviewStats?.approved ?? 0;
   const rejectedQueueCount = reviewStats?.rejected ?? 0;
   const pausedAutomationCount = automations.filter((module) => !module.config.enabled).length;
-  const queueHasSignal = pendingReviewCount > 0 || failedQueueCount > 0 || recentRecords.length > 0 || (overview?.activity_count_24h ?? 0) > 0;
   const xAccountConnected = (overview?.connected_x_count ?? 0) > 0;
-  const automationEnabled = xAccountConnected && automations.some((module) => module.config.enabled);
   const xAuthIssueCount = recentRecords.filter((record) => record.failureCategory === "x_auth").length;
   const attentionItems = [
     {
@@ -579,6 +575,10 @@ export default function DashboardPage() {
 
   const todayOpportunityItems: TodayOpsItem[] = (todayOps?.opportunities || []).map(mapWorkbenchItem);
   const todayReviewItems: TodayOpsItem[] = (todayOps?.reviews || []).map(mapWorkbenchItem);
+  const shouldShowTodayOps = Boolean(todayOpsError) || todayOpportunityItems.length > 0 || todayReviewItems.length > 0 || attentionItems.length > 0;
+  const shouldShowWorkflowProgress = pendingReviewCount > 0 || approvedQueueCount > 0 || rejectedQueueCount > 0 || failedQueueCount > 0 || (automationRequested && pausedAutomationCount > 0);
+  const shouldShowPublishReview = Boolean(publishJobsError) || publishJobs.length > 0;
+  const shouldShowFeedbackLearning = Boolean(oafBotDashboard?.feedbackSummary?.negative_count) || feedbackIssueVerdictStats.length > 0;
   const operationalBlockers: OperationalBlocker[] = attentionItems.map((item) => ({
     id: item.key,
     title: t(item.labelKey, { count: item.count }),
@@ -609,67 +609,73 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <StatusOverviewCards overview={overview} loading={loadState === "loading"} />
-      <UserOnboardingCard
-        accountConnected={xAccountConnected}
-        oafBotCreated={botCount > 0}
-        autoPostConfigured={autoPostConfigured}
-        automationEnabled={automationEnabled}
-        executionQueueChecked={queueHasSignal}
-      />
-      <TodayOpsWorkbench
-        loading={todayOpsLoading}
-        errorMessage={todayOpsError}
-        opportunities={todayOpportunityItems}
-        reviews={todayReviewItems}
-        alerts={attentionItems.slice(0, 4)}
-        onRetry={() => void fetchTodayOps()}
-      />
-      <OperationalBlockersCard
-        title={t("dashboard.operationalBlockers.title")}
-        description={t("dashboard.operationalBlockers.description")}
-        loading={oafBotDashboardLoading || todayOpsLoading}
-        blockers={operationalBlockers}
-        emptyTitle={t("dashboard.operationalBlockers.emptyTitle")}
-        emptyDescription={t("dashboard.operationalBlockers.emptyDescription")}
-      />
-      <WorkflowProgressCard
-        loading={oafBotDashboardLoading}
-        pending={pendingReviewCount}
-        approved={approvedQueueCount}
-        rejected={rejectedQueueCount}
-        failed={failedQueueCount}
-        paused={automationRequested ? pausedAutomationCount : null}
-      />
-      <PublishReviewCard
-        loading={publishJobsLoading}
-        errorMessage={publishJobsError}
-        jobs={publishJobs}
-        timeZone={timeZone}
-        onRetry={() => void fetchPublishJobs()}
-      />
-      <FeedbackLearningCard
-        loading={oafBotDashboardLoading}
-        summary={oafBotDashboard?.feedbackSummary || null}
-        verdictStats={feedbackIssueVerdictStats}
-        verdictDetails={feedbackIssueVerdictDetails}
-        verdictDetailsLoading={feedbackIssueVerdictDetailsLoading}
-        verdictDetailsRequested={feedbackIssueVerdictDetailsRequested}
-        bot={oafBotDashboard?.bots[0] || null}
-        learningRulePreferences={oafBotDashboard?.learningRulePreferences || []}
-        timeZone={timeZone}
-        onLoadVerdictDetails={fetchFeedbackIssueVerdictDetails}
-        onUpdateLearningRulePreference={updateLearningRulePreference}
-      />
-      <FirstUseGuideCard
+      <DailyXQueueStartCard
         loading={loadState === "loading" || oafBotDashboardLoading}
-        accountConnected={xAccountConnected}
         hasBot={botCount > 0}
-        autoPostConfigured={autoPostConfigured}
-        automationEnabled={automationRequested ? automationEnabled : true}
-        hasExecutionSignal={queueHasSignal}
+        connectedAccounts={overview?.connected_x_count ?? 0}
+        pendingReviews={pendingReviewCount}
+        blockers={attentionItems.length}
       />
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <StatusOverviewCards overview={overview} loading={loadState === "loading"} />
+      {operationalBlockers.length > 0 ? (
+        <OperationalBlockersCard
+          title={t("dashboard.operationalBlockers.title")}
+          description={t("dashboard.operationalBlockers.description")}
+          loading={oafBotDashboardLoading || todayOpsLoading}
+          blockers={operationalBlockers}
+          emptyTitle={t("dashboard.operationalBlockers.emptyTitle")}
+          emptyDescription={t("dashboard.operationalBlockers.emptyDescription")}
+        />
+      ) : null}
+      {shouldShowTodayOps ? (
+        <TodayOpsWorkbench
+          loading={todayOpsLoading}
+          errorMessage={todayOpsError}
+          opportunities={todayOpportunityItems}
+          reviews={todayReviewItems}
+          alerts={attentionItems.slice(0, 4)}
+          onRetry={() => void fetchTodayOps()}
+        />
+      ) : null}
+      {shouldShowWorkflowProgress || shouldShowPublishReview ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {shouldShowWorkflowProgress ? (
+            <WorkflowProgressCard
+              loading={oafBotDashboardLoading}
+              pending={pendingReviewCount}
+              approved={approvedQueueCount}
+              rejected={rejectedQueueCount}
+              failed={failedQueueCount}
+              paused={automationRequested ? pausedAutomationCount : null}
+            />
+          ) : null}
+          {shouldShowPublishReview ? (
+            <PublishReviewCard
+              loading={publishJobsLoading}
+              errorMessage={publishJobsError}
+              jobs={publishJobs}
+              timeZone={timeZone}
+              onRetry={() => void fetchPublishJobs()}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {shouldShowFeedbackLearning ? (
+        <FeedbackLearningCard
+          loading={oafBotDashboardLoading}
+          summary={oafBotDashboard?.feedbackSummary || null}
+          verdictStats={feedbackIssueVerdictStats}
+          verdictDetails={feedbackIssueVerdictDetails}
+          verdictDetailsLoading={feedbackIssueVerdictDetailsLoading}
+          verdictDetailsRequested={feedbackIssueVerdictDetailsRequested}
+          bot={oafBotDashboard?.bots[0] || null}
+          learningRulePreferences={oafBotDashboard?.learningRulePreferences || []}
+          timeZone={timeZone}
+          onLoadVerdictDetails={fetchFeedbackIssueVerdictDetails}
+          onUpdateLearningRulePreference={updateLearningRulePreference}
+        />
+      ) : null}
+      {botCount > 0 || oafBotDashboardError ? (
         <OAFBotReadinessCard
           loading={oafBotDashboardLoading}
           errorMessage={oafBotDashboardError}
@@ -680,12 +686,8 @@ export default function DashboardPage() {
           autoPostNotReady={autoPostNotReadyCount}
           onRetry={() => void fetchOAFBotDashboard()}
         />
-        <AttentionCard
-          loading={oafBotDashboardLoading || recentLoading}
-          items={attentionItems}
-        />
-      </div>
-      <XAccountStatus overview={overview} />
+      ) : null}
+      {xAccountConnected ? <XAccountStatus overview={overview} /> : null}
       <DeferredDashboardSection
         open={deferredSectionsOpen.points}
         title={t("dashboard.points.title")}
@@ -737,106 +739,87 @@ export default function DashboardPage() {
   );
 }
 
-function FirstUseGuideCard({
+function DailyXQueueStartCard({
   loading,
-  accountConnected,
   hasBot,
-  autoPostConfigured,
-  automationEnabled,
-  hasExecutionSignal,
+  connectedAccounts,
+  pendingReviews,
+  blockers,
 }: {
   loading: boolean;
-  accountConnected: boolean;
   hasBot: boolean;
-  autoPostConfigured: boolean;
-  automationEnabled: boolean;
-  hasExecutionSignal: boolean;
+  connectedAccounts: number;
+  pendingReviews: number;
+  blockers: number;
 }) {
   const { t } = useT();
-  if (loading || (accountConnected && hasBot && autoPostConfigured && automationEnabled && hasExecutionSignal)) {
-    return null;
-  }
   const items = [
     {
-      key: "account",
-      done: accountConnected,
-      title: t("dashboard.firstUse.dailyXQueue.title"),
-      description: t("dashboard.firstUse.dailyXQueue.description"),
-      href: "/daily-x-queue",
-      cta: t("dashboard.firstUse.dailyXQueue.cta"),
+      key: "setup",
+      title: t("dashboard.dailyXQueueHero.step.setup.title"),
+      description: t("dashboard.dailyXQueueHero.step.setup.description"),
     },
     {
-      key: "bot",
-      done: hasBot,
-      title: t("dashboard.firstUse.dailyXQueue.title"),
-      description: t("dashboard.firstUse.dailyXQueue.description"),
-      href: "/daily-x-queue",
-      cta: t("dashboard.firstUse.dailyXQueue.cta"),
+      key: "source",
+      title: t("dashboard.dailyXQueueHero.step.source.title"),
+      description: t("dashboard.dailyXQueueHero.step.source.description"),
     },
     {
-      key: "autoPost",
-      done: autoPostConfigured,
-      title: t("dashboard.firstUse.dailyXQueue.title"),
-      description: t("dashboard.firstUse.dailyXQueue.description"),
-      href: "/daily-x-queue",
-      cta: t("dashboard.firstUse.dailyXQueue.cta"),
-    },
-    {
-      key: "automation",
-      done: automationEnabled,
-      title: t("dashboard.firstUse.dailyXQueue.title"),
-      description: t("dashboard.firstUse.dailyXQueue.description"),
-      href: "/daily-x-queue",
-      cta: t("dashboard.firstUse.dailyXQueue.cta"),
-    },
-    {
-      key: "queue",
-      done: hasExecutionSignal,
-      title: t("dashboard.firstUse.dailyXQueue.title"),
-      description: t("dashboard.firstUse.dailyXQueue.description"),
-      href: "/daily-x-queue",
-      cta: t("dashboard.firstUse.dailyXQueue.cta"),
+      key: "review",
+      title: t("dashboard.dailyXQueueHero.step.review.title"),
+      description: t("dashboard.dailyXQueueHero.step.review.description"),
     },
   ];
-  const nextItem = items.find((item) => !item.done) ?? items[items.length - 1];
+  const metrics = [
+    { key: "bot", value: loading ? "—" : hasBot ? t("dashboard.dailyXQueueHero.metric.ready") : t("dashboard.dailyXQueueHero.metric.notReady"), label: t("dashboard.dailyXQueueHero.metric.bot") },
+    { key: "accounts", value: loading ? "—" : connectedAccounts, label: t("dashboard.dailyXQueueHero.metric.accounts") },
+    { key: "reviews", value: loading ? "—" : pendingReviews, label: t("dashboard.dailyXQueueHero.metric.reviews") },
+    { key: "blockers", value: loading ? "—" : blockers, label: t("dashboard.dailyXQueueHero.metric.blockers") },
+  ];
   return (
     <Card className="border-[#1d9bf0]/30 bg-[#06111d]">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr] xl:items-start">
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/12 text-[#1d9bf0]">
-              <PlayCircle className="size-5" />
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-[#e7e9ea]">{t("dashboard.firstUse.title")}</h2>
-              <p className="mt-1 text-sm leading-6 text-[#8b98a5]">{t("dashboard.firstUse.description")}</p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {items.map((item, index) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={`rounded-2xl border p-3 transition hover:bg-[#16181c] ${
-                  item.done ? "border-emerald-300/20 bg-emerald-400/8" : "border-[#2f3336] bg-black"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-[#71767b]">{t("dashboard.firstUse.step", { number: index + 1 })}</span>
-                  <span className={`grid size-6 place-items-center rounded-full ${item.done ? "bg-emerald-400/10 text-emerald-200" : "bg-[#1d9bf0]/10 text-[#1d9bf0]"}`}>
-                    {item.done ? <CheckCircle2 className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.description}</p>
-              </Link>
-            ))}
+          <p className="text-xs font-semibold tracking-wide text-[#1d9bf0] uppercase">{t("dashboard.dailyXQueueHero.eyebrow")}</p>
+          <h2 className="mt-2 max-w-3xl text-2xl font-semibold tracking-normal text-[#e7e9ea] md:text-3xl">{t("dashboard.dailyXQueueHero.title")}</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5] md:text-base">{t("dashboard.dailyXQueueHero.description")}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link href="/daily-x-queue" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+              <Sparkles className="size-4" />
+              {t("dashboard.dailyXQueueHero.primaryCta")}
+            </Link>
+            <Link href="/oaf-bots" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+              <Bot className="size-4" />
+              {t("dashboard.dailyXQueueHero.secondaryCta")}
+            </Link>
           </div>
         </div>
-        <Link href={nextItem.href} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
-          {nextItem.cta}
-          <ChevronRight className="size-4" />
-        </Link>
+        <div className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {metrics.map((item) => (
+              <div key={item.key} className="rounded-2xl border border-[#2f3336] bg-black/60 p-3">
+                <p className="text-xs text-[#71767b]">{item.label}</p>
+                <p className="mt-1 text-xl font-semibold text-[#e7e9ea]">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl border border-[#2f3336] bg-black/60 p-3">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("dashboard.dailyXQueueHero.stepsTitle")}</p>
+            <div className="mt-3 space-y-2">
+              {items.map((item, index) => (
+                <div key={item.key} className="flex gap-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                    <span className="text-xs font-semibold">{index + 1}</span>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
+                    <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </Card>
   );
@@ -1712,65 +1695,6 @@ function OAFBotReadinessCard({
             {t(total > 0 ? "dashboard.oafBots.ctaManage" : "dashboard.oafBots.ctaCreate")}
             <ExternalLink className="size-4" />
           </Link>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function AttentionCard({
-  loading,
-  items,
-}: {
-  loading: boolean;
-  items: Array<{ key: string; count: number; labelKey: string; href: string; tone: "warning" | "danger" }>;
-}) {
-  const { t } = useT();
-  return (
-    <Card>
-      <CardHeader title={t("dashboard.attention.title")} description={t("dashboard.attention.description")} />
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="size-8 animate-pulse rounded-full bg-[#1d9bf0]/10" />
-                <SkeletonLine className="h-4 w-40" />
-              </span>
-              <SkeletonLine className="h-4 w-4" />
-            </div>
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
-          <div className="flex gap-3">
-            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-200" />
-            <div>
-              <p className="font-semibold text-emerald-100">{t("dashboard.attention.emptyTitle")}</p>
-              <p className="mt-1 text-sm leading-6 text-emerald-100/70">{t("dashboard.attention.emptyDescription")}</p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) => {
-            const Icon = item.tone === "danger" ? ShieldAlert : AlertTriangle;
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 transition hover:bg-[#16181c]"
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span className={`grid size-8 shrink-0 place-items-center rounded-full ${item.tone === "danger" ? "bg-rose-500/10 text-rose-200" : "bg-amber-400/10 text-amber-100"}`}>
-                    <Icon className="size-4" />
-                  </span>
-                  <span className="min-w-0 text-sm font-semibold text-[#e7e9ea]">{t(item.labelKey, { count: item.count })}</span>
-                </span>
-                <ChevronRight className="size-4 shrink-0 text-[#71767b]" />
-              </Link>
-            );
-          })}
         </div>
       )}
     </Card>

@@ -446,6 +446,7 @@ export default function OAFBotsPage() {
   const [pendingAppliedFormChange, setPendingAppliedFormChange] = useState<PendingAppliedFormChange | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
   const [saving, setSaving] = useState(false);
+  const [deletingBot, setDeletingBot] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [comparingLearning, setComparingLearning] = useState(false);
   const [rewritingSafety, setRewritingSafety] = useState(false);
@@ -1054,6 +1055,64 @@ export default function OAFBotsPage() {
     }
   };
 
+  const deleteSelectedBot = async () => {
+    if (!selectedBot || deletingBot) return;
+    const name = selectedBot.name || t("oafBots.preview.unnamed");
+    if (!window.confirm(t("oafBots.delete.confirm", { name }))) return;
+    setDeletingBot(true);
+    try {
+      await oafBotService.delete(selectedBot.id);
+      const remaining = bots.filter((item) => item.id !== selectedBot.id);
+      setBots(remaining);
+      setUsage((prev) => ({ ...prev, oafBots: Math.max(0, prev.oafBots - 1) }));
+      setMatrixUsageByBot((current) => {
+        const next = { ...current };
+        delete next[selectedBot.id];
+        return next;
+      });
+      setMatrixFeedbackByBot((current) => {
+        const next = { ...current };
+        delete next[selectedBot.id];
+        return next;
+      });
+      setMatrixInspectionFlagsByBot((current) => {
+        const next = { ...current };
+        delete next[selectedBot.id];
+        return next;
+      });
+      setSamples(null);
+      setLearningComparison(null);
+      setGenerationUsages([]);
+      setGenerationFeedback([]);
+      setDisabledLearningIssues([]);
+      setLearningRulePreferences([]);
+      setSampleContexts({});
+      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
+      setCompleteProfilePreview(null);
+      setFeedbackSuggestionPreview(null);
+      setSafetyRewritePreview(null);
+      setPendingAppliedFormChange(null);
+      const next = remaining[0] || null;
+      if (next) {
+        setSelectedID(next.id);
+        setForm(botToPayload(next, defaultPrimaryLanguage));
+        setActiveStep("identity");
+        void loadLearningRulePreferences(next.id);
+      } else {
+        setSelectedID(null);
+        setForm(createEmptyForm(defaultPrimaryLanguage));
+        setActiveStep("identity");
+      }
+      void loadRelationshipContext();
+      broadcastDataSynced(Date.now());
+      pushToast(t("oafBots.delete.deleted"));
+    } catch (error) {
+      pushToast(errorMessage(error, t("oafBots.delete.failed")));
+    } finally {
+      setDeletingBot(false);
+    }
+  };
+
   const completeProfile = async () => {
     if (!hasProfileAssistSeed(form)) {
       pushToast(t("oafBots.completeProfile.needSeed"));
@@ -1335,8 +1394,10 @@ export default function OAFBotsPage() {
         activeContentCount={selectedActiveContentItems.length}
         queueSummary={selectedQueueSummary}
         onCreate={startCreate}
+        onDelete={deleteSelectedBot}
         onStepChange={setActiveStep}
         onTest={handlePreviewTest}
+        deleting={deletingBot}
       />
 
       <details open={usageNeedsAttention} className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
@@ -2382,8 +2443,10 @@ function OAFBotFocusPanel({
   activeContentCount,
   queueSummary,
   onCreate,
+  onDelete,
   onStepChange,
   onTest,
+  deleting,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   bot: OAFBot | null;
@@ -2397,8 +2460,10 @@ function OAFBotFocusPanel({
   activeContentCount: number;
   queueSummary: QueueSummary;
   onCreate: () => void;
+  onDelete: () => void;
   onStepChange: (step: WizardStep) => void;
   onTest: () => void;
+  deleting: boolean;
 }) {
   const hasBot = Boolean(bot);
   const ready = hasBot && completion >= 60;
@@ -2481,6 +2546,12 @@ function OAFBotFocusPanel({
                 {t("oafBots.focus.queueCta")}
               </Button>
             </Link>
+            {hasBot ? (
+              <Button type="button" variant="destructive" onClick={onDelete} disabled={deleting}>
+                {deleting ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                {t(deleting ? "oafBots.delete.loading" : "oafBots.delete.action")}
+              </Button>
+            ) : null}
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#8b98a5]">
             <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">

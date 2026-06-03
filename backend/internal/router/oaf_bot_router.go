@@ -18,6 +18,7 @@ func RegisterOAFBot(rg *gin.RouterGroup, c *controller.OAFBotController) {
 	group.GET("/feedback-summary", c.FeedbackSummary)
 	group.GET("/:id", c.Get)
 	group.PUT("/:id", c.Update)
+	group.DELETE("/:id", c.Delete)
 	group.GET("/:id/learning-rule-preferences", c.LearningRulePreferences)
 	group.POST("/:id/learning-rule-preferences", c.UpsertLearningRulePreference)
 	group.POST("/:id/feedback-profile-suggestion", c.SuggestProfileFromFeedback)

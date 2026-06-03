@@ -163,6 +163,10 @@ export const oafBotService = {
     const res = await request.put<ApiResponse<OAFBot>>(`/oaf-bots/${id}`, body);
     return res.data.data;
   },
+  async delete(id: number) {
+    const res = await request.delete<ApiResponse<{ deleted: boolean }>>(`/oaf-bots/${id}`);
+    return res.data.data;
+  },
   async completeProfile(draft: OAFBotPayload, mode: OAFBotProfileAssistMode = "fill_missing_only") {
     const res = await request.post<ApiResponse<OAFBotCompleteProfileResult>>("/oaf-bots/complete-profile", { draft, mode });
     return res.data.data;

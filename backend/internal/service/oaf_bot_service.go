@@ -218,6 +218,80 @@ func (s *OAFBotService) Update(userID, id uint, req dto.OAFBotUpsertRequest) (*d
 	return &item, nil
 }
 
+func (s *OAFBotService) Delete(userID, id uint) error {
+	if s.botRepo == nil || s.botRepo.DB == nil {
+		return fmt.Errorf("oaf bot repository is not configured")
+	}
+	if _, err := s.botRepo.GetByUserAndID(userID, id); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	return s.botRepo.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.AutoPostPlan{}).
+			Where("user_id = ? AND bot_id = ?", userID, id).
+			Updates(map[string]any{
+				"bot_id":        0,
+				"enabled":       false,
+				"next_run_at":   nil,
+				"processing_at": nil,
+				"updated_at":    now,
+			}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.PublishJob{}).
+			Where("user_id = ? AND bot_id = ? AND status NOT IN ?", userID, id, []string{repository.PublishStatusPublished, repository.PublishStatusCancelled}).
+			Updates(map[string]any{
+				"status":          repository.PublishStatusCancelled,
+				"next_attempt_at": nil,
+				"last_error":      "OAF Bot deleted.",
+				"updated_at":      now,
+			}).Error; err != nil {
+			return err
+		}
+		zeroBotModels := []any{
+			&model.AutoPostDraft{},
+			&model.AutoReplyDraft{},
+			&model.AutoCommentTask{},
+			&model.AutoPostGenerationRun{},
+			&model.PublishJob{},
+			&model.CostUsageLedger{},
+			&model.TrendFeedback{},
+			&model.ReviewQueueFeedbackIssueVerdict{},
+			&model.DailyXQueueContext{},
+		}
+		for _, m := range zeroBotModels {
+			if err := tx.Model(m).
+				Where("user_id = ? AND bot_id = ?", userID, id).
+				Updates(map[string]any{"bot_id": 0, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&model.ContentLibraryItem{}).
+			Where("user_id = ? AND bot_id = ?", userID, id).
+			Updates(map[string]any{"bot_id": nil, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		deleteModels := []any{
+			&model.OAFBotGenerationFeedback{},
+			&model.OAFBotLearningRulePreference{},
+			&model.AIGenerationUsage{},
+		}
+		for _, m := range deleteModels {
+			if err := tx.Where("user_id = ? AND bot_id = ?", userID, id).Delete(m).Error; err != nil {
+				return err
+			}
+		}
+		res := tx.Where("user_id = ? AND id = ?", userID, id).Delete(&model.OAFBot{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
 func (s *OAFBotService) CompleteProfile(ctx context.Context, userID uint, req dto.OAFBotCompleteProfileRequest) (*dto.OAFBotCompleteProfileResponse, error) {
 	now := time.Now().UTC()
 	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {

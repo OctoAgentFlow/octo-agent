@@ -175,6 +175,22 @@ func (ctl *OAFBotController) Update(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *OAFBotController) Delete(c *gin.Context) {
+	userID, id, ok := ctl.userAndBotID(c)
+	if !ok {
+		return
+	}
+	if err := ctl.oafBotService.Delete(userID, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, http.StatusNotFound, "oaf bot not found")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}
+
 func (ctl *OAFBotController) CompleteProfile(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

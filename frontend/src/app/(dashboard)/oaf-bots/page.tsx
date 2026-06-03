@@ -614,7 +614,7 @@ export default function OAFBotsPage() {
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
   const canTestBot = personaCompleteness >= 40;
   const nextSetupStep = wizardStepOrder.find((step) => !stepCompletion[step]) ?? "test";
-  const showMatrixPanel = limits.multiBotMatrix || bots.length > 1;
+  const showMatrixPanel = bots.length > 1;
   const usageNeedsAttention = usage.oafBots >= limits.maxBots || usage.aiGenerationsMonth >= limits.aiGenerationsMonthly;
 
   const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
@@ -1402,10 +1402,8 @@ export default function OAFBotsPage() {
         activeContentCount={selectedActiveContentItems.length}
         queueSummary={selectedQueueSummary}
         onCreate={startCreate}
-        onDelete={deleteSelectedBot}
         onStepChange={setActiveStep}
         onTest={handlePreviewTest}
-        deleting={deletingBot}
       />
 
       <details open={usageNeedsAttention} className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
@@ -1540,7 +1538,7 @@ export default function OAFBotsPage() {
           </div>
         </SectionCard>
 
-        <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div id="oaf-bot-editor" className="grid min-w-0 scroll-mt-24 gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
           <SectionCard
             title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
             description={t("oafBots.form.description")}
@@ -2107,6 +2105,7 @@ export default function OAFBotsPage() {
               t={t}
               bot={selectedBot}
               account={selectedAccount}
+              completion={personaCompleteness}
               automationStates={selectedAutomationStates}
               autoPostPlan={selectedPostPlan}
               activeContentCount={selectedActiveContentItems.length}
@@ -2133,6 +2132,14 @@ export default function OAFBotsPage() {
               defaultPrimaryLanguage={defaultPrimaryLanguage}
               isDefaultLanguageConfig={isDefaultLanguageConfig}
             />
+            {selectedBot ? (
+              <OAFBotDangerZone
+                t={t}
+                botName={selectedBot.name || t("oafBots.preview.unnamed")}
+                deleting={deletingBot}
+                onDelete={deleteSelectedBot}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -2451,10 +2458,8 @@ function OAFBotFocusPanel({
   activeContentCount,
   queueSummary,
   onCreate,
-  onDelete,
   onStepChange,
   onTest,
-  deleting,
 }: {
   t: (key: string, params?: Record<string, string | number>) => string;
   bot: OAFBot | null;
@@ -2468,10 +2473,8 @@ function OAFBotFocusPanel({
   activeContentCount: number;
   queueSummary: QueueSummary;
   onCreate: () => void;
-  onDelete: () => void;
   onStepChange: (step: WizardStep) => void;
   onTest: () => void;
-  deleting: boolean;
 }) {
   const hasBot = Boolean(bot);
   const ready = hasBot && completion >= 60;
@@ -2554,12 +2557,6 @@ function OAFBotFocusPanel({
                 {t("oafBots.focus.queueCta")}
               </Button>
             </Link>
-            {hasBot ? (
-              <Button type="button" variant="destructive" onClick={onDelete} disabled={deleting}>
-                {deleting ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                {t(deleting ? "oafBots.delete.loading" : "oafBots.delete.action")}
-              </Button>
-            ) : null}
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#8b98a5]">
             <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
@@ -2821,6 +2818,7 @@ function BotRelationshipCard({
   t,
   bot,
   account,
+  completion,
   automationStates,
   autoPostPlan,
   activeContentCount,
@@ -2833,6 +2831,7 @@ function BotRelationshipCard({
   t: (key: string, params?: Record<string, string | number>) => string;
   bot: OAFBot | null;
   account?: AccountListItem;
+  completion: number;
   automationStates: BotAutomationState[];
   autoPostPlan?: AutoPostPlanApi;
   activeContentCount: number;
@@ -2845,6 +2844,8 @@ function BotRelationshipCard({
   const recentItems = queueItems.slice(0, 3);
   const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
   const autoPostReady = autoPostReadiness.length > 0 && autoPostReadiness.every((item) => item.ready);
+  const dailyQueueReady = Boolean(bot);
+  const hasQueueActivity = queueSummary.pendingReview > 0 || queueSummary.readyToPublish > 0;
 
   return (
     <SectionCard title={t("oafBots.relationship.title")} description={t("oafBots.relationship.description")} className="bg-black p-4 md:p-5">
@@ -2910,6 +2911,43 @@ function BotRelationshipCard({
             ) : null}
           </div>
 
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.coreReadinessTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.coreReadinessDescription")}</p>
+            </div>
+            <div className="grid gap-2">
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.persona")}
+                description={completion >= 60 ? t("oafBots.relationship.readiness.personaValue", { percent: completion }) : t("oafBots.relationship.readiness.personaMissing", { percent: completion })}
+                ready={completion >= 60}
+                href="#oaf-bot-editor"
+                action={completion >= 60 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.content")}
+                description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
+                ready={activeContentCount > 0}
+                href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.dailyQueue")}
+                description={dailyQueueReady ? t("oafBots.relationship.readiness.dailyQueueReady") : t("oafBots.relationship.readiness.dailyQueueMissing")}
+                ready={dailyQueueReady}
+                href="/daily-x-queue"
+                action={t("oafBots.relationship.openDailyQueue")}
+              />
+              <AutoPostReadinessTile
+                title={t("oafBots.relationship.readiness.queue")}
+                description={t("oafBots.relationship.readiness.queueValue", { review: queueSummary.pendingReview, ready: queueSummary.readyToPublish })}
+                ready={hasQueueActivity}
+                href="/execution-queue"
+                action={t("oafBots.relationship.openQueue")}
+              />
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -2927,70 +2965,87 @@ function BotRelationshipCard({
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#e7e9ea]">
-                  {autoPostReady ? t("oafBots.relationship.autoPostReadyTitle") : t("oafBots.relationship.autoPostNeedsSetupTitle")}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-[#71767b]">
-                  {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
-                </p>
+          <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.advancedAutomationSummary")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                    {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs text-[#71767b]">
+                  {t("oafBots.relationship.enabledAutomationsValue", { count: enabledAutomationCount })}
+                </span>
               </div>
-              <Link href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-                {t("oafBots.relationship.openAutoPost")}
-              </Link>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <AutoPostReadinessTile
-                title={t("oafBots.relationship.readiness.account")}
-                description={account ? `@${account.username}` : t("oafBots.relationship.readiness.accountMissing")}
-                ready={Boolean(account)}
-                href="/accounts"
-                action={account ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
-              />
-              <AutoPostReadinessTile
-                title={t("oafBots.relationship.readiness.content")}
-                description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
-                ready={activeContentCount > 0}
-                href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
-                action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
-              />
-              <AutoPostReadinessTile
-                title={t("oafBots.relationship.readiness.planner")}
-                description={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
-                ready={Boolean(autoPostPlan?.enabled)}
-                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
-                action={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
-              />
-              <AutoPostReadinessTile
-                title={t("oafBots.relationship.readiness.autopilot")}
-                description={t(`executionQueue.executionMode.${autoPostPlan?.execution_mode || "review"}`)}
-                ready={autoPostPlan?.execution_mode === "autopilot"}
-                href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
-                action={autoPostPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
-              />
-            </div>
-          </div>
+            </summary>
+            <div className="mt-4 space-y-3">
+              <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">
+                      {autoPostReady ? t("oafBots.relationship.autoPostReadyTitle") : t("oafBots.relationship.autoPostNeedsSetupTitle")}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-[#71767b]">
+                      {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                    </p>
+                  </div>
+                  <Link href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                    {t("oafBots.relationship.openAutoPost")}
+                  </Link>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <AutoPostReadinessTile
+                    title={t("oafBots.relationship.readiness.account")}
+                    description={account ? `@${account.username}` : t("oafBots.relationship.readiness.accountMissing")}
+                    ready={Boolean(account)}
+                    href="/accounts"
+                    action={account ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                  />
+                  <AutoPostReadinessTile
+                    title={t("oafBots.relationship.readiness.content")}
+                    description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
+                    ready={activeContentCount > 0}
+                    href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                    action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                  />
+                  <AutoPostReadinessTile
+                    title={t("oafBots.relationship.readiness.planner")}
+                    description={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
+                    ready={Boolean(autoPostPlan?.enabled)}
+                    href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                    action={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                  />
+                  <AutoPostReadinessTile
+                    title={t("oafBots.relationship.readiness.autopilot")}
+                    description={t(`executionQueue.executionMode.${autoPostPlan?.execution_mode || "review"}`)}
+                    ready={autoPostPlan?.execution_mode === "autopilot"}
+                    href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
+                    action={autoPostPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                  />
+                </div>
+              </div>
 
-          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.automationTitle")}</p>
-                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.automationDescription")}</p>
+              <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.automationTitle")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.automationDescription")}</p>
+                  </div>
+                  <Rocket className="size-5 shrink-0 text-[#1d9bf0]" />
+                </div>
+                {loading ? (
+                  <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b]">{t("oafBots.relationship.loading")}</p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {automationStates.map((item) => (
+                      <BotAutomationTile key={item.type} item={item} t={t} />
+                    ))}
+                  </div>
+                )}
               </div>
-              <Rocket className="size-5 shrink-0 text-[#1d9bf0]" />
             </div>
-            {loading ? (
-              <p className="rounded-xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b]">{t("oafBots.relationship.loading")}</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {automationStates.map((item) => (
-                  <BotAutomationTile key={item.type} item={item} t={t} />
-                ))}
-              </div>
-            )}
-          </div>
+          </details>
 
           <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
@@ -3018,6 +3073,35 @@ function BotRelationshipCard({
           </div>
         </div>
       )}
+    </SectionCard>
+  );
+}
+
+function OAFBotDangerZone({
+  t,
+  botName,
+  deleting,
+  onDelete,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  botName: string;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <SectionCard title={t("oafBots.delete.zoneTitle")} description={t("oafBots.delete.zoneDescription", { name: botName })} className="border-rose-500/20 bg-black p-4 md:p-5">
+      <div className="flex flex-col gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rose-400/25 bg-rose-500/10 text-rose-200">
+            <AlertTriangle className="size-4" />
+          </div>
+          <p className="text-sm leading-6 text-rose-100/85">{t("oafBots.delete.zoneWarning")}</p>
+        </div>
+        <Button type="button" variant="destructive" onClick={onDelete} disabled={deleting} className="w-full sm:w-auto">
+          {deleting ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          {t(deleting ? "oafBots.delete.loading" : "oafBots.delete.action")}
+        </Button>
+      </div>
     </SectionCard>
   );
 }

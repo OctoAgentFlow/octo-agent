@@ -254,7 +254,7 @@ octo_stop_from_pid_file() {
     if kill -0 "$old_pid" 2>/dev/null; then
       echo "[$label] old pid still running after ${waited}s: $old_pid"
       echo "[$label] please stop it manually, then retry."
-      exit 1
+      return 1
     fi
   fi
 
@@ -318,7 +318,7 @@ octo_ensure_port_free() {
   echo "[$label] port $port is already occupied: $port_pids"
   echo "[$label] deployment will not kill unknown processes by default."
   echo "[$label] if this is the previous same service, ensure the pid file is correct or rerun with ALLOW_KILL_PORT=1."
-  exit 1
+  return 1
 }
 
 octo_wait_for_port() {
@@ -375,7 +375,7 @@ octo_prepare_node_runtime() {
 
   if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
     echo "[$label] Node.js 20.9+ is required. Current: $(node -v 2>/dev/null || echo not-found)"
-    exit 1
+    return 1
   fi
 
   echo "[$label] node=$(node -v) npm=$(npm -v)"
@@ -404,7 +404,7 @@ octo_assert_config_port() {
 
   if [ ! -f "$config_file" ]; then
     echo "[$label] config file not found: $config_file"
-    exit 1
+    return 1
   fi
 
   local actual_port
@@ -412,6 +412,6 @@ octo_assert_config_port() {
   if [ "$actual_port" != "$expected_port" ]; then
     echo "[$label] config port mismatch in $config_file"
     echo "[$label] expected $section.port=$expected_port, actual=$actual_port"
-    exit 1
+    return 1
   fi
 }

@@ -419,13 +419,13 @@ func Load() (*Config, error) {
 	if cfg.Billing.ExplorerAPIKeys == nil {
 		cfg.Billing.ExplorerAPIKeys = map[string]string{}
 	}
-	if err := applyExternalSecretConfig(env, &cfg); err != nil {
+	if err := applyExternalSecretConfig(env, service, &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-func applyExternalSecretConfig(env string, cfg *Config) error {
+func applyExternalSecretConfig(env string, service string, cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
@@ -455,30 +455,43 @@ func applyExternalSecretConfig(env string, cfg *Config) error {
 	applyMapEnvOverrides(cfg.Billing.ExplorerAPIKeys, "BILLING_EXPLORER_API_KEY_")
 	applyPaymentMethodEnvOverrides(cfg.Billing.PaymentMethods)
 
-	if env == "local" || env == "test" {
+	if env == "local" {
 		return nil
 	}
 	required := map[string]string{
-		"mysql.data_source/MYSQL_DSN":                 cfg.MySQL.DataSource,
-		"x_oauth.client_id/X_OAUTH_CLIENT_ID":         cfg.XOAuth.ClientID,
-		"x_oauth.client_secret/X_OAUTH_CLIENT_SECRET": cfg.XOAuth.ClientSecret,
-		"x_oauth.state_secret/X_OAUTH_STATE_SECRET":   cfg.XOAuth.StateSecret,
+		"mysql.data_source/MYSQL_DSN": cfg.MySQL.DataSource,
+	}
+	if service == "" || service == "api" {
+		required["x_oauth.client_id/X_OAUTH_CLIENT_ID"] = cfg.XOAuth.ClientID
+		required["x_oauth.client_secret/X_OAUTH_CLIENT_SECRET"] = cfg.XOAuth.ClientSecret
+		required["x_oauth.state_secret/X_OAUTH_STATE_SECRET"] = cfg.XOAuth.StateSecret
+		if strings.EqualFold(cfg.LLM.DefaultProvider, "openai") {
+			required["llm.openai.api_key/OPENAI_API_KEY"] = cfg.LLM.OpenAI.APIKey
+		}
+		if cfg.Billing.Scanner.Enabled {
+			required["billing.webhook_secret/BILLING_WEBHOOK_SECRET"] = cfg.Billing.WebhookSecret
+		}
 	}
 	if strings.EqualFold(cfg.Email.Provider, "resend") {
 		required["email.resend.api_key/RESEND_API_KEY"] = cfg.Email.Resend.APIKey
 	}
-	if strings.EqualFold(cfg.LLM.DefaultProvider, "openai") {
-		required["llm.openai.api_key/OPENAI_API_KEY"] = cfg.LLM.OpenAI.APIKey
-	}
-	if cfg.Billing.Scanner.Enabled {
-		required["billing.webhook_secret/BILLING_WEBHOOK_SECRET"] = cfg.Billing.WebhookSecret
-	}
+	missing := make([]string, 0)
 	for name, value := range required {
 		if isMissingSecret(value) {
-			return fmt.Errorf("%s is required for APP_ENV=%s", name, env)
+			missing = append(missing, name)
 		}
 	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing critical config for APP_ENV=%s APP_SERVICE=%s: %s", env, serviceLabel(service), strings.Join(missing, ", "))
+	}
 	return nil
+}
+
+func serviceLabel(service string) string {
+	if strings.TrimSpace(service) == "" {
+		return "legacy"
+	}
+	return service
 }
 
 func applyMapEnvOverrides(target map[string]string, prefix string) {

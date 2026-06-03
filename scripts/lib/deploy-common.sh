@@ -81,6 +81,20 @@ def tail_log(path, max_lines=18, max_chars=1800):
         return ""
 
 
+def config_error(path):
+    if not path or not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()[-80:]
+        for line in reversed(lines):
+            if "load config failed:" in line or "missing critical config" in line:
+                return line.strip()[-1200:]
+    except Exception:
+        return ""
+    return ""
+
+
 def field(label, value):
     if value is None:
         value = ""
@@ -146,6 +160,9 @@ if pid_file and os.path.exists(pid_file):
         pass
 if status != "success":
     fields.append(field("退出码", exit_code))
+    cfg_error = config_error(log_file)
+    if cfg_error:
+        fields.append(field("配置错误", cfg_error))
 
 elements = [
     {
@@ -313,6 +330,13 @@ octo_wait_for_port() {
 
   local elapsed=0
   while [ "$elapsed" -lt "$timeout_seconds" ]; do
+    local startup_pid
+    startup_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "${startup_pid:-}" ] && ! kill -0 "$startup_pid" 2>/dev/null; then
+      echo "[$label] deploy failed: startup process exited before port $port listened (pid=$startup_pid)"
+      return 1
+    fi
+
     local running_pids
     running_pids="$(octo_listen_pids "$port")"
     if [ -n "${running_pids:-}" ] || octo_is_port_listening "$port"; then

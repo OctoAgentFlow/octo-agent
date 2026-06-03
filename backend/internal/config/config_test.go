@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalizeConfigService(t *testing.T) {
 	cases := []struct {
@@ -160,7 +163,7 @@ func TestApplyExternalSecretConfigOverridesSensitiveValues(t *testing.T) {
 			},
 		},
 	}
-	if err := applyExternalSecretConfig("test", &cfg); err != nil {
+	if err := applyExternalSecretConfig("test", "api", &cfg); err != nil {
 		t.Fatalf("applyExternalSecretConfig returned error: %v", err)
 	}
 	if cfg.MySQL.DataSource != "user:pass@tcp(localhost:3306)/octo" {
@@ -197,8 +200,64 @@ func TestApplyExternalSecretConfigRequiresProdSecrets(t *testing.T) {
 		},
 		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
 	}
-	if err := applyExternalSecretConfig("prod", &cfg); err == nil {
+	if err := applyExternalSecretConfig("prod", "api", &cfg); err == nil {
 		t.Fatal("expected prod TODO secrets to fail")
+	}
+}
+
+func TestApplyExternalSecretConfigRequiresTestAPISecrets(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "")
+	t.Setenv("X_OAUTH_CLIENT_ID", "")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("X_OAUTH_STATE_SECRET", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "")
+
+	cfg := Config{
+		Email: EmailConfig{Provider: "local"},
+		MySQL: MySQLConfig{DataSource: "mysql-dsn"},
+		XOAuth: XOAuthConfig{
+			ClientID:    "x-client",
+			RedirectURI: "https://test.octo-agent.com/api/v1/accounts/oauth/x/callback",
+			Scopes:      "tweet.read tweet.write users.read offline.access",
+		},
+		LLM: LLMConfig{
+			DefaultProvider: "openai",
+			OpenAI:          OpenAIConfig{APIKey: "openai-key"},
+		},
+		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
+	}
+	err := applyExternalSecretConfig("test", "api", &cfg)
+	if err == nil {
+		t.Fatal("expected test api missing oauth secrets to fail")
+	}
+	msg := err.Error()
+	for _, want := range []string{"x_oauth.client_secret/X_OAUTH_CLIENT_SECRET", "x_oauth.state_secret/X_OAUTH_STATE_SECRET"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("missing config error %q does not mention %q", msg, want)
+		}
+	}
+}
+
+func TestApplyExternalSecretConfigAllowsTestAdminWithoutAPIOAuth(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "")
+	t.Setenv("X_OAUTH_CLIENT_ID", "")
+	t.Setenv("X_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("X_OAUTH_STATE_SECRET", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("BILLING_WEBHOOK_SECRET", "")
+
+	cfg := Config{
+		Email: EmailConfig{Provider: "local"},
+		MySQL: MySQLConfig{DataSource: "mysql-dsn"},
+		XOAuth: XOAuthConfig{
+			ClientID: "x-client",
+		},
+		LLM:     LLMConfig{DefaultProvider: "openai"},
+		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
+	}
+	if err := applyExternalSecretConfig("test", "admin", &cfg); err != nil {
+		t.Fatalf("expected test admin to ignore api-only oauth/openai secrets, got %v", err)
 	}
 }
 
@@ -224,7 +283,7 @@ func TestApplyExternalSecretConfigRequiresProdOpenAIKey(t *testing.T) {
 		},
 		Billing: BillingConfig{Scanner: BillingScannerConfig{Enabled: false}},
 	}
-	if err := applyExternalSecretConfig("prod", &cfg); err == nil {
+	if err := applyExternalSecretConfig("prod", "api", &cfg); err == nil {
 		t.Fatal("expected prod openai TODO secret to fail")
 	}
 }

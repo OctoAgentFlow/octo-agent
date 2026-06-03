@@ -610,6 +610,9 @@ export default function OAFBotsPage() {
   const qualityDiagnostics = useMemo(() => getPersonaQualityDiagnostics(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
   const canTestBot = personaCompleteness >= 40;
+  const nextSetupStep = wizardStepOrder.find((step) => !stepCompletion[step]) ?? "test";
+  const showMatrixPanel = limits.multiBotMatrix || bots.length > 1;
+  const usageNeedsAttention = usage.oafBots >= limits.maxBots || usage.aiGenerationsMonth >= limits.aiGenerationsMonthly;
 
   const wizardSteps = useMemo<Array<{ id: WizardStep; label: string; description: string }>>(
     () => [
@@ -1319,34 +1322,65 @@ export default function OAFBotsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
-        <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
-        <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
-        <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsMonth} limit={limits.monthlyAutoComments} />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
-        <p className="min-w-0 break-words">{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
-        <Link href="/billing" className="inline-flex shrink-0 items-center gap-1 font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-          {t("oafBots.planHintCta")}
-          <ArrowRight className="size-4" />
-        </Link>
-      </div>
-
-      <BotMatrixPanel
+      <OAFBotFocusPanel
         t={t}
-        rows={filteredMatrixRows}
-        allRowsCount={matrixRows.length}
-        summary={matrixSummary}
-        inspectionItems={matrixInspectionItems}
-        activeFilter={matrixFilter}
-        onFilterChange={setMatrixFilter}
-        loading={matrixLoading || relationshipLoading}
-        enabled={limits.multiBotMatrix}
-        selectedID={selectedID}
-        onSelect={selectBot}
+        bot={selectedBot}
+        botCount={bots.length}
+        account={selectedAccount}
+        completion={personaCompleteness}
+        nextStep={nextSetupStep}
+        canCreate={canCreate}
+        canTest={canTestBot}
+        formChanged={formChanged}
+        activeContentCount={selectedActiveContentItems.length}
+        queueSummary={selectedQueueSummary}
+        onCreate={startCreate}
+        onStepChange={setActiveStep}
+        onTest={handlePreviewTest}
       />
+
+      <details open={usageNeedsAttention} className="rounded-2xl border border-[#2f3336] bg-black p-4 md:p-5">
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.usageDetails.title")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[#71767b]">{t("oafBots.usageDetails.description")}</p>
+            </div>
+            <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-xs text-[#71767b]">
+              {usageNeedsAttention ? t("oafBots.usageDetails.needsAttention") : t("oafBots.usageDetails.expand")}
+            </span>
+          </div>
+        </summary>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
+          <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
+          <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
+          <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsMonth} limit={limits.monthlyAutoComments} />
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
+          <p className="min-w-0 break-words">{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>
+          <Link href="/billing" className="inline-flex shrink-0 items-center gap-1 font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+            {t("oafBots.planHintCta")}
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+      </details>
+
+      {showMatrixPanel ? (
+        <BotMatrixPanel
+          t={t}
+          rows={filteredMatrixRows}
+          allRowsCount={matrixRows.length}
+          summary={matrixSummary}
+          inspectionItems={matrixInspectionItems}
+          activeFilter={matrixFilter}
+          onFilterChange={setMatrixFilter}
+          loading={matrixLoading || relationshipLoading}
+          enabled={limits.multiBotMatrix}
+          selectedID={selectedID}
+          onSelect={selectBot}
+        />
+      ) : null}
 
       {!canCreate ? (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -1832,14 +1866,21 @@ export default function OAFBotsPage() {
 
             {activeStep === "test" ? (
               <WizardPanel title={t("oafBots.section.test")} description={t("oafBots.section.testDesc")}>
-                <LearningRulesCenter
-                  rules={productizedLearningRules}
-                  preferences={learningRulePreferences}
-                  disabledLearningIssues={disabledLearningIssues}
-                  issueOptions={feedbackIssueOptions}
-                  selectedBotName={selectedBot?.name || ""}
-                  onToggleLearningIssue={toggleLearningIssue}
-                />
+                <details className="mb-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+                    {t("oafBots.learningCenter.advancedSummary")}
+                  </summary>
+                  <div className="mt-3">
+                    <LearningRulesCenter
+                      rules={productizedLearningRules}
+                      preferences={learningRulePreferences}
+                      disabledLearningIssues={disabledLearningIssues}
+                      issueOptions={feedbackIssueOptions}
+                      selectedBotName={selectedBot?.name || ""}
+                      onToggleLearningIssue={toggleLearningIssue}
+                    />
+                  </div>
+                </details>
                 <SamplePanel
                   t={t}
                   samples={samples}
@@ -2328,6 +2369,166 @@ function QuotaCard({ label, used, limit }: { label: string; used: number; limit:
   );
 }
 
+function OAFBotFocusPanel({
+  t,
+  bot,
+  botCount,
+  account,
+  completion,
+  nextStep,
+  canCreate,
+  canTest,
+  formChanged,
+  activeContentCount,
+  queueSummary,
+  onCreate,
+  onStepChange,
+  onTest,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  bot: OAFBot | null;
+  botCount: number;
+  account?: AccountListItem;
+  completion: number;
+  nextStep: WizardStep;
+  canCreate: boolean;
+  canTest: boolean;
+  formChanged: boolean;
+  activeContentCount: number;
+  queueSummary: QueueSummary;
+  onCreate: () => void;
+  onStepChange: (step: WizardStep) => void;
+  onTest: () => void;
+}) {
+  const hasBot = Boolean(bot);
+  const ready = hasBot && completion >= 60;
+  const primaryAction = !hasBot
+    ? t("oafBots.focus.action.create")
+    : canTest && !formChanged
+      ? t("oafBots.focus.action.test")
+      : t("oafBots.focus.action.continue", { step: t(`oafBots.wizard.${nextStep}`) });
+  const primaryDisabled = !hasBot && !canCreate;
+
+  const handlePrimary = () => {
+    if (!hasBot) {
+      onCreate();
+      return;
+    }
+    if (canTest && !formChanged) {
+      onTest();
+      return;
+    }
+    onStepChange(nextStep);
+  };
+
+  const signals = [
+    {
+      icon: <Bot className="size-4" />,
+      title: t("oafBots.focus.signal.persona.title"),
+      value: t(ready ? "oafBots.focus.signal.persona.ready" : "oafBots.focus.signal.persona.needsWork", { percent: completion }),
+      tone: ready ? "success" : "warning",
+    },
+    {
+      icon: <ListChecks className="size-4" />,
+      title: t("oafBots.focus.signal.dailyQueue.title"),
+      value: hasBot ? t("oafBots.focus.signal.dailyQueue.ready") : t("oafBots.focus.signal.dailyQueue.needsBot"),
+      tone: hasBot ? "info" : "neutral",
+    },
+    {
+      icon: <FilePlus2 className="size-4" />,
+      title: t("oafBots.focus.signal.memory.title"),
+      value: t("oafBots.focus.signal.memory.value", { count: activeContentCount }),
+      tone: activeContentCount > 0 ? "success" : "neutral",
+    },
+    {
+      icon: <Workflow className="size-4" />,
+      title: t("oafBots.focus.signal.queue.title"),
+      value: t("oafBots.focus.signal.queue.value", { count: queueSummary.pendingReview }),
+      tone: queueSummary.pendingReview > 0 ? "warning" : "neutral",
+    },
+  ] as const;
+
+  return (
+    <section className="rounded-2xl border border-[#1d9bf0]/20 bg-[#06111d] p-5 md:p-6">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[#8ecdf8]">
+            <Sparkles className="size-4" />
+            {t("oafBots.focus.kicker")}
+          </p>
+          <h2 className="mt-2 text-2xl font-bold tracking-normal text-[#e7e9ea]">
+            {hasBot
+              ? t("oafBots.focus.title.selected", { name: bot?.name || t("oafBots.preview.unnamed") })
+              : t("oafBots.focus.title.empty")}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#8b98a5]">
+            {t("oafBots.focus.description")}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" onClick={handlePrimary} disabled={primaryDisabled}>
+              <Sparkles className="size-4" />
+              {primaryAction}
+            </Button>
+            <Link href="/daily-x-queue" className="inline-flex">
+              <Button type="button" variant="outline">
+                <ListChecks className="size-4" />
+                {t("oafBots.focus.dailyQueueCta")}
+              </Button>
+            </Link>
+            <Link href="/execution-queue" className="inline-flex">
+              <Button type="button" variant="outline">
+                <Workflow className="size-4" />
+                {t("oafBots.focus.queueCta")}
+              </Button>
+            </Link>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#8b98a5]">
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+              {t("oafBots.focus.meta.bots", { count: botCount })}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+              {account ? t("oafBots.focus.meta.account", { account: `@${account.username}` }) : t("oafBots.focus.meta.noAccount")}
+            </span>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {signals.map((signal) => (
+            <FocusSignal key={signal.title} icon={signal.icon} title={signal.title} value={signal.value} tone={signal.tone} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FocusSignal({
+  icon,
+  title,
+  value,
+  tone,
+}: {
+  icon: ReactNode;
+  title: string;
+  value: string;
+  tone: "success" | "warning" | "info" | "neutral";
+}) {
+  const toneClass = {
+    success: "border-emerald-300/20 bg-emerald-400/10 text-emerald-100",
+    warning: "border-amber-300/20 bg-amber-400/10 text-amber-100",
+    info: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-blue-100",
+    neutral: "border-white/10 bg-black/20 text-[#8b98a5]",
+  }[tone];
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="flex items-center gap-2">
+        <span className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full border ${toneClass}`}>{icon}</span>
+        <p className="truncate text-xs font-semibold text-[#e7e9ea]">{title}</p>
+      </div>
+      <p className="mt-2 text-sm leading-5 text-[#8b98a5]">{value}</p>
+    </div>
+  );
+}
+
 function ListStat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-[#2f3336] bg-black px-2.5 py-2">
@@ -2630,6 +2831,23 @@ function BotRelationshipCard({
             ) : null}
           </div>
 
+          <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#d7ebff]">{t("oafBots.relationship.dailyQueueTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.relationship.dailyQueueDescription")}</p>
+              </div>
+              <Link href="/daily-x-queue" className="shrink-0 text-xs font-semibold text-[#8ecdf8] hover:text-white">
+                {t("oafBots.relationship.openDailyQueue")}
+              </Link>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <DailyQueueSignal label={t("oafBots.relationship.dailyQueue.persona")} />
+              <DailyQueueSignal label={t("oafBots.relationship.dailyQueue.guardrails")} />
+              <DailyQueueSignal label={t("oafBots.relationship.dailyQueue.learning")} />
+            </div>
+          </div>
+
           <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -2722,6 +2940,15 @@ function BotRelationshipCard({
         </div>
       )}
     </SectionCard>
+  );
+}
+
+function DailyQueueSignal({ label }: { label: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[#1d9bf0]/15 bg-black/25 px-3 py-2 text-xs text-[#8b98a5]">
+      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-300" />
+      <span className="truncate">{label}</span>
+    </div>
   );
 }
 
@@ -3932,16 +4159,23 @@ function SamplePanel({
         </Button>
       </div>
 
-      <GenerationFeedbackHistory
-        t={t}
-        items={feedbackItems}
-        loading={feedbackLoading}
-        deletingID={feedbackDeletingID}
-        issueOptions={feedbackIssueOptions}
-        suggestionLoading={feedbackSuggestionLoading}
-        onDelete={onFeedbackDelete}
-        onSuggestProfile={onFeedbackProfileSuggestion}
-      />
+      <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+          {t("oafBots.feedback.advancedSummary")}
+        </summary>
+        <div className="mt-3">
+          <GenerationFeedbackHistory
+            t={t}
+            items={feedbackItems}
+            loading={feedbackLoading}
+            deletingID={feedbackDeletingID}
+            issueOptions={feedbackIssueOptions}
+            suggestionLoading={feedbackSuggestionLoading}
+            onDelete={onFeedbackDelete}
+            onSuggestProfile={onFeedbackProfileSuggestion}
+          />
+        </div>
+      </details>
 
       {samples ? (
         <div className="grid min-w-0 grid-cols-1 gap-4">

@@ -213,7 +213,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 
 func (s *ReviewQueueService) BulkAction(ctx context.Context, userID uint, req dto.ReviewQueueBulkActionRequest) (*dto.ReviewQueueBulkActionResponse, error) {
 	action := strings.ToLower(strings.TrimSpace(req.Action))
-	if action != "approve" && action != "reject" && action != "retry" {
+	if action != "approve" && action != "reject" && action != "retry" && action != "delete" {
 		return nil, errors.New("invalid action")
 	}
 	if len(req.Items) == 0 {
@@ -354,9 +354,108 @@ func (s *ReviewQueueService) runBulkActionItem(ctx context.Context, userID uint,
 		}
 		_, err := s.publishing.RetryJob(userID, item.PublishJobID)
 		return err
+	case "delete":
+		return s.deleteQueueItem(userID, item)
 	default:
 		return errors.New("invalid action")
 	}
+}
+
+func (s *ReviewQueueService) deleteQueueItem(userID uint, item dto.ReviewQueueBulkActionItemRequest) error {
+	switch item.QueueType {
+	case "comment":
+		if s.commentTaskRepo == nil {
+			return errors.New("auto comment repository is not configured")
+		}
+		task, err := s.commentTaskRepo.GetByUserAndID(userID, item.SourceID)
+		if err != nil {
+			return err
+		}
+		if err := assertReviewQueueDeleteAllowed("comment", task.Status); err != nil {
+			return err
+		}
+		if err := s.assertPublishJobsDeletable(userID, repository.PublishSourceComment, item.SourceID); err != nil {
+			return err
+		}
+		if err := s.deleteReviewQueuePublishJobs(userID, repository.PublishSourceComment, item.SourceID); err != nil {
+			return err
+		}
+		return s.commentTaskRepo.DeleteByUserAndID(userID, item.SourceID)
+	case "reply":
+		if s.replyDraftRepo == nil {
+			return errors.New("auto reply repository is not configured")
+		}
+		draft, err := s.replyDraftRepo.GetByUserAndID(userID, item.SourceID)
+		if err != nil {
+			return err
+		}
+		if err := assertReviewQueueDeleteAllowed("reply", draft.Status); err != nil {
+			return err
+		}
+		if err := s.assertPublishJobsDeletable(userID, repository.PublishSourceReply, item.SourceID); err != nil {
+			return err
+		}
+		if err := s.deleteReviewQueuePublishJobs(userID, repository.PublishSourceReply, item.SourceID); err != nil {
+			return err
+		}
+		return s.replyDraftRepo.DeleteByUserAndID(userID, item.SourceID)
+	case "post":
+		if s.postDraftRepo == nil {
+			return errors.New("auto post repository is not configured")
+		}
+		draft, err := s.postDraftRepo.GetByUserAndID(userID, item.SourceID)
+		if err != nil {
+			return err
+		}
+		if isDailyXQueueDraft(*draft) {
+			return errors.New("daily x queue drafts must be managed from Daily X Queue")
+		}
+		if err := assertReviewQueueDeleteAllowed("post", draft.Status); err != nil {
+			return err
+		}
+		if err := s.assertPublishJobsDeletable(userID, repository.PublishSourcePost, item.SourceID); err != nil {
+			return err
+		}
+		if err := s.deleteReviewQueuePublishJobs(userID, repository.PublishSourcePost, item.SourceID); err != nil {
+			return err
+		}
+		return s.postDraftRepo.DeleteByUserAndID(userID, item.SourceID)
+	default:
+		return fmt.Errorf("%s cannot be deleted from the execution queue", item.QueueType)
+	}
+}
+
+func assertReviewQueueDeleteAllowed(queueType string, status string) error {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "processing", "sending", "sent", "published":
+		return fmt.Errorf("%s item cannot be deleted from status %s", queueType, normalized)
+	default:
+		return nil
+	}
+}
+
+func (s *ReviewQueueService) assertPublishJobsDeletable(userID uint, sourceType string, sourceID uint) error {
+	if s == nil || s.publishJobRepo == nil {
+		return nil
+	}
+	jobs, err := s.publishJobRepo.ListBySources(userID, sourceType, []uint{sourceID})
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		if job.Status == repository.PublishStatusProcessing || job.Status == repository.PublishStatusPublished {
+			return fmt.Errorf("%s item has a %s publish job and cannot be deleted", sourceType, job.Status)
+		}
+	}
+	return nil
+}
+
+func (s *ReviewQueueService) deleteReviewQueuePublishJobs(userID uint, sourceType string, sourceID uint) error {
+	if s == nil || s.publishJobRepo == nil {
+		return nil
+	}
+	return s.publishJobRepo.DeleteReviewQueueDeletableBySource(userID, sourceType, sourceID)
 }
 
 func (s *ReviewQueueService) CreateFeedbackIssueVerdict(userID uint, req dto.ReviewQueueFeedbackIssueVerdictRequest) (*dto.ReviewQueueFeedbackIssueVerdictResponse, error) {

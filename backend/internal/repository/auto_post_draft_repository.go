@@ -60,6 +60,10 @@ func (r *AutoPostDraftRepository) Save(draft *model.AutoPostDraft) error {
 	return r.DB.Save(draft).Error
 }
 
+func (r *AutoPostDraftRepository) DeleteByUserAndID(userID, id uint) error {
+	return r.DB.Where("user_id = ? AND id = ?", userID, id).Delete(&model.AutoPostDraft{}).Error
+}
+
 func (r *AutoPostDraftRepository) CountCreatedBetween(userID uint, from, to time.Time) (int64, error) {
 	var n int64
 	err := r.DB.Model(&model.AutoPostDraft{}).

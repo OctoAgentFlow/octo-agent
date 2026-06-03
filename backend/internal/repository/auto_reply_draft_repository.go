@@ -51,6 +51,10 @@ func (r *AutoReplyDraftRepository) Save(task *model.AutoReplyDraft) error {
 	return r.DB.Save(task).Error
 }
 
+func (r *AutoReplyDraftRepository) DeleteByUserAndID(userID, id uint) error {
+	return r.DB.Where("user_id = ? AND id = ?", userID, id).Delete(&model.AutoReplyDraft{}).Error
+}
+
 func (r *AutoReplyDraftRepository) CountCreatedBetween(userID uint, from, to time.Time) (int64, error) {
 	var n int64
 	err := r.DB.Model(&model.AutoReplyDraft{}).

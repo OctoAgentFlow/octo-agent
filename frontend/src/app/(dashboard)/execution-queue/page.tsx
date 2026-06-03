@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clock, FileText, MessageCircle, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clock, FileText, MessageCircle, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -50,7 +50,7 @@ type FeedbackIssueMatch = {
   reasonKeys: string[];
 };
 type FeedbackIssueVerdict = "accurate" | "irrelevant";
-type BulkAction = "approve" | "reject" | "retry";
+type BulkAction = "approve" | "reject" | "retry" | "delete";
 type FailureGroupKey = "authorization" | "module_paused" | "rate_limit" | "safety" | "publish_api" | "content" | "unknown";
 type PublishOutcomeFilter = "all" | "pending" | "published" | "failed" | "dry_run" | "real";
 type SmartBulkGroup = {
@@ -369,6 +369,13 @@ function canBulkRetry(item: ReviewQueueItemApi, moduleEnabled: Record<ModuleType
   return item.status === "failed" && Boolean(item.publish_job_id) && moduleEnabled[item.type as ModuleType] !== false;
 }
 
+function canDeleteQueueItem(item: ReviewQueueItemApi) {
+  if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return false;
+  if (item.status === "processing" || item.status === "published") return false;
+  if (item.publish_status === "processing" || item.publish_status === "published") return false;
+  return ["draft", "pending_review", "approved", "ready_to_publish", "rejected", "failed"].includes(item.status);
+}
+
 function failureGroupForItem(item: ReviewQueueItemApi): FailureGroupKey {
   const text = [
     item.publish_last_error,
@@ -536,11 +543,12 @@ export default function ExecutionQueuePage() {
   const activeReasonWeights = useMemo(() => reasonWeightsForIssue(feedbackIssueStats, urlFeedbackIssue), [feedbackIssueStats, urlFeedbackIssue]);
   const prioritizedItems = useMemo(() => prioritizeByFeedbackIssue(items, urlFeedbackIssue, activeReasonWeights), [activeReasonWeights, items, urlFeedbackIssue]);
   const publishFilteredItems = useMemo(() => prioritizedItems.filter((item) => publishOutcomeMatches(item, publishOutcomeFilter)), [prioritizedItems, publishOutcomeFilter]);
-  const visibleSelectableItems = useMemo(() => publishFilteredItems.filter((item) => canBulkApprove(item, moduleEnabled) || canBulkReject(item) || canBulkRetry(item, moduleEnabled)), [moduleEnabled, publishFilteredItems]);
+  const visibleSelectableItems = useMemo(() => publishFilteredItems.filter((item) => canBulkApprove(item, moduleEnabled) || canBulkReject(item) || canBulkRetry(item, moduleEnabled) || canDeleteQueueItem(item)), [moduleEnabled, publishFilteredItems]);
   const selectedItems = useMemo(() => publishFilteredItems.filter((item) => selectedKeys.has(queueItemKey(item))), [publishFilteredItems, selectedKeys]);
   const selectedApproveCount = useMemo(() => selectedItems.filter((item) => canBulkApprove(item, moduleEnabled)).length, [moduleEnabled, selectedItems]);
   const selectedRejectCount = useMemo(() => selectedItems.filter(canBulkReject).length, [selectedItems]);
   const selectedRetryCount = useMemo(() => selectedItems.filter((item) => canBulkRetry(item, moduleEnabled)).length, [moduleEnabled, selectedItems]);
+  const selectedDeleteCount = useMemo(() => selectedItems.filter(canDeleteQueueItem).length, [selectedItems]);
   const failureGroups = useMemo(() => {
     const groups = new Map<FailureGroupKey, { key: FailureGroupKey; count: number; examples: string[] }>();
     for (const item of publishFilteredItems) {
@@ -1060,6 +1068,7 @@ export default function ExecutionQueuePage() {
     return sourceItems.filter((item) => {
       if (action === "approve") return canBulkApprove(item, moduleEnabled);
       if (action === "reject") return canBulkReject(item);
+      if (action === "delete") return canDeleteQueueItem(item);
       return canBulkRetry(item, moduleEnabled);
     });
   };
@@ -1092,7 +1101,7 @@ export default function ExecutionQueuePage() {
       const confirmed = await confirm({
         description: t(`executionQueue.bulk.confirm.${action}`, { count: candidates.length }),
         confirmLabel: t(`executionQueue.bulk.action.${action}`),
-        tone: action === "reject" ? "destructive" : "default",
+        tone: action === "reject" || action === "delete" ? "destructive" : "default",
       });
       if (!confirmed) return;
     }
@@ -1267,6 +1276,10 @@ export default function ExecutionQueuePage() {
                 <XCircle className="size-4" />
                 {t("executionQueue.bulk.action.rejectWithCount", { count: selectedRejectCount })}
               </Button>
+              <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedDeleteCount === 0} onClick={() => void runBulkAction("delete")}>
+                <Trash2 className="size-4" />
+                {t("executionQueue.bulk.action.deleteWithCount", { count: selectedDeleteCount })}
+              </Button>
             </div>
           </div>
         </Card>
@@ -1397,7 +1410,8 @@ export default function ExecutionQueuePage() {
               const manageable = item.type === "comment" || item.type === "reply" || item.type === "post";
               const canEdit = canEditQueueItem(item);
               const canReview = manageable && (item.status === "pending_review" || item.status === "draft");
-              const bulkSelectable = canBulkApprove(item, moduleEnabled) || canBulkReject(item) || canBulkRetry(item, moduleEnabled);
+              const canDelete = canDeleteQueueItem(item);
+              const bulkSelectable = canBulkApprove(item, moduleEnabled) || canBulkReject(item) || canBulkRetry(item, moduleEnabled) || canDelete;
               const displayTarget = normalizeTargetSummary(item.type, item.target_summary, t);
               const publishStatusLabel = t(publishStatusKey(item.publish_status));
               const modulePaused = moduleEnabled[item.type as ModuleType] === false;
@@ -1719,6 +1733,18 @@ export default function ExecutionQueuePage() {
                             >
                               <Send className="size-4" />
                               {publisherStatus?.dry_run ? t("executionQueue.actions.dryRunPublish") : t("executionQueue.actions.realPublish")}
+                            </Button>
+                          ) : null}
+                          {canDelete ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full border-[#f4212e]/25 bg-[#f4212e]/5 text-[#ff8a91] hover:bg-[#f4212e]/10 sm:w-auto"
+                              disabled={busyID === item.id || bulkBusy !== null}
+                              onClick={() => void runBulkAction("delete", { candidates: [item] })}
+                            >
+                              <Trash2 className="size-4" />
+                              {t("executionQueue.actions.delete")}
                             </Button>
                           ) : null}
                         </>

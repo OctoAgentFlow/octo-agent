@@ -133,6 +133,13 @@ func (r *PublishJobRepository) DeleteNonPublishedBySource(userID uint, sourceTyp
 		Delete(&model.PublishJob{}).Error
 }
 
+func (r *PublishJobRepository) DeleteReviewQueueDeletableBySource(userID uint, sourceType string, sourceID uint) error {
+	return r.DB.
+		Where("user_id = ? AND source_type = ? AND source_id = ?", userID, sourceType, sourceID).
+		Where("status IN ?", []string{PublishStatusPending, PublishStatusFailed, PublishStatusCancelled}).
+		Delete(&model.PublishJob{}).Error
+}
+
 func (r *PublishJobRepository) RecordXPublishCost(job *model.PublishJob, occurredAt time.Time) error {
 	if job == nil || strings.TrimSpace(job.ExternalID) == "" {
 		return nil

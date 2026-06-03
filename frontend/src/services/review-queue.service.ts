@@ -92,7 +92,7 @@ export type ReviewQueueFeedbackIssueVerdictPayload = {
   reasons: string[];
 };
 
-export type ReviewQueueBulkAction = "approve" | "reject" | "retry";
+export type ReviewQueueBulkAction = "approve" | "reject" | "retry" | "delete";
 
 export type ReviewQueueBulkActionItemPayload = {
   queue_type: ReviewQueueItemApi["type"];

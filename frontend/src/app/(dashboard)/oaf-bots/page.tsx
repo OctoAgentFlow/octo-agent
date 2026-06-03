@@ -99,6 +99,7 @@ type SafetyRewritePreview = {
   result: OAFBotTestGenerateResult;
 };
 type SafetyRewriteMode = "natural" | "conservative" | "shorter";
+type AccountArchetypeKey = "brand" | "founder" | "kol" | "community" | "agency";
 type ProfileDiffItem = {
   key: keyof OAFBotPayload;
   before: OAFBotPayload[keyof OAFBotPayload];
@@ -141,6 +142,7 @@ type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
+const accountArchetypeKeys: AccountArchetypeKey[] = ["brand", "founder", "kol", "community", "agency"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
 const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
   "name",
@@ -185,6 +187,63 @@ const reviewBacklogInspectionThreshold = 5;
 const trendRegionValues = ["1", "23424977"];
 const trendCategoryValues = ["crypto", "finance", "tech", "sports", "entertainment", "gaming", "politics", "news", "culture", "lifestyle", "meme", "other"];
 const sensitiveTrendPolicyValues = ["avoid", "review_only", "allow"];
+const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload> & { occupation: string }> = {
+  brand: {
+    occupation: "Official brand account",
+    personality_tags: ["Professional", "Restrained", "Helpful"],
+    voice_tone: "Concise operator voice with clear product context",
+    identity_summary: "An official brand OAF Bot focused on controlled product updates, practical workflows, and review-first social operations.",
+    growth_goal: "Build brand authority",
+    content_pillars: ["Product value", "Use cases", "Market education"],
+    content_objectives: "Explain product workflows, share useful updates, and keep brand messaging controlled.",
+    avoid_claims: ["Guaranteed returns", "Absolute superiority claims", "Unverified official partnership"],
+    safety_mode: "balanced",
+  },
+  founder: {
+    occupation: "Founder / operator",
+    personality_tags: ["Direct", "Curious", "Warm"],
+    voice_tone: "Concise founder/operator voice with practical observations",
+    identity_summary: "A founder/operator OAF Bot that speaks from hands-on product and growth experience.",
+    growth_goal: "Build brand authority",
+    content_pillars: ["Founder insight", "User pain points", "Product value"],
+    content_objectives: "Share operational lessons, explain product decisions, and make the workflow feel concrete.",
+    avoid_claims: ["Guaranteed returns", "Absolute superiority claims"],
+    safety_mode: "balanced",
+  },
+  kol: {
+    occupation: "KOL / creator",
+    personality_tags: ["Casual", "Sharp", "Helpful"],
+    voice_tone: "Natural creator voice with a clear point of view",
+    identity_summary: "A KOL-style OAF Bot that turns trusted source material into opinionated but controlled X content.",
+    growth_goal: "Grow followers",
+    content_pillars: ["Market education", "Use cases", "Community proof"],
+    content_objectives: "Create useful takes, explain why the topic matters, and avoid sounding like product documentation.",
+    avoid_claims: ["Guaranteed returns", "Legal or financial advice", "Token price prediction"],
+    safety_mode: "balanced",
+  },
+  community: {
+    occupation: "Community operator",
+    personality_tags: ["Warm", "Helpful", "Professional"],
+    voice_tone: "Supportive community operations voice",
+    identity_summary: "A community OAF Bot focused on updates, member context, and safe engagement loops.",
+    growth_goal: "Increase account activity",
+    content_pillars: ["Community proof", "Roadmap updates", "Ecosystem collaborations"],
+    content_objectives: "Keep the community informed, invite review, and avoid overpromising outcomes.",
+    avoid_claims: ["Guaranteed returns", "Unverified official partnership"],
+    safety_mode: "conservative",
+  },
+  agency: {
+    occupation: "Agency operator",
+    personality_tags: ["Professional", "Growth-oriented", "Restrained"],
+    voice_tone: "Clear agency operator voice with controlled client-safe wording",
+    identity_summary: "An agency-managed OAF Bot that keeps account voice consistent while supporting repeatable review workflows.",
+    growth_goal: "Capture leads",
+    content_pillars: ["Use cases", "User pain points", "Product value"],
+    content_objectives: "Produce reusable account-safe drafts, keep client messaging aligned, and support review-first operations.",
+    avoid_claims: ["Guaranteed returns", "Absolute superiority claims", "Unverified official partnership"],
+    safety_mode: "conservative",
+  },
+};
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -612,6 +671,7 @@ export default function OAFBotsPage() {
   const personaChecklist = useMemo(() => getPersonaChecklist(form, t), [form, t]);
   const qualityDiagnostics = useMemo(() => getPersonaQualityDiagnostics(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
+  const selectedAccountArchetype = useMemo(() => detectAccountArchetype(form), [form]);
   const canTestBot = personaCompleteness >= 40;
   const nextSetupStep = wizardStepOrder.find((step) => !stepCompletion[step]) ?? "test";
   const showMatrixPanel = bots.length > 1;
@@ -961,6 +1021,11 @@ export default function OAFBotsPage() {
 
   const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const applyAccountArchetype = (type: AccountArchetypeKey) => {
+    setForm((prev) => applyAccountArchetypePreset(prev, type));
+    pushToast(t("oafBots.accountType.applied", { type: t(`oafBots.accountType.${type}.title`) }));
   };
 
   const selectBot = (bot: OAFBot) => {
@@ -1590,6 +1655,11 @@ export default function OAFBotsPage() {
 
             {activeStep === "identity" ? (
               <WizardPanel title={t("oafBots.section.identity")} description={t("oafBots.section.identityDesc")}>
+                <AccountArchetypePicker
+                  t={t}
+                  selected={selectedAccountArchetype}
+                  onSelect={applyAccountArchetype}
+                />
                 <div className="grid gap-4 md:grid-cols-2">
                   <TextField
                     label={t("oafBots.fields.name")}
@@ -1686,28 +1756,26 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.coreValueProps")}
                     recommended
                   />
-                  <TextArea
-                    label={t("oafBots.fields.productFeatures")}
-                    value={form.product_features}
-                    onChange={(value) => updateForm("product_features", value)}
-                    placeholder={t("oafBots.placeholders.productFeatures")}
-                    helper={t("oafBots.helpers.productFeatures")}
-                  />
-                  <div className="md:col-span-2">
-                    <TextArea
-                      label={t("oafBots.fields.differentiators")}
-                      value={form.differentiators}
-                      onChange={(value) => updateForm("differentiators", value)}
-                      placeholder={t("oafBots.placeholders.differentiators")}
-                      helper={t("oafBots.helpers.differentiators")}
-                    />
-                  </div>
-                  <div className="md:col-span-2 rounded-[8px] border border-[#2f3336] bg-black/25 p-4">
-                    <div className="mb-4 flex flex-col gap-1">
-                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.promotion.title")}</p>
-                      <p className="text-xs leading-relaxed text-[#71767b]">{t("oafBots.promotion.description")}</p>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                  <details className="md:col-span-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+                      {t("oafBots.advancedProduct.title")}
+                    </summary>
+                    <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedProduct.description")}</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <TextArea
+                        label={t("oafBots.fields.productFeatures")}
+                        value={form.product_features}
+                        onChange={(value) => updateForm("product_features", value)}
+                        placeholder={t("oafBots.placeholders.productFeatures")}
+                        helper={t("oafBots.helpers.productFeatures")}
+                      />
+                      <TextArea
+                        label={t("oafBots.fields.differentiators")}
+                        value={form.differentiators}
+                        onChange={(value) => updateForm("differentiators", value)}
+                        placeholder={t("oafBots.placeholders.differentiators")}
+                        helper={t("oafBots.helpers.differentiators")}
+                      />
                       <TextField
                         label={t("oafBots.fields.websiteUrl")}
                         value={form.website_url}
@@ -1746,7 +1814,7 @@ export default function OAFBotsPage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  </details>
                 </div>
               </WizardPanel>
             ) : null}
@@ -1773,14 +1841,7 @@ export default function OAFBotsPage() {
                   placeholder={t("oafBots.placeholders.tagInput")}
                   recommended
                 />
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <SelectField
-                    label={t("oafBots.fields.mbti")}
-                    value={form.mbti}
-                    onChange={(value) => updateForm("mbti", value)}
-                    options={mbtiOptions}
-                    helper={t("oafBots.helpers.mbti")}
-                  />
+                <div className="mt-4">
                   <ChipTextArea
                     label={t("oafBots.fields.voiceTone")}
                     value={form.voice_tone}
@@ -1791,6 +1852,21 @@ export default function OAFBotsPage() {
                     recommended
                   />
                 </div>
+                <details className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+                    {t("oafBots.advancedStyle.title")}
+                  </summary>
+                  <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedStyle.description")}</p>
+                  <div className="mt-4">
+                    <SelectField
+                      label={t("oafBots.fields.mbti")}
+                      value={form.mbti}
+                      onChange={(value) => updateForm("mbti", value)}
+                      options={mbtiOptions}
+                      helper={t("oafBots.helpers.mbti")}
+                    />
+                  </div>
+                </details>
               </WizardPanel>
             ) : null}
 
@@ -1819,12 +1895,12 @@ export default function OAFBotsPage() {
                   onAvoidClaimsChange={(values) => updateForm("avoid_claims", values)}
                   onComplianceNotesChange={(value) => updateForm("compliance_notes", value)}
                 />
-                <div className="mt-4 rounded-[8px] border border-[#2f3336] bg-black/25 p-4">
-                  <div className="mb-4">
-                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.trends.title")}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-[#71767b]">{t("oafBots.trends.description")}</p>
-                  </div>
-                  <div className="grid gap-4">
+                <details className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+                    {t("oafBots.advancedTrends.title")}
+                  </summary>
+                  <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedTrends.description")}</p>
+                  <div className="mt-4 grid gap-4">
                     <TagPicker
                       label={t("oafBots.fields.trendRegions")}
                       values={form.trend_regions}
@@ -1863,7 +1939,7 @@ export default function OAFBotsPage() {
                       </label>
                     </div>
                   </div>
-                </div>
+                </details>
               </WizardPanel>
             ) : null}
 
@@ -1896,13 +1972,6 @@ export default function OAFBotsPage() {
                     placeholder={t("oafBots.placeholders.tagInput")}
                     recommended
                   />
-                  <TextArea
-                    label={t("oafBots.fields.contentObjectives")}
-                    value={form.content_objectives}
-                    onChange={(value) => updateForm("content_objectives", value)}
-                    placeholder={t("oafBots.placeholders.contentObjectives")}
-                    helper={t("oafBots.helpers.contentObjectives")}
-                  />
                   <ChipTextArea
                     label={t("oafBots.fields.preferredCTA")}
                     value={form.preferred_cta}
@@ -1911,22 +1980,39 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.preferredCTA")}
                     options={growthGoalOptions}
                   />
-                  <TagPicker
-                    label={t("oafBots.fields.hashtags")}
-                    values={form.hashtags}
-                    options={hashtagOptions}
-                    onChange={(values) => updateForm("hashtags", values)}
-                    helper={t("oafBots.helpers.hashtags")}
-                    placeholder={t("oafBots.placeholders.tagInput")}
-                  />
-                  <TagPicker
-                    label={t("oafBots.fields.keywords")}
-                    values={form.keywords}
-                    options={keywordOptions}
-                    onChange={(values) => updateForm("keywords", values)}
-                    helper={t("oafBots.helpers.keywords")}
-                    placeholder={t("oafBots.placeholders.tagInput")}
-                  />
+                  <details className="xl:col-span-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+                      {t("oafBots.advancedGoals.title")}
+                    </summary>
+                    <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedGoals.description")}</p>
+                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                      <TextArea
+                        label={t("oafBots.fields.contentObjectives")}
+                        value={form.content_objectives}
+                        onChange={(value) => updateForm("content_objectives", value)}
+                        placeholder={t("oafBots.placeholders.contentObjectives")}
+                        helper={t("oafBots.helpers.contentObjectives")}
+                      />
+                      <TagPicker
+                        label={t("oafBots.fields.hashtags")}
+                        values={form.hashtags}
+                        options={hashtagOptions}
+                        onChange={(values) => updateForm("hashtags", values)}
+                        helper={t("oafBots.helpers.hashtags")}
+                        placeholder={t("oafBots.placeholders.tagInput")}
+                      />
+                      <div className="xl:col-span-2">
+                        <TagPicker
+                          label={t("oafBots.fields.keywords")}
+                          values={form.keywords}
+                          options={keywordOptions}
+                          onChange={(values) => updateForm("keywords", values)}
+                          helper={t("oafBots.helpers.keywords")}
+                          placeholder={t("oafBots.placeholders.tagInput")}
+                        />
+                      </div>
+                    </div>
+                  </details>
                 </div>
               </WizardPanel>
             ) : null}
@@ -2399,6 +2485,31 @@ function joinMultiValues(values: string[]) {
   return values.map((item) => item.trim()).filter(Boolean).join(",");
 }
 
+function mergeUniqueValues(current: string[] = [], additions: string[] = []) {
+  return Array.from(new Set([...current, ...additions].map((item) => item.trim()).filter(Boolean)));
+}
+
+function detectAccountArchetype(form: OAFBotPayload): AccountArchetypeKey | null {
+  const matched = accountArchetypeKeys.find((key) => form.occupation === accountArchetypePresets[key].occupation);
+  return matched || null;
+}
+
+function applyAccountArchetypePreset(current: OAFBotPayload, type: AccountArchetypeKey): OAFBotPayload {
+  const preset = accountArchetypePresets[type];
+  return {
+    ...current,
+    occupation: preset.occupation,
+    personality_tags: mergeUniqueValues(current.personality_tags, preset.personality_tags),
+    content_pillars: mergeUniqueValues(current.content_pillars, preset.content_pillars),
+    avoid_claims: mergeUniqueValues(current.avoid_claims, preset.avoid_claims),
+    voice_tone: current.voice_tone.trim() || preset.voice_tone || "",
+    identity_summary: current.identity_summary.trim() || preset.identity_summary || "",
+    growth_goal: current.growth_goal.trim() || preset.growth_goal || "",
+    content_objectives: current.content_objectives.trim() || preset.content_objectives || "",
+    safety_mode: current.safety_mode || preset.safety_mode || "balanced",
+  };
+}
+
 function summarizeQueue(items: ReviewQueueItemApi[]): QueueSummary {
   return items.reduce<QueueSummary>(
     (summary, item) => {
@@ -2434,6 +2545,47 @@ function getErrorBody(error: unknown): ApiErrorBody | undefined {
 
 function errorMessage(error: unknown, fallback: string) {
   return getErrorBody(error)?.message || fallback;
+}
+
+function AccountArchetypePicker({
+  t,
+  selected,
+  onSelect,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  selected: AccountArchetypeKey | null;
+  onSelect: (type: AccountArchetypeKey) => void;
+}) {
+  return (
+    <div className="mb-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="mb-3">
+        <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.accountType.title")}</p>
+        <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.accountType.description")}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {accountArchetypeKeys.map((type) => {
+          const active = selected === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(type)}
+              className={`min-w-0 rounded-xl border p-3 text-left transition ${
+                active ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/12" : "border-[#2f3336] bg-black hover:bg-[#16181c]"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-semibold text-[#e7e9ea]">{t(`oafBots.accountType.${type}.title`)}</p>
+                {active ? <CheckCircle2 className="size-4 shrink-0 text-[#1d9bf0]" /> : null}
+              </div>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{t(`oafBots.accountType.${type}.description`)}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function QuotaCard({ label, used, limit }: { label: string; used: number; limit: number }) {
@@ -4269,28 +4421,45 @@ function SamplePanel({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-        {sceneItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onSceneChange(item.id)}
-            className={`min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition ${
-              scene === item.id ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]" : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#0f1419] text-[#1d9bf0]">
-                {item.icon}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate whitespace-nowrap text-sm font-medium">{item.title}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#71767b] [overflow-wrap:anywhere]">{item.description}</p>
-              </div>
-            </div>
-          </button>
-        ))}
+      <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]">
+            {selectedSceneItem.icon}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.test.primarySceneTitle", { scene: selectedSceneItem.title })}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{selectedSceneItem.description}</p>
+          </div>
+        </div>
       </div>
+
+      <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
+          {t("oafBots.test.advancedScenes")}
+        </summary>
+        <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+          {sceneItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSceneChange(item.id)}
+              className={`min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition ${
+                scene === item.id ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/12 text-[#e7e9ea]" : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-[#0f1419] text-[#1d9bf0]">
+                  {item.icon}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate whitespace-nowrap text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#71767b] [overflow-wrap:anywhere]">{item.description}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </details>
 
       {!selectedID ? (
         <p className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-100">{t("oafBots.test.saveFirst")}</p>

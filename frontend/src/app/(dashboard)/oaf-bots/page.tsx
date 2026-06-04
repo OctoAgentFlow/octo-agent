@@ -1806,42 +1806,52 @@ export default function OAFBotsPage() {
                       </div>
                     </div>
                   </div>
-                  <TextArea
-                    label={t("oafBots.fields.projectOneLiner")}
-                    value={form.project_one_liner}
-                    onChange={(value) => updateForm("project_one_liner", value)}
-                    placeholder={t("oafBots.placeholders.projectOneLiner")}
-                    helper={t("oafBots.helpers.projectOneLiner")}
-                    recommended
-                  />
-                  <TextArea
-                    label={t("oafBots.fields.targetAudience")}
-                    value={form.target_audience}
-                    onChange={(value) => updateForm("target_audience", value)}
-                    placeholder={t("oafBots.placeholders.targetAudience")}
-                    helper={t("oafBots.helpers.targetAudience")}
-                    recommended
-                  />
-                  <TextArea
-                    label={t("oafBots.fields.coreValueProps")}
-                    value={form.core_value_props}
-                    onChange={(value) => updateForm("core_value_props", value)}
-                    placeholder={t("oafBots.placeholders.coreValueProps")}
-                    helper={t("oafBots.helpers.coreValueProps")}
-                    recommended
-                  />
-                  <details className="md:col-span-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                  <div className="md:col-span-2">
+                    <TextArea
+                      label={t("oafBots.fields.projectOneLiner")}
+                      value={form.project_one_liner}
+                      onChange={(value) => updateForm("project_one_liner", value)}
+                      placeholder={t("oafBots.placeholders.projectOneLiner")}
+                      helper={t("oafBots.helpers.projectOneLiner")}
+                      minHeightClass="min-h-[150px]"
+                      recommended
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <TextArea
+                      label={t("oafBots.fields.targetAudience")}
+                      value={form.target_audience}
+                      onChange={(value) => updateForm("target_audience", value)}
+                      placeholder={t("oafBots.placeholders.targetAudience")}
+                      helper={t("oafBots.helpers.targetAudience")}
+                      minHeightClass="min-h-[150px]"
+                      recommended
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <TextArea
+                      label={t("oafBots.fields.coreValueProps")}
+                      value={form.core_value_props}
+                      onChange={(value) => updateForm("core_value_props", value)}
+                      placeholder={t("oafBots.placeholders.coreValueProps")}
+                      helper={t("oafBots.helpers.coreValueProps")}
+                      minHeightClass="min-h-[170px]"
+                      recommended
+                    />
+                  </div>
+                  <details className="md:col-span-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-5">
                     <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
                       {t("oafBots.advancedProduct.title")}
                     </summary>
                     <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedProduct.description")}</p>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="mt-5 grid gap-5 md:grid-cols-2">
                       <TextArea
                         label={t("oafBots.fields.productFeatures")}
                         value={form.product_features}
                         onChange={(value) => updateForm("product_features", value)}
                         placeholder={t("oafBots.placeholders.productFeatures")}
                         helper={t("oafBots.helpers.productFeatures")}
+                        minHeightClass="min-h-[150px]"
                       />
                       <TextArea
                         label={t("oafBots.fields.differentiators")}
@@ -1849,6 +1859,7 @@ export default function OAFBotsPage() {
                         onChange={(value) => updateForm("differentiators", value)}
                         placeholder={t("oafBots.placeholders.differentiators")}
                         helper={t("oafBots.helpers.differentiators")}
+                        minHeightClass="min-h-[150px]"
                       />
                       <TextField
                         label={t("oafBots.fields.websiteUrl")}
@@ -1885,6 +1896,7 @@ export default function OAFBotsPage() {
                           onChange={(value) => updateForm("cta_policy", value)}
                           placeholder={t("oafBots.placeholders.ctaPolicy")}
                           helper={t("oafBots.helpers.ctaPolicy")}
+                          minHeightClass="min-h-[170px]"
                         />
                       </div>
                     </div>
@@ -3604,6 +3616,7 @@ function TextArea({
   placeholder,
   helper,
   recommended,
+  minHeightClass = "min-h-32",
 }: {
   label: string;
   value: string;
@@ -3611,10 +3624,11 @@ function TextArea({
   placeholder?: string;
   helper?: string;
   recommended?: boolean;
+  minHeightClass?: string;
 }) {
   return (
     <FieldShell label={label} helper={helper} recommended={recommended}>
-      <textarea className="form-input min-h-32 max-w-full resize-y leading-relaxed" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <textarea className={`form-input ${minHeightClass} max-w-full resize-y leading-relaxed`} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </FieldShell>
   );
 }

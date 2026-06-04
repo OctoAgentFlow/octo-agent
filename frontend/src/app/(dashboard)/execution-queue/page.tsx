@@ -450,6 +450,9 @@ export default function ExecutionQueuePage() {
   const [publisherStatus, setPublisherStatus] = useState<XPublisherStatusApi | null>(null);
   const [recentBulkActivity, setRecentBulkActivity] = useState<ActivityItemApi | null>(null);
   const loadSeqRef = useRef(0);
+  const loadToastRef = useRef(pushToast);
+  const loadTRef = useRef(t);
+  const lastLoadErrorToastRef = useRef("");
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [moduleEnabled, setModuleEnabled] = useState<Record<ModuleType, boolean>>({
     post: true,
@@ -457,6 +460,11 @@ export default function ExecutionQueuePage() {
     reply: true,
     dm: true,
   });
+
+  useEffect(() => {
+    loadToastRef.current = pushToast;
+    loadTRef.current = t;
+  }, [pushToast, t]);
 
   useEffect(() => {
     setTypeFilter((current) => (current === urlFilters.type ? current : urlFilters.type));
@@ -484,8 +492,9 @@ export default function ExecutionQueuePage() {
     }
   }, [modeFilter, pathname, publishOutcomeFilter, router, searchKey, statusFilter, typeFilter, urlFeedbackIssue, urlFocus.sourceID, urlFocus.type]);
 
-  const loadQueue = useCallback(async () => {
+  const loadQueue = useCallback(async (options?: { forceToast?: boolean }) => {
     const seq = loadSeqRef.current + 1;
+    const loadKey = `${typeFilter}:${statusFilter}:${modeFilter}`;
     loadSeqRef.current = seq;
     setLoadState("loading");
     try {
@@ -514,16 +523,22 @@ export default function ExecutionQueuePage() {
         reply: automationData.modules.find((item) => item.type === "reply")?.config.enabled ?? true,
         dm: automationData.modules.find((item) => item.type === "dm")?.config.enabled ?? true,
       });
+      lastLoadErrorToastRef.current = "";
       setLoadState("ready");
     } catch (error) {
       if (loadSeqRef.current !== seq) return;
+      const fallback = loadTRef.current("executionQueue.errors.load");
       const message = axios.isAxiosError(error)
-        ? error.response?.data?.message || t("executionQueue.errors.load")
-        : t("executionQueue.errors.load");
-      pushToast(message);
+        ? error.response?.data?.message || fallback
+        : fallback;
+      const toastKey = `${loadKey}:${message}`;
+      if (options?.forceToast || lastLoadErrorToastRef.current !== toastKey) {
+        loadToastRef.current(message);
+        lastLoadErrorToastRef.current = toastKey;
+      }
       setLoadState("error");
     }
-  }, [modeFilter, pushToast, statusFilter, t, typeFilter]);
+  }, [modeFilter, statusFilter, typeFilter]);
 
   useEffect(() => {
     void loadQueue();
@@ -1380,7 +1395,7 @@ export default function ExecutionQueuePage() {
         {loadState === "error" ? (
           <div className="m-5 rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">
             <p>{t("executionQueue.errors.load")}</p>
-            <Button className="mt-4" size="sm" variant="outline" onClick={() => void loadQueue()}>
+            <Button className="mt-4" size="sm" variant="outline" onClick={() => void loadQueue({ forceToast: true })}>
               {t("common.retry")}
             </Button>
           </div>

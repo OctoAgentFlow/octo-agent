@@ -191,7 +191,8 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
   brand: {
     occupation: "Official brand account",
     personality_tags: ["Professional", "Restrained", "Helpful"],
-    voice_tone: "Concise operator voice with clear product context",
+    voice_tone:
+      "Concise official-operator voice. Use short practical sentences. Explain social operations workflows clearly. Avoid hype, generic AI claims, and hard-selling CTAs.",
     identity_summary: "An official brand OAF Bot focused on controlled product updates, practical workflows, and review-first social operations.",
     growth_goal: "Build brand authority",
     content_pillars: ["Product value", "Use cases", "Market education"],
@@ -202,7 +203,8 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
   founder: {
     occupation: "Founder / operator",
     personality_tags: ["Direct", "Curious", "Warm"],
-    voice_tone: "Concise founder/operator voice with practical observations",
+    voice_tone:
+      "Practical founder/operator voice. Start from an operator pain point, then show a concrete workflow or decision. Keep CTAs soft and avoid sounding like an ad.",
     identity_summary: "A founder/operator OAF Bot that speaks from hands-on product and growth experience.",
     growth_goal: "Build brand authority",
     content_pillars: ["Founder insight", "User pain points", "Product value"],
@@ -213,7 +215,7 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
   kol: {
     occupation: "KOL / creator",
     personality_tags: ["Casual", "Sharp", "Helpful"],
-    voice_tone: "Natural creator voice with a clear point of view",
+    voice_tone: "Natural creator voice with a clear point of view. Make specific observations, avoid product documentation, and keep the hook conversational.",
     identity_summary: "A KOL-style OAF Bot that turns trusted source material into opinionated but controlled X content.",
     growth_goal: "Grow followers",
     content_pillars: ["Market education", "Use cases", "Community proof"],
@@ -224,7 +226,7 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
   community: {
     occupation: "Community operator",
     personality_tags: ["Warm", "Helpful", "Professional"],
-    voice_tone: "Supportive community operations voice",
+    voice_tone: "Supportive community operations voice. Be clear, calm, and useful; invite participation without overpromising outcomes.",
     identity_summary: "A community OAF Bot focused on updates, member context, and safe engagement loops.",
     growth_goal: "Increase account activity",
     content_pillars: ["Community proof", "Roadmap updates", "Ecosystem collaborations"],
@@ -235,13 +237,46 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
   agency: {
     occupation: "Agency operator",
     personality_tags: ["Professional", "Growth-oriented", "Restrained"],
-    voice_tone: "Clear agency operator voice with controlled client-safe wording",
+    voice_tone:
+      "Client-safe agency operator voice. Keep wording controlled, practical, and reusable; connect posts to workflow value without aggressive claims.",
     identity_summary: "An agency-managed OAF Bot that keeps account voice consistent while supporting repeatable review workflows.",
     growth_goal: "Capture leads",
     content_pillars: ["Use cases", "User pain points", "Product value"],
     content_objectives: "Produce reusable account-safe drafts, keep client messaging aligned, and support review-first operations.",
     avoid_claims: ["Guaranteed returns", "Absolute superiority claims", "Unverified official partnership"],
     safety_mode: "conservative",
+  },
+};
+const styleRecommendationPresets: Record<AccountArchetypeKey, { personalityTags: string[]; voiceTone: string; mbti: string }> = {
+  brand: {
+    personalityTags: ["Professional", "Restrained", "Direct", "Helpful"],
+    voiceTone:
+      "Concise official-operator voice. Use short practical sentences. Explain social operations workflows clearly. Avoid hype, generic AI claims, and hard-selling CTAs.",
+    mbti: "INTJ",
+  },
+  founder: {
+    personalityTags: ["Direct", "Curious", "Growth-oriented", "Restrained"],
+    voiceTone:
+      "Practical founder/operator voice. Start from an operator pain point, then show a concrete workflow or decision. Keep CTAs soft and avoid sounding like an ad.",
+    mbti: "ENTJ",
+  },
+  kol: {
+    personalityTags: ["Curious", "Casual", "Sharp", "Direct"],
+    voiceTone:
+      "Natural creator voice with a clear point of view. Make specific observations, avoid product documentation, and keep the hook conversational.",
+    mbti: "ENTP",
+  },
+  community: {
+    personalityTags: ["Warm", "Helpful", "Restrained", "Professional"],
+    voiceTone:
+      "Supportive community operations voice. Be clear, calm, and useful; invite participation without overpromising outcomes.",
+    mbti: "ENFJ",
+  },
+  agency: {
+    personalityTags: ["Professional", "Restrained", "Growth-oriented", "Direct"],
+    voiceTone:
+      "Client-safe agency operator voice. Keep wording controlled, practical, and reusable; connect posts to workflow value without aggressive claims.",
+    mbti: "ISTJ",
   },
 };
 const accountArchetypeOccupationKeywords: Record<AccountArchetypeKey, string[]> = {
@@ -481,13 +516,13 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     dmConversion: "Convert through DMs",
   },
   voicePresets: {
-    concise: "Concise and professional",
-    natural: "Relaxed and natural",
-    web3Native: "Web3-native",
-    founder: "Founder perspective",
-    technical: "Technical explainer",
-    growth: "Growth conversion",
-    community: "Community operations",
+    concise: "Concise professional voice. Use short sentences, clear structure, and practical product language. Avoid hype and vague AI claims.",
+    natural: "Relaxed natural voice. Sound conversational and useful, but keep the message focused and avoid filler.",
+    web3Native: "Web3-native operator voice. Use community-aware phrasing, but avoid degen hype, financial promises, and spammy CTAs.",
+    founder: "Founder/operator perspective. Share practical observations, tradeoffs, and workflow lessons from building or operating the product.",
+    technical: "Technical explainer voice. Make mechanisms clear, define terms when needed, and avoid overclaiming what the system can do.",
+    growth: "Practical growth-operator voice. Connect posts to user pain, workflow value, or a next step. Use soft CTAs only when useful.",
+    community: "Community operations voice. Be warm, clear, and responsive; invite participation while keeping expectations realistic.",
   },
 };
 
@@ -700,6 +735,8 @@ export default function OAFBotsPage() {
   const qualityDiagnostics = useMemo(() => getPersonaQualityDiagnostics(form, t), [form, t]);
   const stepCompletion = useMemo(() => getStepCompletion(form, Boolean(selectedID)), [form, selectedID]);
   const selectedAccountArchetype = useMemo(() => detectAccountArchetype(form), [form]);
+  const styleRecommendationType = selectedAccountArchetype || "brand";
+  const styleRecommendation = styleRecommendationPresets[styleRecommendationType];
   const canTestBot = personaCompleteness >= 40;
   const nextSetupStep = wizardStepOrder.find((step) => !stepCompletion[step]) ?? "test";
   const showMatrixPanel = bots.length > 1;
@@ -1090,6 +1127,16 @@ export default function OAFBotsPage() {
   const applyAccountArchetype = (type: AccountArchetypeKey) => {
     setForm((prev) => applyAccountArchetypePreset(prev, type));
     pushToast(t("oafBots.accountType.applied", { type: t(`oafBots.accountType.${type}.title`) }));
+  };
+
+  const applyStyleRecommendation = () => {
+    setForm((prev) => ({
+      ...prev,
+      personality_tags: styleRecommendation.personalityTags,
+      voice_tone: styleRecommendation.voiceTone,
+      mbti: styleRecommendation.mbti,
+    }));
+    pushToast(t("oafBots.styleRecommendation.applied"));
   };
 
   const selectBot = (bot: OAFBot) => {
@@ -1944,6 +1991,13 @@ export default function OAFBotsPage() {
                   onPrimaryLanguageChange={(value) => updateForm("primary_language", value)}
                   onLanguageStrategyChange={(value) => updateForm("language_strategy", value)}
                 />
+                <StyleRecommendationPanel
+                  t={t}
+                  type={styleRecommendationType}
+                  preset={styleRecommendation}
+                  personalityOptions={personalityOptions}
+                  onApply={applyStyleRecommendation}
+                />
                 <TagPicker
                   label={t("oafBots.fields.personalityTags")}
                   values={form.personality_tags}
@@ -2700,6 +2754,61 @@ function AccountArchetypePicker({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function StyleRecommendationPanel({
+  t,
+  type,
+  preset,
+  personalityOptions,
+  onApply,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  type: AccountArchetypeKey;
+  preset: { personalityTags: string[]; voiceTone: string; mbti: string };
+  personalityOptions: ChipOption[];
+  onApply: () => void;
+}) {
+  return (
+    <div className="mb-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/8 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-[#1d9bf0]" />
+            <p className="text-sm font-semibold text-[#e7e9ea]">
+              {t("oafBots.styleRecommendation.title", { type: t(`oafBots.accountType.${type}.title`) })}
+            </p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.styleRecommendation.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onApply} className="shrink-0">
+          <Sparkles className="size-4" />
+          {t("oafBots.styleRecommendation.apply")}
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_1.4fr_0.45fr]">
+        <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+          <p className="text-[11px] font-semibold uppercase text-[#71767b]">{t("oafBots.fields.personalityTags")}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {preset.personalityTags.map((tag) => (
+              <span key={tag} className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-[11px] text-[#8ecdf8]">
+                {getChipLabel(tag, personalityOptions)}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+          <p className="text-[11px] font-semibold uppercase text-[#71767b]">{t("oafBots.fields.voiceTone")}</p>
+          <p className="mt-2 text-xs leading-5 text-[#e7e9ea]/82">{preset.voiceTone}</p>
+        </div>
+        <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+          <p className="text-[11px] font-semibold uppercase text-[#71767b]">{t("oafBots.fields.mbti")}</p>
+          <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{preset.mbti}</p>
+          <p className="mt-1 text-[11px] leading-4 text-[#71767b]">{t("oafBots.styleRecommendation.mbtiHint")}</p>
+        </div>
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const srcDir = path.join(root, "src");
 const dictDir = path.join(srcDir, "i18n", "dictionaries");
-const dictionaryFiles = ["en.ts", "zh-CN.ts", "zh-TW.ts", "ja.ts", "ko.ts", "ru.ts"];
+const dictionaryFiles = ["en.ts", "zh-CN.ts"];
 const primaryDictionaryFiles = ["en.ts", "zh-CN.ts"];
 
 function readText(filePath) {
@@ -87,12 +87,6 @@ for (const fileName of primaryDictionaryFiles) {
     failures.push(`${fileName} is missing statically used keys: ${missingUsed.length}`);
     failures.push(`  ${missingUsed.slice(0, 30).join(", ")}`);
   }
-}
-
-for (const fileName of dictionaryFiles.filter((fileName) => !primaryDictionaryFiles.includes(fileName))) {
-  const missing = difference(englishKeys, dictionaries[fileName]);
-  const extra = difference(dictionaries[fileName], englishKeys);
-  console.log(`${fileName}: translated_keys=${dictionaries[fileName].size}, english_fallback_keys=${missing.length}, extra_keys=${extra.length}`);
 }
 
 console.log(`en.ts: keys=${englishKeys.size}`);

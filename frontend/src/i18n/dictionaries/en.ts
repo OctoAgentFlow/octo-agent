@@ -3863,6 +3863,8 @@ export const dict: I18nDict = {
   "oafBots.section.identityDesc": "Define who this Bot represents, which X account it belongs to, and what perspective it speaks from.",
   "oafBots.section.brand": "Brand and product positioning",
   "oafBots.section.brandDesc": "Clarify the project, audience, value props, and differentiators so Auto Post becomes more specific and stable.",
+  "oafBots.brandLanguageHint.title": "English context is recommended",
+  "oafBots.brandLanguageHint.description": "English product positioning and source material usually generate more stable X copy. Chinese is also fine if this account mainly posts in Chinese.",
   "oafBots.promotion.title": "Promotion entry points",
   "oafBots.promotion.description": "After you configure website, community, and docs links, the Bot will only use these real links and follow your CTA policy before routing users there.",
   "oafBots.advancedProduct.title": "Advanced product and promotion details",

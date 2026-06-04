@@ -3831,6 +3831,8 @@ export const dict: I18nDict = {
   "oafBots.section.identityDesc": "定义这个 Bot 代表谁、绑定哪个 X 账号，以及它从什么视角说话。",
   "oafBots.section.brand": "品牌与产品定位",
   "oafBots.section.brandDesc": "把项目、受众、价值主张和差异化写清楚，自动发推会更具体、更稳定。",
+  "oafBots.brandLanguageHint.title": "建议优先用英文填写",
+  "oafBots.brandLanguageHint.description": "英文产品定位和素材通常能生成更稳定的 X 文案；如果这个账号主要发中文，也可以填写中文。",
   "oafBots.promotion.title": "推广入口",
   "oafBots.promotion.description": "配置官网、社群和文档入口后，Bot 只会使用这些真实链接，并按 CTA 规则决定什么时候引导用户访问。",
   "oafBots.advancedProduct.title": "高级产品与推广细节",

@@ -1797,6 +1797,15 @@ export default function OAFBotsPage() {
             {activeStep === "brand" ? (
               <WizardPanel title={t("oafBots.section.brand")} description={t("oafBots.section.brandDesc")}>
                 <div className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2 rounded-2xl border border-sky-400/20 bg-sky-400/[0.07] p-4 text-sm text-sky-50/85">
+                    <div className="flex items-start gap-3">
+                      <Info className="mt-0.5 size-4 shrink-0 text-[#1d9bf0]" />
+                      <div className="space-y-1">
+                        <p className="font-semibold text-[#e7e9ea]">{t("oafBots.brandLanguageHint.title")}</p>
+                        <p className="text-xs leading-5 text-[#8b98a5]">{t("oafBots.brandLanguageHint.description")}</p>
+                      </div>
+                    </div>
+                  </div>
                   <TextArea
                     label={t("oafBots.fields.projectOneLiner")}
                     value={form.project_one_liner}

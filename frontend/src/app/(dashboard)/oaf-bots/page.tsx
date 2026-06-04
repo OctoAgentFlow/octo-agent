@@ -2593,7 +2593,7 @@ function AccountArchetypePicker({
         <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.accountType.title")}</p>
         <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.accountType.description")}</p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
         {accountArchetypeKeys.map((type) => {
           const active = selected === type;
           return (
@@ -2606,11 +2606,11 @@ function AccountArchetypePicker({
                 active ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/12" : "border-[#2f3336] bg-black hover:bg-[#16181c]"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-semibold text-[#e7e9ea]">{t(`oafBots.accountType.${type}.title`)}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold leading-5 text-[#e7e9ea]">{t(`oafBots.accountType.${type}.title`)}</p>
                 {active ? <CheckCircle2 className="size-4 shrink-0 text-[#1d9bf0]" /> : null}
               </div>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{t(`oafBots.accountType.${type}.description`)}</p>
+              <p className="mt-2 text-xs leading-5 text-[#71767b]">{t(`oafBots.accountType.${type}.description`)}</p>
             </button>
           );
         })}

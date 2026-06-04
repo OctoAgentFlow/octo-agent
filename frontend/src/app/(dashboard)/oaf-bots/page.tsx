@@ -279,6 +279,62 @@ const styleRecommendationPresets: Record<AccountArchetypeKey, { personalityTags:
     mbti: "ISTJ",
   },
 };
+type TopicGuardrailRecommendationPreset = {
+  topics: string[];
+  contentPillars: string[];
+  forbiddenTopics: string[];
+  avoidClaims: string[];
+  complianceNotes: string;
+  safetyMode: OAFBotPayload["safety_mode"];
+};
+
+const topicGuardrailRecommendationPresets: Record<AccountArchetypeKey, TopicGuardrailRecommendationPreset> = {
+  brand: {
+    topics: ["AI Agent", "X Marketing", "Product Launch", "Community Building"],
+    contentPillars: ["Product value", "Use cases", "Market education", "Roadmap updates"],
+    forbiddenTopics: ["Investment advice", "Profit promises", "Impersonating officials"],
+    avoidClaims: ["Guaranteed returns", "Absolute superiority claims", "Unverified official partnership"],
+    complianceNotes:
+      "Do not promise guaranteed growth or engagement.\nDo not describe automation as spam at scale.\nDo not claim full replacement of human operators.\nDo not publish fake metrics or unverified partnerships.",
+    safetyMode: "balanced",
+  },
+  founder: {
+    topics: ["AI Agent", "Startup", "Product Launch", "X Marketing"],
+    contentPillars: ["Founder insight", "User pain points", "Product value", "Market education"],
+    forbiddenTopics: ["Investment advice", "Profit promises", "Price predictions"],
+    avoidClaims: ["Guaranteed returns", "Absolute superiority claims", "Legal or financial advice"],
+    complianceNotes:
+      "Do not overstate product results before evidence exists.\nDo not use aggressive hard-sell CTAs.\nDo not turn personal operator lessons into guaranteed outcomes.",
+    safetyMode: "balanced",
+  },
+  kol: {
+    topics: ["AI Agent", "Web3 Growth", "Crypto Trends", "Startup"],
+    contentPillars: ["Market education", "Use cases", "Community proof", "Founder insight"],
+    forbiddenTopics: ["Investment advice", "Profit promises", "Price predictions"],
+    avoidClaims: ["Guaranteed returns", "Token price prediction", "Legal or financial advice"],
+    complianceNotes:
+      "Separate opinion from facts.\nDo not imply inside information or official partnerships.\nDo not make token, price, or investment recommendations.",
+    safetyMode: "balanced",
+  },
+  community: {
+    topics: ["Community Building", "Product Launch", "SocialFi", "Web3 Growth"],
+    contentPillars: ["Community proof", "Roadmap updates", "Ecosystem collaborations", "Use cases"],
+    forbiddenTopics: ["Investment advice", "Profit promises", "Aggressive language"],
+    avoidClaims: ["Guaranteed returns", "Unverified official partnership", "Absolute superiority claims"],
+    complianceNotes:
+      "Keep community expectations realistic.\nDo not promise roadmap delivery dates unless verified.\nDo not use confrontational language toward users or competitors.",
+    safetyMode: "conservative",
+  },
+  agency: {
+    topics: ["X Marketing", "Community Building", "Product Launch", "Web3 Growth"],
+    contentPillars: ["Use cases", "User pain points", "Product value", "Market education"],
+    forbiddenTopics: ["Investment advice", "Profit promises", "Impersonating officials"],
+    avoidClaims: ["Guaranteed returns", "Absolute superiority claims", "Unverified official partnership"],
+    complianceNotes:
+      "Keep client-safe wording.\nDo not imply outcomes the client did not approve.\nDo not publish unsupported metrics, testimonials, or partnership claims.",
+    safetyMode: "conservative",
+  },
+};
 const accountArchetypeOccupationKeywords: Record<AccountArchetypeKey, string[]> = {
   brand: ["official brand", "brand account", "official account", "product account"],
   founder: ["founder", "operator", "product operator", "product manager", "builder", "product-led growth"],
@@ -737,6 +793,7 @@ export default function OAFBotsPage() {
   const selectedAccountArchetype = useMemo(() => detectAccountArchetype(form), [form]);
   const styleRecommendationType = selectedAccountArchetype || "brand";
   const styleRecommendation = styleRecommendationPresets[styleRecommendationType];
+  const topicGuardrailRecommendation = topicGuardrailRecommendationPresets[styleRecommendationType];
   const canTestBot = personaCompleteness >= 40;
   const nextSetupStep = wizardStepOrder.find((step) => !stepCompletion[step]) ?? "test";
   const showMatrixPanel = bots.length > 1;
@@ -1137,6 +1194,19 @@ export default function OAFBotsPage() {
       mbti: styleRecommendation.mbti,
     }));
     pushToast(t("oafBots.styleRecommendation.applied"));
+  };
+
+  const applyTopicGuardrailRecommendation = () => {
+    setForm((prev) => ({
+      ...prev,
+      topics: mergeUniqueValues(prev.topics, topicGuardrailRecommendation.topics),
+      content_pillars: mergeUniqueValues(prev.content_pillars, topicGuardrailRecommendation.contentPillars),
+      forbidden_topics: mergeUniqueValues(prev.forbidden_topics, topicGuardrailRecommendation.forbiddenTopics),
+      avoid_claims: mergeUniqueValues(prev.avoid_claims, topicGuardrailRecommendation.avoidClaims),
+      compliance_notes: mergeRuleText(prev.compliance_notes, topicGuardrailRecommendation.complianceNotes),
+      safety_mode: topicGuardrailRecommendation.safetyMode || prev.safety_mode,
+    }));
+    pushToast(t("oafBots.topicGuardrailRecommendation.applied"));
   };
 
   const selectBot = (bot: OAFBot) => {
@@ -2038,15 +2108,48 @@ export default function OAFBotsPage() {
 
             {activeStep === "topics" ? (
               <WizardPanel title={t("oafBots.section.topics")} description={t("oafBots.section.topicsDesc")}>
-                <TagPicker
-                  label={t("oafBots.fields.topics")}
-                  values={form.topics}
-                  options={topicOptions}
-                  onChange={(values) => updateForm("topics", values)}
-                  helper={t("oafBots.helpers.topics")}
-                  placeholder={t("oafBots.placeholders.tagInput")}
-                  recommended
+                <TopicGuardrailRecommendationPanel
+                  t={t}
+                  type={styleRecommendationType}
+                  preset={topicGuardrailRecommendation}
+                  topicOptions={topicOptions}
+                  contentPillarOptions={contentPillarOptions}
+                  forbiddenTopicOptions={forbiddenTopicOptions}
+                  avoidClaimOptions={avoidClaimOptions}
+                  onApply={applyTopicGuardrailRecommendation}
                 />
+                <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+                  <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.topicStructure.prioritizeTitle")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.topicStructure.prioritizeDescription")}</p>
+                    <div className="mt-4">
+                      <TagPicker
+                        label={t("oafBots.fields.topics")}
+                        values={form.topics}
+                        options={topicOptions}
+                        onChange={(values) => updateForm("topics", values)}
+                        helper={t("oafBots.helpers.topics")}
+                        placeholder={t("oafBots.placeholders.tagInput")}
+                        recommended
+                      />
+                    </div>
+                  </div>
+                  <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.topicStructure.pillarsTitle")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.topicStructure.pillarsDescription")}</p>
+                    <div className="mt-4">
+                      <TagPicker
+                        label={t("oafBots.fields.contentPillars")}
+                        values={form.content_pillars}
+                        options={contentPillarOptions}
+                        onChange={(values) => updateForm("content_pillars", values)}
+                        helper={t("oafBots.helpers.contentPillars")}
+                        placeholder={t("oafBots.placeholders.tagInput")}
+                        recommended
+                      />
+                    </div>
+                  </div>
+                </div>
                 <SafetyRulesPanel
                   t={t}
                   safetyMode={form.safety_mode}
@@ -2127,15 +2230,6 @@ export default function OAFBotsPage() {
                     placeholder={t("oafBots.placeholders.growthGoal")}
                     helper={t("oafBots.helpers.growthGoal")}
                     options={growthGoalOptions}
-                    recommended
-                  />
-                  <TagPicker
-                    label={t("oafBots.fields.contentPillars")}
-                    values={form.content_pillars}
-                    options={contentPillarOptions}
-                    onChange={(values) => updateForm("content_pillars", values)}
-                    helper={t("oafBots.helpers.contentPillars")}
-                    placeholder={t("oafBots.placeholders.tagInput")}
                     recommended
                   />
                   <ChipTextArea
@@ -2657,6 +2751,10 @@ function mergeUniqueValues(current: string[] = [], additions: string[] = []) {
   return Array.from(new Set([...current, ...additions].map((item) => item.trim()).filter(Boolean)));
 }
 
+function mergeRuleText(current = "", additions = "") {
+  return mergeUniqueValues(current.split(/\n+/), additions.split(/\n+/)).join("\n");
+}
+
 function detectAccountArchetype(form: OAFBotPayload): AccountArchetypeKey | null {
   const matched = accountArchetypeKeys.find((key) => form.occupation === accountArchetypePresets[key].occupation);
   if (matched) return matched;
@@ -2809,6 +2907,84 @@ function StyleRecommendationPanel({
           <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{preset.mbti}</p>
           <p className="mt-1 text-[11px] leading-4 text-[#71767b]">{t("oafBots.styleRecommendation.mbtiHint")}</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TopicGuardrailRecommendationPanel({
+  t,
+  type,
+  preset,
+  topicOptions,
+  contentPillarOptions,
+  forbiddenTopicOptions,
+  avoidClaimOptions,
+  onApply,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  type: AccountArchetypeKey;
+  preset: TopicGuardrailRecommendationPreset;
+  topicOptions: ChipOption[];
+  contentPillarOptions: ChipOption[];
+  forbiddenTopicOptions: ChipOption[];
+  avoidClaimOptions: ChipOption[];
+  onApply: () => void;
+}) {
+  const complianceRuleCount = preset.complianceNotes.split(/\n+/).filter((line) => line.trim()).length;
+  return (
+    <div className="mb-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/8 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-[#1d9bf0]" />
+            <p className="text-sm font-semibold text-[#e7e9ea]">
+              {t("oafBots.topicGuardrailRecommendation.title", { type: t(`oafBots.accountType.${type}.title`) })}
+            </p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.topicGuardrailRecommendation.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onApply} className="shrink-0">
+          <Sparkles className="size-4" />
+          {t("oafBots.topicGuardrailRecommendation.apply")}
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-3">
+        <RecommendationPreviewCard
+          title={t("oafBots.topicGuardrailRecommendation.prioritize")}
+          values={preset.topics.map((item) => getChipLabel(item, topicOptions))}
+        />
+        <RecommendationPreviewCard
+          title={t("oafBots.topicGuardrailRecommendation.pillars")}
+          values={preset.contentPillars.map((item) => getChipLabel(item, contentPillarOptions))}
+        />
+        <RecommendationPreviewCard
+          title={t("oafBots.topicGuardrailRecommendation.boundaries")}
+          values={[
+            ...preset.forbiddenTopics.map((item) => getChipLabel(item, forbiddenTopicOptions)),
+            ...preset.avoidClaims.map((item) => getChipLabel(item, avoidClaimOptions)),
+            t("oafBots.topicGuardrailRecommendation.ruleCount", { count: complianceRuleCount }),
+          ]}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#8b98a5]">
+        <Lock className="size-3.5 text-amber-300" />
+        <span>{t("oafBots.topicGuardrailRecommendation.safetyMode", { mode: t(`oafBots.safetyRules.mode.${preset.safetyMode}.title`) })}</span>
+      </div>
+    </div>
+  );
+}
+
+function RecommendationPreviewCard({ title, values }: { title: string; values: string[] }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="text-[11px] font-semibold uppercase text-[#71767b]">{title}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {values.map((value) => (
+          <span key={value} className="max-w-full rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-[11px] text-[#8ecdf8] [overflow-wrap:anywhere]">
+            {value}
+          </span>
+        ))}
       </div>
     </div>
   );

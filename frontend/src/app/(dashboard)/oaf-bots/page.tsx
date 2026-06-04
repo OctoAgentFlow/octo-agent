@@ -2697,7 +2697,7 @@ function OAFBotFocusPanel({
               <Sparkles className="size-4" />
               {primaryAction}
             </Button>
-            <Link href="/daily-x-queue" className="inline-flex">
+            <Link href={bot?.id ? `/daily-x-queue?bot_id=${bot.id}` : "/daily-x-queue"} className="inline-flex">
               <Button type="button" variant="outline">
                 <ListChecks className="size-4" />
                 {t("oafBots.focus.dailyQueueCta")}
@@ -3087,7 +3087,7 @@ function BotRelationshipCard({
                 title={t("oafBots.relationship.readiness.dailyQueue")}
                 description={dailyQueueReady ? t("oafBots.relationship.readiness.dailyQueueReady") : t("oafBots.relationship.readiness.dailyQueueMissing")}
                 ready={dailyQueueReady}
-                href="/daily-x-queue"
+                href={`/daily-x-queue?bot_id=${bot.id}`}
                 action={t("oafBots.relationship.openDailyQueue")}
               />
               <AutoPostReadinessTile
@@ -3106,7 +3106,7 @@ function BotRelationshipCard({
                 <p className="text-sm font-semibold text-[#d7ebff]">{t("oafBots.relationship.dailyQueueTitle")}</p>
                 <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.relationship.dailyQueueDescription")}</p>
               </div>
-              <Link href="/daily-x-queue" className="shrink-0 text-xs font-semibold text-[#8ecdf8] hover:text-white">
+              <Link href={`/daily-x-queue?bot_id=${bot.id}`} className="shrink-0 text-xs font-semibold text-[#8ecdf8] hover:text-white">
                 {t("oafBots.relationship.openDailyQueue")}
               </Link>
             </div>
@@ -4525,6 +4525,20 @@ function SamplePanel({
               onToggleLearningIssue={onToggleLearningIssue}
               t={t}
             />
+            {selectedID ? (
+              <div className="flex flex-col gap-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.samples.dailyDraftTitle")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.samples.dailyDraftHint")}</p>
+                </div>
+                <Link href={`/daily-x-queue?bot_id=${selectedID}`} className="inline-flex shrink-0">
+                  <Button type="button" size="sm">
+                    <ListChecks className="size-4" />
+                    {t("oafBots.samples.dailyDraftCta")}
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
             {appliedLearningRuleIssues.length > 0 ? (
               <LearningImpactCompare
                 t={t}

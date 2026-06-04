@@ -71,6 +71,13 @@ function contentItemAvailableForBot(item: ContentLibraryItemApi, bot: OAFBot) {
     (!itemAccountID || (botAccountID > 0 && itemAccountID === botAccountID));
 }
 
+function requestedBotIDFromLocation() {
+  if (typeof window === "undefined") return 0;
+  const raw = new URLSearchParams(window.location.search).get("bot_id");
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : 0;
+}
+
 function knownDailyXQueueErrorKey(message: string) {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return "";
@@ -154,12 +161,13 @@ export default function DailyXQueuePage() {
   }, [availableContentItems, overview?.source_material, selectedContentID]);
   const sourcePoolMode = Boolean(selectedBot && availableContentItems.length > 0);
   const showManualSourceForm = !selectedBot || (!contentItemsLoading && availableContentItems.length === 0);
-  const setupReady = Boolean(overview?.context?.bot_id);
-  const sourceReady = Boolean(overview?.context?.content_library_id);
-  const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
+  const setupReady = Boolean(overview?.context?.bot_id && (!selectedBotID || overview.context.bot_id === selectedBotID));
+  const sourceReady = setupReady && Boolean(overview?.context?.content_library_id);
+  const drafts = useMemo(() => setupReady ? overview?.drafts || [] : [], [overview?.drafts, setupReady]);
   const botName = selectedBot?.name || overview?.bot?.name || "OAF Bot";
-  const reviewActionsCount = overview?.review_actions_count || 0;
-  const approvedOrCopiedCount = overview?.approved_or_copied_count || 0;
+  const reviewActionsCount = setupReady ? overview?.review_actions_count || 0 : 0;
+  const approvedOrCopiedCount = setupReady ? overview?.approved_or_copied_count || 0 : 0;
+  const activated = setupReady && Boolean(overview?.activated);
   const setupCanSave = usingExistingBot
     ? Boolean((setupForm.x_handle || selectedBotHandle).trim())
     : Boolean(setupForm.x_handle.trim() && setupForm.product_context.trim());
@@ -191,6 +199,7 @@ export default function DailyXQueuePage() {
   const handleSelectBot = useCallback((value: string) => {
     const id = Number(value);
     setSelectedBotID(id);
+    setSelectedContentID(0);
     const bot = bots.find((item) => item.id === id) || null;
     applySelectedBotToSetup(bot);
   }, [applySelectedBotToSetup, bots]);
@@ -206,7 +215,19 @@ export default function DailyXQueuePage() {
       setOverview(data);
       setBots(botData.items);
       setAccounts(accountData.items);
-      if (data.context) {
+      const requestedBotID = requestedBotIDFromLocation();
+      const requestedBot = requestedBotID ? botData.items.find((bot) => bot.id === requestedBotID) || null : null;
+      if (requestedBot) {
+        setSelectedBotID(requestedBot.id);
+        setSetupForm({
+          x_handle: botAccountHandle(requestedBot, accountData.items),
+          website_url: requestedBot.website_url || "",
+          product_context: botProductContext(requestedBot),
+          target_audience: requestedBot.target_audience || "",
+          voice_preference: requestedBot.voice_tone || defaultVoicePreference,
+          guardrails: joinBotGuardrails(requestedBot),
+        });
+      } else if (data.context) {
         setSelectedBotID(data.context.bot_id || 0);
         setSetupForm({
           x_handle: data.context.x_handle || "",
@@ -217,7 +238,8 @@ export default function DailyXQueuePage() {
           guardrails: data.context.guardrails || "",
         });
       }
-      if (data.source_material) {
+      const contextMatchesRequestedBot = !requestedBot || data.context?.bot_id === requestedBot.id;
+      if (data.source_material && contextMatchesRequestedBot) {
         setSelectedContentID(data.source_material.id);
         setSourceForm({
           title: data.source_material.title || "",
@@ -541,7 +563,7 @@ export default function DailyXQueuePage() {
           </p>
         </div>
         <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-sm text-[#8b98a5]">
-          {overview?.activated ? (
+          {activated ? (
             <span className="font-semibold text-emerald-200">{t("dailyXQueue.activated")}</span>
           ) : (
             <span>{t("dailyXQueue.progress.nextLabel", { step: nextActivationStep?.label || t("dailyXQueue.progress.done") })}</span>

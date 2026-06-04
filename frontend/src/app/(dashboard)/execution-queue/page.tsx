@@ -453,6 +453,13 @@ export default function ExecutionQueuePage() {
   const loadToastRef = useRef(pushToast);
   const loadTRef = useRef(t);
   const lastLoadErrorToastRef = useRef("");
+  const syncingFiltersFromUrlRef = useRef(false);
+  const filterStateRef = useRef({
+    type: typeFilter,
+    status: statusFilter,
+    mode: modeFilter,
+    publishOutcome: publishOutcomeFilter,
+  });
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [moduleEnabled, setModuleEnabled] = useState<Record<ModuleType, boolean>>({
     post: true,
@@ -467,6 +474,22 @@ export default function ExecutionQueuePage() {
   }, [pushToast, t]);
 
   useEffect(() => {
+    filterStateRef.current = {
+      type: typeFilter,
+      status: statusFilter,
+      mode: modeFilter,
+      publishOutcome: publishOutcomeFilter,
+    };
+  }, [modeFilter, publishOutcomeFilter, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    const current = filterStateRef.current;
+    const hasMismatch = current.type !== urlFilters.type ||
+      current.status !== urlFilters.status ||
+      current.mode !== urlFilters.mode ||
+      current.publishOutcome !== urlFilters.publishOutcome;
+    if (!hasMismatch) return;
+    syncingFiltersFromUrlRef.current = true;
     setTypeFilter((current) => (current === urlFilters.type ? current : urlFilters.type));
     setStatusFilter((current) => (current === urlFilters.status ? current : urlFilters.status));
     setModeFilter((current) => (current === urlFilters.mode ? current : urlFilters.mode));
@@ -474,6 +497,17 @@ export default function ExecutionQueuePage() {
   }, [urlFilters.mode, urlFilters.publishOutcome, urlFilters.status, urlFilters.type]);
 
   useEffect(() => {
+    if (syncingFiltersFromUrlRef.current) {
+      if (
+        typeFilter === urlFilters.type &&
+        statusFilter === urlFilters.status &&
+        modeFilter === urlFilters.mode &&
+        publishOutcomeFilter === urlFilters.publishOutcome
+      ) {
+        syncingFiltersFromUrlRef.current = false;
+      }
+      return;
+    }
     const next = new URLSearchParams();
     if (typeFilter !== "all") next.set("type", typeFilter);
     if (statusFilter !== "all") next.set("status", statusFilter);
@@ -490,7 +524,7 @@ export default function ExecutionQueuePage() {
     if (href !== currentHref) {
       router.replace(href, { scroll: false });
     }
-  }, [modeFilter, pathname, publishOutcomeFilter, router, searchKey, statusFilter, typeFilter, urlFeedbackIssue, urlFocus.sourceID, urlFocus.type]);
+  }, [modeFilter, pathname, publishOutcomeFilter, router, searchKey, statusFilter, typeFilter, urlFeedbackIssue, urlFilters.mode, urlFilters.publishOutcome, urlFilters.status, urlFilters.type, urlFocus.sourceID, urlFocus.type]);
 
   const loadQueue = useCallback(async (options?: { forceToast?: boolean }) => {
     const seq = loadSeqRef.current + 1;

@@ -246,10 +246,10 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
 };
 const accountArchetypeOccupationKeywords: Record<AccountArchetypeKey, string[]> = {
   brand: ["official brand", "brand account", "official account", "product account"],
-  founder: ["founder", "operator", "product operator", "product manager", "builder"],
+  founder: ["founder", "operator", "product operator", "product manager", "builder", "product-led growth"],
   kol: ["kol", "creator", "influencer"],
   community: ["community"],
-  agency: ["agency", "managed account"],
+  agency: ["agency", "managed account", "client operator"],
 };
 const accountArchetypeDetectionOrder: AccountArchetypeKey[] = ["brand", "agency", "community", "kol", "founder"];
 
@@ -364,14 +364,23 @@ const mbtiValues = [
 
 const recommendedOptionValues: Record<string, Record<string, string>> = {
   occupation: {
+    aiSocialOpsOperator: "AI social operations product operator",
+    aiProductOperator: "AI product operator",
+    saasFounderOperator: "SaaS founder / operator",
+    founderOperatorAIWorkflows: "Founder/operator building AI workflows",
     web3GrowthManager: "Web3 Growth Manager",
+    web3GrowthOperator: "Web3 Growth Operator",
     aiProductManager: "AI Product Manager",
     cryptoResearcher: "Crypto Researcher",
+    communityGrowthLead: "Community Growth Lead",
     communityManager: "Community Manager",
+    kolCreatorOperator: "KOL / Creator Operator",
     founder: "Founder",
     developerAdvocate: "Developer Advocate",
     contentCreator: "Content Creator",
     kolAssistant: "KOL Assistant",
+    agencyClientOperator: "Agency Client Operator",
+    productLedGrowthOperator: "Product-led Growth Operator",
   },
   industry: {
     ai: "AI",
@@ -700,14 +709,23 @@ export default function OAFBotsPage() {
 
   const occupationOptions = useMemo(
     () => optionKeys("occupation", [
+      "aiSocialOpsOperator",
+      "aiProductOperator",
+      "saasFounderOperator",
+      "founderOperatorAIWorkflows",
       "web3GrowthManager",
+      "web3GrowthOperator",
       "aiProductManager",
       "cryptoResearcher",
+      "communityGrowthLead",
       "communityManager",
+      "kolCreatorOperator",
       "founder",
       "developerAdvocate",
       "contentCreator",
       "kolAssistant",
+      "agencyClientOperator",
+      "productLedGrowthOperator",
     ], t),
     [t],
   );

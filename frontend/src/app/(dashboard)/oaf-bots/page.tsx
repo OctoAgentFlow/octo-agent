@@ -387,12 +387,23 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     web3: "Web3",
     defi: "DeFi",
     socialfi: "SocialFi",
+    b2bSoftware: "B2B Software",
     nft: "NFT / Digital Collectibles",
     gaming: "Gaming",
     saas: "SaaS",
     creatorEconomy: "Creator Economy",
+    consumerApps: "Consumer Apps",
+    fintech: "FinTech",
+    ecommerce: "E-commerce",
+    edtech: "Education / EdTech",
+    mediaNewsletter: "Media / Newsletter",
+    communityDao: "Community / DAO",
+    marketingGrowth: "Marketing / Growth",
+    agencyServices: "Agency / Services",
     cryptoTrading: "Crypto Trading",
     developerTools: "Developer Tools",
+    realEstate: "Real Estate",
+    healthWellness: "Health / Wellness",
   },
   personality: {
     professional: "Professional",
@@ -730,7 +741,34 @@ export default function OAFBotsPage() {
     [t],
   );
   const industryOptions = useMemo(
-    () => optionKeys("industry", ["ai", "web3", "defi", "socialfi", "nft", "gaming", "saas", "creatorEconomy", "cryptoTrading", "developerTools"], t),
+    () =>
+      optionKeys(
+        "industry",
+        [
+          "ai",
+          "web3",
+          "socialfi",
+          "saas",
+          "marketingGrowth",
+          "creatorEconomy",
+          "developerTools",
+          "b2bSoftware",
+          "fintech",
+          "ecommerce",
+          "edtech",
+          "mediaNewsletter",
+          "communityDao",
+          "consumerApps",
+          "agencyServices",
+          "gaming",
+          "cryptoTrading",
+          "defi",
+          "nft",
+          "realEstate",
+          "healthWellness",
+        ],
+        t,
+      ),
     [t],
   );
   const personalityOptions = useMemo(
@@ -1722,6 +1760,7 @@ export default function OAFBotsPage() {
                     helper={t("oafBots.helpers.industry")}
                     options={industryOptions}
                     maxValues={5}
+                    initialOptionCount={10}
                     limitText={t("oafBots.industry.maxHint")}
                   />
                   <details className="md:col-span-2 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
@@ -3866,6 +3905,7 @@ function TagPicker({
   placeholder,
   recommended,
   maxValues,
+  initialOptionCount,
   limitText,
 }: {
   label: string;
@@ -3876,6 +3916,7 @@ function TagPicker({
   placeholder?: string;
   recommended?: boolean;
   maxValues?: number;
+  initialOptionCount?: number;
   limitText?: string;
 }) {
   const { t } = useT();
@@ -3932,7 +3973,7 @@ function TagPicker({
           </div>
         </div>
       </FieldShell>
-      <ChipOptions options={options} onPick={addValue} selected={values} disableUnselected={maxReached} />
+      <ChipOptions options={options} onPick={addValue} selected={values} disableUnselected={maxReached} maxInitial={initialOptionCount} />
       {limitText ? <p className={`text-xs leading-relaxed ${maxReached ? "text-amber-100/80" : "text-[#71767b]"}`}>{limitText}</p> : null}
     </div>
   );

@@ -571,6 +571,13 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     brandAuthority: "Build brand authority",
     dmConversion: "Convert through DMs",
   },
+  ctaPresets: {
+    websiteIntro: "Use the website link only when explaining product capability or inviting users to try the product.",
+    tryOafBot: "Use a soft CTA such as 'try OAF Bot' only after a concrete workflow or use case.",
+    followCases: "Invite users to follow upcoming product cases or operator notes.",
+    telegramCommunity: "Use Telegram only for community, support, or campaign questions.",
+    noLinkEveryPost: "Do not attach links to every output; prefer value-first posts.",
+  },
   voicePresets: {
     concise: "Concise professional voice. Use short sentences, clear structure, and practical product language. Avoid hype and vague AI claims.",
     natural: "Relaxed natural voice. Sound conversational and useful, but keep the message focused and avoid filler.",
@@ -895,6 +902,10 @@ export default function OAFBotsPage() {
   );
   const growthGoalOptions = useMemo(
     () => optionKeys("growthGoals", ["activity", "followers", "website", "trial", "leads", "brandAuthority", "dmConversion"], t),
+    [t],
+  );
+  const ctaOptions = useMemo(
+    () => optionKeys("ctaPresets", ["websiteIntro", "tryOafBot", "followCases", "telegramCommunity", "noLinkEveryPost"], t),
     [t],
   );
   const voicePresetOptions = useMemo(
@@ -1884,27 +1895,37 @@ export default function OAFBotsPage() {
                     <summary className="cursor-pointer text-sm font-medium text-white">{t("oafBots.advancedIdentity.title")}</summary>
                     <p className="mt-2 text-xs leading-relaxed text-white/45">{t("oafBots.advancedIdentity.description")}</p>
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <SelectField
-                    label={t("oafBots.fields.ageRange")}
-                    value={form.age_range}
-                    onChange={(value) => updateForm("age_range", value)}
-                    options={ageOptions}
-                    helper={t("oafBots.helpers.ageRange")}
-                  />
-                  <SelectField
-                    label={t("oafBots.fields.gender")}
-                    value={form.gender}
-                    onChange={(value) => updateForm("gender", value)}
-                    options={genderOptions}
-                    helper={t("oafBots.helpers.gender")}
-                  />
-                  <SelectField
-                    label={t("oafBots.fields.education")}
-                    value={form.education}
-                    onChange={(value) => updateForm("education", value)}
-                    options={educationOptions}
-                    helper={t("oafBots.helpers.education")}
-                  />
+                      <SelectField
+                        label={t("oafBots.fields.ageRange")}
+                        value={form.age_range}
+                        onChange={(value) => updateForm("age_range", value)}
+                        options={ageOptions}
+                        helper={t("oafBots.helpers.ageRange")}
+                      />
+                      <SelectField
+                        label={t("oafBots.fields.gender")}
+                        value={form.gender}
+                        onChange={(value) => updateForm("gender", value)}
+                        options={genderOptions}
+                        helper={t("oafBots.helpers.gender")}
+                      />
+                      <SelectField
+                        label={t("oafBots.fields.education")}
+                        value={form.education}
+                        onChange={(value) => updateForm("education", value)}
+                        options={educationOptions}
+                        helper={t("oafBots.helpers.education")}
+                      />
+                      <div className="md:col-span-3">
+                        <TextArea
+                          label={t("oafBots.fields.identitySummary")}
+                          value={form.identity_summary}
+                          onChange={(value) => updateForm("identity_summary", value)}
+                          placeholder={t("oafBots.placeholders.identitySummary")}
+                          helper={t("oafBots.helpers.identitySummary")}
+                          minHeightClass="min-h-[140px]"
+                        />
+                      </div>
                     </div>
                   </details>
                 </div>
@@ -2217,15 +2238,16 @@ export default function OAFBotsPage() {
 
             {activeStep === "goals" ? (
               <WizardPanel title={t("oafBots.section.goals")} description={t("oafBots.section.goalsDesc")}>
+                <div className="mb-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/8 p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="mt-0.5 size-4 shrink-0 text-[#1d9bf0]" />
+                    <div>
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.growthRouting.title")}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.growthRouting.description")}</p>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                  <TextArea
-                    label={t("oafBots.fields.identitySummary")}
-                    value={form.identity_summary}
-                    onChange={(value) => updateForm("identity_summary", value)}
-                    placeholder={t("oafBots.placeholders.identitySummary")}
-                    helper={t("oafBots.helpers.identitySummary")}
-                    recommended
-                  />
                   <ChipTextArea
                     label={t("oafBots.fields.growthGoal")}
                     value={form.growth_goal}
@@ -2241,7 +2263,7 @@ export default function OAFBotsPage() {
                     onChange={(value) => updateForm("preferred_cta", value)}
                     placeholder={t("oafBots.placeholders.preferredCTA")}
                     helper={t("oafBots.helpers.preferredCTA")}
-                    options={growthGoalOptions}
+                    options={ctaOptions}
                   />
                   <details className="xl:col-span-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                     <summary className="cursor-pointer list-none text-sm font-semibold text-[#e7e9ea]">
@@ -2249,13 +2271,6 @@ export default function OAFBotsPage() {
                     </summary>
                     <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedGoals.description")}</p>
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                      <TextArea
-                        label={t("oafBots.fields.contentObjectives")}
-                        value={form.content_objectives}
-                        onChange={(value) => updateForm("content_objectives", value)}
-                        placeholder={t("oafBots.placeholders.contentObjectives")}
-                        helper={t("oafBots.helpers.contentObjectives")}
-                      />
                       <TagPicker
                         label={t("oafBots.fields.hashtags")}
                         values={form.hashtags}
@@ -2264,16 +2279,14 @@ export default function OAFBotsPage() {
                         helper={t("oafBots.helpers.hashtags")}
                         placeholder={t("oafBots.placeholders.tagInput")}
                       />
-                      <div className="xl:col-span-2">
-                        <TagPicker
-                          label={t("oafBots.fields.keywords")}
-                          values={form.keywords}
-                          options={keywordOptions}
-                          onChange={(values) => updateForm("keywords", values)}
-                          helper={t("oafBots.helpers.keywords")}
-                          placeholder={t("oafBots.placeholders.tagInput")}
-                        />
-                      </div>
+                      <TagPicker
+                        label={t("oafBots.fields.keywords")}
+                        values={form.keywords}
+                        options={keywordOptions}
+                        onChange={(values) => updateForm("keywords", values)}
+                        helper={t("oafBots.helpers.keywords")}
+                        placeholder={t("oafBots.placeholders.tagInput")}
+                      />
                     </div>
                   </details>
                 </div>
@@ -2659,7 +2672,7 @@ function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<Wi
     brand: Boolean(form.project_one_liner.trim() && (form.target_audience.trim() || form.core_value_props.trim())),
     style: Boolean((form.primary_language.trim() && form.language_strategy.trim()) || form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
     topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
-    goals: Boolean(form.identity_summary.trim() && form.growth_goal.trim() && (form.content_pillars.length > 0 || form.content_objectives.trim())),
+    goals: Boolean(form.growth_goal.trim()),
     test: hasSavedBot,
   };
 }

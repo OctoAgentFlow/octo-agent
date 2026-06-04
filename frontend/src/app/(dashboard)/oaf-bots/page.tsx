@@ -1629,7 +1629,7 @@ export default function OAFBotsPage() {
           </div>
         </SectionCard>
 
-        <div id="oaf-bot-editor" className="grid min-w-0 scroll-mt-24 gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div id="oaf-bot-editor" className="grid min-w-0 scroll-mt-24 gap-5">
           <SectionCard
             title={selectedBot ? t("oafBots.form.editTitle") : t("oafBots.form.createTitle")}
             description={t("oafBots.form.description")}
@@ -2212,7 +2212,7 @@ export default function OAFBotsPage() {
             </div>
           </SectionCard>
 
-          <div className="space-y-5">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
             <BotRelationshipCard
               t={t}
               bot={selectedBot}
@@ -2245,12 +2245,14 @@ export default function OAFBotsPage() {
               isDefaultLanguageConfig={isDefaultLanguageConfig}
             />
             {selectedBot ? (
-              <OAFBotDangerZone
-                t={t}
-                botName={selectedBot.name || t("oafBots.preview.unnamed")}
-                deleting={deletingBot}
-                onDelete={deleteSelectedBot}
-              />
+              <div className="xl:col-span-2">
+                <OAFBotDangerZone
+                  t={t}
+                  botName={selectedBot.name || t("oafBots.preview.unnamed")}
+                  deleting={deletingBot}
+                  onDelete={deleteSelectedBot}
+                />
+              </div>
             ) : null}
           </div>
         </div>

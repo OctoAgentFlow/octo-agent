@@ -1844,60 +1844,86 @@ export default function OAFBotsPage() {
                       {t("oafBots.advancedProduct.title")}
                     </summary>
                     <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedProduct.description")}</p>
-                    <div className="mt-5 grid gap-5 md:grid-cols-2">
-                      <TextArea
-                        label={t("oafBots.fields.productFeatures")}
-                        value={form.product_features}
-                        onChange={(value) => updateForm("product_features", value)}
-                        placeholder={t("oafBots.placeholders.productFeatures")}
-                        helper={t("oafBots.helpers.productFeatures")}
-                        minHeightClass="min-h-[150px]"
-                      />
-                      <TextArea
-                        label={t("oafBots.fields.differentiators")}
-                        value={form.differentiators}
-                        onChange={(value) => updateForm("differentiators", value)}
-                        placeholder={t("oafBots.placeholders.differentiators")}
-                        helper={t("oafBots.helpers.differentiators")}
-                        minHeightClass="min-h-[150px]"
-                      />
-                      <TextField
-                        label={t("oafBots.fields.websiteUrl")}
-                        value={form.website_url}
-                        onChange={(value) => updateForm("website_url", value)}
-                        placeholder={t("oafBots.placeholders.websiteUrl")}
-                        helper={t("oafBots.helpers.websiteUrl")}
-                      />
-                      <TextField
-                        label={t("oafBots.fields.telegramUrl")}
-                        value={form.telegram_url}
-                        onChange={(value) => updateForm("telegram_url", value)}
-                        placeholder={t("oafBots.placeholders.telegramUrl")}
-                        helper={t("oafBots.helpers.telegramUrl")}
-                      />
-                      <TextField
-                        label={t("oafBots.fields.discordUrl")}
-                        value={form.discord_url}
-                        onChange={(value) => updateForm("discord_url", value)}
-                        placeholder={t("oafBots.placeholders.discordUrl")}
-                        helper={t("oafBots.helpers.discordUrl")}
-                      />
-                      <TextField
-                        label={t("oafBots.fields.docsUrl")}
-                        value={form.docs_url}
-                        onChange={(value) => updateForm("docs_url", value)}
-                        placeholder={t("oafBots.placeholders.docsUrl")}
-                        helper={t("oafBots.helpers.docsUrl")}
-                      />
-                      <div className="md:col-span-2">
-                        <TextArea
-                          label={t("oafBots.fields.ctaPolicy")}
-                          value={form.cta_policy}
-                          onChange={(value) => updateForm("cta_policy", value)}
-                          placeholder={t("oafBots.placeholders.ctaPolicy")}
-                          helper={t("oafBots.helpers.ctaPolicy")}
-                          minHeightClass="min-h-[170px]"
-                        />
+                    <div className="mt-5 space-y-5">
+                      <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                        <div className="mb-4">
+                          <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.advancedProduct.memoryTitle")}</p>
+                          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedProduct.memoryDescription")}</p>
+                        </div>
+                        <div className="grid gap-5">
+                          <TextArea
+                            label={t("oafBots.fields.productFeatures")}
+                            value={form.product_features}
+                            onChange={(value) => updateForm("product_features", value)}
+                            placeholder={t("oafBots.placeholders.productFeatures")}
+                            helper={t("oafBots.helpers.productFeatures")}
+                            minHeightClass="min-h-[180px]"
+                          />
+                          <TextArea
+                            label={t("oafBots.fields.differentiators")}
+                            value={form.differentiators}
+                            onChange={(value) => updateForm("differentiators", value)}
+                            placeholder={t("oafBots.placeholders.differentiators")}
+                            helper={t("oafBots.helpers.differentiators")}
+                            minHeightClass="min-h-[180px]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                        <div className="mb-4">
+                          <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.advancedProduct.routingTitle")}</p>
+                          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedProduct.routingDescription")}</p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <TextField
+                            label={t("oafBots.fields.websiteUrl")}
+                            value={form.website_url}
+                            onChange={(value) => updateForm("website_url", value)}
+                            placeholder={t("oafBots.placeholders.websiteUrl")}
+                            helper={t("oafBots.helpers.websiteUrl")}
+                          />
+                          <TextField
+                            label={t("oafBots.fields.telegramUrl")}
+                            value={form.telegram_url}
+                            onChange={(value) => updateForm("telegram_url", value)}
+                            placeholder={t("oafBots.placeholders.telegramUrl")}
+                            helper={t("oafBots.helpers.telegramUrl")}
+                          />
+                          <TextField
+                            label={t("oafBots.fields.discordUrl")}
+                            value={form.discord_url}
+                            onChange={(value) => updateForm("discord_url", value)}
+                            placeholder={t("oafBots.placeholders.discordUrl")}
+                            helper={t("oafBots.helpers.discordUrl")}
+                          />
+                          <TextField
+                            label={t("oafBots.fields.docsUrl")}
+                            value={form.docs_url}
+                            onChange={(value) => updateForm("docs_url", value)}
+                            placeholder={t("oafBots.placeholders.docsUrl")}
+                            helper={t("oafBots.helpers.docsUrl")}
+                          />
+                        </div>
+                        <div className="mt-5">
+                          <TextArea
+                            label={t("oafBots.fields.ctaPolicy")}
+                            value={form.cta_policy}
+                            onChange={(value) => updateForm("cta_policy", value)}
+                            placeholder={t("oafBots.placeholders.ctaPolicy")}
+                            helper={t("oafBots.helpers.ctaPolicy")}
+                            minHeightClass="min-h-[170px]"
+                          />
+                          <div className="mt-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                            <p className="text-xs font-semibold text-[#e7e9ea]">{t("oafBots.advancedProduct.ctaTipsTitle")}</p>
+                            <div className="mt-2 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-2">
+                              <p>{t("oafBots.advancedProduct.ctaTipWebsite")}</p>
+                              <p>{t("oafBots.advancedProduct.ctaTipTelegram")}</p>
+                              <p>{t("oafBots.advancedProduct.ctaTipDocs")}</p>
+                              <p>{t("oafBots.advancedProduct.ctaTipNoSpam")}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </details>

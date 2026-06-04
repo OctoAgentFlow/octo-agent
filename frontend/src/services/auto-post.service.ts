@@ -164,6 +164,10 @@ export type TrendSelectionData = {
   items: TrendTopicApi[];
 };
 
+export type TrendTopicListData = {
+  items: TrendTopicApi[];
+};
+
 export type TrendFeedbackRating = "relevant" | "irrelevant" | "too_forced";
 
 export type TrendFeedbackPayload = {
@@ -222,6 +226,17 @@ export const autoPostService = {
         bot_id: params.botID || undefined,
         limit: params.limit || 3,
         excluded_trend_names: params.excludedTrendNames?.join(",") || undefined,
+      },
+    });
+    return res.data.data;
+  },
+  async trendTopics(params?: { limit?: number; region?: string; category?: string; riskLevel?: string }) {
+    const res = await request.get<ApiResponse<TrendTopicListData>>("/trends/topics", {
+      params: {
+        limit: params?.limit || 80,
+        region: params?.region || undefined,
+        category: params?.category || undefined,
+        risk_level: params?.riskLevel || undefined,
       },
     });
     return res.data.data;

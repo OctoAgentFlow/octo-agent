@@ -2169,6 +2169,9 @@ export default function OAFBotsPage() {
                     {t("oafBots.advancedTrends.title")}
                   </summary>
                   <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedTrends.description")}</p>
+                  <Link href="/trends" className="mt-3 inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] transition hover:bg-[#16181c]">
+                    {t("oafBots.advancedTrends.viewCurrent")}
+                  </Link>
                   <div className="mt-4 grid gap-4">
                     <TagPicker
                       label={t("oafBots.fields.trendRegions")}

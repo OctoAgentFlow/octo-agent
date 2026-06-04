@@ -125,6 +125,8 @@ export default function DailyXQueuePage() {
   const sourceReady = Boolean(overview?.context?.content_library_id);
   const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
   const botName = selectedBot?.name || overview?.bot?.name || "OAF Bot";
+  const reviewActionsCount = overview?.review_actions_count || 0;
+  const approvedOrCopiedCount = overview?.approved_or_copied_count || 0;
   const setupCanSave = selectedBotID
     ? Boolean((setupForm.x_handle || selectedBotHandle).trim())
     : Boolean(setupForm.x_handle.trim() && setupForm.product_context.trim());
@@ -361,9 +363,54 @@ export default function DailyXQueuePage() {
   };
 
   const progress = useMemo(() => {
-    const steps = [setupReady, sourceReady, drafts.length === 3, (overview?.review_actions_count || 0) >= 3, (overview?.approved_or_copied_count || 0) >= 1];
+    const steps = [setupReady, sourceReady, drafts.length === 3, reviewActionsCount >= 3, approvedOrCopiedCount >= 1];
     return steps.filter(Boolean).length;
-  }, [drafts.length, overview?.approved_or_copied_count, overview?.review_actions_count, setupReady, sourceReady]);
+  }, [approvedOrCopiedCount, drafts.length, reviewActionsCount, setupReady, sourceReady]);
+  const activationStepItems = useMemo(() => [
+    {
+      key: "setup",
+      label: t("dailyXQueue.progress.setup"),
+      done: setupReady,
+      value: setupReady ? t("dailyXQueue.progress.done") : t("dailyXQueue.progress.todo"),
+    },
+    {
+      key: "source",
+      label: t("dailyXQueue.progress.source"),
+      done: sourceReady,
+      value: sourceReady ? t("dailyXQueue.progress.done") : t("dailyXQueue.progress.todo"),
+    },
+    {
+      key: "drafts",
+      label: t("dailyXQueue.progress.drafts"),
+      done: drafts.length === 3,
+      value: t("dailyXQueue.progress.countOf", { count: Math.min(drafts.length, 3), total: 3 }),
+    },
+    {
+      key: "reviews",
+      label: t("dailyXQueue.progress.review"),
+      done: reviewActionsCount >= 3,
+      value: t("dailyXQueue.progress.countOf", { count: Math.min(reviewActionsCount, 3), total: 3 }),
+    },
+    {
+      key: "output",
+      label: t("dailyXQueue.progress.output"),
+      done: approvedOrCopiedCount >= 1,
+      value: t("dailyXQueue.progress.countOf", { count: Math.min(approvedOrCopiedCount, 1), total: 1 }),
+    },
+  ], [approvedOrCopiedCount, drafts.length, reviewActionsCount, setupReady, sourceReady, t]);
+  const nextActivationStep = activationStepItems.find((item) => !item.done);
+  const setupBlockedHint = !setupCanSave
+    ? t(selectedBotID ? "dailyXQueue.setup.missingHandleHint" : "dailyXQueue.setup.missingRequiredHint")
+    : "";
+  const sourceBlockedHint = !setupReady
+    ? t("dailyXQueue.source.disabledHint")
+    : (!sourceForm.title.trim() || !sourceForm.body.trim() ? t("dailyXQueue.source.missingRequiredHint") : "");
+  const generateBlockedHint = !setupReady
+    ? t("dailyXQueue.generate.setupFirstHint")
+    : (!sourceReady ? t("dailyXQueue.generate.sourceFirstHint") : "");
+  const emptyHint = !setupReady
+    ? t("dailyXQueue.empty.setupFirst")
+    : (!sourceReady ? t("dailyXQueue.empty.sourceFirst") : t("dailyXQueue.empty.ready"));
 
   if (loadState === "loading") {
     return (
@@ -385,8 +432,11 @@ export default function DailyXQueuePage() {
           </p>
         </div>
         <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-sm text-[#8b98a5]">
-          <span className="font-semibold text-[#e7e9ea]">{progress}/5</span> {t("dailyXQueue.activationSteps")}
-          {overview?.activated ? <span className="ml-3 text-emerald-200">{t("dailyXQueue.activated")}</span> : null}
+          {overview?.activated ? (
+            <span className="font-semibold text-emerald-200">{t("dailyXQueue.activated")}</span>
+          ) : (
+            <span>{t("dailyXQueue.progress.nextLabel", { step: nextActivationStep?.label || t("dailyXQueue.progress.done") })}</span>
+          )}
         </div>
       </header>
 
@@ -399,66 +449,122 @@ export default function DailyXQueuePage() {
         </Card>
       ) : null}
 
+      <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.progress.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.progress.description")}</p>
+          </div>
+          <p className="text-xs font-semibold text-[#8b98a5]">{progress}/5</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {activationStepItems.map((item) => (
+            <div
+              key={item.key}
+              className={`rounded-xl border px-3 py-2 ${
+                item.done ? "border-emerald-300/25 bg-emerald-500/10" : "border-[#2f3336] bg-[#0f1419]"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate text-xs font-semibold text-[#e7e9ea]">{item.label}</span>
+                {item.done ? <CheckCircle2 className="size-3.5 shrink-0 text-emerald-300" /> : null}
+              </div>
+              <p className={`mt-1 text-xs ${item.done ? "text-emerald-200" : "text-[#71767b]"}`}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="border-[#2f3336] bg-black">
           <CardHeader title={t("dailyXQueue.setup.title")} description={t("dailyXQueue.setup.description")} />
-          <div className="grid gap-3">
-            <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <label className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.setup.botSelectLabel")}</label>
-              <select
-                className="form-input mt-2 h-11 py-0"
-                value={selectedBotID || ""}
-                onChange={(event) => handleSelectBot(event.target.value)}
-              >
-                <option value="">{t("dailyXQueue.setup.botSelectPlaceholder")}</option>
-                {bots.map((bot) => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
-              {selectedBot ? (
-                <div className="mt-3 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-3">
-                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.selectedBot")}</span> {selectedBot.name}</p>
-                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botVoice")}</span> {selectedBot.voice_tone || t("dailyXQueue.setup.notSet")}</p>
-                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botAudience")}</span> {selectedBot.target_audience || t("dailyXQueue.setup.notSet")}</p>
-                </div>
-              ) : (
-                <div className="mt-3 flex flex-col gap-2 text-xs leading-5 text-[#8b98a5] sm:flex-row sm:items-center sm:justify-between">
-                  <span>{bots.length ? t("dailyXQueue.setup.chooseBotHint") : t("dailyXQueue.setup.noBotsHint")}</span>
-                  <Link href="/oaf-bots" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:underline">
-                    <Bot className="size-3.5" />
-                    {t("dailyXQueue.setup.manageBots")}
-                  </Link>
-                </div>
-              )}
+          <div className="grid gap-4">
+            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              setupReady ? "border-emerald-300/25 bg-emerald-500/10 text-emerald-200" : "border-[#2f3336] bg-[#0f1419] text-[#8b98a5]"
+            }`}>
+              {setupReady ? <CheckCircle2 className="size-3.5" /> : null}
+              {setupReady ? t("dailyXQueue.setup.readyStatus") : t("dailyXQueue.setup.notReadyStatus")}
             </div>
-            <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
-            <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
-            <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
+            <div className="grid gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.setup.requiredTitle")}</p>
+              <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <label className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.setup.botSelectLabel")}</label>
+                <select
+                  className="form-input mt-2 h-11 py-0"
+                  value={selectedBotID || ""}
+                  onChange={(event) => handleSelectBot(event.target.value)}
+                >
+                  <option value="">{t("dailyXQueue.setup.botSelectPlaceholder")}</option>
+                  {bots.map((bot) => (
+                    <option key={bot.id} value={bot.id}>
+                      {bot.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedBot ? (
+                  <div className="mt-3 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-3">
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.selectedBot")}</span> {selectedBot.name}</p>
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botVoice")}</span> {selectedBot.voice_tone || t("dailyXQueue.setup.notSet")}</p>
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botAudience")}</span> {selectedBot.target_audience || t("dailyXQueue.setup.notSet")}</p>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2 text-xs leading-5 text-[#8b98a5] sm:flex-row sm:items-center sm:justify-between">
+                    <span>{bots.length ? t("dailyXQueue.setup.chooseBotHint") : t("dailyXQueue.setup.noBotsHint")}</span>
+                    <Link href="/oaf-bots" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:underline">
+                      <Bot className="size-3.5" />
+                      {t("dailyXQueue.setup.manageBots")}
+                    </Link>
+                  </div>
+                )}
+              </div>
+              <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
+              <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
+            </div>
+            <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.setup.advancedTitle")}</summary>
+              <div className="mt-3 grid gap-3">
+                <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
+                <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
+                <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
+                <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
+              </div>
+            </details>
             <Button type="button" disabled={busy === "setup" || !setupCanSave} onClick={handleSetup}>
               {busy === "setup" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {t("dailyXQueue.setup.save")}
             </Button>
+            {setupBlockedHint ? <p className="text-xs leading-5 text-[#71767b]">{setupBlockedHint}</p> : null}
           </div>
         </Card>
 
         <Card className="border-[#2f3336] bg-black">
           <CardHeader title={t("dailyXQueue.source.title")} description={t("dailyXQueue.source.description")} />
-          <div className="grid gap-3">
-            <Input placeholder={t("dailyXQueue.source.titlePlaceholder")} value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
-            <textarea className="form-input min-h-32 resize-y" placeholder={t("dailyXQueue.source.bodyPlaceholder")} value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.source.urlPlaceholder")} value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.source.topicsPlaceholder")} value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.source.goalPlaceholder")} value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
-            <Input placeholder={t("dailyXQueue.source.ctaPlaceholder")} value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
+          <div className="grid gap-4">
+            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              sourceReady ? "border-emerald-300/25 bg-emerald-500/10 text-emerald-200" : "border-[#2f3336] bg-[#0f1419] text-[#8b98a5]"
+            }`}>
+              {sourceReady ? <CheckCircle2 className="size-3.5" /> : null}
+              {sourceReady ? t("dailyXQueue.source.readyStatus") : t("dailyXQueue.source.notReadyStatus")}
+            </div>
+            <div className="grid gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.source.requiredTitle")}</p>
+              <Input placeholder={t("dailyXQueue.source.titlePlaceholder")} value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
+              <textarea className="form-input min-h-32 resize-y" placeholder={t("dailyXQueue.source.bodyPlaceholder")} value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
+            </div>
+            <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.source.advancedTitle")}</summary>
+              <div className="mt-3 grid gap-3">
+                <Input placeholder={t("dailyXQueue.source.urlPlaceholder")} value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
+                <Input placeholder={t("dailyXQueue.source.topicsPlaceholder")} value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
+                <Input placeholder={t("dailyXQueue.source.goalPlaceholder")} value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
+                <Input placeholder={t("dailyXQueue.source.ctaPlaceholder")} value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
+              </div>
+            </details>
             <Button type="button" disabled={busy === "source" || !setupReady || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={handleSource}>
               {busy === "source" ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
               {t("dailyXQueue.source.save")}
             </Button>
+            {sourceBlockedHint ? <p className="text-xs leading-5 text-[#71767b]">{sourceBlockedHint}</p> : null}
           </div>
         </Card>
       </div>
@@ -469,85 +575,115 @@ export default function DailyXQueuePage() {
             <h2 className="text-lg font-bold text-[#e7e9ea]">{t("dailyXQueue.generate.title")}</h2>
             <p className="mt-1 text-sm text-[#8b98a5]">{t("dailyXQueue.generate.description")}</p>
           </div>
-          <Button type="button" disabled={busy === "generate" || !setupReady || !sourceReady} onClick={handleGenerate}>
-            {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            {t("dailyXQueue.generate.button")}
-          </Button>
+          <div className="grid gap-2 md:justify-items-end">
+            <Button type="button" disabled={busy === "generate" || !setupReady || !sourceReady} onClick={handleGenerate}>
+              {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              {t("dailyXQueue.generate.button")}
+            </Button>
+            {generateBlockedHint ? <p className="text-xs leading-5 text-[#8b98a5]">{generateBlockedHint}</p> : null}
+          </div>
         </div>
       </Card>
 
       <section className="grid gap-4">
+        {drafts.length > 0 ? (
+          <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" />
+              <div>
+                <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.draft.reviewHintTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.draft.reviewHint")}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {drafts.length === 0 ? (
           <Card className="border-[#2f3336] bg-black">
-            <p className="text-sm text-[#8b98a5]">{t("dailyXQueue.empty")}</p>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.empty")}</p>
+            <p className="mt-1 text-sm leading-6 text-[#8b98a5]">{emptyHint}</p>
           </Card>
         ) : null}
-        {drafts.slice(0, 3).map((draft, index) => (
-          <Card key={draft.id} className="border-[#2f3336] bg-black">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.draft.title", { number: index + 1 })}</p>
-                  <p className="mt-1 text-xs text-[#71767b]">{directionLabel(draft.why_generated || draft.content_direction)}</p>
+        {drafts.slice(0, 3).map((draft, index) => {
+          const draftText = draftEdits[draft.id] ?? draft.generated_content;
+          const draftTooLong = draftText.length > 280;
+
+          return (
+            <Card key={draft.id} className="border-[#2f3336] bg-black">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.draft.title", { number: index + 1 })}</p>
+                    <p className="mt-1 text-xs text-[#71767b]">{directionLabel(draft.why_generated || draft.content_direction)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(draft.status)}`}>{t(`dailyXQueue.status.${draft.status}`)}</span>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${riskTone(draft.risk_level)}`}>{t("dailyXQueue.risk.label", { level: t(`dailyXQueue.risk.${draft.risk_level || "low"}`) })}</span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(draft.status)}`}>{t(`dailyXQueue.status.${draft.status}`)}</span>
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${riskTone(draft.risk_level)}`}>{t("dailyXQueue.risk.label", { level: t(`dailyXQueue.risk.${draft.risk_level || "low"}`) })}</span>
+                <textarea
+                  className="form-input min-h-32 resize-y leading-relaxed"
+                  value={draftText}
+                  onChange={(event) => setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))}
+                />
+                <p className={`text-right text-xs ${draftTooLong ? "text-amber-200" : "text-[#71767b]"}`}>
+                  {t("dailyXQueue.draft.characterCount", { count: draftText.length, limit: 280 })}
+                </p>
+                <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#8b98a5] md:grid-cols-2 xl:grid-cols-4">
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.generatedByLabel")}</span> {botName}</p>
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.sourceLabel")}</span> {draft.source_used || draft.content_title || t("dailyXQueue.fallback.source")}</p>
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.whyLabel")}</span> {directionLabel(draft.why_generated)}</p>
+                  <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.riskReasonsLabel")}</span> {draft.failure_reason || t("dailyXQueue.risk.none")}</p>
                 </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" disabled={busy === `edit-${draft.id}`} onClick={() => void handleEdit(draft)}>
+                      {busy === `edit-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
+                      {t("dailyXQueue.actions.edit")}
+                    </Button>
+                    <Button type="button" disabled={busy === `approve-${draft.id}`} onClick={() => void handleApprove(draft)}>
+                      {busy === `approve-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                      {t("dailyXQueue.actions.approve")}
+                    </Button>
+                    <Button type="button" variant="outline" disabled={busy === `rewrite-${draft.id}`} onClick={() => void handleRewrite(draft)}>
+                      {busy === `rewrite-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+                      {t("dailyXQueue.actions.rewrite")}
+                    </Button>
+                    <Button type="button" variant="outline" disabled={busy === `copy-${draft.id}`} onClick={() => void handleCopy(draft)}>
+                      {busy === `copy-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Clipboard className="size-4" />}
+                      {t("dailyXQueue.actions.copy")}
+                    </Button>
+                  </div>
+                  <div className="flex min-w-0 gap-2">
+                    <select
+                      className="form-input h-10 min-w-0 py-0 text-sm"
+                      value={rejectByDraft[draft.id] || ""}
+                      onChange={(event) => setRejectByDraft((current) => ({ ...current, [draft.id]: event.target.value }))}
+                    >
+                      <option value="" disabled>{t("dailyXQueue.rejectReason.placeholder")}</option>
+                      {rejectReasons.map((reason) => <option key={reason} value={reason}>{t(`dailyXQueue.rejectReason.${reason}`)}</option>)}
+                    </select>
+                    <Button type="button" variant="destructive" disabled={busy === `reject-${draft.id}` || !rejectByDraft[draft.id]} onClick={() => void handleReject(draft)}>
+                      {busy === `reject-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <ThumbsDown className="size-4" />}
+                      {t("dailyXQueue.actions.reject")}
+                    </Button>
+                  </div>
+                </div>
+                <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.draft.rewriteFeedbackSummary")}</summary>
+                  <label className="mt-3 grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.draft.rewriteFeedbackLabel")}</span>
+                    <Input
+                      placeholder={t("dailyXQueue.rewriteFeedbackPlaceholder")}
+                      value={rewriteFeedback[draft.id] || ""}
+                      onChange={(event) => setRewriteFeedback((current) => ({ ...current, [draft.id]: event.target.value }))}
+                    />
+                    <span className="text-xs leading-5 text-[#71767b]">{t("dailyXQueue.draft.rewriteFeedbackHelp")}</span>
+                  </label>
+                </details>
               </div>
-              <textarea
-                className="form-input min-h-32 resize-y leading-relaxed"
-                value={draftEdits[draft.id] ?? draft.generated_content}
-                onChange={(event) => setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))}
-              />
-              <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#8b98a5] md:grid-cols-2 xl:grid-cols-4">
-                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.generatedByLabel")}</span> {botName}</p>
-                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.sourceLabel")}</span> {draft.source_used || draft.content_title || t("dailyXQueue.fallback.source")}</p>
-                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.whyLabel")}</span> {directionLabel(draft.why_generated)}</p>
-                <p><span className="text-[#e7e9ea]">{t("dailyXQueue.draft.riskReasonsLabel")}</span> {draft.failure_reason || t("dailyXQueue.risk.none")}</p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" disabled={busy === `edit-${draft.id}`} onClick={() => void handleEdit(draft)}>
-                    {busy === `edit-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
-                    {t("dailyXQueue.actions.edit")}
-                  </Button>
-                  <Button type="button" disabled={busy === `approve-${draft.id}`} onClick={() => void handleApprove(draft)}>
-                    {busy === `approve-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                    {t("dailyXQueue.actions.approve")}
-                  </Button>
-                  <Button type="button" variant="outline" disabled={busy === `rewrite-${draft.id}`} onClick={() => void handleRewrite(draft)}>
-                    {busy === `rewrite-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
-                    {t("dailyXQueue.actions.rewrite")}
-                  </Button>
-                  <Button type="button" variant="outline" disabled={busy === `copy-${draft.id}`} onClick={() => void handleCopy(draft)}>
-                    {busy === `copy-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <Clipboard className="size-4" />}
-                    {t("dailyXQueue.actions.copy")}
-                  </Button>
-                </div>
-                <div className="flex min-w-0 gap-2">
-                  <select
-                    className="form-input h-10 min-w-0 py-0 text-sm"
-                    value={rejectByDraft[draft.id] || ""}
-                    onChange={(event) => setRejectByDraft((current) => ({ ...current, [draft.id]: event.target.value }))}
-                  >
-                    <option value="" disabled>{t("dailyXQueue.rejectReason.placeholder")}</option>
-                    {rejectReasons.map((reason) => <option key={reason} value={reason}>{t(`dailyXQueue.rejectReason.${reason}`)}</option>)}
-                  </select>
-                  <Button type="button" variant="destructive" disabled={busy === `reject-${draft.id}` || !rejectByDraft[draft.id]} onClick={() => void handleReject(draft)}>
-                    {busy === `reject-${draft.id}` ? <Loader2 className="size-4 animate-spin" /> : <ThumbsDown className="size-4" />}
-                    {t("dailyXQueue.actions.reject")}
-                  </Button>
-                </div>
-              </div>
-              <Input
-                placeholder={t("dailyXQueue.rewriteFeedbackPlaceholder")}
-                value={rewriteFeedback[draft.id] || ""}
-                onChange={(event) => setRewriteFeedback((current) => ({ ...current, [draft.id]: event.target.value }))}
-              />
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </section>
     </div>
   );

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/repository"
 
@@ -52,6 +53,48 @@ func newOAFBotDeleteTestService(t *testing.T) (*OAFBotService, *gorm.DB) {
 		repository.NewOAFBotLearningRulePreferenceRepository(db),
 		nil,
 	), db
+}
+
+func TestOAFBotCreateUpdatePreservesCustomOccupation(t *testing.T) {
+	svc, db := newOAFBotDeleteTestService(t)
+	user := model.User{Email: "custom-occupation@example.com", Name: "Custom Occupation", Status: "active", Role: "user"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	customOccupation := "AI social operations product operator"
+	created, err := svc.Create(user.ID, dto.OAFBotUpsertRequest{
+		Name:       "OctoAgentFlow Bot",
+		Occupation: customOccupation,
+		Topics:     []string{"AI social operations"},
+	})
+	if err != nil {
+		t.Fatalf("create bot: %v", err)
+	}
+	if created.Occupation != customOccupation {
+		t.Fatalf("expected custom occupation %q, got %q", customOccupation, created.Occupation)
+	}
+
+	loaded, err := svc.Get(user.ID, created.ID)
+	if err != nil {
+		t.Fatalf("load bot: %v", err)
+	}
+	if loaded.Occupation != customOccupation {
+		t.Fatalf("expected loaded custom occupation %q, got %q", customOccupation, loaded.Occupation)
+	}
+
+	updatedOccupation := "Founder/operator building AI social operations workflows"
+	updated, err := svc.Update(user.ID, created.ID, dto.OAFBotUpsertRequest{
+		Name:       created.Name,
+		Occupation: updatedOccupation,
+		Topics:     []string{"AI social operations"},
+	})
+	if err != nil {
+		t.Fatalf("update bot: %v", err)
+	}
+	if updated.Occupation != updatedOccupation {
+		t.Fatalf("expected updated custom occupation %q, got %q", updatedOccupation, updated.Occupation)
+	}
 }
 
 func TestOAFBotDeleteCleansReferencesAndCancelsPendingPublishJobs(t *testing.T) {

@@ -244,6 +244,14 @@ const accountArchetypePresets: Record<AccountArchetypeKey, Partial<OAFBotPayload
     safety_mode: "conservative",
   },
 };
+const accountArchetypeOccupationKeywords: Record<AccountArchetypeKey, string[]> = {
+  brand: ["official brand", "brand account", "official account", "product account"],
+  founder: ["founder", "operator", "product operator", "product manager", "builder"],
+  kol: ["kol", "creator", "influencer"],
+  community: ["community"],
+  agency: ["agency", "managed account"],
+};
+const accountArchetypeDetectionOrder: AccountArchetypeKey[] = ["brand", "agency", "community", "kol", "founder"];
 
 const emptyLimits: PlanLimits = {
   maxBots: 1,
@@ -2491,7 +2499,10 @@ function mergeUniqueValues(current: string[] = [], additions: string[] = []) {
 
 function detectAccountArchetype(form: OAFBotPayload): AccountArchetypeKey | null {
   const matched = accountArchetypeKeys.find((key) => form.occupation === accountArchetypePresets[key].occupation);
-  return matched || null;
+  if (matched) return matched;
+  const occupation = form.occupation.trim().toLowerCase();
+  if (!occupation) return null;
+  return accountArchetypeDetectionOrder.find((key) => accountArchetypeOccupationKeywords[key].some((keyword) => occupation.includes(keyword))) || null;
 }
 
 function applyAccountArchetypePreset(current: OAFBotPayload, type: AccountArchetypeKey): OAFBotPayload {

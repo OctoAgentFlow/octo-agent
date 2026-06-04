@@ -19,6 +19,10 @@ type DailyXQueueSourceMaterialRequest struct {
 	CTAPreference string   `json:"cta_preference"`
 }
 
+type DailyXQueueSelectSourceMaterialRequest struct {
+	ContentLibraryID uint `json:"content_library_id" binding:"required"`
+}
+
 type DailyXQueueDraftUpdateRequest struct {
 	GeneratedContent string `json:"generated_content" binding:"required"`
 }

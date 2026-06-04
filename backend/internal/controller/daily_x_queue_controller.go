@@ -75,6 +75,25 @@ func (ctl *DailyXQueueController) SaveSourceMaterial(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *DailyXQueueController) SelectSourceMaterial(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.DailyXQueueSelectSourceMaterialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.service.SelectSourceMaterial(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *DailyXQueueController) Generate(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

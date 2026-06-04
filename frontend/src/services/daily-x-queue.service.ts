@@ -44,7 +44,7 @@ export type DailyXQueueSetupPayload = {
   bot_id?: number;
   x_handle: string;
   website_url?: string;
-  product_context: string;
+  product_context?: string;
   target_audience?: string;
   voice_preference?: string;
   guardrails?: string;
@@ -95,6 +95,12 @@ export const dailyXQueueService = {
   },
   async saveSourceMaterial(payload: DailyXQueueSourcePayload) {
     const res = await request.post<ApiResponse<DailyXQueueSourceApi>>("/daily-x-queue/source-material", payload);
+    return res.data.data;
+  },
+  async selectSourceMaterial(contentLibraryID: number) {
+    const res = await request.post<ApiResponse<DailyXQueueSourceApi>>("/daily-x-queue/source-material/select", {
+      content_library_id: contentLibraryID,
+    });
     return res.data.data;
   },
   async generate() {

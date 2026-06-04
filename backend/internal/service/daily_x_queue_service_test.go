@@ -129,6 +129,101 @@ func TestDailyXQueueSetupCanUseExistingOAFBotWithoutCreatingDuplicate(t *testing
 	}
 }
 
+func TestDailyXQueueCanSelectExistingContentLibraryItemForOAFBot(t *testing.T) {
+	svc, db := newDailyXQueueTestService(t)
+	userID := uint(35)
+	bot := &model.OAFBot{
+		UserID:          userID,
+		Name:            "Content Pool Bot",
+		ProjectOneLiner: "OctoAgentFlow uses OAF Bot content memory for daily drafts.",
+		VoiceTone:       "concise operator",
+	}
+	if err := db.Create(bot).Error; err != nil {
+		t.Fatalf("create bot: %v", err)
+	}
+	contentBotID := bot.ID
+	item := &model.ContentLibraryItem{
+		UserID:   userID,
+		BotID:    &contentBotID,
+		Title:    "Configured content pool source",
+		ItemType: "idea",
+		Body:     "A configured content pool item should feed today's OAF Bot drafts.",
+		Status:   "active",
+		Priority: 80,
+	}
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+	if _, err := svc.Setup(context.Background(), userID, dto.DailyXQueueSetupRequest{
+		BotID:   bot.ID,
+		XHandle: "octo_agent_flow",
+	}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	selected, err := svc.SelectSourceMaterial(userID, dto.DailyXQueueSelectSourceMaterialRequest{ContentLibraryID: item.ID})
+	if err != nil {
+		t.Fatalf("select source material: %v", err)
+	}
+	if selected.Context.ContentLibraryID != item.ID {
+		t.Fatalf("expected context source %d, got %d", item.ID, selected.Context.ContentLibraryID)
+	}
+	if selected.SourceMaterial.Title != item.Title {
+		t.Fatalf("expected selected source title %q, got %q", item.Title, selected.SourceMaterial.Title)
+	}
+	var captured GenerateAutoPostInput
+	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+		if captured.ContentItemTitle == "" {
+			captured = in
+		}
+		return AIGeneratedText{Text: "Draft grounded in selected content pool source."}, nil
+	}
+	generated, err := svc.Generate(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if len(generated.Drafts) != 3 {
+		t.Fatalf("expected exactly 3 drafts, got %d", len(generated.Drafts))
+	}
+	if captured.ContentItemTitle != item.Title || captured.ContentItemBody != item.Body {
+		t.Fatalf("expected selected content item in generation input, got title=%q body=%q", captured.ContentItemTitle, captured.ContentItemBody)
+	}
+}
+
+func TestDailyXQueueRejectsSourceMaterialFromAnotherOAFBot(t *testing.T) {
+	svc, db := newDailyXQueueTestService(t)
+	userID := uint(36)
+	bot := &model.OAFBot{UserID: userID, Name: "Selected Bot", ProjectOneLiner: "Selected bot context"}
+	otherBot := &model.OAFBot{UserID: userID, Name: "Other Bot", ProjectOneLiner: "Other bot context"}
+	if err := db.Create(bot).Error; err != nil {
+		t.Fatalf("create bot: %v", err)
+	}
+	if err := db.Create(otherBot).Error; err != nil {
+		t.Fatalf("create other bot: %v", err)
+	}
+	otherBotID := otherBot.ID
+	item := &model.ContentLibraryItem{
+		UserID:   userID,
+		BotID:    &otherBotID,
+		Title:    "Other bot source",
+		ItemType: "idea",
+		Body:     "This source belongs to another OAF Bot.",
+		Status:   "active",
+	}
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("create content item: %v", err)
+	}
+	if _, err := svc.Setup(context.Background(), userID, dto.DailyXQueueSetupRequest{
+		BotID:   bot.ID,
+		XHandle: "octo_agent_flow",
+	}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if _, err := svc.SelectSourceMaterial(userID, dto.DailyXQueueSelectSourceMaterialRequest{ContentLibraryID: item.ID}); err == nil {
+		t.Fatal("expected source material from another OAF Bot to be rejected")
+	}
+}
+
 func setupDailyXQueueFixture(t *testing.T, svc *DailyXQueueService, userID uint) {
 	t.Helper()
 	if _, err := svc.Setup(context.Background(), userID, dto.DailyXQueueSetupRequest{

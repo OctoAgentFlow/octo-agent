@@ -11,6 +11,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { apiErrorMessage } from "@/lib/request";
 import { accountService, type AccountListItem } from "@/services/account.service";
+import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { dailyXQueueService, type DailyXQueueDraftApi, type DailyXQueueOverviewApi } from "@/services/daily-x-queue.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
@@ -61,11 +62,21 @@ function botAccountHandle(bot: OAFBot | null, accounts: AccountListItem[]) {
   return account?.username || "";
 }
 
+function contentItemAvailableForBot(item: ContentLibraryItemApi, bot: OAFBot) {
+  const itemBotID = item.bot_id || 0;
+  const itemAccountID = item.twitter_account_id || 0;
+  const botAccountID = bot.twitter_account_id || 0;
+  return item.status === "active" &&
+    (!itemBotID || itemBotID === bot.id) &&
+    (!itemAccountID || (botAccountID > 0 && itemAccountID === botAccountID));
+}
+
 function knownDailyXQueueErrorKey(message: string) {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return "";
   if (normalized.includes("setup is required")) return "dailyXQueue.toast.error.setupRequired";
   if (normalized.includes("source material is required")) return "dailyXQueue.toast.error.sourceRequired";
+  if (normalized.includes("source material is not available") || normalized.includes("source material is not active")) return "dailyXQueue.toast.error.sourceUnavailable";
   if (normalized.includes("reject reason is required")) return "dailyXQueue.toast.error.rejectReasonRequired";
   if (normalized.includes("x_handle is required")) return "dailyXQueue.toast.error.handleRequired";
   if (normalized.includes("openai api key is empty")) return "dailyXQueue.toast.error.llmConfig";
@@ -94,7 +105,10 @@ export default function DailyXQueuePage() {
   const [overview, setOverview] = useState<DailyXQueueOverviewApi | null>(null);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
+  const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
+  const [contentItemsLoading, setContentItemsLoading] = useState(false);
   const [selectedBotID, setSelectedBotID] = useState<number>(0);
+  const [selectedContentID, setSelectedContentID] = useState<number>(0);
   const [busy, setBusy] = useState<BusyAction>("");
   const [setupForm, setSetupForm] = useState({
     x_handle: "",
@@ -121,13 +135,32 @@ export default function DailyXQueuePage() {
     return bots.find((bot) => bot.id === selectedBotID) || (overview?.bot?.id === selectedBotID ? overview.bot : null);
   }, [bots, overview?.bot, selectedBotID]);
   const selectedBotHandle = useMemo(() => botAccountHandle(selectedBot, accounts), [accounts, selectedBot]);
+  const usingExistingBot = Boolean(selectedBot);
+  const selectedBotNeedsManualHandle = usingExistingBot && !selectedBotHandle;
+  const selectedBotProductSummary = selectedBot
+    ? botProductContext(selectedBot) || selectedBot.content_objectives || selectedBot.growth_goal || ""
+    : "";
+  const selectedBotGuardrailsSummary = selectedBot
+    ? joinBotGuardrails(selectedBot) || selectedBot.safety_mode || ""
+    : "";
+  const availableContentItems = useMemo(() => {
+    if (!selectedBot) return [] as ContentLibraryItemApi[];
+    return contentItems.filter((item) => contentItemAvailableForBot(item, selectedBot));
+  }, [contentItems, selectedBot]);
+  const selectedContentItem = useMemo(() => {
+    if (!selectedContentID) return null;
+    return availableContentItems.find((item) => item.id === selectedContentID) ||
+      (overview?.source_material?.id === selectedContentID ? overview.source_material : null);
+  }, [availableContentItems, overview?.source_material, selectedContentID]);
+  const sourcePoolMode = Boolean(selectedBot && availableContentItems.length > 0);
+  const showManualSourceForm = !selectedBot || (!contentItemsLoading && availableContentItems.length === 0);
   const setupReady = Boolean(overview?.context?.bot_id);
   const sourceReady = Boolean(overview?.context?.content_library_id);
   const drafts = useMemo(() => overview?.drafts || [], [overview?.drafts]);
   const botName = selectedBot?.name || overview?.bot?.name || "OAF Bot";
   const reviewActionsCount = overview?.review_actions_count || 0;
   const approvedOrCopiedCount = overview?.approved_or_copied_count || 0;
-  const setupCanSave = selectedBotID
+  const setupCanSave = usingExistingBot
     ? Boolean((setupForm.x_handle || selectedBotHandle).trim())
     : Boolean(setupForm.x_handle.trim() && setupForm.product_context.trim());
   const localizedError = useCallback((error: unknown, fallbackKey: string) => {
@@ -185,6 +218,7 @@ export default function DailyXQueuePage() {
         });
       }
       if (data.source_material) {
+        setSelectedContentID(data.source_material.id);
         setSourceForm({
           title: data.source_material.title || "",
           body: data.source_material.body || "",
@@ -193,6 +227,8 @@ export default function DailyXQueuePage() {
           growth_goal: data.source_material.growth_goal || "",
           cta_preference: data.source_material.cta_preference || "",
         });
+      } else {
+        setSelectedContentID(0);
       }
       setLoadState("ready");
     } catch (error) {
@@ -204,6 +240,43 @@ export default function DailyXQueuePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!selectedBot) {
+      setContentItems([]);
+      setSelectedContentID(0);
+      return;
+    }
+    let cancelled = false;
+    setContentItemsLoading(true);
+    contentLibraryService.list({
+      botID: selectedBot.id,
+      twitterAccountID: selectedBot.twitter_account_id || undefined,
+      status: "active",
+      limit: 50,
+    }).then((data) => {
+      if (cancelled) return;
+      const allowedItems = data.items.filter((item) => contentItemAvailableForBot(item, selectedBot));
+      setContentItems(allowedItems);
+      setSelectedContentID((current) => {
+        if (current && allowedItems.some((item) => item.id === current)) return current;
+        if (overview?.source_material?.id && allowedItems.some((item) => item.id === overview.source_material?.id)) {
+          return overview.source_material.id;
+        }
+        return allowedItems[0]?.id || 0;
+      });
+    }).catch((error) => {
+      if (!cancelled) {
+        setContentItems([]);
+        pushToast(localizedError(error, "dailyXQueue.toast.error.contentPool"));
+      }
+    }).finally(() => {
+      if (!cancelled) setContentItemsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localizedError, overview?.source_material?.id, pushToast, selectedBot]);
 
   useEffect(() => {
     setSetupForm((current) => {
@@ -237,11 +310,19 @@ export default function DailyXQueuePage() {
   const handleSetup = async () => {
     setBusy("setup");
     try {
-      const data = await dailyXQueueService.setup({
-        ...setupForm,
-        bot_id: selectedBotID || undefined,
-        x_handle: setupForm.x_handle || selectedBotHandle,
-      });
+      const data = await dailyXQueueService.setup(
+        selectedBot
+          ? {
+              bot_id: selectedBot.id,
+              x_handle: selectedBotHandle || setupForm.x_handle,
+              website_url: selectedBot.website_url || setupForm.website_url,
+              product_context: selectedBotProductSummary || setupForm.product_context,
+              target_audience: selectedBot.target_audience || setupForm.target_audience,
+              voice_preference: selectedBot.voice_tone || setupForm.voice_preference,
+              guardrails: selectedBotGuardrailsSummary || setupForm.guardrails,
+            }
+          : setupForm,
+      );
       setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, bot: data.bot }));
       setSelectedBotID(data.bot.id);
       pushToast(t("dailyXQueue.toast.setupSaved"));
@@ -267,6 +348,32 @@ export default function DailyXQueuePage() {
       pushToast(t("dailyXQueue.toast.sourceSaved"));
     } catch (error) {
       pushToast(localizedError(error, "dailyXQueue.toast.error.source"));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleSelectContentSource = async () => {
+    if (!selectedContentID) {
+      pushToast(t("dailyXQueue.toast.error.contentSelectionRequired"));
+      return;
+    }
+    setBusy("source");
+    try {
+      const data = await dailyXQueueService.selectSourceMaterial(selectedContentID);
+      setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, source_material: data.source_material }));
+      setSourceForm({
+        title: data.source_material.title || "",
+        body: data.source_material.body || "",
+        source_url: data.source_material.source_url || "",
+        topics: (data.source_material.topics || []).join(", "),
+        growth_goal: data.source_material.growth_goal || "",
+        cta_preference: data.source_material.cta_preference || "",
+      });
+      setSelectedContentID(data.source_material.id);
+      pushToast(t("dailyXQueue.toast.sourceSelected"));
+    } catch (error) {
+      pushToast(localizedError(error, "dailyXQueue.toast.error.sourceSelect"));
     } finally {
       setBusy("");
     }
@@ -400,11 +507,13 @@ export default function DailyXQueuePage() {
   ], [approvedOrCopiedCount, drafts.length, reviewActionsCount, setupReady, sourceReady, t]);
   const nextActivationStep = activationStepItems.find((item) => !item.done);
   const setupBlockedHint = !setupCanSave
-    ? t(selectedBotID ? "dailyXQueue.setup.missingHandleHint" : "dailyXQueue.setup.missingRequiredHint")
+    ? t(usingExistingBot ? "dailyXQueue.setup.missingHandleHint" : "dailyXQueue.setup.missingRequiredHint")
     : "";
   const sourceBlockedHint = !setupReady
     ? t("dailyXQueue.source.disabledHint")
-    : (!sourceForm.title.trim() || !sourceForm.body.trim() ? t("dailyXQueue.source.missingRequiredHint") : "");
+    : (sourcePoolMode
+      ? (!selectedContentID ? t("dailyXQueue.source.missingPoolSelectionHint") : "")
+      : (!sourceForm.title.trim() || !sourceForm.body.trim() ? t("dailyXQueue.source.missingRequiredHint") : ""));
   const generateBlockedHint = !setupReady
     ? t("dailyXQueue.generate.setupFirstHint")
     : (!sourceReady ? t("dailyXQueue.generate.sourceFirstHint") : "");
@@ -501,13 +610,7 @@ export default function DailyXQueuePage() {
                     </option>
                   ))}
                 </select>
-                {selectedBot ? (
-                  <div className="mt-3 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-3">
-                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.selectedBot")}</span> {selectedBot.name}</p>
-                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botVoice")}</span> {selectedBot.voice_tone || t("dailyXQueue.setup.notSet")}</p>
-                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botAudience")}</span> {selectedBot.target_audience || t("dailyXQueue.setup.notSet")}</p>
-                  </div>
-                ) : (
+                {!selectedBot ? (
                   <div className="mt-3 flex flex-col gap-2 text-xs leading-5 text-[#8b98a5] sm:flex-row sm:items-center sm:justify-between">
                     <span>{bots.length ? t("dailyXQueue.setup.chooseBotHint") : t("dailyXQueue.setup.noBotsHint")}</span>
                     <Link href="/oaf-bots" className="inline-flex items-center gap-1 font-semibold text-[#1d9bf0] hover:underline">
@@ -515,23 +618,60 @@ export default function DailyXQueuePage() {
                       {t("dailyXQueue.setup.manageBots")}
                     </Link>
                   </div>
-                )}
+                ) : null}
               </div>
-              <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
-              <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
+              {selectedBot ? (
+                <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[#1d9bf0]/15 text-[#1d9bf0]">
+                      <Bot className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.setup.botSummaryTitle")}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.setup.botSummaryDescription")}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-2 text-xs leading-5 text-[#8b98a5] sm:grid-cols-2">
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.selectedBot")}</span> {selectedBot.name}</p>
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botHandle")}</span> {selectedBotHandle ? `@${selectedBotHandle}` : t("dailyXQueue.setup.notSet")}</p>
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botVoice")}</span> {selectedBot.voice_tone || t("dailyXQueue.setup.notSet")}</p>
+                    <p><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botAudience")}</span> {selectedBot.target_audience || t("dailyXQueue.setup.notSet")}</p>
+                    <p className="sm:col-span-2"><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botProduct")}</span> {selectedBotProductSummary || t("dailyXQueue.setup.notSet")}</p>
+                    <p className="sm:col-span-2"><span className="text-[#e7e9ea]">{t("dailyXQueue.setup.botGuardrails")}</span> {selectedBotGuardrailsSummary || t("dailyXQueue.setup.notSet")}</p>
+                  </div>
+                  {selectedBotNeedsManualHandle ? (
+                    <div className="mt-4 grid gap-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.setup.manualHandleLabel")}</label>
+                      <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
+                      <p className="text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.setup.manualHandleHint")}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs leading-5 text-emerald-200">{t("dailyXQueue.setup.boundHandleHint")}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.setup.manualContextTitle")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.setup.manualContextDescription")}</p>
+                  </div>
+                  <Input placeholder={t("dailyXQueue.setup.handlePlaceholder")} value={setupForm.x_handle} onChange={(event) => setSetupForm((v) => ({ ...v, x_handle: event.target.value }))} />
+                  <textarea className="form-input min-h-28 resize-y" placeholder={t("dailyXQueue.setup.productPlaceholder")} value={setupForm.product_context} onChange={(event) => setSetupForm((v) => ({ ...v, product_context: event.target.value }))} />
+                  <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.setup.advancedTitle")}</summary>
+                    <div className="mt-3 grid gap-3">
+                      <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
+                      <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
+                      <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
+                      <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
-            <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.setup.advancedTitle")}</summary>
-              <div className="mt-3 grid gap-3">
-                <Input placeholder={t("dailyXQueue.setup.websitePlaceholder")} value={setupForm.website_url} onChange={(event) => setSetupForm((v) => ({ ...v, website_url: event.target.value }))} />
-                <Input placeholder={t("dailyXQueue.setup.audiencePlaceholder")} value={setupForm.target_audience} onChange={(event) => setSetupForm((v) => ({ ...v, target_audience: event.target.value }))} />
-                <Input placeholder={t("dailyXQueue.setup.voicePlaceholder")} value={setupForm.voice_preference} onChange={(event) => setSetupForm((v) => ({ ...v, voice_preference: event.target.value }))} />
-                <textarea className="form-input min-h-20 resize-y" placeholder={t("dailyXQueue.setup.guardrailsPlaceholder")} value={setupForm.guardrails} onChange={(event) => setSetupForm((v) => ({ ...v, guardrails: event.target.value }))} />
-              </div>
-            </details>
             <Button type="button" disabled={busy === "setup" || !setupCanSave} onClick={handleSetup}>
               {busy === "setup" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {t("dailyXQueue.setup.save")}
+              {selectedBot ? t("dailyXQueue.setup.useBot") : t("dailyXQueue.setup.saveManual")}
             </Button>
             {setupBlockedHint ? <p className="text-xs leading-5 text-[#71767b]">{setupBlockedHint}</p> : null}
           </div>
@@ -546,24 +686,85 @@ export default function DailyXQueuePage() {
               {sourceReady ? <CheckCircle2 className="size-3.5" /> : null}
               {sourceReady ? t("dailyXQueue.source.readyStatus") : t("dailyXQueue.source.notReadyStatus")}
             </div>
-            <div className="grid gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.source.requiredTitle")}</p>
-              <Input placeholder={t("dailyXQueue.source.titlePlaceholder")} value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
-              <textarea className="form-input min-h-32 resize-y" placeholder={t("dailyXQueue.source.bodyPlaceholder")} value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
-            </div>
-            <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.source.advancedTitle")}</summary>
-              <div className="mt-3 grid gap-3">
-                <Input placeholder={t("dailyXQueue.source.urlPlaceholder")} value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
-                <Input placeholder={t("dailyXQueue.source.topicsPlaceholder")} value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
-                <Input placeholder={t("dailyXQueue.source.goalPlaceholder")} value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
-                <Input placeholder={t("dailyXQueue.source.ctaPlaceholder")} value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
+            {selectedBot ? (
+              <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.source.poolTitle")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.source.poolDescription")}</p>
+                  </div>
+                  <Link href="/oaf-bots" className="inline-flex items-center gap-1 text-xs font-semibold text-[#1d9bf0] hover:underline">
+                    <Bot className="size-3.5" />
+                    {t("dailyXQueue.source.managePool")}
+                  </Link>
+                </div>
+                {contentItemsLoading ? (
+                  <div className="mt-4 inline-flex items-center gap-2 text-xs text-[#8b98a5]">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    {t("dailyXQueue.source.poolLoading")}
+                  </div>
+                ) : availableContentItems.length > 0 ? (
+                  <div className="mt-4 grid gap-3">
+                    <select
+                      className="form-input h-11 py-0"
+                      value={selectedContentID || ""}
+                      onChange={(event) => setSelectedContentID(Number(event.target.value))}
+                    >
+                      <option value="" disabled>{t("dailyXQueue.source.poolPlaceholder")}</option>
+                      {availableContentItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedContentItem ? (
+                      <div className="grid gap-2 rounded-2xl border border-[#2f3336] bg-black p-3 text-xs leading-5 text-[#8b98a5]">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          <p><span className="text-[#e7e9ea]">{t("dailyXQueue.source.previewTitle")}</span> {selectedContentItem.title}</p>
+                          <p><span className="text-[#e7e9ea]">{t("dailyXQueue.source.previewType")}</span> {selectedContentItem.item_type}</p>
+                        </div>
+                        <p className="max-h-16 overflow-hidden">{selectedContentItem.body}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          <p><span className="text-[#e7e9ea]">{t("dailyXQueue.source.previewTopics")}</span> {(selectedContentItem.topics || []).join(", ") || t("dailyXQueue.setup.notSet")}</p>
+                          <p><span className="text-[#e7e9ea]">{t("dailyXQueue.source.previewCta")}</span> {selectedContentItem.cta_preference || t("dailyXQueue.setup.notSet")}</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.source.poolEmpty")}</p>
+                )}
               </div>
-            </details>
-            <Button type="button" disabled={busy === "source" || !setupReady || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={handleSource}>
-              {busy === "source" ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
-              {t("dailyXQueue.source.save")}
-            </Button>
+            ) : null}
+            {showManualSourceForm ? (
+              <>
+                <div className="grid gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("dailyXQueue.source.requiredTitle")}</p>
+                  <Input placeholder={t("dailyXQueue.source.titlePlaceholder")} value={sourceForm.title} onChange={(event) => setSourceForm((v) => ({ ...v, title: event.target.value }))} />
+                  <textarea className="form-input min-h-32 resize-y" placeholder={t("dailyXQueue.source.bodyPlaceholder")} value={sourceForm.body} onChange={(event) => setSourceForm((v) => ({ ...v, body: event.target.value }))} />
+                </div>
+                <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.source.advancedTitle")}</summary>
+                  <div className="mt-3 grid gap-3">
+                    <Input placeholder={t("dailyXQueue.source.urlPlaceholder")} value={sourceForm.source_url} onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))} />
+                    <Input placeholder={t("dailyXQueue.source.topicsPlaceholder")} value={sourceForm.topics} onChange={(event) => setSourceForm((v) => ({ ...v, topics: event.target.value }))} />
+                    <Input placeholder={t("dailyXQueue.source.goalPlaceholder")} value={sourceForm.growth_goal} onChange={(event) => setSourceForm((v) => ({ ...v, growth_goal: event.target.value }))} />
+                    <Input placeholder={t("dailyXQueue.source.ctaPlaceholder")} value={sourceForm.cta_preference} onChange={(event) => setSourceForm((v) => ({ ...v, cta_preference: event.target.value }))} />
+                  </div>
+                </details>
+              </>
+            ) : null}
+            {sourcePoolMode ? (
+              <Button type="button" disabled={busy === "source" || !setupReady || !selectedContentID} onClick={handleSelectContentSource}>
+                {busy === "source" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                {t("dailyXQueue.source.usePoolItem")}
+              </Button>
+            ) : (
+              <Button type="button" disabled={busy === "source" || !setupReady || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={handleSource}>
+                {busy === "source" ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
+                {t("dailyXQueue.source.save")}
+              </Button>
+            )}
             {sourceBlockedHint ? <p className="text-xs leading-5 text-[#71767b]">{sourceBlockedHint}</p> : null}
           </div>
         </Card>

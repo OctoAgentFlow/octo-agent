@@ -208,6 +208,40 @@ func (s *DailyXQueueService) SaveSourceMaterial(userID uint, req dto.DailyXQueue
 	return &dto.DailyXQueueSourceMaterialResponse{Context: dailyXContextToDTO(*ctxRow), SourceMaterial: out}, nil
 }
 
+func (s *DailyXQueueService) SelectSourceMaterial(userID uint, req dto.DailyXQueueSelectSourceMaterialRequest) (*dto.DailyXQueueSourceMaterialResponse, error) {
+	ctxRow, err := s.latestContext(userID)
+	if err != nil || ctxRow.BotID == 0 {
+		return nil, ErrDailyXQueueSetupRequired
+	}
+	if req.ContentLibraryID == 0 {
+		return nil, ErrDailyXQueueSourceRequired
+	}
+	item, err := s.contentRepo.GetByUserAndID(userID, req.ContentLibraryID)
+	if err != nil {
+		return nil, fmt.Errorf("source material is not available")
+	}
+	if item.Status != "active" {
+		return nil, fmt.Errorf("source material is not active")
+	}
+	bot, err := s.botRepo.GetByUserAndID(userID, ctxRow.BotID)
+	if err != nil {
+		return nil, err
+	}
+	if item.BotID != nil && *item.BotID != bot.ID {
+		return nil, fmt.Errorf("source material is not available for this oaf bot")
+	}
+	if item.TwitterAccountID != nil && (bot.TwitterAccountID == 0 || *item.TwitterAccountID != bot.TwitterAccountID) {
+		return nil, fmt.Errorf("source material is not available for this oaf bot")
+	}
+	ctxRow.ContentLibraryID = item.ID
+	if err := s.contextRepo.Save(ctxRow); err != nil {
+		return nil, err
+	}
+	_ = s.recordActivity(userID, 0, "system", "review", dailyXQueuePreviewSource, "@"+ctxRow.XHandle, "Daily X Queue existing source material selected.")
+	out := contentLibraryItemToDTO(*item)
+	return &dto.DailyXQueueSourceMaterialResponse{Context: dailyXContextToDTO(*ctxRow), SourceMaterial: out}, nil
+}
+
 func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.DailyXQueueGenerateResponse, error) {
 	ctxRow, err := s.latestContext(userID)
 	if err != nil || ctxRow.BotID == 0 {

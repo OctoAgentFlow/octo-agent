@@ -26,6 +26,8 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type ExecutionMode = "manual" | "review" | "autopilot";
+type ReplyDraftFilter = "all" | "needs_review" | "ready" | "sent" | "failed" | "rejected";
+type OverviewMetricTone = "blue" | "green" | "violet" | "yellow" | "red";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
 const inputClass = "form-input";
@@ -60,14 +62,28 @@ function canEditReplyDraft(status: string) {
   return status === "review" || status === "pending_review" || status === "draft" || status === "approved";
 }
 
+function isReplyReviewStatus(status: string) {
+  return status === "draft" || status === "review" || status === "pending_review";
+}
+
+function isReplyPublishReadyStatus(status: string) {
+  return status === "approved" || status === "ready_to_publish";
+}
+
+function isReplySentStatus(status: string) {
+  return status === "published" || status === "sent";
+}
+
 export default function AutoRepliesPage() {
   const { t } = useT();
   const { pushToast } = useToast();
   const { confirm } = useConfirm();
+  const timeZone = usePreferredTimeZone();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [drafts, setDrafts] = useState<AutoReplyDraftApi[]>([]);
+  const [draftFilter, setDraftFilter] = useState<ReplyDraftFilter>("all");
   const [plan, setPlan] = useState("free_trial");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [replyModule, setReplyModule] = useState<AutomationModuleApi | null>(null);
@@ -89,15 +105,29 @@ export default function AutoRepliesPage() {
     [bots, selectedAccount]
   );
   const autopilotAvailable = canUseAutopilot(plan);
-  const accountDrafts = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccount?.id), [drafts, selectedAccount?.id]);
-  const queuedDraftCount = useMemo(
-    () => accountDrafts.filter((draft) => ["draft", "review", "pending_review", "approved", "ready_to_publish"].includes(draft.status)).length,
-    [accountDrafts]
+  const accountDrafts = useMemo(
+    () =>
+      drafts
+        .filter((draft) => draft.x_account_id === selectedAccount?.id)
+        .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || "")),
+    [drafts, selectedAccount?.id]
   );
   const publishReadyCount = useMemo(
-    () => accountDrafts.filter((draft) => ["approved", "ready_to_publish", "published", "sent"].includes(draft.status)).length,
+    () => accountDrafts.filter((draft) => isReplyPublishReadyStatus(draft.status)).length,
     [accountDrafts]
   );
+  const reviewDraftCount = useMemo(() => accountDrafts.filter((draft) => isReplyReviewStatus(draft.status)).length, [accountDrafts]);
+  const sentDraftCount = useMemo(() => accountDrafts.filter((draft) => isReplySentStatus(draft.status)).length, [accountDrafts]);
+  const failedDraftCount = useMemo(() => accountDrafts.filter((draft) => draft.status === "failed").length, [accountDrafts]);
+  const rejectedDraftCount = useMemo(() => accountDrafts.filter((draft) => draft.status === "rejected").length, [accountDrafts]);
+  const visibleDrafts = useMemo(() => {
+    if (draftFilter === "needs_review") return accountDrafts.filter((draft) => isReplyReviewStatus(draft.status));
+    if (draftFilter === "ready") return accountDrafts.filter((draft) => isReplyPublishReadyStatus(draft.status));
+    if (draftFilter === "sent") return accountDrafts.filter((draft) => isReplySentStatus(draft.status));
+    if (draftFilter === "failed") return accountDrafts.filter((draft) => draft.status === "failed");
+    if (draftFilter === "rejected") return accountDrafts.filter((draft) => draft.status === "rejected");
+    return accountDrafts;
+  }, [accountDrafts, draftFilter]);
 
   const loadAll = useCallback(async () => {
     setLoadState("loading");
@@ -301,27 +331,23 @@ export default function AutoRepliesPage() {
 
       {loadState === "ready" ? (
         <>
-          <AutomationSetupGuide
-            baseKey="autoReply"
-            hasAccount={Boolean(selectedAccount)}
+          <AutoReplyRunSummary
+            selectedAccount={selectedAccount}
+            selectedBot={selectedBot}
+            module={replyModule}
             hasTargetInput={hasTargetInput}
-            autopilotAvailable={autopilotAvailable}
             executionMode={executionMode}
-            queueHref="/execution-queue?type=reply"
-          />
-          <AutomationPipelineSummary
-            baseKey="autoReply"
-            inputValue={commentText.trim() ? formatHandle(authorHandle) : t("autoReply.pipeline.inputValue", { count: accountDrafts.length })}
-            queueCount={queuedDraftCount}
+            accountDraftCount={accountDrafts.length}
+            reviewDraftCount={reviewDraftCount}
             publishReadyCount={publishReadyCount}
-            executionMode={executionMode}
-            queueHref="/execution-queue?type=reply"
+            failedDraftCount={failedDraftCount}
           />
           <ReplyScanStatusCard module={replyModule} />
         </>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div id="auto-reply-target-form">
         <Card className="bg-[#0f1419]">
           <CardHeader title={t("autoReply.target.title")} description={t("autoReply.target.description")} />
           <div className="space-y-4">
@@ -480,6 +506,7 @@ export default function AutoRepliesPage() {
             </Button>
           </div>
         </Card>
+        </div>
 
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
@@ -489,14 +516,49 @@ export default function AutoRepliesPage() {
                 {modulePausedActionTip}
               </p>
             ) : null}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <ReplyQueueMetric label={t("autoReply.review.metrics.review")} value={reviewDraftCount} tone="yellow" />
+              <ReplyQueueMetric label={t("autoReply.review.metrics.ready")} value={publishReadyCount} tone="green" />
+              <ReplyQueueMetric label={t("autoReply.review.metrics.sent")} value={sentDraftCount} tone="blue" />
+              <ReplyQueueMetric label={t("autoReply.review.metrics.failed")} value={failedDraftCount} tone="red" />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {([
+                { key: "all" as ReplyDraftFilter, count: accountDrafts.length },
+                { key: "needs_review" as ReplyDraftFilter, count: reviewDraftCount },
+                { key: "ready" as ReplyDraftFilter, count: publishReadyCount },
+                { key: "sent" as ReplyDraftFilter, count: sentDraftCount },
+                { key: "failed" as ReplyDraftFilter, count: failedDraftCount },
+                { key: "rejected" as ReplyDraftFilter, count: rejectedDraftCount },
+              ]).map((filter) => {
+                const active = draftFilter === filter.key;
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setDraftFilter(filter.key)}
+                    className={[
+                      "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition-colors",
+                      active ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/15 text-[#d7ebff]" : "border-[#2f3336] bg-black text-[#71767b] hover:text-[#e7e9ea]",
+                    ].join(" ")}
+                  >
+                    {t(`autoReply.review.filters.${filter.key}`)}
+                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">{filter.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#71767b]">
+              {t("autoReply.review.showing", { shown: Math.min(visibleDrafts.length, 12), total: visibleDrafts.length })}
+            </p>
           </div>
           <div className="divide-y divide-[#2f3336]">
-            {drafts.length === 0 ? (
+            {visibleDrafts.length === 0 ? (
               <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">
-                {t("autoReply.review.empty")}
+                {accountDrafts.length === 0 ? t("autoReply.review.empty") : t("autoReply.review.filteredEmpty")}
               </div>
             ) : (
-              drafts.slice(0, 12).map((draft) => {
+              visibleDrafts.slice(0, 12).map((draft) => {
                 const canReview = draft.status === "review" || draft.status === "pending_review" || draft.status === "draft";
                 const canEditDraft = canEditReplyDraft(draft.status);
                 const canRetryReply = Boolean(draft.comment_tweet_id && (draft.status === "sent" || draft.status === "published" || draft.status === "failed"));
@@ -530,10 +592,11 @@ export default function AutoRepliesPage() {
                             <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea] [overflow-wrap:anywhere]">{draft.generated_reply || "—"}</p>
                           )}
                         </div>
-                        <div className="grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
+                        <div className="grid gap-2 text-xs text-[#71767b] sm:grid-cols-4">
                           <DraftRouteStep label={t("autoReply.pipeline.input")} value={formatHandle(draft.comment_author_handle)} />
                           <DraftRouteStep label={t("autoReply.pipeline.queue")} value={t(statusKey(draft.status))} />
                           <DraftRouteStep label={t("autoReply.pipeline.publish")} value={draft.status === "published" || draft.status === "sent" ? t("autoReply.pipeline.published") : t("autoReply.pipeline.waiting")} />
+                          <DraftRouteStep label={t("autoReply.review.createdAt")} value={formatDateTime(draft.created_at, timeZone)} />
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -589,6 +652,108 @@ export default function AutoRepliesPage() {
   );
 }
 
+function AutoReplyRunSummary({
+  selectedAccount,
+  selectedBot,
+  module,
+  hasTargetInput,
+  executionMode,
+  accountDraftCount,
+  reviewDraftCount,
+  publishReadyCount,
+  failedDraftCount,
+}: {
+  selectedAccount: AccountListItem | null;
+  selectedBot: OAFBot | null;
+  module: AutomationModuleApi | null;
+  hasTargetInput: boolean;
+  executionMode: ExecutionMode;
+  accountDraftCount: number;
+  reviewDraftCount: number;
+  publishReadyCount: number;
+  failedDraftCount: number;
+}) {
+  const { t } = useT();
+  const timeZone = usePreferredTimeZone();
+  const accountReady = Boolean(selectedAccount?.publish_ready);
+  const moduleRunning = Boolean(module?.config.enabled);
+  const metrics: Array<{
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    helper: string;
+    tone: OverviewMetricTone;
+  }> = [
+    {
+      icon: ShieldCheck,
+      label: t("autoReply.overview.account"),
+      value: selectedAccount ? formatHandle(selectedAccount.username || selectedAccount.display_name) : t("autoReply.target.noAccounts"),
+      helper: accountReady ? t("autoReply.overview.accountReady") : t("autoReply.overview.accountBlocked"),
+      tone: accountReady ? "green" : "yellow",
+    },
+    {
+      icon: Bot,
+      label: t("autoReply.overview.bot"),
+      value: selectedBot?.name || t("autoReply.botStatus.title"),
+      helper: selectedBot ? t("autoReply.overview.botReady") : t("autoReply.overview.botMissing"),
+      tone: selectedBot ? "blue" : "yellow",
+    },
+    {
+      icon: Database,
+      label: t("autoReply.overview.target"),
+      value: hasTargetInput ? t("autoReply.signal.inputReady") : t("autoReply.signal.inputWaiting"),
+      helper: t("autoReply.overview.targetHelper"),
+      tone: hasTargetInput ? "green" : "blue",
+    },
+    {
+      icon: ListChecks,
+      label: t("autoReply.overview.mode"),
+      value: t(`autoReply.execution.${executionMode}.title`),
+      helper: t("autoReply.overview.modeHelper"),
+      tone: executionMode === "autopilot" ? "green" : "blue",
+    },
+    {
+      icon: Send,
+      label: t("autoReply.overview.queue"),
+      value: t("autoReply.overview.queueValue", { review: reviewDraftCount, publish: publishReadyCount }),
+      helper: t("autoReply.overview.queueHelper", { total: accountDraftCount, failed: failedDraftCount }),
+      tone: failedDraftCount > 0 ? "red" : "violet",
+    },
+    {
+      icon: Sparkles,
+      label: t("autoReply.overview.scan"),
+      value: moduleRunning ? t("autoReply.overview.scanOn") : t("autoReply.overview.scanOff"),
+      helper: module?.next_run_at ? t("autoReply.overview.nextScan", { time: formatDateTime(module.next_run_at, timeZone) }) : t("autoReply.overview.scanHelper"),
+      tone: moduleRunning ? "green" : "yellow",
+    },
+  ];
+
+  return (
+    <Card className="border-[#1d9bf0]/20 bg-[#06111d]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("autoReply.overview.title")}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#8b98a5]">{t("autoReply.overview.description")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link href="#auto-reply-target-form" className="inline-flex h-8 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+            <Wand2 className="size-3.5" />
+            {t("autoReply.overview.generateCta")}
+          </Link>
+          <Link href="/execution-queue?type=reply" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("autoReply.overview.queueCta")}
+          </Link>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+        {metrics.map((metric) => (
+          <OverviewMetric key={metric.label} {...metric} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function replyScanStatusTone(status?: string) {
   if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   if (status === "failed" || status === "reauth_required") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]";
@@ -604,177 +769,79 @@ function ReplyScanStatusCard({ module }: { module: AutomationModuleApi | null })
   const tone = replyScanStatusTone(status);
 
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419]">
+      <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoReply.scan.title")}</p>
-          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoReply.scan.description")}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{t("autoReply.scan.description")}</p>
         </div>
         <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}>
           <ListChecks className="size-3.5" />
           {t(`autoReply.scan.status.${status}`)}
         </span>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      </summary>
+      <div className="grid gap-3 border-t border-[#2f3336] p-4 md:grid-cols-3">
         <DraftRouteStep label={t("autoReply.scan.lastResult")} value={message} />
         <DraftRouteStep label={t("autoReply.scan.lastRun")} value={formatDateTime(module?.last_run_at || module?.last_scan_at, timeZone)} />
         <DraftRouteStep label={t("autoReply.scan.nextRun")} value={module?.config.enabled ? formatDateTime(module?.next_run_at, timeZone) : t("automation.time.paused")} />
       </div>
-    </Card>
+    </details>
   );
 }
 
-function AutomationSetupGuide({
-  baseKey,
-  hasAccount,
-  hasTargetInput,
-  autopilotAvailable,
-  executionMode,
-  queueHref,
+function OverviewMetric({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  tone,
 }: {
-  baseKey: "autoReply";
-  hasAccount: boolean;
-  hasTargetInput: boolean;
-  autopilotAvailable: boolean;
-  executionMode: ExecutionMode;
-  queueHref: string;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  helper: string;
+  tone: OverviewMetricTone;
 }) {
-  const { t } = useT();
-  const autopilotReady = executionMode === "autopilot" && autopilotAvailable;
-  const checks = [
-    {
-      done: hasAccount,
-      title: t(`${baseKey}.setup.account.title`),
-      description: t(`${baseKey}.setup.account.description`),
-    },
-    {
-      done: hasTargetInput,
-      title: t(`${baseKey}.setup.target.title`),
-      description: t(`${baseKey}.setup.target.description`),
-    },
-    {
-      done: autopilotReady,
-      title: t(`${baseKey}.setup.mode.title`),
-      description: t(`${baseKey}.setup.mode.description`),
-    },
-    {
-      done: true,
-      title: t(`${baseKey}.setup.queue.title`),
-      description: t(`${baseKey}.setup.queue.description`),
-    },
-  ];
-  const missingCount = checks.filter((item) => !item.done).length;
-
+  const toneClass =
+    tone === "green"
+      ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+      : tone === "violet"
+        ? "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]"
+        : tone === "yellow"
+          ? "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"
+          : tone === "red"
+            ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]"
+            : "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
   return (
-    <Card className={missingCount === 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-[#e7e9ea]">{missingCount === 0 ? t(`${baseKey}.setup.readyTitle`) : t(`${baseKey}.setup.title`)}</p>
-          <p className="mt-1 text-sm leading-6 text-[#71767b]">{missingCount === 0 ? t(`${baseKey}.setup.readyDescription`) : t(`${baseKey}.setup.description`)}</p>
-        </div>
-        <Link href={queueHref} className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-white hover:bg-[#16181c]">
-          {t(`${baseKey}.pipeline.openQueue`)}
-        </Link>
+    <div className="min-w-0 rounded-2xl border border-[#1d9bf0]/15 bg-black/35 p-3">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className={`inline-flex size-8 shrink-0 items-center justify-center rounded-xl border ${toneClass}`}>
+          <Icon className="size-3.5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase tracking-[0.12em] text-[#71767b]">{label}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{value}</span>
+          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#8b98a5]">{helper}</span>
+        </span>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {checks.map((item) => (
-          <div key={item.title} className="rounded-xl border border-[#2f3336] bg-black p-3">
-            <div className="flex items-start gap-3">
-              <span className={`mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border ${item.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
-                {item.done ? <CheckCircle2 className="size-4" /> : <span className="size-2 rounded-full bg-current" />}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
-                <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
+    </div>
   );
 }
 
-function AutomationPipelineSummary({
-  baseKey,
-  inputValue,
-  queueCount,
-  publishReadyCount,
-  executionMode,
-  queueHref,
-}: {
-  baseKey: "autoReply";
-  inputValue: string;
-  queueCount: number;
-  publishReadyCount: number;
-  executionMode: ExecutionMode;
-  queueHref: string;
-}) {
-  const { t } = useT();
-  const steps = [
-    {
-      id: "input",
-      icon: Database,
-      title: t(`${baseKey}.pipeline.input`),
-      value: inputValue,
-      description: t(`${baseKey}.pipeline.inputDesc`),
-      tone: "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]",
-    },
-    {
-      id: "generate",
-      icon: Wand2,
-      title: t(`${baseKey}.pipeline.generate`),
-      value: t(`${baseKey}.execution.${executionMode}.title`),
-      description: t(`${baseKey}.pipeline.generateDesc`),
-      tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
-    },
-    {
-      id: "queue",
-      icon: ListChecks,
-      title: t(`${baseKey}.pipeline.queue`),
-      value: t(`${baseKey}.pipeline.queueValue`, { count: queueCount }),
-      description: t(`${baseKey}.pipeline.queueDesc`),
-      tone: "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]",
-    },
-    {
-      id: "publish",
-      icon: Send,
-      title: t(`${baseKey}.pipeline.publish`),
-      value: t(`${baseKey}.pipeline.publishValue`, { count: publishReadyCount }),
-      description: t(`${baseKey}.pipeline.publishDesc`),
-      tone: "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]",
-    },
-  ];
-
+function ReplyQueueMetric({ label, value, tone }: { label: string; value: number; tone: "blue" | "green" | "yellow" | "red" }) {
+  const toneClass =
+    tone === "green"
+      ? "text-[#7ee0b5]"
+      : tone === "yellow"
+        ? "text-[#f6d96b]"
+        : tone === "red"
+          ? "text-[#ff9aa2]"
+          : "text-[#8ecdf8]";
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t(`${baseKey}.pipeline.title`)}</p>
-          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t(`${baseKey}.pipeline.description`)}</p>
-        </div>
-        <Link href={queueHref} className="text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-          {t(`${baseKey}.pipeline.openQueue`)}
-        </Link>
-      </div>
-      <div className="grid gap-3 lg:grid-cols-4">
-        {steps.map((step, index) => (
-          <div key={step.id} className="relative min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border ${step.tone}`}>
-                <step.icon className="size-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-[#e7e9ea]">{step.title}</span>
-                <span className="mt-1 block truncate text-sm text-[#8ecdf8]">{step.value}</span>
-                <span className="mt-2 block line-clamp-2 text-xs leading-5 text-[#71767b]">{step.description}</span>
-              </span>
-            </div>
-            {index < steps.length - 1 ? <ArrowRight className="absolute -right-2 top-1/2 hidden size-4 -translate-y-1/2 text-[#2f3336] lg:block" /> : null}
-          </div>
-        ))}
-      </div>
-    </Card>
+    <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${toneClass}`}>{value}</p>
+    </div>
   );
 }
 

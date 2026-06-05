@@ -1284,6 +1284,7 @@ export const dict: I18nDict = {
   "autoComment.errors.generate": "Failed to generate comment opportunity.",
   "autoComment.errors.quota": "This month's AI generation or Auto Comment quota is used up. Upgrade to keep generating.",
   "autoComment.errors.lowOpportunity": "This post's opportunity score is below the 75 recommendation threshold, so no AI comment was generated.",
+  "autoComment.errors.alreadyCompleted": "This target tweet already has a completed comment record, so it was skipped.",
   "autoComment.errors.approve": "Failed to approve comment content.",
   "autoComment.errors.quotePost": "Failed to queue quote post.",
   "autoComment.errors.reject": "Failed to reject comment content.",

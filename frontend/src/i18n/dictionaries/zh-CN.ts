@@ -1255,6 +1255,7 @@ export const dict: I18nDict = {
   "autoComment.errors.generate": "生成评论机会失败。",
   "autoComment.errors.quota": "本月 AI 生成或自动评论额度已用完，请升级套餐继续生成。",
   "autoComment.errors.lowOpportunity": "这条推文的机会评分低于 75 分推荐阈值，已在 AI 生成前跳过。",
+  "autoComment.errors.alreadyCompleted": "这条目标推文已有完成的评论记录，已跳过生成。",
   "autoComment.errors.approve": "批准评论内容失败。",
   "autoComment.errors.quotePost": "加入引用发布队列失败。",
   "autoComment.errors.reject": "拒绝评论内容失败。",

@@ -112,6 +112,24 @@ func (r *ActivityRepository) HasSuccessfulReplyToRefTweet(userID uint, refTweetI
 	return n > 0, nil
 }
 
+// HasSuccessfulCommentToRefTweet returns true if we already logged a successful Auto Comment against this target tweet.
+func (r *ActivityRepository) HasSuccessfulCommentToRefTweet(userID, xAccountID uint, refTweetID string) (bool, error) {
+	if refTweetID == "" {
+		return false, nil
+	}
+	q := r.DB.Model(&model.ActivityLog{}).
+		Where("user_id = ? AND type = ? AND status = ?", userID, "comment", "success").
+		Where("(reply_comment_tweet_id = ? OR ref_tweet_id = ?)", refTweetID, refTweetID)
+	if xAccountID > 0 {
+		q = q.Where("x_account_id = ?", xAccountID)
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // LatestReplyExecutedAt returns the latest executed_at among reply activities (success or failed), or nil.
 func (r *ActivityRepository) LatestReplyExecutedAt(userID uint) (*time.Time, error) {
 	var row model.ActivityLog

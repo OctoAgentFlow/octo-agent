@@ -38,6 +38,7 @@ const (
 
 var (
 	ErrAutoCommentOpportunityTooLow   = errors.New("auto_comment_opportunity_too_low")
+	ErrAutoCommentAlreadyCompleted    = errors.New("auto_comment_already_completed")
 	ErrAutoCommentTargetLimitExceeded = errors.New("auto_comment_target_limit_exceeded")
 	ErrAutoCommentScanLimitExceeded   = errors.New("auto_comment_scan_limit_exceeded")
 )
@@ -473,6 +474,11 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, target.XAccountID)
 	if err != nil {
 		return nil, fmt.Errorf("x account not found")
+	}
+	if completed, err := s.alreadyCompletedAutoCommentForTweet(userID, target.XAccountID, target.TargetTweetID); err != nil {
+		return nil, err
+	} else if completed {
+		return nil, autoCommentAlreadyCompletedError(target.TargetTweetID)
 	}
 	existing, err := s.taskRepo.GetByTargetTweet(userID, target.XAccountID, target.TargetTweetID)
 	if err == nil {
@@ -1085,6 +1091,13 @@ func (s *AutoCommentService) bestAutoCommentTweetCandidate(target model.AutoComm
 		if target.LastSeenTweetID == tw.ID {
 			break
 		}
+		completed, err := s.alreadyCompletedAutoCommentForTweet(target.UserID, target.XAccountID, tw.ID)
+		if err != nil {
+			return autoCommentTweetCandidate{}, false, err
+		}
+		if completed {
+			continue
+		}
 		exists, err := s.taskRepo.ExistsForTargetTweet(target.UserID, target.XAccountID, tw.ID)
 		if err != nil {
 			return autoCommentTweetCandidate{}, false, err
@@ -1324,6 +1337,11 @@ func autoCommentHealthSeverityRank(severity string) int {
 
 func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target model.AutoCommentTarget, cfg model.AutomationConfig, tw twitter.UserTweet) (*model.AutoCommentTask, error) {
 	now := time.Now().UTC()
+	if completed, err := s.alreadyCompletedAutoCommentForTweet(target.UserID, target.XAccountID, tw.ID); err != nil {
+		return nil, err
+	} else if completed {
+		return nil, autoCommentAlreadyCompletedError(tw.ID)
+	}
 	if existing, err := s.taskRepo.GetByTargetTweet(target.UserID, target.XAccountID, tw.ID); err == nil {
 		return existing, nil
 	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -2202,6 +2220,40 @@ func autoCommentOpportunityTooLowError(opportunity autoCommentOpportunity) error
 		msg = fmt.Sprintf("opportunity score %d is below minimum %d; skipped to avoid low-quality comments", opportunity.Score, autoCommentMinimumOpportunityScore)
 	}
 	return fmt.Errorf("%w: %s", ErrAutoCommentOpportunityTooLow, msg)
+}
+
+func autoCommentAlreadyCompletedError(tweetID string) error {
+	tweetID = strings.TrimSpace(tweetID)
+	if tweetID == "" {
+		return fmt.Errorf("%w: target tweet already has a completed Auto Comment record", ErrAutoCommentAlreadyCompleted)
+	}
+	return fmt.Errorf("%w: target tweet %s already has a completed Auto Comment record", ErrAutoCommentAlreadyCompleted, tweetID)
+}
+
+func (s *AutoCommentService) alreadyCompletedAutoCommentForTweet(userID, xAccountID uint, tweetID string) (bool, error) {
+	tweetID = strings.TrimSpace(tweetID)
+	if tweetID == "" {
+		return false, nil
+	}
+	if s != nil && s.taskRepo != nil {
+		exists, err := s.taskRepo.ExistsCompletedForTargetTweet(userID, xAccountID, tweetID)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+	}
+	if s != nil && s.activityRepo != nil {
+		exists, err := s.activityRepo.HasSuccessfulCommentToRefTweet(userID, xAccountID, tweetID)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func evaluateAutoCommentOpportunity(tweet, targetUsername string, bot *model.OAFBot, contentContext []GenerationContentContextItem, blockedWords []string) autoCommentOpportunity {

@@ -328,6 +328,8 @@ export default function AutoCommentsPage() {
           ? t("autoComment.errors.quota")
           : body?.error_code === "auto_comment_opportunity_too_low"
             ? t("autoComment.errors.lowOpportunity")
+          : body?.error_code === "auto_comment_already_completed"
+            ? t("autoComment.errors.alreadyCompleted")
           : body?.message || t("autoComment.errors.generate");
       pushToast(message);
     } finally {

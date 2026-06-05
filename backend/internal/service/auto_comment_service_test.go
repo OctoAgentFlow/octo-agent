@@ -7,6 +7,10 @@ import (
 	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/pkg/subscription"
+	"octo-agent/backend/internal/repository"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestEvaluateAutoCommentOpportunityScoresRelevantTweet(t *testing.T) {
@@ -88,6 +92,128 @@ func TestAutoCommentOpportunitySkipCategory(t *testing.T) {
 	}
 	if got := autoCommentOpportunitySkipCategory(75); got != "" {
 		t.Fatalf("expected 75+ to pass generation gate, got %s", got)
+	}
+}
+
+func newAutoCommentCompletionGuardTestService(t *testing.T) (*AutoCommentService, *gorm.DB) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&model.AutoCommentTask{}, &model.ActivityLog{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	return &AutoCommentService{
+		taskRepo:     repository.NewAutoCommentTaskRepository(db),
+		activityRepo: repository.NewActivityRepository(db),
+	}, db
+}
+
+func TestAlreadyCompletedAutoCommentForTweetChecksTasksAndActivity(t *testing.T) {
+	svc, db := newAutoCommentCompletionGuardTestService(t)
+	userID := uint(7)
+	xAccountID := uint(11)
+	now := time.Now().UTC()
+
+	if err := db.Create(&model.AutoCommentTask{
+		UserID:           userID,
+		XAccountID:       xAccountID,
+		TargetTweetID:    "handled_tweet",
+		Status:           "handled",
+		RiskLevel:        "low",
+		CapabilityStatus: "manual_handled",
+		DetectedAt:       now,
+	}).Error; err != nil {
+		t.Fatalf("create handled task: %v", err)
+	}
+	done, err := svc.alreadyCompletedAutoCommentForTweet(userID, xAccountID, "handled_tweet")
+	if err != nil {
+		t.Fatalf("check handled task: %v", err)
+	}
+	if !done {
+		t.Fatal("expected handled task to count as completed")
+	}
+
+	if err := db.Create(&model.AutoCommentTask{
+		UserID:           userID,
+		XAccountID:       xAccountID,
+		TargetTweetID:    "rejected_tweet",
+		Status:           "rejected",
+		RiskLevel:        "low",
+		CapabilityStatus: "review_required",
+		DetectedAt:       now,
+	}).Error; err != nil {
+		t.Fatalf("create rejected task: %v", err)
+	}
+	done, err = svc.alreadyCompletedAutoCommentForTweet(userID, xAccountID, "rejected_tweet")
+	if err != nil {
+		t.Fatalf("check rejected task: %v", err)
+	}
+	if done {
+		t.Fatal("expected rejected task not to count as completed")
+	}
+
+	ref := "activity_tweet"
+	if err := db.Create(&model.ActivityLog{
+		UserID:              userID,
+		XAccountID:          xAccountID,
+		Type:                "comment",
+		Status:              "success",
+		PreviewKey:          "activity.preview.commentSuccess",
+		AccountHandle:       "@octo_agent_flow",
+		ExecutedAt:          now,
+		RefTweetID:          &ref,
+		ReplyCommentTweetID: ref,
+	}).Error; err != nil {
+		t.Fatalf("create comment activity: %v", err)
+	}
+	done, err = svc.alreadyCompletedAutoCommentForTweet(userID, xAccountID, ref)
+	if err != nil {
+		t.Fatalf("check comment activity: %v", err)
+	}
+	if !done {
+		t.Fatal("expected successful comment activity to count as completed")
+	}
+}
+
+func TestBestAutoCommentTweetCandidateSkipsCompletedTweets(t *testing.T) {
+	svc, db := newAutoCommentCompletionGuardTestService(t)
+	userID := uint(8)
+	xAccountID := uint(12)
+	now := time.Now().UTC()
+	ref := "already_commented"
+	if err := db.Create(&model.ActivityLog{
+		UserID:              userID,
+		XAccountID:          xAccountID,
+		Type:                "comment",
+		Status:              "success",
+		PreviewKey:          "activity.preview.commentSuccess",
+		AccountHandle:       "@octo_agent_flow",
+		ExecutedAt:          now,
+		RefTweetID:          &ref,
+		ReplyCommentTweetID: ref,
+	}).Error; err != nil {
+		t.Fatalf("create comment activity: %v", err)
+	}
+
+	target := model.AutoCommentTarget{UserID: userID, XAccountID: xAccountID, TargetUsername: "target_kol", Priority: 5}
+	bot := &model.OAFBot{
+		Keywords: encodeStringList([]string{"AI Agent", "SocialFi", "X Growth"}),
+		Topics:   encodeStringList([]string{"automation"}),
+	}
+	candidate, ok, err := svc.bestAutoCommentTweetCandidate(target, []twitter.UserTweet{
+		{ID: ref, Text: "How are teams using AI Agent automation to improve X Growth without sounding spammy?", CreatedAt: now},
+		{ID: "fresh_candidate", Text: "How are SocialFi teams using AI Agent automation to improve X Growth without sounding spammy?", CreatedAt: now.Add(-time.Minute)},
+	}, bot, nil)
+	if err != nil {
+		t.Fatalf("select candidate: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected fresh candidate after skipping completed tweet")
+	}
+	if candidate.Tweet.ID != "fresh_candidate" {
+		t.Fatalf("expected completed tweet to be skipped, got %s", candidate.Tweet.ID)
 	}
 }
 

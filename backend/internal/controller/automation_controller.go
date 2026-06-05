@@ -790,6 +790,10 @@ func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
 			response.FailWithCode(c, http.StatusBadRequest, err.Error(), "auto_comment_opportunity_too_low")
 			return
 		}
+		if errors.Is(err, service.ErrAutoCommentAlreadyCompleted) {
+			response.FailWithCode(c, http.StatusConflict, err.Error(), "auto_comment_already_completed")
+			return
+		}
 		if strings.Contains(err.Error(), "monthly auto comment quota exceeded") {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "auto_comment_monthly_limit_exceeded")
 			return

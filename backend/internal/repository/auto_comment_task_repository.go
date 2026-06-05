@@ -65,6 +65,18 @@ func (r *AutoCommentTaskRepository) ExistsForTargetTweet(userID, xAccountID uint
 	return n > 0, err
 }
 
+func (r *AutoCommentTaskRepository) ExistsCompletedForTargetTweet(userID, xAccountID uint, tweetID string) (bool, error) {
+	if tweetID == "" {
+		return false, nil
+	}
+	var n int64
+	err := r.DB.Model(&model.AutoCommentTask{}).
+		Where("user_id = ? AND x_account_id = ? AND target_tweet_id = ?", userID, xAccountID, tweetID).
+		Where("status IN ?", []string{"sent", "published", "handled"}).
+		Count(&n).Error
+	return n > 0, err
+}
+
 func (r *AutoCommentTaskRepository) GetByTargetTweet(userID, xAccountID uint, tweetID string) (*model.AutoCommentTask, error) {
 	var row model.AutoCommentTask
 	err := r.DB.Where("user_id = ? AND x_account_id = ? AND target_tweet_id = ?", userID, xAccountID, tweetID).First(&row).Error

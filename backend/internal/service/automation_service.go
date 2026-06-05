@@ -19,11 +19,14 @@ const (
 )
 
 type AutomationService struct {
-	repo         *repository.AutomationRepository
-	userRepo     *repository.UserRepository
-	activityRepo *repository.ActivityRepository
-	postRepo     *repository.PostRepository
-	autoPostRepo *repository.AutoPostPlanRepository
+	repo            *repository.AutomationRepository
+	userRepo        *repository.UserRepository
+	activityRepo    *repository.ActivityRepository
+	postRepo        *repository.PostRepository
+	autoPostRepo    *repository.AutoPostPlanRepository
+	commentTaskRepo *repository.AutoCommentTaskRepository
+	replyDraftRepo  *repository.AutoReplyDraftRepository
+	postDraftRepo   *repository.AutoPostDraftRepository
 }
 
 func NewAutomationService(
@@ -32,8 +35,20 @@ func NewAutomationService(
 	activityRepo *repository.ActivityRepository,
 	postRepo *repository.PostRepository,
 	autoPostRepo *repository.AutoPostPlanRepository,
+	commentTaskRepo *repository.AutoCommentTaskRepository,
+	replyDraftRepo *repository.AutoReplyDraftRepository,
+	postDraftRepo *repository.AutoPostDraftRepository,
 ) *AutomationService {
-	return &AutomationService{repo: repo, userRepo: userRepo, activityRepo: activityRepo, postRepo: postRepo, autoPostRepo: autoPostRepo}
+	return &AutomationService{
+		repo:            repo,
+		userRepo:        userRepo,
+		activityRepo:    activityRepo,
+		postRepo:        postRepo,
+		autoPostRepo:    autoPostRepo,
+		commentTaskRepo: commentTaskRepo,
+		replyDraftRepo:  replyDraftRepo,
+		postDraftRepo:   postDraftRepo,
+	}
 }
 
 func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) {
@@ -257,7 +272,7 @@ func (s *AutomationService) RuntimeStatus(userID uint) (*dto.AutomationRuntimeSt
 	now := time.Now().UTC()
 	since24h := now.Add(-24 * time.Hour)
 
-	needsReviewRows, err := s.activityRepo.CountByStatusSince(userID, "review", time.Time{})
+	needsReviewRows, err := s.currentExecutionQueueNeedsReview(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +312,56 @@ func (s *AutomationService) RuntimeStatus(userID uint) (*dto.AutomationRuntimeSt
 		RetriesLast24: int(retries24hRows),
 		NeedsReview:   int(needsReviewRows),
 	}, nil
+}
+
+func (s *AutomationService) currentExecutionQueueNeedsReview(userID uint) (int64, error) {
+	total := int64(0)
+	if s.commentTaskRepo != nil {
+		tasks, err := s.commentTaskRepo.ListQueueByUser(userID, 500)
+		if err != nil {
+			return 0, err
+		}
+		for _, task := range tasks {
+			if isReviewQueueNeedsReviewStatus(task.Status) {
+				total++
+			}
+		}
+	}
+	if s.replyDraftRepo != nil {
+		drafts, err := s.replyDraftRepo.ListByUser(userID, 500)
+		if err != nil {
+			return 0, err
+		}
+		for _, draft := range drafts {
+			if isReviewQueueNeedsReviewStatus(draft.Status) {
+				total++
+			}
+		}
+	}
+	if s.postDraftRepo != nil {
+		drafts, err := s.postDraftRepo.ListByUser(userID, 500)
+		if err != nil {
+			return 0, err
+		}
+		for _, draft := range drafts {
+			if isDailyXQueueDraft(draft) {
+				continue
+			}
+			if isReviewQueueNeedsReviewStatus(draft.Status) {
+				total++
+			}
+		}
+	}
+	return total, nil
+}
+
+func isReviewQueueNeedsReviewStatus(status string) bool {
+	switch normalizeReviewQueueStatus(status) {
+	case "draft", "pending_review":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, enabled bool, intervalMinutes int) error {

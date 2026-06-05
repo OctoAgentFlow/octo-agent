@@ -70,7 +70,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	walletService := service.NewWalletService(walletRepo)
 	accountService := service.NewAccountService(twitterAccountRepo, userRepo, cfg.XOAuth)
 	dashboardService := service.NewDashboardService(userRepo, walletRepo, twitterAccountRepo, activityRepo, autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, publishJobRepo)
-	automationService := service.NewAutomationService(automationRepo, userRepo, activityRepo, postRepo, autoPostPlanRepo)
+	automationService := service.NewAutomationService(automationRepo, userRepo, activityRepo, postRepo, autoPostPlanRepo, autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo)
 	activityService := service.NewActivityService(activityRepo, twitterAccountRepo)
 	analyticsService := service.NewAnalyticsService(activityRepo, postRepo, twitterAccountRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, autoDMTaskRepo)
 	agentService := service.NewAgentService(automationRepo)

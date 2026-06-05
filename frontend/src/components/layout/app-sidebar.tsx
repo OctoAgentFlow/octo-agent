@@ -8,7 +8,6 @@ import {
   BarChart3,
   Bot,
   Coins,
-  FileText,
   Flame,
   LayoutDashboard,
   ListChecks,
@@ -44,7 +43,6 @@ const navGroups = [
     items: [
       { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
       { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
-      { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
       { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
       { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
     ],

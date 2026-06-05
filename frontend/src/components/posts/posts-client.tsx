@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, FileText, Plus, Sparkles, XCircle, type LucideIcon } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileText, ListChecks, Sparkles, XCircle, type LucideIcon } from "lucide-react";
 
-import { UserOnboardingCard } from "@/components/onboarding/user-onboarding-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -113,13 +112,17 @@ export function PostsClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#71767b] md:text-[15px]">{t("posts.page.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/daily-x-queue" className={cn(buttonVariants())}>
+              <Sparkles className="size-4" />
+              {t("posts.actions.openDailyDrafts")}
+            </Link>
             <Link href="/auto-post" className={cn(buttonVariants({ variant: "outline" }))}>
               <CalendarClock className="size-4" />
               {t("posts.actions.openAutoPost")}
             </Link>
-            <Link href="/posts/create" className={cn(buttonVariants())}>
-              <Plus className="size-4" />
-              {t("posts.actions.new")}
+            <Link href="/execution-queue" className={cn(buttonVariants({ variant: "outline" }))}>
+              <ListChecks className="size-4" />
+              {t("posts.actions.openExecutionQueue")}
             </Link>
           </div>
         </div>
@@ -143,27 +146,24 @@ export function PostsClient() {
       ) : null}
 
       {loadState === "ready" && items.length === 0 ? (
-        <>
-          <UserOnboardingCard
-            accountConnected={accountCount > 0}
-            automationEnabled={false}
-            postCreated={false}
-            activityObserved={false}
-          />
-          <Card>
-            <CardHeader title={t("posts.list.empty")} description={t("posts.list.emptyDescription")} />
-            <div className="flex flex-wrap justify-end gap-2">
-              {accountCount === 0 ? (
-                <Link href="/accounts" className={cn(buttonVariants({ variant: "outline" }))}>
-                  {t("posts.create.goAccounts")}
-                </Link>
-              ) : null}
-              <Link href="/posts/create" className={cn(buttonVariants())}>
-                {t("posts.actions.new")}
+        <Card>
+          <CardHeader title={t("posts.list.empty")} description={t("posts.list.emptyDescription")} />
+          <div className="flex flex-wrap justify-end gap-2">
+            {accountCount === 0 ? (
+              <Link href="/accounts" className={cn(buttonVariants({ variant: "outline" }))}>
+                {t("posts.create.goAccounts")}
               </Link>
-            </div>
-          </Card>
-        </>
+            ) : null}
+            <Link href="/auto-post" className={cn(buttonVariants({ variant: "outline" }))}>
+              <CalendarClock className="size-4" />
+              {t("posts.actions.openAutoPost")}
+            </Link>
+            <Link href="/daily-x-queue" className={cn(buttonVariants())}>
+              <Sparkles className="size-4" />
+              {t("posts.actions.openDailyDrafts")}
+            </Link>
+          </div>
+        </Card>
       ) : null}
 
       {loadState === "ready" && items.length > 0 ? (

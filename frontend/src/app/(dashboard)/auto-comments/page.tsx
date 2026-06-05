@@ -31,7 +31,7 @@ type LoadState = "loading" | "ready" | "error";
 type ExecutionMode = "manual" | "review" | "autopilot";
 type TargetFilter = "all" | "active" | "paused";
 type CommentFeedbackTag = "too_generic" | "too_salesy" | "irrelevant" | "wrong_tone" | "good";
-type DeliveryFilter = "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked" | "handled";
+type DeliveryFilter = "priority" | "all" | "auto_comment" | "manual_comment" | "quote_post" | "blocked" | "handled";
 type DraftPanel = "target" | "action";
 
 const panelClass = "rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4";
@@ -99,6 +99,14 @@ function isQueuedQuotePost(draft: AutoCommentTaskApi) {
   return draft.delivery_mode === "quote_post" && (draft.status === "ready_to_publish" || draft.status === "sending");
 }
 
+function isHighValueCommentOpportunity(draft: AutoCommentTaskApi) {
+  return !isHandledDraft(draft) && !isClosedDraft(draft) && (draft.opportunity_score || 0) >= 75;
+}
+
+function isStrongAutopilotCandidate(draft: AutoCommentTaskApi) {
+  return isHighValueCommentOpportunity(draft) && (draft.opportunity_score || 0) >= 85 && draft.risk_level !== "high";
+}
+
 function displayDeliveryMode(draft: AutoCommentTaskApi) {
   if (isHandledDraft(draft)) {
     return "handled";
@@ -153,7 +161,7 @@ export default function AutoCommentsPage() {
   const [targetSuggestionMeta, setTargetSuggestionMeta] = useState({ targetCount: 0, targetLimit: 0, suggestionLimit: 0 });
   const [targetStatusFilter, setTargetStatusFilter] = useState<TargetFilter>("all");
   const [targetCategoryFilter, setTargetCategoryFilter] = useState("all");
-  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("priority");
   const [editingDraftID, setEditingDraftID] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -218,18 +226,24 @@ export default function AutoCommentsPage() {
   const filteredDrafts = useMemo(
     () =>
       accountDrafts.filter((draft) => {
+        if (deliveryFilter === "priority") return isHighValueCommentOpportunity(draft);
         if (deliveryFilter === "handled") return isHandledDraft(draft);
         if (isHandledDraft(draft)) return false;
         if (deliveryFilter === "all") return true;
         if (deliveryFilter === "blocked") return isClosedDraft(draft) || draft.failure_category === "x_reply_restricted";
         if (deliveryFilter === "quote_post") return isQueuedQuotePost(draft);
         return displayDeliveryMode(draft) === deliveryFilter;
+      }).sort((a, b) => {
+        const scoreDelta = (b.opportunity_score || 0) - (a.opportunity_score || 0);
+        if (Math.abs(scoreDelta) > 5) return scoreDelta;
+        return new Date(b.generated_at || b.detected_at || 0).getTime() - new Date(a.generated_at || a.detected_at || 0).getTime();
       }),
     [accountDrafts, deliveryFilter]
   );
   const deliveryFilterOptions = useMemo(
     () =>
       ([
+        ["priority", activeDrafts.filter((draft) => isHighValueCommentOpportunity(draft)).length],
         ["all", activeDrafts.length],
         ["auto_comment", activeDrafts.filter((draft) => draft.delivery_mode === "auto_comment").length],
         ["manual_comment", activeDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length],
@@ -239,6 +253,19 @@ export default function AutoCommentsPage() {
       ] as Array<[DeliveryFilter, number]>),
     [accountDrafts, activeDrafts]
   );
+  const qualitySummary = useMemo(() => {
+    const activeTargets = accountTargets.filter((target) => target.status === "active").length;
+    const pausedTargets = accountTargets.filter((target) => target.status === "paused").length;
+    const highValue = accountDrafts.filter((draft) => isHighValueCommentOpportunity(draft)).length;
+    const strong = accountDrafts.filter((draft) => isStrongAutopilotCandidate(draft)).length;
+    const manual = activeDrafts.filter((draft) => displayDeliveryMode(draft) === "manual_comment").length;
+    const blocked = activeDrafts.filter((draft) => isClosedDraft(draft) || draft.failure_category === "x_reply_restricted").length;
+    const skippedLow = accountTargets.filter((target) => {
+      const reason = (target.last_failure_reason || "").toLowerCase();
+      return reason.includes("skipped_low_priority") || reason.includes("skipped_low_value");
+    }).length;
+    return { activeTargets, pausedTargets, highValue, strong, manual, blocked, skippedLow };
+  }, [accountDrafts, accountTargets, activeDrafts]);
   const filteredTargets = useMemo(
     () =>
       targets
@@ -587,6 +614,16 @@ export default function AutoCommentsPage() {
     }
   };
 
+  const setTargetStatus = async (id: number, status: AutoCommentTargetApi["status"]) => {
+    try {
+      const updated = await automationService.updateCommentTargetStatus(id, status);
+      setTargets((items) => items.map((item) => (item.id === id ? updated : item)));
+      pushToast(t(status === "paused" ? "autoComment.targets.paused" : "autoComment.targets.resumed"));
+    } catch (error) {
+      pushToast(apiErrorMessage(error) || t("autoComment.targets.statusFailed"));
+    }
+  };
+
   return (
     <div className="space-y-5">
       <Dialog
@@ -675,6 +712,7 @@ export default function AutoCommentsPage() {
             executionMode={executionMode}
             queueHref="/execution-queue?type=comment"
           />
+          <AutoCommentQualityControlPanel summary={qualitySummary} />
           <AutomationPipelineSummary
             baseKey="autoComment"
             inputValue={hasManualTweetContext ? formatHandle(authorHandle) : t("autoComment.pipeline.inputValue", { count: accountTargets.length })}
@@ -844,80 +882,83 @@ export default function AutoCommentsPage() {
               ) : null}
             </div>
 
-            <div className={panelClass}>
-              <div className="mb-3">
-                <p className="text-sm font-semibold text-white">{t("autoComment.manual.title")}</p>
-                <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoComment.manual.description")}</p>
+            <details className={panelClass}>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                <span>
+                  <span className="block text-sm font-semibold text-white">{t("autoComment.manual.title")}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoComment.manual.description")}</span>
+                </span>
+                <ChevronDown className="mt-1 size-4 shrink-0 text-[#71767b]" />
+              </summary>
+              <div className="mt-4 space-y-4 border-t border-[#2f3336] pt-4">
+                <label className="block space-y-2">
+                  <span className={labelClass}>{t("autoComment.target.url")}</span>
+                  <input
+                    value={tweetURL}
+                    onChange={(event) => setTweetURL(event.target.value)}
+                    placeholder={t("autoComment.target.urlPlaceholder")}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className={labelClass}>{t("autoComment.target.author")}</span>
+                  <input
+                    value={authorHandle}
+                    onChange={(event) => setAuthorHandle(event.target.value)}
+                    placeholder={t("autoComment.target.authorPlaceholder")}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className={labelClass}>{t("autoComment.target.text")}</span>
+                  <textarea
+                    value={targetText}
+                    onChange={(event) => setTargetText(event.target.value)}
+                    rows={5}
+                    placeholder={t("autoComment.target.textPlaceholder")}
+                    className={`${inputClass} min-h-32 resize-y leading-6`}
+                  />
+                </label>
+                <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+                  <label className="block space-y-2">
+                    <span className={labelClass}>{t("autoComment.target.category")}</span>
+                    <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value)} className={`${inputClass} h-10 py-0`}>
+                      {targetCategories.map((category) => (
+                        <option key={category} value={category}>
+                          {t(`autoComment.targetCategory.${category}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-2">
+                    <span className={labelClass}>{t("autoComment.target.priority")}</span>
+                    <select value={targetPriority} onChange={(event) => setTargetPriority(Number(event.target.value))} className={`${inputClass} h-10 py-0`}>
+                      {[5, 4, 3, 2, 1].map((priority) => (
+                        <option key={priority} value={priority}>
+                          {t("autoComment.target.priorityValue", { value: priority })}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="block space-y-2">
+                  <span className={labelClass}>{t("autoComment.target.notes")}</span>
+                  <input
+                    value={targetNotes}
+                    onChange={(event) => setTargetNotes(event.target.value)}
+                    placeholder={t("autoComment.target.notesPlaceholder")}
+                    className={inputClass}
+                  />
+                </label>
+                <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3 text-sm text-[#e7e9ea]">
+                  <Sparkles className="mr-2 inline size-4 text-[#1d9bf0]" />
+                  {t("autoComment.target.costHint")}
+                </div>
+                <Button className="w-full" disabled={!canGenerate} onClick={() => void createTargetAndGenerate()}>
+                  {busy ? t("autoComment.target.generating") : t("autoComment.target.generate")}
+                </Button>
               </div>
-              <label className="block space-y-2">
-                <span className={labelClass}>{t("autoComment.target.url")}</span>
-                <input
-                  value={tweetURL}
-                  onChange={(event) => setTweetURL(event.target.value)}
-                  placeholder={t("autoComment.target.urlPlaceholder")}
-                  className={inputClass}
-                />
-              </label>
-              <label className="mt-3 block space-y-2">
-                <span className={labelClass}>{t("autoComment.target.author")}</span>
-                <input
-                  value={authorHandle}
-                  onChange={(event) => setAuthorHandle(event.target.value)}
-                  placeholder={t("autoComment.target.authorPlaceholder")}
-                  className={inputClass}
-                />
-              </label>
-              <label className="mt-3 block space-y-2">
-                <span className={labelClass}>{t("autoComment.target.text")}</span>
-                <textarea
-                  value={targetText}
-                  onChange={(event) => setTargetText(event.target.value)}
-                  rows={5}
-                  placeholder={t("autoComment.target.textPlaceholder")}
-                  className={`${inputClass} min-h-32 resize-y leading-6`}
-                />
-              </label>
-            </div>
-            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-              <label className="block space-y-2">
-                <span className={labelClass}>{t("autoComment.target.category")}</span>
-                <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value)} className={`${inputClass} h-10 py-0`}>
-                  {targetCategories.map((category) => (
-                    <option key={category} value={category}>
-                      {t(`autoComment.targetCategory.${category}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-2">
-                <span className={labelClass}>{t("autoComment.target.priority")}</span>
-                <select value={targetPriority} onChange={(event) => setTargetPriority(Number(event.target.value))} className={`${inputClass} h-10 py-0`}>
-                  {[5, 4, 3, 2, 1].map((priority) => (
-                    <option key={priority} value={priority}>
-                      {t("autoComment.target.priorityValue", { value: priority })}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="block space-y-2">
-              <span className={labelClass}>{t("autoComment.target.notes")}</span>
-              <input
-                value={targetNotes}
-                onChange={(event) => setTargetNotes(event.target.value)}
-                placeholder={t("autoComment.target.notesPlaceholder")}
-                className={inputClass}
-              />
-            </label>
-
-            <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3 text-sm text-[#e7e9ea]">
-              <Sparkles className="mr-2 inline size-4 text-[#1d9bf0]" />
-              {t("autoComment.target.costHint")}
-            </div>
-
-            <Button className="w-full" disabled={!canGenerate} onClick={() => void createTargetAndGenerate()}>
-              {busy ? t("autoComment.target.generating") : t("autoComment.target.generate")}
-            </Button>
+            </details>
 
             <div className={panelClass}>
               <div className="mb-3">
@@ -1040,7 +1081,13 @@ export default function AutoCommentsPage() {
         <div id="auto-comment-opportunity-queue">
         <Card className="overflow-hidden bg-[#0f1419] p-0">
           <div className="border-b border-[#2f3336] p-5 md:p-6">
-            <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <CardHeader title={t("autoComment.review.title")} description={t("autoComment.review.description")} />
+              <Link href="/execution-queue?type=comment&status=pending_review" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+                <ListChecks className="size-4" />
+                {t("autoComment.review.openQueue")}
+              </Link>
+            </div>
             {modulePaused ? (
               <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100/80">
                 {modulePausedActionTip}
@@ -1292,6 +1339,10 @@ export default function AutoCommentsPage() {
                           </>
                         ) : (
                           <>
+                            <Link href={`/execution-queue?type=comment&focus_type=comment&focus_source_id=${draft.id}`} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white transition hover:bg-[#16181c]">
+                              <ListChecks className="size-4" />
+                              {t("autoComment.review.reviewInQueue")}
+                            </Link>
                             <Button size="sm" variant="outline" onClick={() => startEdit(draft)}>
                               <Pencil className="size-4" />
                               {t("autoComment.review.edit")}
@@ -1380,7 +1431,25 @@ export default function AutoCommentsPage() {
                 </div>
                 <p className="mt-2 line-clamp-3 break-words text-xs leading-5 text-[#71767b]">{target.target_text || target.target_tweet_url || target.target_username}</p>
                 {target.notes ? <p className="mt-2 line-clamp-2 break-words border-t border-[#2f3336] pt-2 text-xs leading-5 text-[#8b98a5]">{target.notes}</p> : null}
-                <div className="mt-3 flex justify-end border-t border-[#2f3336] pt-3">
+                <div className="mt-3 grid gap-2 border-t border-[#2f3336] pt-3 text-xs text-[#71767b] sm:grid-cols-2">
+                  <TargetMeta label={t("autoComment.targets.lastChecked")} value={target.last_checked_at ? formatDateTime(target.last_checked_at, timeZone) : "—"} />
+                  <TargetMeta label={t("autoComment.targets.lastCommented")} value={target.last_commented_at ? formatDateTime(target.last_commented_at, timeZone) : "—"} />
+                  {target.last_failure_reason ? (
+                    <div className="sm:col-span-2">
+                      <TargetMeta label={t("autoComment.targets.lastSkip")} value={target.last_failure_reason} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-[#2f3336] pt-3">
+                  {target.status === "paused" ? (
+                    <Button size="sm" variant="outline" onClick={() => void setTargetStatus(target.id, "active")}>
+                      {t("autoComment.targets.resume")}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => void setTargetStatus(target.id, "paused")}>
+                      {t("autoComment.targets.pause")}
+                    </Button>
+                  )}
                   <Button size="sm" variant="destructive" onClick={() => void deleteTarget(target.id)}>
                     <Trash2 className="size-4" />
                     {t("autoComment.targets.delete")}
@@ -1391,6 +1460,77 @@ export default function AutoCommentsPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AutoCommentQualityControlPanel({
+  summary,
+}: {
+  summary: {
+    activeTargets: number;
+    pausedTargets: number;
+    highValue: number;
+    strong: number;
+    manual: number;
+    blocked: number;
+    skippedLow: number;
+  };
+}) {
+  const { t } = useT();
+  const items = [
+    { key: "activeTargets", value: summary.activeTargets, tone: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]" },
+    { key: "highValue", value: summary.highValue, tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" },
+    { key: "strong", value: summary.strong, tone: "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]" },
+    { key: "skippedLow", value: summary.skippedLow, tone: "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" },
+    { key: "manual", value: summary.manual, tone: "border-[#2f3336] bg-black text-[#b6bec5]" },
+    { key: "blocked", value: summary.blocked, tone: "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" },
+  ];
+  return (
+    <Card className="border-[#00ba7c]/20 bg-[#061710]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#d7fbe8]">{t("autoComment.quality.title")}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#8bb9a5]">{t("autoComment.quality.description")}</p>
+        </div>
+        <div className="shrink-0 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+          {t("autoComment.quality.pausedTargets", { count: summary.pausedTargets })}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        {items.map((item) => (
+          <div key={item.key} className={`rounded-2xl border p-3 ${item.tone}`}>
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] opacity-80">{t(`autoComment.quality.${item.key}`)}</p>
+            <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <QualityRule label={t("autoComment.quality.ruleSkip")} value="< 65" description={t("autoComment.quality.ruleSkipDesc")} />
+        <QualityRule label={t("autoComment.quality.ruleGenerate")} value="75+" description={t("autoComment.quality.ruleGenerateDesc")} />
+        <QualityRule label={t("autoComment.quality.ruleAutopilot")} value="85+" description={t("autoComment.quality.ruleAutopilotDesc")} />
+      </div>
+    </Card>
+  );
+}
+
+function QualityRule({ label, value, description }: { label: string; value: string; description: string }) {
+  return (
+    <div className="rounded-2xl border border-[#00ba7c]/15 bg-black/35 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[#d7fbe8]">{label}</p>
+        <p className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-0.5 text-xs font-semibold text-[#7ee0b5]">{value}</p>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-[#8bb9a5]">{description}</p>
+    </div>
+  );
+}
+
+function TargetMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 line-clamp-2 break-words text-xs font-medium text-[#b6bec5]">{value}</p>
     </div>
   );
 }
@@ -1633,10 +1773,15 @@ function AutoCommentAnalyticsPanel({ data }: { data: AutoCommentAnalyticsData })
     { label: t("autoComment.analytics.avgOpportunity"), value: data.summary.average_opportunity },
   ];
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <CardHeader title={t("autoComment.analytics.title")} description={t("autoComment.analytics.description")} />
-      </div>
+    <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419]">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-5 md:p-6">
+        <span>
+          <span className="block text-base font-semibold text-white">{t("autoComment.analytics.title")}</span>
+          <span className="mt-1 block text-sm leading-6 text-[#71767b]">{t("autoComment.analytics.description")}</span>
+        </span>
+        <ChevronDown className="mt-1 size-4 shrink-0 text-[#71767b]" />
+      </summary>
+      <div className="border-t border-[#2f3336] p-5 md:p-6">
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         {stats.map((item) => (
           <div key={item.label} className="rounded-2xl border border-[#2f3336] bg-black p-3">
@@ -1701,7 +1846,8 @@ function AutoCommentAnalyticsPanel({ data }: { data: AutoCommentAnalyticsData })
           </div>
         </div>
       </div>
-    </Card>
+      </div>
+    </details>
   );
 }
 

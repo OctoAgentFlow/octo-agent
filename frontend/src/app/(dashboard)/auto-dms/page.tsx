@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
   Upload,
   UserCheck,
   UserX,
+  type LucideIcon,
 } from "lucide-react";
 
 import { useConfirm } from "@/components/providers/confirm-provider";
@@ -42,6 +43,9 @@ import {
 const requiredDMScopeList = ["dm.read", "dm.write", "tweet.read", "users.read"];
 const dmRecipientSegments: AutoDMRecipientSegment[] = ["lead", "partner", "community", "investor", "existing_user"];
 type AutoDMTaskFilter = "all" | "review" | "approved" | "sent" | "replied" | "risk";
+type AutoDMRecipientStatusFilter = "all" | AutoDMRecipientRuleApi["status"];
+type AutoDMRecipientSegmentFilter = "all" | AutoDMRecipientSegment;
+type AutoDMMeterTone = "blue" | "green" | "yellow" | "red" | "violet";
 const X_OAUTH_RESULT_MESSAGE = "octo-x-oauth-result" as const;
 
 function csvCell(value: string) {
@@ -70,6 +74,9 @@ export default function AutoDMsPage() {
   const [dmImportUserID, setDMImportUserID] = useState("");
   const [dmImportUsername, setDMImportUsername] = useState("");
   const [dmImportSegment, setDMImportSegment] = useState<AutoDMRecipientSegment>("lead");
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipientStatusFilter, setRecipientStatusFilter] = useState<AutoDMRecipientStatusFilter>("all");
+  const [recipientSegmentFilter, setRecipientSegmentFilter] = useState<AutoDMRecipientSegmentFilter>("all");
   const oauthPopupPollRef = useRef<number | null>(null);
 
   const dmAccount = accounts.find((account) => account.status === "connected") ?? accounts[0] ?? null;
@@ -77,7 +84,6 @@ export default function AutoDMsPage() {
   const missingDMScopeList = dmAccount ? requiredDMScopeList.filter((scope) => !dmScopes.has(scope)) : requiredDMScopeList;
   const dmAuthorizationReady = Boolean(dmAccount && dmAccount.status === "connected" && missingDMScopeList.length === 0);
   const reviewCount = dmTasks.filter((task) => task.status === "review").length;
-  const approvedCount = dmTasks.filter((task) => task.status === "approved" || task.status === "sent").length;
   const riskCount = dmTasks.filter((task) => task.status === "failed" || task.status === "blocked").length;
   const repliedCount = dmTasks.filter((task) => Boolean(task.inbound_reply_at)).length;
   const allowlistedCount = dmRecipients.filter((rule) => rule.status === "allowlisted").length;
@@ -89,6 +95,17 @@ export default function AutoDMsPage() {
     if (dmTaskFilter === "risk") return task.status === "failed" || task.status === "blocked";
     return true;
   });
+  const filteredDMRecipients = useMemo(() => {
+    const query = recipientSearch.trim().replace(/^@/, "").toLowerCase();
+    return dmRecipients.filter((rule) => {
+      if (recipientStatusFilter !== "all" && rule.status !== recipientStatusFilter) return false;
+      if (recipientSegmentFilter !== "all" && (rule.recipient_segment || "lead") !== recipientSegmentFilter) return false;
+      if (!query) return true;
+      return [rule.recipient_username, rule.recipient_user_id, rule.reason, rule.source]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [dmRecipients, recipientSearch, recipientSegmentFilter, recipientStatusFilter]);
   const modulePaused = moduleEnabled === false;
   const modulePausedActionTip = modulePaused
     ? t("automation.pausedNotice.actionDisabled", { module: t("automation.module.dm.name") })
@@ -357,8 +374,18 @@ export default function AutoDMsPage() {
       ) : (
         <>
           <AutomationModulePausedNotice type="dm" onEnabledChange={setModuleEnabled} />
-          {dmOverview ? <AutoDMQuotaCard overview={dmOverview} timeZone={timeZone} /> : null}
-          {dmOverview?.segment_metrics?.length ? <AutoDMSegmentAnalytics metrics={dmOverview.segment_metrics} /> : null}
+          <AutoDMRunSummary
+            account={dmAccount}
+            authorizationReady={dmAuthorizationReady}
+            moduleEnabled={moduleEnabled}
+            overview={dmOverview}
+            reviewCount={reviewCount}
+            allowlistedCount={allowlistedCount}
+            riskCount={riskCount}
+            repliedCount={repliedCount}
+            onReconnect={() => void reconnectXAccount()}
+            authRefreshing={authRefreshing}
+          />
           <Card className={dmAuthorizationReady ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
@@ -391,40 +418,11 @@ export default function AutoDMsPage() {
               </Button>
             </div>
           </Card>
-
-          <AutoDMSetupGuide
-            hasRecipients={dmRecipients.length > 0}
-            hasReviewTasks={dmTasks.length > 0}
-            allowlistedCount={allowlistedCount}
-            riskCount={riskCount}
-          />
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {[
-              { icon: Inbox, label: t("autoDm.stats.review"), value: reviewCount, tone: "text-[#f6d96b]" },
-              { icon: CheckCircle2, label: t("autoDm.stats.approved"), value: approvedCount, tone: "text-[#00ba7c]" },
-              { icon: MessageCircleReply, label: t("autoDm.stats.replied"), value: repliedCount, tone: "text-[#8ecdf8]" },
-              { icon: ShieldCheck, label: t("autoDm.stats.allowlisted"), value: allowlistedCount, tone: "text-[#1d9bf0]" },
-              { icon: UserX, label: t("autoDm.stats.risk"), value: riskCount, tone: "text-[#f4212e]" },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <Card key={item.label} className="bg-[#0f1419] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-[#71767b]">{item.label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
-                    </div>
-                    <div className="flex size-10 items-center justify-center rounded-full border border-[#2f3336] bg-black">
-                      <Icon className={`size-5 ${item.tone}`} />
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          {dmOverview ? <AutoDMQuotaCard overview={dmOverview} timeZone={timeZone} /> : null}
+          {dmOverview?.segment_metrics?.length ? <AutoDMSegmentAnalytics metrics={dmOverview.segment_metrics} /> : null}
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div id="auto-dm-review">
             <Card className="min-w-0 bg-[#0f1419]">
               <CardHeader
                 title={t("automation.dmReview.title")}
@@ -555,10 +553,44 @@ export default function AutoDMsPage() {
                 )}
               </div>
             </Card>
+            </div>
 
             <div className="space-y-4">
               <Card className="bg-[#0f1419]">
                 <CardHeader title={t("automation.dmReview.rules")} description={t("autoDm.rules.description")} />
+                <div className="mb-4 grid gap-2">
+                  <input
+                    value={recipientSearch}
+                    onChange={(event) => setRecipientSearch(event.target.value)}
+                    placeholder={t("autoDm.rules.searchPlaceholder")}
+                    className="w-full rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-white outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]/60"
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <select
+                      value={recipientStatusFilter}
+                      onChange={(event) => setRecipientStatusFilter(event.target.value as AutoDMRecipientStatusFilter)}
+                      className="w-full rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]/60"
+                    >
+                      <option value="all">{t("autoDm.rules.allStatuses")}</option>
+                      <option value="allowlisted">{t("autoDm.recipientStatus.allowlisted")}</option>
+                      <option value="blocked">{t("autoDm.recipientStatus.blocked")}</option>
+                      <option value="unsubscribed">{t("autoDm.recipientStatus.unsubscribed")}</option>
+                    </select>
+                    <select
+                      value={recipientSegmentFilter}
+                      onChange={(event) => setRecipientSegmentFilter(event.target.value as AutoDMRecipientSegmentFilter)}
+                      className="w-full rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]/60"
+                    >
+                      <option value="all">{t("autoDm.rules.allSegments")}</option>
+                      {dmRecipientSegments.map((segment) => (
+                        <option key={segment} value={segment}>{t(`autoDm.segment.${segment}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs leading-5 text-[#71767b]">
+                    {t("autoDm.rules.showing", { shown: Math.min(filteredDMRecipients.length, 20), total: filteredDMRecipients.length })}
+                  </p>
+                </div>
                 <div className="space-y-2">
                   {dmRecipients.length === 0 ? (
                     <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center">
@@ -566,8 +598,14 @@ export default function AutoDMsPage() {
                       <p className="mt-3 text-sm font-medium text-white">{t("automation.dmReview.emptyRules")}</p>
                       <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.empty.rulesHint")}</p>
                     </div>
+                  ) : filteredDMRecipients.length === 0 ? (
+                    <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center">
+                      <UserCheck className="mx-auto size-8 text-[#71767b]" />
+                      <p className="mt-3 text-sm font-medium text-white">{t("autoDm.rules.filteredEmptyTitle")}</p>
+                      <p className="mt-1 text-xs text-[#71767b]">{t("autoDm.rules.filteredEmptyDescription")}</p>
+                    </div>
                   ) : (
-                    dmRecipients.slice(0, 20).map((rule) => (
+                    filteredDMRecipients.slice(0, 20).map((rule) => (
                       <div key={rule.id} className="rounded-2xl border border-[#2f3336] bg-black p-3">
                         <div className="space-y-3">
                           <div className="min-w-0">
@@ -607,8 +645,19 @@ export default function AutoDMsPage() {
                 </div>
               </Card>
 
-              <Card className="bg-[#0f1419]">
-                <CardHeader title={t("automation.dmReview.import")} description={t("autoDm.import.description")} />
+              <details id="auto-dm-import" className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-5 md:p-6">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{t("automation.dmReview.import")}</p>
+                      <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoDm.import.description")}</p>
+                    </div>
+                    <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#8ecdf8]">
+                      {t("autoDm.import.open")}
+                    </span>
+                  </div>
+                </summary>
+                <div className="mt-4 border-t border-[#2f3336] pt-4">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
                     <div className="mb-3 flex items-start gap-3">
@@ -710,7 +759,8 @@ export default function AutoDMsPage() {
                     ))}
                   </div>
                 ) : null}
-              </Card>
+                </div>
+              </details>
               <Card className="bg-[#0f1419] p-4">
                 <div className="flex items-start gap-3">
                   <Clock3 className="mt-0.5 size-5 shrink-0 text-[#1d9bf0]" />
@@ -728,6 +778,156 @@ export default function AutoDMsPage() {
   );
 }
 
+function AutoDMRunSummary({
+  account,
+  authorizationReady,
+  moduleEnabled,
+  overview,
+  reviewCount,
+  allowlistedCount,
+  riskCount,
+  repliedCount,
+  onReconnect,
+  authRefreshing,
+}: {
+  account: AccountListItem | null;
+  authorizationReady: boolean;
+  moduleEnabled: boolean | null;
+  overview: AutoDMOverviewData | null;
+  reviewCount: number;
+  allowlistedCount: number;
+  riskCount: number;
+  repliedCount: number;
+  onReconnect: () => void;
+  authRefreshing: boolean;
+}) {
+  const { t } = useT();
+  const moduleReady = moduleEnabled !== false;
+  const monthlyRemaining = overview && overview.monthly_limit > 0 ? overview.monthly_remaining : 0;
+  const quotaLabel = overview
+    ? overview.monthly_limit > 0
+      ? `${monthlyRemaining.toLocaleString()} / ${overview.monthly_limit.toLocaleString()}`
+      : t("autoDm.quota.none")
+    : t("autoDm.overview.unknown");
+  const meters: Array<{
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    helper: string;
+    tone: AutoDMMeterTone;
+  }> = [
+    {
+      icon: ShieldCheck,
+      label: t("autoDm.overview.authorization"),
+      value: account ? `@${account.username || account.id}` : t("autoDm.overview.noAccount"),
+      helper: authorizationReady ? t("autoDm.overview.authorizationReady") : t("autoDm.overview.authorizationBlocked"),
+      tone: authorizationReady ? "green" : "yellow",
+    },
+    {
+      icon: PlugZap,
+      label: t("autoDm.overview.module"),
+      value: moduleReady ? t("autoDm.overview.moduleEnabled") : t("autoDm.overview.modulePaused"),
+      helper: t("autoDm.overview.moduleHelper"),
+      tone: moduleReady ? "green" : "yellow",
+    },
+    {
+      icon: UserCheck,
+      label: t("autoDm.overview.allowlist"),
+      value: allowlistedCount.toLocaleString(),
+      helper: t("autoDm.overview.allowlistHelper"),
+      tone: allowlistedCount > 0 ? "blue" : "yellow",
+    },
+    {
+      icon: Inbox,
+      label: t("autoDm.overview.review"),
+      value: reviewCount.toLocaleString(),
+      helper: t("autoDm.overview.reviewHelper", { replies: repliedCount }),
+      tone: reviewCount > 0 ? "yellow" : "blue",
+    },
+    {
+      icon: UserX,
+      label: t("autoDm.overview.risk"),
+      value: riskCount.toLocaleString(),
+      helper: riskCount > 0 ? t("autoDm.overview.riskBlocked") : t("autoDm.overview.riskClear"),
+      tone: riskCount > 0 ? "red" : "green",
+    },
+    {
+      icon: Clock3,
+      label: t("autoDm.overview.quota"),
+      value: quotaLabel,
+      helper: overview?.quota_exhausted ? t("autoDm.quota.exhausted") : t("autoDm.overview.quotaHelper"),
+      tone: overview?.quota_exhausted ? "red" : "violet",
+    },
+  ];
+
+  return (
+    <Card className="border-[#1d9bf0]/20 bg-[#06111d]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("autoDm.overview.title")}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#8b98a5]">{t("autoDm.overview.description")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <a href="#auto-dm-review" className="inline-flex h-8 items-center justify-center rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+            {t("autoDm.overview.reviewCta")}
+          </a>
+          <a href="#auto-dm-import" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("autoDm.overview.importCta")}
+          </a>
+          <Button size="sm" variant={authorizationReady ? "outline" : "default"} onClick={onReconnect} disabled={authRefreshing}>
+            {authRefreshing ? <RefreshCw className="size-3.5 animate-spin" /> : <PlugZap className="size-3.5" />}
+            {authRefreshing ? t("autoDm.auth.refreshing") : t("autoDm.auth.reconnect")}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        {meters.map((meter) => (
+          <AutoDMMeter key={meter.label} {...meter} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function AutoDMMeter({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  helper: string;
+  tone: AutoDMMeterTone;
+}) {
+  const toneClass =
+    tone === "green"
+      ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+      : tone === "yellow"
+        ? "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"
+        : tone === "red"
+          ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff9aa2]"
+          : tone === "violet"
+            ? "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]"
+            : "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#1d9bf0]/15 bg-black/35 p-3">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className={`inline-flex size-8 shrink-0 items-center justify-center rounded-xl border ${toneClass}`}>
+          <Icon className="size-3.5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase tracking-[0.12em] text-[#71767b]">{label}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{value}</span>
+          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#8b98a5]">{helper}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData; timeZone: string }) {
   const { t } = useT();
   const monthlyLimitText = overview.monthly_limit > 0 ? overview.monthly_limit.toLocaleString() : t("autoDm.quota.none");
@@ -735,8 +935,8 @@ function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData;
   const dailyLimitText = overview.daily_soft_limit > 0 ? overview.daily_soft_limit.toLocaleString() : t("autoDm.quota.none");
   const dailyRemainingText = overview.daily_soft_limit > 0 ? overview.daily_remaining.toLocaleString() : "0";
   return (
-    <Card className={overview.quota_exhausted ? "border-amber-300/20 bg-amber-500/10" : "bg-[#0f1419]"}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <details className={`rounded-2xl border p-5 md:p-6 ${overview.quota_exhausted ? "border-amber-300/20 bg-amber-500/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
+      <summary className="flex cursor-pointer list-none flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-white">{t("autoDm.quota.title")}</p>
           <p className="mt-1 text-sm leading-6 text-[#71767b]">
@@ -750,8 +950,8 @@ function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData;
             <Button size="sm">{t("autoDm.quota.upgrade")}</Button>
           </Link>
         ) : null}
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      </summary>
+      <div className="mt-4 grid gap-3 border-t border-[#2f3336] pt-4 md:grid-cols-3">
         <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
           <p className="text-xs text-[#71767b]">{t("autoDm.quota.monthly")}</p>
           <p className="mt-2 text-2xl font-semibold text-white">
@@ -772,7 +972,7 @@ function AutoDMQuotaCard({ overview, timeZone }: { overview: AutoDMOverviewData;
           <p className="mt-1 text-xs text-[#71767b]">{overview.quota_exhausted ? t("autoDm.quota.exhausted") : t("autoDm.quota.ready")}</p>
         </div>
       </div>
-    </Card>
+    </details>
   );
 }
 
@@ -781,15 +981,15 @@ function AutoDMSegmentAnalytics({ metrics }: { metrics: NonNullable<AutoDMOvervi
   const visible = metrics.filter((item) => item.sent + item.failed + item.blocked + item.review + item.unsubscribed > 0);
   const rows = visible.length > 0 ? visible : metrics;
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-5 md:p-6">
+      <summary className="flex cursor-pointer list-none flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-white">{t("autoDm.segmentAnalytics.title")}</p>
           <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoDm.segmentAnalytics.description")}</p>
         </div>
         <span className="text-xs text-[#71767b]">{t("autoDm.segmentAnalytics.replyNote")}</span>
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-5">
+      </summary>
+      <div className="mt-4 grid gap-3 border-t border-[#2f3336] pt-4 lg:grid-cols-5">
         {rows.map((item) => (
           <div key={String(item.segment)} className="rounded-2xl border border-[#2f3336] bg-black p-3">
             <p className="text-sm font-semibold text-white">{t(`autoDm.segment.${item.segment || "lead"}`)}</p>
@@ -807,7 +1007,7 @@ function AutoDMSegmentAnalytics({ metrics }: { metrics: NonNullable<AutoDMOvervi
           </div>
         ))}
       </div>
-    </Card>
+    </details>
   );
 }
 
@@ -960,70 +1160,4 @@ function diagnosticLabel(key: string, fallback: string, t: ReturnType<typeof use
 function diagnosticDetail(key: string, fallback: string, t: ReturnType<typeof useT>["t"]) {
   const known = new Set(["recipient_rule", "oauth_scope", "x_token", "recipient_lookup", "x_account", "failure", "sent", "blocked"]);
   return known.has(key) ? t(`autoDm.diagnostics.detail.${key}`, { detail: fallback }) : fallback;
-}
-
-function AutoDMSetupGuide({
-  hasRecipients,
-  hasReviewTasks,
-  allowlistedCount,
-  riskCount,
-}: {
-  hasRecipients: boolean;
-  hasReviewTasks: boolean;
-  allowlistedCount: number;
-  riskCount: number;
-}) {
-  const { t } = useT();
-  const checks = [
-    {
-      done: hasRecipients,
-      title: t("autoDm.setup.recipients.title"),
-      description: t("autoDm.setup.recipients.description"),
-      icon: Upload,
-    },
-    {
-      done: hasReviewTasks,
-      title: t("autoDm.setup.review.title"),
-      description: t("autoDm.setup.review.description"),
-      icon: Inbox,
-    },
-    {
-      done: allowlistedCount > 0,
-      title: t("autoDm.setup.rules.title"),
-      description: t("autoDm.setup.rules.description", { count: allowlistedCount }),
-      icon: UserCheck,
-    },
-    {
-      done: riskCount === 0,
-      title: t("autoDm.setup.risk.title"),
-      description: t("autoDm.setup.risk.description", { count: riskCount }),
-      icon: ShieldCheck,
-    },
-  ];
-  const missingCount = checks.filter((item) => !item.done).length;
-
-  return (
-    <Card className={missingCount === 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-amber-300/20 bg-amber-500/10"}>
-      <p className="text-sm font-semibold text-[#e7e9ea]">{missingCount === 0 ? t("autoDm.setup.readyTitle") : t("autoDm.setup.title")}</p>
-      <p className="mt-1 text-sm leading-6 text-[#71767b]">{missingCount === 0 ? t("autoDm.setup.readyDescription") : t("autoDm.setup.description")}</p>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {checks.map((item) => {
-          const Icon = item.icon;
-          return (
-            <div key={item.title} className="rounded-xl border border-[#2f3336] bg-black p-3">
-              <div className="flex items-start gap-3">
-                <span className={`mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border ${item.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-amber-300/25 bg-amber-500/10 text-amber-100"}`}>
-                  {item.done ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-[#e7e9ea]">{item.title}</span>
-                  <span className="mt-1 block text-xs leading-5 text-[#71767b]">{item.description}</span>
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
 }

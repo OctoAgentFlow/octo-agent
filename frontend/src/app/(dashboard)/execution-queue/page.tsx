@@ -1224,28 +1224,6 @@ export default function ExecutionQueuePage() {
         ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
-        {statCards.map((stat) => (
-          <Card key={stat.key} className="bg-[#0f1419] p-4 transition-colors hover:bg-[#16181c]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-[#71767b]">{stat.label}</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
-              </div>
-              <stat.icon className="size-4 text-[#1d9bf0]" />
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <QueueProgressCard stats={stats} pausedCount={disabledModuleTypes.length} />
-
-      <PublishReadinessCard
-        stats={stats}
-        publisherStatus={publisherStatus}
-        pausedCount={disabledModuleTypes.length}
-      />
-
       <OperationalBlockersCard
         title={t("executionQueue.blockers.title")}
         description={t("executionQueue.blockers.description")}
@@ -1255,36 +1233,126 @@ export default function ExecutionQueuePage() {
         emptyDescription={t("executionQueue.blockers.emptyDescription")}
       />
 
-      {failureGroups.length > 0 ? (
-        <Card className="border-rose-300/20 bg-rose-500/10 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-rose-50">{t("executionQueue.failureGroups.title")}</p>
-              <p className="mt-1 text-xs leading-5 text-rose-50/70">{t("executionQueue.failureGroups.description")}</p>
-            </div>
-            <Link href="/execution-queue?status=failed" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-200/25 bg-black/20 px-3 text-sm font-semibold text-rose-50 transition hover:bg-rose-300/10">
-              {t("executionQueue.failureGroups.viewFailed")}
-              <ArrowRight className="size-4" />
-            </Link>
+      <details className="group rounded-2xl border border-[#2f3336] bg-[#0f1419]">
+        <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 marker:hidden md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">{t("executionQueue.diagnostics.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("executionQueue.diagnostics.description")}</p>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {failureGroups.slice(0, 3).map((group) => (
-              <Link key={group.key} href="/execution-queue?status=failed" className="rounded-2xl border border-rose-200/20 bg-black/30 p-4 transition hover:border-rose-200/40">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-2.5 py-1 text-amber-100">
+              {t("executionQueue.diagnostics.pending", { count: stats.pending_review })}
+            </span>
+            <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 py-1 text-[#7ee0b5]">
+              {t("executionQueue.diagnostics.ready", { count: stats.ready_to_publish })}
+            </span>
+            <span className="rounded-full border border-rose-300/25 bg-rose-500/10 px-2.5 py-1 text-rose-100">
+              {t("executionQueue.diagnostics.failed", { count: stats.failed })}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#2f3336] px-2.5 py-1 font-semibold text-[#8ecdf8]">
+              {t("executionQueue.diagnostics.expand")}
+              <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+            </span>
+          </div>
+        </summary>
+        <div className="space-y-4 border-t border-[#2f3336] p-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            {statCards.map((stat) => (
+              <div key={stat.key} className="rounded-xl border border-[#2f3336] bg-black/60 p-4 transition-colors hover:border-[#1d9bf0]/40">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-rose-50">{t(`executionQueue.failureGroups.${group.key}.title`)}</p>
-                    <p className="mt-1 text-xs leading-5 text-rose-50/65">{t(`executionQueue.failureGroups.${group.key}.description`)}</p>
+                    <p className="text-xs text-[#71767b]">{stat.label}</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
                   </div>
-                  <span className="shrink-0 rounded-full border border-rose-200/25 bg-black/30 px-2 py-0.5 text-xs font-semibold text-rose-50">{group.count}</span>
+                  <stat.icon className="size-4 text-[#1d9bf0]" />
                 </div>
-                {group.examples[0] ? (
-                  <p className="mt-3 line-clamp-2 text-xs leading-5 text-rose-50/60">{group.examples[0]}</p>
-                ) : null}
-              </Link>
+              </div>
             ))}
           </div>
-        </Card>
-      ) : null}
+
+          <QueueProgressCard stats={stats} pausedCount={disabledModuleTypes.length} />
+
+          <PublishReadinessCard
+            stats={stats}
+            publisherStatus={publisherStatus}
+            pausedCount={disabledModuleTypes.length}
+          />
+
+          {failureGroups.length > 0 ? (
+            <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-rose-50">{t("executionQueue.failureGroups.title")}</p>
+                  <p className="mt-1 text-xs leading-5 text-rose-50/70">{t("executionQueue.failureGroups.description")}</p>
+                </div>
+                <Link href="/execution-queue?status=failed" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-200/25 bg-black/20 px-3 text-sm font-semibold text-rose-50 transition hover:bg-rose-300/10">
+                  {t("executionQueue.failureGroups.viewFailed")}
+                  <ArrowRight className="size-4" />
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {failureGroups.slice(0, 3).map((group) => (
+                  <Link key={group.key} href="/execution-queue?status=failed" className="rounded-2xl border border-rose-200/20 bg-black/30 p-4 transition hover:border-rose-200/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-rose-50">{t(`executionQueue.failureGroups.${group.key}.title`)}</p>
+                        <p className="mt-1 text-xs leading-5 text-rose-50/65">{t(`executionQueue.failureGroups.${group.key}.description`)}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-rose-200/25 bg-black/30 px-2 py-0.5 text-xs font-semibold text-rose-50">{group.count}</span>
+                    </div>
+                    {group.examples[0] ? (
+                      <p className="mt-3 line-clamp-2 text-xs leading-5 text-rose-50/60">{group.examples[0]}</p>
+                    ) : null}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {loadState === "ready" && smartBulkGroups.length > 0 ? (
+            <SmartBulkGroupPanel groups={smartBulkGroups} selectedKeys={selectedKeys} onSelectGroup={selectSmartBulkGroup} />
+          ) : null}
+
+          {loadState === "ready" && visibleSelectableItems.length > 0 ? (
+            <div className="rounded-2xl border border-[#2f3336] bg-black/60 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <label className="flex min-w-0 items-center gap-3 text-sm font-semibold text-[#e7e9ea]">
+                  <input
+                    type="checkbox"
+                    checked={visibleSelectableItems.length > 0 && visibleSelectableItems.every((item) => selectedKeys.has(queueItemKey(item)))}
+                    onChange={toggleSelectVisible}
+                    className="size-4 rounded border-[#2f3336] bg-black"
+                  />
+                  <span>{t("executionQueue.bulk.selectVisible", { count: visibleSelectableItems.length })}</span>
+                  <span className="text-xs font-normal text-[#71767b]">{t("executionQueue.bulk.selected", { count: selectedItems.length })}</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" disabled={bulkBusy !== null || selectedApproveCount === 0} onClick={() => void runBulkAction("approve")}>
+                    <CheckCircle2 className="size-4" />
+                    {t("executionQueue.bulk.action.approveWithCount", { count: selectedApproveCount })}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRetryCount === 0} onClick={() => void runBulkAction("retry")}>
+                    <RefreshCw className="size-4" />
+                    {t("executionQueue.bulk.action.retryWithCount", { count: selectedRetryCount })}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRejectCount === 0} onClick={openBulkRejectDialog}>
+                    <XCircle className="size-4" />
+                    {t("executionQueue.bulk.action.rejectWithCount", { count: selectedRejectCount })}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedDeleteCount === 0} onClick={() => void runBulkAction("delete")}>
+                    <Trash2 className="size-4" />
+                    {t("executionQueue.bulk.action.deleteWithCount", { count: selectedDeleteCount })}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {recentBulkActivity ? (
+            <RecentBulkActivityCard activity={recentBulkActivity} />
+          ) : null}
+        </div>
+      </details>
 
       <Card className="bg-[#0f1419]">
         <div className="grid gap-3 md:grid-cols-4">
@@ -1294,49 +1362,6 @@ export default function ExecutionQueuePage() {
           <FilterSelect label={t("executionQueue.filters.publishOutcome")} value={publishOutcomeFilter} onChange={(value) => setPublishOutcomeFilter(value as PublishOutcomeFilter)} options={publishOutcomeOptions} labelPrefix="executionQueue.publishOutcome" />
         </div>
       </Card>
-
-      {loadState === "ready" && smartBulkGroups.length > 0 ? (
-        <SmartBulkGroupPanel groups={smartBulkGroups} selectedKeys={selectedKeys} onSelectGroup={selectSmartBulkGroup} />
-      ) : null}
-
-      {loadState === "ready" && visibleSelectableItems.length > 0 ? (
-        <Card className="border-[#2f3336] bg-[#0f1419] p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <label className="flex min-w-0 items-center gap-3 text-sm font-semibold text-[#e7e9ea]">
-              <input
-                type="checkbox"
-                checked={visibleSelectableItems.length > 0 && visibleSelectableItems.every((item) => selectedKeys.has(queueItemKey(item)))}
-                onChange={toggleSelectVisible}
-                className="size-4 rounded border-[#2f3336] bg-black"
-              />
-              <span>{t("executionQueue.bulk.selectVisible", { count: visibleSelectableItems.length })}</span>
-              <span className="text-xs font-normal text-[#71767b]">{t("executionQueue.bulk.selected", { count: selectedItems.length })}</span>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={bulkBusy !== null || selectedApproveCount === 0} onClick={() => void runBulkAction("approve")}>
-                <CheckCircle2 className="size-4" />
-                {t("executionQueue.bulk.action.approveWithCount", { count: selectedApproveCount })}
-              </Button>
-              <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRetryCount === 0} onClick={() => void runBulkAction("retry")}>
-                <RefreshCw className="size-4" />
-                {t("executionQueue.bulk.action.retryWithCount", { count: selectedRetryCount })}
-              </Button>
-              <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRejectCount === 0} onClick={openBulkRejectDialog}>
-                <XCircle className="size-4" />
-                {t("executionQueue.bulk.action.rejectWithCount", { count: selectedRejectCount })}
-              </Button>
-              <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedDeleteCount === 0} onClick={() => void runBulkAction("delete")}>
-                <Trash2 className="size-4" />
-                {t("executionQueue.bulk.action.deleteWithCount", { count: selectedDeleteCount })}
-              </Button>
-            </div>
-          </div>
-        </Card>
-      ) : null}
-
-      {recentBulkActivity ? (
-        <RecentBulkActivityCard activity={recentBulkActivity} />
-      ) : null}
 
       {urlFeedbackIssue ? (
         <Card className="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
@@ -1542,29 +1567,46 @@ export default function ExecutionQueuePage() {
                         ) : null}
                       </div>
 
-                      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                        <QueueInfoCard
-                          icon={Sparkles}
-                          label={t("executionQueue.item.source")}
-                          title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKey(item.type))}
-                          description={t(sourceDescriptionForItem(item))}
-                          tone={sourceTone(item.type)}
-                        />
-                        <QueueInfoCard
-                          icon={ShieldAlert}
-                          label={t("executionQueue.item.executionPath")}
-                          title={t(`executionQueue.executionMode.${item.execution_mode}`)}
-                          description={t(`executionQueue.executionPath.${item.execution_mode}`)}
-                          tone={statusTone(item.status)}
-                        />
-                        <QueueInfoCard
-                          icon={Send}
-                          label={t("executionQueue.item.publishState")}
-                          title={publishStatusLabel}
-                          description={item.publish_job_id ? t("executionQueue.publishState.withJob", { id: item.publish_job_id }) : t("executionQueue.publishState.withoutJob")}
-                          tone={publishTone(item.publish_status)}
-                        />
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-[#71767b]">
+                        <span className="min-w-0">
+                          <span className="font-semibold text-[#8b98a5]">{t(targetLabelForItem(item))}:</span>{" "}
+                          <span className="break-words text-[#cfd9e2]">{displayTarget}</span>
+                        </span>
+                        <span>
+                          <span className="font-semibold text-[#8b98a5]">{t("executionQueue.item.bot")}:</span>{" "}
+                          <span className="text-[#cfd9e2]">{item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")}</span>
+                        </span>
+                        <span>
+                          <span className="font-semibold text-[#8b98a5]">{t("executionQueue.item.account")}:</span>{" "}
+                          <span className="text-[#cfd9e2]">{item.twitter_account_name || `#${item.twitter_account_id}`}</span>
+                        </span>
                       </div>
+
+                      {heavyPanelsOpen ? (
+                        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                          <QueueInfoCard
+                            icon={Sparkles}
+                            label={t("executionQueue.item.source")}
+                            title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKey(item.type))}
+                            description={t(sourceDescriptionForItem(item))}
+                            tone={sourceTone(item.type)}
+                          />
+                          <QueueInfoCard
+                            icon={ShieldAlert}
+                            label={t("executionQueue.item.executionPath")}
+                            title={t(`executionQueue.executionMode.${item.execution_mode}`)}
+                            description={t(`executionQueue.executionPath.${item.execution_mode}`)}
+                            tone={statusTone(item.status)}
+                          />
+                          <QueueInfoCard
+                            icon={Send}
+                            label={t("executionQueue.item.publishState")}
+                            title={publishStatusLabel}
+                            description={item.publish_job_id ? t("executionQueue.publishState.withJob", { id: item.publish_job_id }) : t("executionQueue.publishState.withoutJob")}
+                            tone={publishTone(item.publish_status)}
+                          />
+                        </div>
+                      ) : null}
 
                       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                         {editing ? (
@@ -1603,7 +1645,7 @@ export default function ExecutionQueuePage() {
                         )}
                       </div>
 
-                      {!heavyPanelsOpen && manageable ? (
+                      {!heavyPanelsOpen ? (
                         <Button
                           type="button"
                           size="sm"
@@ -1619,7 +1661,7 @@ export default function ExecutionQueuePage() {
                           }
                         >
                           <ChevronDown className="size-3.5" />
-                          {t("executionQueue.performance.expandTools")}
+                          {t(manageable ? "executionQueue.performance.expandTools" : "executionQueue.performance.expandDetails")}
                         </Button>
                       ) : null}
 
@@ -1668,33 +1710,35 @@ export default function ExecutionQueuePage() {
                         </p>
                       ) : null}
 
-                      <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
-                        <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
-                        <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
-                        <MetaLine className="md:col-span-2" label={t(targetLabelForItem(item))} value={displayTarget} />
-                        <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
-                        <MetaLine
-                          label={t("executionQueue.item.risk")}
-                          value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
-                        />
-                        {item.publish_job_id ? (
+                      {heavyPanelsOpen ? (
+                        <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
+                          <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
+                          <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
+                          <MetaLine className="md:col-span-2" label={t(targetLabelForItem(item))} value={displayTarget} />
+                          <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
                           <MetaLine
-                            className="md:col-span-2"
-                            label={t("executionQueue.item.publishJob")}
-                            value={[
-                              `#${item.publish_job_id}`,
-                              item.publish_status ? t(`executionQueue.publishStatus.${item.publish_status}`) : "",
-                              item.publish_mode ? t(`executionQueue.publishMode.${item.publish_mode}`) : "",
-                              item.publish_last_error || "",
-                            ].filter(Boolean).join(" · ")}
+                            label={t("executionQueue.item.risk")}
+                            value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
                           />
-                        ) : null}
-                        {item.publish_external_url ? (
-                          <a className="md:col-span-2 break-words text-[#1d9bf0] hover:underline" href={item.publish_external_url} target="_blank" rel="noreferrer">
-                            {item.publish_external_url}
-                          </a>
-                        ) : null}
-                      </div>
+                          {item.publish_job_id ? (
+                            <MetaLine
+                              className="md:col-span-2"
+                              label={t("executionQueue.item.publishJob")}
+                              value={[
+                                `#${item.publish_job_id}`,
+                                item.publish_status ? t(`executionQueue.publishStatus.${item.publish_status}`) : "",
+                                item.publish_mode ? t(`executionQueue.publishMode.${item.publish_mode}`) : "",
+                                item.publish_last_error || "",
+                              ].filter(Boolean).join(" · ")}
+                            />
+                          ) : null}
+                          {item.publish_external_url ? (
+                            <a className="md:col-span-2 break-words text-[#1d9bf0] hover:underline" href={item.publish_external_url} target="_blank" rel="noreferrer">
+                              {item.publish_external_url}
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:justify-start xl:max-w-[300px] xl:justify-end">
@@ -1715,20 +1759,6 @@ export default function ExecutionQueuePage() {
                         </>
                       ) : (
                         <>
-                          {canEdit ? (
-                            <Button
-                              size="sm"
-                              className="w-full sm:w-auto"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingKey(itemKey);
-                                setEditingContent(item.content || "");
-                              }}
-                            >
-                              <Pencil className="size-4" />
-                              {t("executionQueue.actions.edit")}
-                            </Button>
-                          ) : null}
                           {canReview ? (
                             <Button
                               size="sm"
@@ -1745,6 +1775,25 @@ export default function ExecutionQueuePage() {
                             <Button size="sm" className="w-full sm:w-auto" variant="outline" disabled={busyID === item.id} onClick={() => openRejectDialog(item)}>
                               <XCircle className="size-4" />
                               {t("executionQueue.actions.reject")}
+                            </Button>
+                          ) : null}
+                          {canEdit ? (
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingKey(itemKey);
+                                setEditingContent(item.content || "");
+                                setExpandedItemKeys((current) => {
+                                  const next = new Set(current);
+                                  next.add(itemKey);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                              {t("executionQueue.actions.edit")}
                             </Button>
                           ) : null}
                           {item.status === "failed" && item.publish_job_id ? (

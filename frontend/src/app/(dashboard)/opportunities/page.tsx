@@ -55,6 +55,8 @@ type OpportunityStats = {
 };
 
 const actionableStatuses = new Set(["draft", "review", "pending_review", "approved", "ready_to_publish", "failed"]);
+const commentRecommendedScore = 75;
+const maxRecommendedCommentOpportunities = 20;
 const kindIcons: Record<OpportunityKind, LucideIcon> = {
   comment: MessageCircle,
   reply: Reply,
@@ -86,8 +88,9 @@ function riskTone(risk: string) {
 }
 
 function scoreTone(score: number) {
-  if (score >= 80) return "text-[#7ee0b5]";
-  if (score >= 55) return "text-[#f6d96b]";
+  if (score >= 85) return "text-[#7ee0b5]";
+  if (score >= commentRecommendedScore) return "text-[#8ecdf8]";
+  if (score >= 65) return "text-[#f6d96b]";
   return "text-[#8b98a5]";
 }
 
@@ -179,8 +182,12 @@ export default function OpportunitiesPage() {
         automationService.replyDrafts(),
         automationService.commentTargets(),
       ]);
+      const commentItems = commentData.items
+        .map(commentToOpportunity)
+        .filter((item) => item.score >= commentRecommendedScore)
+        .slice(0, maxRecommendedCommentOpportunities);
       const next = [
-        ...commentData.items.map(commentToOpportunity),
+        ...commentItems,
         ...replyData.items.map(replyToOpportunity),
         ...targetData.items.slice(0, 24).map(targetToOpportunity),
       ].sort((a, b) => {
@@ -277,6 +284,8 @@ export default function OpportunitiesPage() {
 
       <GrowthPublishPathCard stats={stats} />
 
+      <ResourceGuardCard />
+
       <OpportunityCommandCard command={command} />
 
       <OwnershipCard stats={stats} />
@@ -368,6 +377,23 @@ function OpportunityPreviewLink({ item, timeZone }: { item: OpportunityItem; tim
         </span>
       </span>
     </Link>
+  );
+}
+
+function ResourceGuardCard() {
+  const { t } = useT();
+  return (
+    <Card className="border-[#00ba7c]/20 bg-[#061710] p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]">
+          <ShieldAlert className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#d7fbe8]">{t("opportunities.resourceGuard.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8bb9a5]">{t("opportunities.resourceGuard.description")}</p>
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -29,7 +29,7 @@ func (r *AutoCommentTaskRepository) ListByUser(userID uint, limit int) ([]model.
 		limit = 500
 	}
 	var rows []model.AutoCommentTask
-	err := r.DB.Where("user_id = ?", userID).Order(autoCommentQueueOrder).Limit(limit * 3).Find(&rows).Error
+	err := r.DB.Where("user_id = ? AND status <> ?", userID, "skipped").Order(autoCommentQueueOrder).Limit(limit * 3).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (r *AutoCommentTaskRepository) ListQueueByUser(userID uint, limit int) ([]m
 		limit = 500
 	}
 	var rows []model.AutoCommentTask
-	err := r.DB.Where("user_id = ? AND status <> ?", userID, "handled").Order(autoCommentQueueOrder).Limit(limit * 3).Find(&rows).Error
+	err := r.DB.Where("user_id = ? AND status NOT IN ?", userID, []string{"handled", "skipped"}).Order(autoCommentQueueOrder).Limit(limit * 3).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +129,8 @@ func (r *AutoCommentTaskRepository) CountCreatedBetween(userID uint, from, to ti
 	var n int64
 	err := r.DB.Model(&model.AutoCommentTask{}).
 		Where("user_id = ?", userID).
+		Where("status <> ?", "skipped").
+		Where("generated_at IS NOT NULL").
 		Where("created_at >= ? AND created_at <= ?", from, to).
 		Count(&n).Error
 	return n, err

@@ -57,12 +57,37 @@ func TestApplyAutoCommentOpportunityGateDowngradesAutopilot(t *testing.T) {
 	approvalRequired := false
 	var approvedAt *time.Time
 
-	applyAutoCommentOpportunityGate(ExecutionModeAutopilot, autoCommentOpportunity{Score: 20}, &status, &capability, &approvalRequired, &approvedAt)
+	applyAutoCommentOpportunityGate(ExecutionModeAutopilot, autoCommentOpportunity{Score: 80}, &status, &capability, &approvalRequired, &approvedAt)
 	if status != "pending_review" {
 		t.Fatalf("expected low opportunity autopilot task to require review, got %s", status)
 	}
-	if capability != "low_opportunity_review" || !approvalRequired {
+	if capability != "opportunity_review_required" || !approvalRequired {
 		t.Fatalf("unexpected gate result: capability=%s approval=%v", capability, approvalRequired)
+	}
+}
+
+func TestApplyAutoCommentOpportunityGateAllowsStrongAutopilot(t *testing.T) {
+	now := time.Now().UTC()
+	status := "ready_to_publish"
+	capability := "autopilot_prepared"
+	approvalRequired := false
+	approvedAt := &now
+
+	applyAutoCommentOpportunityGate(ExecutionModeAutopilot, autoCommentOpportunity{Score: 90}, &status, &capability, &approvalRequired, &approvedAt)
+	if status != "ready_to_publish" || capability != "autopilot_prepared" || approvalRequired || approvedAt == nil {
+		t.Fatalf("expected strong opportunity to remain autopilot-ready, got status=%s capability=%s approval=%v approved=%v", status, capability, approvalRequired, approvedAt)
+	}
+}
+
+func TestAutoCommentOpportunitySkipCategory(t *testing.T) {
+	if got := autoCommentOpportunitySkipCategory(74); got != "skipped_low_priority" {
+		t.Fatalf("expected 65-74 to be low-priority skipped, got %s", got)
+	}
+	if got := autoCommentOpportunitySkipCategory(64); got != "skipped_low_value" {
+		t.Fatalf("expected below 65 to be low-value skipped, got %s", got)
+	}
+	if got := autoCommentOpportunitySkipCategory(75); got != "" {
+		t.Fatalf("expected 75+ to pass generation gate, got %s", got)
 	}
 }
 

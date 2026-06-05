@@ -1044,6 +1044,10 @@ export default function AutoCommentsPage() {
                 {modulePausedActionTip}
               </p>
             ) : null}
+            <p className="mt-3 rounded-xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 px-3 py-2 text-xs leading-5 text-[#9de8c5]">
+              <span className="font-semibold text-[#d7fbe8]">{t("autoComment.resourceGuard.title")}</span>
+              <span className="ml-1 text-[#9fcab4]">{t("autoComment.resourceGuard.description")}</span>
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {deliveryFilterOptions.map(([filter, count]) => (
                 <button

@@ -31,7 +31,9 @@ const (
 	autoCommentDeliverySkip          = "skip"
 	autoCommentDeliveryInbound       = "inbound_handoff"
 
-	autoCommentMinimumOpportunityScore = 40
+	autoCommentLowPriorityOpportunityScore = 65
+	autoCommentMinimumOpportunityScore     = 75
+	autoCommentAutopilotOpportunityScore   = 85
 )
 
 var (
@@ -481,30 +483,30 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 		return nil, err
 	}
 	now := time.Now().UTC()
-	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
-		return nil, err
-	}
 	bot, err := s.botForAccount(userID, target.XAccountID)
 	if err != nil {
 		return nil, err
 	}
 	cfg := s.commentConfig(userID)
+	blocked := blockedWordsFromConfig(cfg)
+	contentContext := contentContextForGeneration(s.contentRepo, userID, target.XAccountID, botIDForUsage(bot), target.TargetText, target.TargetUsername, bot)
+	opportunity := evaluateAutoCommentOpportunity(target.TargetText, target.TargetUsername, bot, contentContext, blocked)
+	if opportunity.Score < autoCommentMinimumOpportunityScore {
+		return nil, autoCommentOpportunityTooLowError(opportunity)
+	}
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
 	mode := s.effectiveCommentExecutionMode(userID, cfg)
 	if mode == ExecutionModeAutopilot {
 		if err := s.assertAutoCommentMonthlyQuota(userID, now); err != nil {
 			return nil, err
 		}
 	}
-	blocked := blockedWordsFromConfig(cfg)
 	input := autoCommentInputFromBot(target, bot, blocked)
-	contentContext := contentContextForGeneration(s.contentRepo, userID, target.XAccountID, botIDForUsage(bot), target.TargetText, target.TargetUsername, bot)
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(userID, botIDForUsage(bot))
 	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "comment")
-	opportunity := evaluateAutoCommentOpportunity(target.TargetText, target.TargetUsername, bot, contentContext, blocked)
-	if opportunity.Score < autoCommentMinimumOpportunityScore {
-		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
-	}
 	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
 	if err != nil {
 		return nil, err
@@ -1045,7 +1047,7 @@ func (s *AutoCommentService) runOnceForTarget(ctx context.Context, target model.
 				t := candidate.Tweet.CreatedAt
 				target.LastSeenTweetAt = &t
 			}
-			target.LastFailureReason = truncateErrMsg(fmt.Sprintf("skip: opportunity score %d below minimum %d", candidate.OpportunityScore, autoCommentMinimumOpportunityScore))
+			target.LastFailureReason = truncateErrMsg(autoCommentOpportunitySkipMessage(candidate.OpportunityScore))
 		}
 		return s.targetRepo.Save(&target)
 	}
@@ -1199,6 +1201,16 @@ func buildAutoCommentHealthItems(targets []model.AutoCommentTarget, stats map[ui
 	for _, target := range targets {
 		base := autoCommentHealthBase(target, stats[target.ID])
 		reasonLower := strings.ToLower(strings.TrimSpace(target.LastFailureReason))
+		if strings.Contains(reasonLower, "skipped_low_priority") || strings.Contains(reasonLower, "skipped_low_value") {
+			item := base
+			item.IssueType = "low_opportunity"
+			item.Severity = "low"
+			item.Message = "Recent target tweets were skipped by the opportunity threshold before AI generation."
+			item.SuggestedAction = "Keep this target only if it is strategically important, or lower its priority to protect generation and review resources."
+			item.LastFailureReason = target.LastFailureReason
+			items = append(items, item)
+			continue
+		}
 		if isAutoCommentAuthFailure(reasonLower) {
 			item := base
 			item.IssueType = "auth_or_account"
@@ -1317,33 +1329,33 @@ func (s *AutoCommentService) createTaskFromTweet(ctx context.Context, target mod
 	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, target.UserID, now); err != nil {
-		return nil, err
-	}
 	bot, err := s.botForAccount(target.UserID, target.XAccountID)
 	if err != nil {
 		return nil, err
 	}
-	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(target.UserID, target.XAccountID)
-	if err != nil {
-		return nil, fmt.Errorf("x account not found")
-	}
 	blocked := blockedWordsFromConfig(&cfg)
+	contentContext := contentContextForGeneration(s.contentRepo, target.UserID, target.XAccountID, botIDForUsage(bot), tw.Text, target.TargetUsername, bot)
+	opportunity := evaluateAutoCommentOpportunity(tw.Text, target.TargetUsername, bot, contentContext, blocked)
+	if opportunity.Score < autoCommentMinimumOpportunityScore {
+		return nil, autoCommentOpportunityTooLowError(opportunity)
+	}
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, target.UserID, now); err != nil {
+		return nil, err
+	}
 	mode := s.effectiveCommentExecutionMode(target.UserID, &cfg)
 	if mode == ExecutionModeAutopilot {
 		if err := s.assertAutoCommentMonthlyQuota(target.UserID, now); err != nil {
 			return nil, err
 		}
 	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(target.UserID, target.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
 	input := autoCommentInputFromValues(target.TargetUsername, tw.Text, cfg.Tone, blocked, bot)
-	contentContext := contentContextForGeneration(s.contentRepo, target.UserID, target.XAccountID, botIDForUsage(bot), tw.Text, target.TargetUsername, bot)
 	input.ContentContext = contentContext
 	input.FeedbackSignals = s.autoCommentFeedbackSignals(target.UserID, botIDForUsage(bot))
 	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, target.UserID, botIDForUsage(bot), "comment")
-	opportunity := evaluateAutoCommentOpportunity(tw.Text, target.TargetUsername, bot, contentContext, blocked)
-	if opportunity.Score < autoCommentMinimumOpportunityScore {
-		return nil, fmt.Errorf("%w: score %d is below minimum %d; skipped to avoid low-quality comments", ErrAutoCommentOpportunityTooLow, opportunity.Score, autoCommentMinimumOpportunityScore)
-	}
 	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
 	comment := generated.Text
 	risk := evaluateAutoCommentRisk(comment, bot, blocked)
@@ -2163,6 +2175,35 @@ type autoCommentOpportunity struct {
 	ReferencedContent []string
 }
 
+func autoCommentOpportunitySkipCategory(score int) string {
+	if score >= autoCommentMinimumOpportunityScore {
+		return ""
+	}
+	if score >= autoCommentLowPriorityOpportunityScore {
+		return "skipped_low_priority"
+	}
+	return "skipped_low_value"
+}
+
+func autoCommentOpportunitySkipMessage(score int) string {
+	switch autoCommentOpportunitySkipCategory(score) {
+	case "skipped_low_priority":
+		return fmt.Sprintf("skip: skipped_low_priority opportunity score %d is below the recommended %d threshold; no AI comment was generated to protect review and publishing resources.", score, autoCommentMinimumOpportunityScore)
+	case "skipped_low_value":
+		return fmt.Sprintf("skip: skipped_low_value opportunity score %d is below the resource floor %d; no AI comment was generated.", score, autoCommentLowPriorityOpportunityScore)
+	default:
+		return ""
+	}
+}
+
+func autoCommentOpportunityTooLowError(opportunity autoCommentOpportunity) error {
+	msg := strings.TrimPrefix(autoCommentOpportunitySkipMessage(opportunity.Score), "skip: ")
+	if msg == "" {
+		msg = fmt.Sprintf("opportunity score %d is below minimum %d; skipped to avoid low-quality comments", opportunity.Score, autoCommentMinimumOpportunityScore)
+	}
+	return fmt.Errorf("%w: %s", ErrAutoCommentOpportunityTooLow, msg)
+}
+
 func evaluateAutoCommentOpportunity(tweet, targetUsername string, bot *model.OAFBot, contentContext []GenerationContentContextItem, blockedWords []string) autoCommentOpportunity {
 	text := strings.ToLower(strings.TrimSpace(tweet))
 	score := 45
@@ -2437,14 +2478,14 @@ func autoCommentInitialState(mode string, risk autoCommentRisk, now time.Time) (
 }
 
 func applyAutoCommentOpportunityGate(mode string, opportunity autoCommentOpportunity, status, capability *string, approvalRequired *bool, approvedAt **time.Time) {
-	if mode != ExecutionModeAutopilot || opportunity.Score >= 30 {
+	if mode != ExecutionModeAutopilot || opportunity.Score >= autoCommentAutopilotOpportunityScore {
 		return
 	}
 	if status == nil || capability == nil || approvalRequired == nil || approvedAt == nil {
 		return
 	}
 	*status = "pending_review"
-	*capability = "low_opportunity_review"
+	*capability = "opportunity_review_required"
 	*approvalRequired = true
 	*approvedAt = nil
 }

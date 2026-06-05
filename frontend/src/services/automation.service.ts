@@ -379,7 +379,7 @@ export type AutoCommentTaskApi = {
   api_reply_block_reason?: string;
   manual_action_url?: string;
   quote_post_candidate?: string;
-  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent" | "handled";
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent" | "handled" | "skipped";
   risk_level: "low" | "medium" | "high" | string;
   capability_status: string;
   failure_category?: string;

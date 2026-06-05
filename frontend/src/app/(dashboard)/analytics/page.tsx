@@ -41,6 +41,8 @@ const automationWorkbenchHref = {
   dm: "/auto-dms",
 } satisfies Record<AnalyticsAutomationType, string>;
 
+const moduleHealthOrder: AnalyticsAutomationType[] = ["post", "reply", "comment", "dm"];
+
 const analyticsRanges: AnalyticsRange[] = ["7d", "30d"];
 
 function formatDate(value: string, timeZone: string) {
@@ -131,6 +133,25 @@ function normalizedFailureCategory(item: AnalyticsOverview["failure_reasons"][nu
     category === "unknown"
     ? category
     : undefined;
+}
+
+function moduleHealthItems(overview: AnalyticsOverview): AnalyticsOverview["automation_breakdown"] {
+  const known = new Map<string, AnalyticsOverview["automation_breakdown"][number]>();
+  for (const item of overview.automation_breakdown) {
+    if (moduleHealthOrder.includes(item.type)) {
+      known.set(item.type, item);
+    }
+  }
+  return moduleHealthOrder.map((type) => {
+    const item = known.get(type);
+    return {
+      type,
+      total: item?.total ?? 0,
+      success: item?.success ?? 0,
+      failed: item?.failed ?? 0,
+      review: item?.review ?? 0,
+    };
+  });
 }
 
 function MetricCard({
@@ -881,8 +902,8 @@ function ModuleHealthSection({ overview }: { overview: AnalyticsOverview }) {
     <Card className="bg-[#0f1419]">
       <CardHeader title={t("analytics.modules.title")} description={t("analytics.modules.description")} />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {overview.automation_breakdown.map((item) => {
-          const Icon = automationIcon[item.type] ?? Activity;
+        {moduleHealthItems(overview).map((item) => {
+          const Icon = automationIcon[item.type];
           const moduleSuccessRate = percent(item.success, item.total);
           const needsAttention = item.failed + item.review;
           return (

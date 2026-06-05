@@ -448,6 +448,10 @@ export const dict: I18nDict = {
   "auth.wallet.description": "Select a wallet provider and sign once to bind the address to your account.",
 
   // sidebar
+  "sidebar.group.workspace": "Workbench",
+  "sidebar.group.oafBotWorkflow": "OAF Bot Workflow",
+  "sidebar.group.operations": "Operations",
+  "sidebar.group.accountSettings": "Account & Settings",
   "sidebar.nav.dashboard": "Dashboard",
   "sidebar.nav.dailyXQueue": "Today Drafts",
   "sidebar.nav.activity": "Activity",

@@ -24,22 +24,42 @@ import {
 import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
-const navItems = [
-  { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
-  { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
-  { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
-  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
-  { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
-  { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
-  { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
-  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
-  { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
-  { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
-  { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
-  { labelKey: "sidebar.nav.admin", href: "/admin", icon: ShieldCheck },
-  { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
-  { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
+const navGroups = [
+  {
+    labelKey: "sidebar.group.workspace",
+    items: [
+      { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    labelKey: "sidebar.group.oafBotWorkflow",
+    items: [
+      { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+      { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
+      { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
+    ],
+  },
+  {
+    labelKey: "sidebar.group.operations",
+    items: [
+      { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
+      { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
+      { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
+      { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
+      { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    labelKey: "sidebar.group.accountSettings",
+    items: [
+      { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+      { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
+      { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
+      { labelKey: "sidebar.nav.admin", href: "/admin", icon: ShieldCheck },
+      { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
+      { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
+    ],
+  },
 ];
 
 const adminNavItems = [
@@ -55,7 +75,12 @@ export function AppSidebar() {
   const searchParams = useSearchParams();
   const { t } = useT();
   const adminMode = isAdminFrontend();
-  const visibleNavItems = adminMode ? adminNavItems : navItems.filter((item) => item.href !== "/admin");
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.href !== "/admin"),
+    }))
+    .filter((group) => group.items.length > 0);
   const activeAdminSection = searchParams.get("section") || "overview";
 
   return (
@@ -80,11 +105,9 @@ export function AppSidebar() {
           <span className="whitespace-nowrap text-xs leading-4 text-[#71767b]">Flow</span>
         </span>
       </Link>
-      <nav className="space-y-1.5">
-        {visibleNavItems.map((item) => {
-          const active = "section" in item
-            ? pathname === "/admin" && item.section === activeAdminSection
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
+      <nav className="space-y-5">
+        {adminMode ? adminNavItems.map((item) => {
+          const active = pathname === "/admin" && item.section === activeAdminSection;
           return (
             <Link
               key={item.href}
@@ -97,7 +120,28 @@ export function AppSidebar() {
               {t(item.labelKey)}
             </Link>
           );
-        })}
+        }) : visibleNavGroups.map((group) => (
+          <div key={group.labelKey} className="space-y-1.5">
+            <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#71767b]">
+              {t(group.labelKey)}
+            </p>
+            {group.items.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 rounded-full px-3 py-2.5 text-[15px] font-medium transition-colors ${
+                    active ? "bg-[#1d9bf0]/12 text-[#e7e9ea]" : "text-[#e7e9ea]/75 hover:bg-[#16181c] hover:text-[#e7e9ea]"
+                  }`}
+                >
+                  <item.icon className={`size-5 ${active ? "text-[#1d9bf0]" : ""}`} />
+                  {t(item.labelKey)}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
     </aside>

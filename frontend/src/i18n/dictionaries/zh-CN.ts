@@ -420,6 +420,10 @@ export const dict: I18nDict = {
   "auth.wallet.description": "请选择钱包提供方，签名后会把地址绑定到当前账号。",
 
   // sidebar
+  "sidebar.group.workspace": "工作台",
+  "sidebar.group.oafBotWorkflow": "OAF Bot 工作流",
+  "sidebar.group.operations": "运营执行",
+  "sidebar.group.accountSettings": "账户与设置",
   "sidebar.nav.dashboard": "仪表板",
   "sidebar.nav.dailyXQueue": "今日草稿",
   "sidebar.nav.activity": "活动",

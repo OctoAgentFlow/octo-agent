@@ -24,17 +24,17 @@ import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
-  { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
-  { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+  { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
   { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
-  { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
   { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
   { labelKey: "sidebar.nav.posts", href: "/posts", icon: FileText },
+  { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
+  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
+  { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
   { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
   { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },

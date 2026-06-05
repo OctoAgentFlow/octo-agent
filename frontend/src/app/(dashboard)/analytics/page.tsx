@@ -34,6 +34,13 @@ const automationIcon = {
   comment: MessageSquareText,
 } satisfies Record<AnalyticsAutomationType, typeof FileText>;
 
+const automationWorkbenchHref = {
+  post: "/auto-post",
+  reply: "/auto-replies",
+  comment: "/auto-comments",
+  dm: "/auto-dms",
+} satisfies Record<AnalyticsAutomationType, string>;
+
 const analyticsRanges: AnalyticsRange[] = ["7d", "30d"];
 
 function formatDate(value: string, timeZone: string) {
@@ -344,6 +351,23 @@ export default function AnalyticsPage() {
         />
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+        <FailureReasonsCard
+          overview={overview}
+          range={range}
+          selectedAccountID={selectedAccountID}
+          timeZone={timeZone}
+        />
+        <AttentionItemsCard
+          overview={overview}
+          range={range}
+          selectedAccountID={selectedAccountID}
+          timeZone={timeZone}
+        />
+      </div>
+
+      <ModuleHealthSection overview={overview} />
+
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card>
           <CardHeader
@@ -406,7 +430,7 @@ export default function AnalyticsPage() {
           right={
             <Link
               className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-              href="/posts"
+              href="/execution-queue?type=post"
             >
               {t("analytics.contentEffect.manage")}
             </Link>
@@ -505,42 +529,6 @@ export default function AnalyticsPage() {
       </Card>
 
       <Card className="bg-[#0f1419]">
-        <CardHeader title={t("analytics.automation.title")} description={t("analytics.automation.description")} />
-        <div className="grid gap-3 md:grid-cols-3">
-          {overview.automation_breakdown.map((item) => {
-            const Icon = automationIcon[item.type] ?? Activity;
-            return (
-              <div key={item.type} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition-colors hover:bg-[#080808]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-9 w-9 place-items-center rounded-full border border-[#2f3336] bg-[#16181c] text-[#1d9bf0]">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <p className="font-semibold text-white">{t(`automation.module.${item.type}.name`)}</p>
-                  </div>
-                  <p className="text-2xl font-semibold text-white">{item.total}</p>
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 px-2 py-2">
-                    <p className="text-xs text-[#7ee0b5]/80">{t("analytics.status.success")}</p>
-                    <p className="font-semibold text-[#7ee0b5]">{item.success}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-2 py-2">
-                    <p className="text-xs text-[#ff8a91]/80">{t("analytics.status.failed")}</p>
-                    <p className="font-semibold text-[#ff8a91]">{item.failed}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#ffd400]/20 bg-[#ffd400]/10 px-2 py-2">
-                    <p className="text-xs text-[#f6d96b]/80">{t("analytics.status.review")}</p>
-                    <p className="font-semibold text-[#f6d96b]">{item.review}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card className="bg-[#0f1419]">
         <CardHeader
           title={t("analytics.autoDMOps.title")}
           description={t("analytics.autoDMOps.description")}
@@ -617,58 +605,63 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-            <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.failureCategories")}</p>
-            {overview.auto_dm_operations.failure_categories.length === 0 ? (
-              <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noFailures")}</p>
-            ) : (
-              <div className="space-y-2">
-                {overview.auto_dm_operations.failure_categories.map((item) => (
-                  <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-medium text-white">{item.category || t("analytics.failureReasons.unknown")}</p>
-                      {item.last_at ? <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.last_at, timeZone)}</p> : null}
+        <details className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-white marker:text-[#1d9bf0]">
+            {t("analytics.autoDMOps.advancedDetails")}
+          </summary>
+          <div className="mt-4 grid gap-3 xl:grid-cols-2">
+            <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+              <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.failureCategories")}</p>
+              {overview.auto_dm_operations.failure_categories.length === 0 ? (
+                <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noFailures")}</p>
+              ) : (
+                <div className="space-y-2">
+                  {overview.auto_dm_operations.failure_categories.map((item) => (
+                    <div key={`${item.category}-${item.last_at ?? ""}`} className="flex items-start justify-between gap-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-white">{item.category || t("analytics.failureReasons.unknown")}</p>
+                        {item.last_at ? <p className="mt-1 text-xs text-[#71767b]">{formatDateTime(item.last_at, timeZone)}</p> : null}
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">{item.count}</span>
                     </div>
-                    <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-            <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.recentEvents")}</p>
-            {overview.auto_dm_operations.recent_events.length === 0 ? (
-              <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noEvents")}</p>
-            ) : (
-              <div className="space-y-2">
-                {overview.auto_dm_operations.recent_events.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
-                      <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at, timeZone)}</span>
-                    </div>
-                    <p className="mt-1 line-clamp-2 break-words text-xs text-[#71767b]">{item.message || item.account_handle || "—"}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {overview.auto_dm_operations.imports.recent_errors.length > 0 ? (
-          <div className="mt-4 rounded-2xl border border-[#ffd400]/20 bg-[#ffd400]/10 p-4">
-            <p className="mb-3 text-sm font-semibold text-[#f6d96b]">{t("analytics.autoDMOps.recentImportErrors")}</p>
-            <div className="space-y-2">
-              {overview.auto_dm_operations.imports.recent_errors.map((item) => (
-                <div key={item.id} className="text-xs text-[#f6d96b]">
-                  {formatDateTime(item.imported_at, timeZone)} · {compactText(item.errors.join(" · "), 180)}
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+              <p className="mb-3 text-sm font-semibold text-white">{t("analytics.autoDMOps.recentEvents")}</p>
+              {overview.auto_dm_operations.recent_events.length === 0 ? (
+                <p className="text-sm text-[#71767b]">{t("analytics.autoDMOps.noEvents")}</p>
+              ) : (
+                <div className="space-y-2">
+                  {overview.auto_dm_operations.recent_events.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
+                        <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at, timeZone)}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 break-words text-xs text-[#71767b]">{item.message || item.account_handle || "—"}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        ) : null}
+
+          {overview.auto_dm_operations.imports.recent_errors.length > 0 ? (
+            <div className="mt-4 rounded-2xl border border-[#ffd400]/20 bg-[#ffd400]/10 p-4">
+              <p className="mb-3 text-sm font-semibold text-[#f6d96b]">{t("analytics.autoDMOps.recentImportErrors")}</p>
+              <div className="space-y-2">
+                {overview.auto_dm_operations.imports.recent_errors.map((item) => (
+                  <div key={item.id} className="text-xs text-[#f6d96b]">
+                    {formatDateTime(item.imported_at, timeZone)} · {compactText(item.errors.join(" · "), 180)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </details>
       </Card>
 
       <Card className="bg-[#0f1419]">
@@ -726,130 +719,216 @@ export default function AnalyticsPage() {
         )}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-        <Card className="bg-[#0f1419]">
-          <CardHeader
-            title={t("analytics.failureReasons.title")}
-            description={t("analytics.failureReasons.description")}
-            right={
-              <span className="grid h-9 w-9 place-items-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]">
-                <AlertTriangle className="h-4 w-4" />
-              </span>
-            }
-          />
-          {overview.failure_reasons.length === 0 ? (
-            <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
-              {t("analytics.failureReasons.empty")}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {overview.failure_reasons.map((item) => {
-                const category = normalizedFailureCategory(item);
-                return (
-                  <div key={`${item.category || item.reason}-${item.last_at ?? ""}`} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="break-words text-sm font-medium text-white">
-                          {t(failureCategoryLabelKey(category))}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">
-                          {t(failureCategoryAdviceKey(category))}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">
-                        {t("analytics.failureReasons.count", { count: item.count })}
+    </div>
+  );
+}
+
+function FailureReasonsCard({
+  overview,
+  range,
+  selectedAccountID,
+  timeZone,
+}: {
+  overview: AnalyticsOverview;
+  range: AnalyticsRange;
+  selectedAccountID?: number;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("analytics.failureReasons.title")}
+        description={t("analytics.failureReasons.description")}
+        right={
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+        }
+      />
+      {overview.failure_reasons.length === 0 ? (
+        <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
+          {t("analytics.failureReasons.empty")}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {overview.failure_reasons.map((item) => {
+            const category = normalizedFailureCategory(item);
+            return (
+              <div key={`${item.category || item.reason}-${item.last_at ?? ""}`} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-medium text-white">
+                      {t(failureCategoryLabelKey(category))}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">
+                      {t(failureCategoryAdviceKey(category))}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-1 text-xs font-semibold text-[#ff8a91]">
+                    {t("analytics.failureReasons.count", { count: item.count })}
+                  </span>
+                </div>
+                {item.last_at ? (
+                  <p className="mt-2 text-xs text-[#71767b]">
+                    {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at, timeZone) })}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex justify-end">
+                  <Link
+                    className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
+                    href={activityHref({
+                      range,
+                      status: "failed",
+                      accountID: selectedAccountID,
+                      failureCategory: category,
+                    })}
+                  >
+                    {t("analytics.viewInActivity")}
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function AttentionItemsCard({
+  overview,
+  range,
+  selectedAccountID,
+  timeZone,
+}: {
+  overview: AnalyticsOverview;
+  range: AnalyticsRange;
+  selectedAccountID?: number;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("analytics.attention.title")}
+        description={t("analytics.attention.description")}
+        right={
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]">
+            <ListChecks className="h-4 w-4" />
+          </span>
+        }
+      />
+      {overview.attention_items.length === 0 ? (
+        <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
+          {t("analytics.attention.empty")}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {overview.attention_items.map((item) => {
+            const record = attentionRecord(item);
+            return (
+              <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-white">
+                        {t(`automation.module.${item.type}.name`)}
+                      </span>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                          item.status === "failed"
+                            ? "border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"
+                            : "border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]"
+                        }`}
+                      >
+                        {t(`analytics.status.${item.status}`)}
                       </span>
                     </div>
-                    {item.last_at ? (
-                      <p className="mt-2 text-xs text-[#71767b]">
-                        {t("analytics.failureReasons.lastAt", { time: formatDateTime(item.last_at, timeZone) })}
-                      </p>
+                    <p className="line-clamp-2 break-words text-sm text-[#b6bec5]">{activityNarrativeLine(record, t)}</p>
+                    {item.error_message ? (
+                      <p className="line-clamp-2 break-words text-xs text-[#ff8a91]">{compactText(item.error_message, 160)}</p>
                     ) : null}
-                    <div className="mt-3 flex justify-end">
-                      <Link
-                        className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-                        href={activityHref({
-                          range,
-                          status: "failed",
-                          accountID: selectedAccountID,
-                          failureCategory: category,
-                        })}
-                      >
-                        {t("analytics.viewInActivity")}
-                      </Link>
+                    <div className="flex flex-wrap gap-3 text-xs text-[#71767b]">
+                      <span>{item.account_handle}</span>
+                      <span>{formatDateTime(item.executed_at, timeZone)}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+                  <Link
+                    className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
+                    href={activityHref({
+                      range,
+                      status: item.status,
+                      type: item.type,
+                      accountID: item.x_account_id || selectedAccountID,
+                    })}
+                  >
+                    {t("analytics.viewInActivity")}
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
 
-        <Card className="bg-[#0f1419]">
-          <CardHeader
-            title={t("analytics.attention.title")}
-            description={t("analytics.attention.description")}
-            right={
-              <span className="grid h-9 w-9 place-items-center rounded-full border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]">
-                <ListChecks className="h-4 w-4" />
-              </span>
-            }
-          />
-          {overview.attention_items.length === 0 ? (
-            <div className="rounded-2xl border border-[#2f3336] bg-black px-3 py-5 text-sm text-[#71767b]">
-              {t("analytics.attention.empty")}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {overview.attention_items.map((item) => {
-                const record = attentionRecord(item);
-                return (
-                  <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-black px-3 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-white">
-                            {t(`automation.module.${item.type}.name`)}
-                          </span>
-                          <span
-                            className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
-                              item.status === "failed"
-                                ? "border border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"
-                                : "border border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]"
-                            }`}
-                          >
-                            {t(`analytics.status.${item.status}`)}
-                          </span>
-                        </div>
-                        <p className="line-clamp-2 break-words text-sm text-[#b6bec5]">{activityNarrativeLine(record, t)}</p>
-                        {item.error_message ? (
-                          <p className="line-clamp-2 break-words text-xs text-[#ff8a91]">{compactText(item.error_message, 160)}</p>
-                        ) : null}
-                        <div className="flex flex-wrap gap-3 text-xs text-[#71767b]">
-                          <span>{item.account_handle}</span>
-                          <span>{formatDateTime(item.executed_at, timeZone)}</span>
-                        </div>
-                      </div>
-                      <Link
-                        className="shrink-0 rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-                        href={activityHref({
-                          range,
-                          status: item.status,
-                          type: item.type,
-                          accountID: item.x_account_id || selectedAccountID,
-                        })}
-                      >
-                        {t("analytics.viewInActivity")}
-                      </Link>
-                    </div>
+function ModuleHealthSection({ overview }: { overview: AnalyticsOverview }) {
+  const { t } = useT();
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader title={t("analytics.modules.title")} description={t("analytics.modules.description")} />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {overview.automation_breakdown.map((item) => {
+          const Icon = automationIcon[item.type] ?? Activity;
+          const moduleSuccessRate = percent(item.success, item.total);
+          const needsAttention = item.failed + item.review;
+          return (
+            <div key={item.type} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition-colors hover:bg-[#080808]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#2f3336] bg-[#16181c] text-[#1d9bf0]">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-white">{t(`automation.module.${item.type}.name`)}</p>
+                    <p className="mt-0.5 text-xs text-[#71767b]">{t("analytics.modules.total", { count: item.total })}</p>
                   </div>
-                );
-              })}
+                </div>
+                <span
+                  className={`shrink-0 rounded-full border px-2 py-1 text-xs font-semibold ${
+                    needsAttention > 0
+                      ? "border-[#ffd400]/20 bg-[#ffd400]/10 text-[#f6d96b]"
+                      : "border-[#00ba7c]/20 bg-[#00ba7c]/10 text-[#7ee0b5]"
+                  }`}
+                >
+                  {needsAttention > 0 ? t("analytics.modules.needsWork") : t("analytics.modules.stable")}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <AccountMetric label={t("analytics.status.success")} value={item.success} />
+                <AccountMetric label={t("analytics.status.failed")} value={item.failed} tone="rose" />
+                <AccountMetric label={t("analytics.status.review")} value={item.review} tone="amber" />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-[#71767b]">
+                  {t("analytics.modules.successRate", { rate: moduleSuccessRate })}
+                </p>
+                <Link
+                  href={automationWorkbenchHref[item.type]}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16181c]"
+                >
+                  {t("analytics.modules.open")}
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              </div>
             </div>
-          )}
-        </Card>
+          );
+        })}
       </div>
-    </div>
+    </Card>
   );
 }
 

@@ -21,6 +21,7 @@ import (
 
 const (
 	autoReplyPreviewRunes            = 160
+	autoReplyContentRunes            = 220
 	replyReservationStale            = 30 * time.Minute
 	autoReplyDefaultIntervalMinutes  = 15
 	autoReplyScanNoAccountReady      = "no_account_ready"
@@ -177,7 +178,7 @@ func (s *AutoReplyService) GenerateDraft(ctx context.Context, userID uint, req d
 		CommentAuthorHandle: normalizeHandle(req.CommentAuthorHandle),
 		RootTweetText:       truncateRunes(req.RootTweetText, 1000),
 		CommentText:         truncateRunes(req.CommentText, 1000),
-		GeneratedReply:      truncateRunes(reply, autoReplyPreviewRunes),
+		GeneratedReply:      fitAutoReplyContent(reply),
 		Status:              status,
 		RiskLevel:           risk.Level,
 		CapabilityStatus:    capability,
@@ -216,7 +217,7 @@ func (s *AutoReplyService) UpdateDraft(userID, id uint, content string) (*dto.Au
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be edited from status %s", draft.Status)
 	}
-	draft.GeneratedReply = truncateRunes(content, autoReplyPreviewRunes)
+	draft.GeneratedReply = fitAutoReplyContent(content)
 	if draft.Status == "approved" {
 		draft.Status = "pending_review"
 		draft.ApprovedAt = nil
@@ -283,7 +284,7 @@ func (s *AutoReplyService) RewriteDraft(ctx context.Context, userID, id uint, re
 	}
 	cfg, _ := s.automationRepo.GetByUserAndType(userID, repository.AutomationTypeReply)
 	risk := evaluateAutoCommentRisk(generated.Text, bot, blockedWordsFromConfig(cfg))
-	draft.GeneratedReply = truncateRunes(generated.Text, autoReplyPreviewRunes)
+	draft.GeneratedReply = fitAutoReplyContent(generated.Text)
 	draft.RiskLevel = risk.Level
 	draft.FailureCategory = risk.Category
 	draft.FailureReason = risk.Reason
@@ -437,7 +438,7 @@ func (s *AutoReplyService) RetryDraft(ctx context.Context, userID, id uint) (*dt
 		}
 		return nil, err
 	}
-	reply := truncateRunes(generated.Text, autoReplyPreviewRunes)
+	reply := fitAutoReplyContent(generated.Text)
 	risk := evaluateAutoCommentRisk(reply, bot, blocked)
 	draft.BotID = botIDForUsage(bot)
 	draft.GeneratedReply = reply
@@ -887,7 +888,7 @@ func (s *AutoReplyService) generateAutopilotReply(ctx context.Context, userID ui
 	if err != nil {
 		return "", nil, err
 	}
-	content := truncateRunes(generated.Text, autoReplyPreviewRunes)
+	content := fitAutoReplyContent(generated.Text)
 	if strings.TrimSpace(content) == "" {
 		return "", nil, fmt.Errorf("AI generated an empty auto reply")
 	}

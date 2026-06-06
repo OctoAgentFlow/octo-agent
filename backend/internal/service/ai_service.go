@@ -731,14 +731,14 @@ func (s *AIService) GenerateAutoReply(ctx context.Context, in GenerateAutoReplyI
 	if err != nil {
 		return AIGeneratedText{}, err
 	}
-	text := truncateRunes(strings.TrimSpace(result.Text), 220)
+	text := fitAutoReplyContent(result.Text)
 	expectedLanguage := expectedReplyOutputLanguage(commentText, in.PrimaryLanguage, in.LanguageStrategy)
 	result.Usage = withExpectedAndActualLanguage(result.Usage, expectedLanguage, text)
 	if shouldRetryForLanguageMismatch(expectedLanguage, text) {
 		retryUser := user.String() + "\nLanguage correction retry:\n- The previous draft did not match the required output language.\n- Rewrite the reply in " + expectedLanguage + " only, while preserving the same meaning and safety rules.\n"
 		retry, retryErr := s.generateGuardedText(ctx, system, retryUser)
 		if retryErr == nil {
-			retryText := truncateRunes(strings.TrimSpace(retry.Text), 220)
+			retryText := fitAutoReplyContent(retry.Text)
 			retry.Usage = withExpectedAndActualLanguage(retry.Usage, expectedLanguage, retryText)
 			retry.Usage.RetryCount = 1
 			return AIGeneratedText{Text: retryText, Usage: combineTextUsage(result.Usage, retry.Usage)}, nil
@@ -2258,6 +2258,27 @@ func fitDailyXQueueGeneratedPost(s string) string {
 		return sentence
 	}
 	if xPostCharacterCount(cut+".") <= 220 {
+		return strings.TrimSpace(cut) + "."
+	}
+	return cut
+}
+
+func fitAutoReplyContent(s string) string {
+	text := cleanupGeneratedPayload(s)
+	text = strings.Trim(text, "\"“”")
+	text = stripGeneratedLabel(text)
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" {
+		return ""
+	}
+	if len([]rune(text)) <= autoReplyContentRunes && endsLikeCompleteSentence(text) {
+		return text
+	}
+	cut := fitGeneratedTweet(text, autoReplyContentRunes)
+	if sentence := completeSentencePrefix(cut); sentence != "" {
+		return sentence
+	}
+	if len([]rune(cut+".")) <= autoReplyContentRunes {
 		return strings.TrimSpace(cut) + "."
 	}
 	return cut

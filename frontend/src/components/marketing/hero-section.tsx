@@ -46,7 +46,7 @@ export function HeroSection() {
         </p>
         <div className="grid gap-3 sm:flex sm:items-center">
           <Link
-            href="/login"
+            href="/launch-plan"
             className={cn(
               buttonVariants({ variant: "default" }),
               "h-12 w-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-[0_16px_34px_rgba(29,155,240,0.2)] hover:opacity-90 sm:h-10 sm:w-auto"

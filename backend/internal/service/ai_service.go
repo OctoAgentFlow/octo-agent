@@ -1512,81 +1512,6 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 	return profile, strings.TrimSpace(result.Text), result.Usage, nil
 }
 
-func (s *AIService) GenerateOAFBotLaunchPlan(ctx context.Context, in dto.OAFBotLaunchPlanRequest) (dto.OAFBotLaunchPlanOutput, error) {
-	project := strings.TrimSpace(in.ProjectSummary)
-	if project == "" {
-		return dto.OAFBotLaunchPlanOutput{}, fmt.Errorf("project summary is required")
-	}
-	outputLanguage := "Simplified Chinese"
-	if strings.TrimSpace(in.OutputLanguage) == "en" {
-		outputLanguage = "English"
-	}
-	system := strings.Join([]string{
-		"You are Octo-Agent Flow's OAF Bot launch strategist.",
-		"Create a practical X account launch and operations plan that turns user context into an OAF Bot setup preview.",
-		"Focus on account positioning, persona, content memory, guardrails, review-first operation, and controlled automation.",
-		"Do not promise guaranteed growth, engagement, revenue, token price, passive income, or fully automated replacement of human operators.",
-		"Return strict JSON only. Do not return markdown, comments, or extra text.",
-	}, " ")
-
-	var user strings.Builder
-	user.WriteString("Product positioning: OctoAgentFlow is OAF Bot for X Account Operations.\n")
-	user.WriteString("User stage: " + strings.TrimSpace(in.Stage) + "\n")
-	user.WriteString("Account type: " + strings.TrimSpace(in.AccountType) + "\n")
-	if strings.TrimSpace(in.XHandle) != "" {
-		user.WriteString("X handle: @" + strings.TrimPrefix(strings.TrimSpace(in.XHandle), "@") + "\n")
-	}
-	user.WriteString("Project or account summary:\n")
-	user.WriteString(project + "\n")
-	if strings.TrimSpace(in.TargetAudience) != "" {
-		user.WriteString("Target audience:\n" + strings.TrimSpace(in.TargetAudience) + "\n")
-	}
-	if strings.TrimSpace(in.DesiredFollowers) != "" {
-		user.WriteString("Desired follower profile:\n" + strings.TrimSpace(in.DesiredFollowers) + "\n")
-	}
-	if strings.TrimSpace(in.Industry) != "" {
-		user.WriteString("Industry:\n" + strings.TrimSpace(in.Industry) + "\n")
-	}
-	if strings.TrimSpace(in.WebsiteURL) != "" {
-		user.WriteString("Website URL:\n" + strings.TrimSpace(in.WebsiteURL) + "\n")
-	}
-	if strings.TrimSpace(in.SourceMaterial) != "" {
-		user.WriteString("Trusted source material:\n" + truncateRunes(in.SourceMaterial, 1800) + "\n")
-	}
-	if strings.TrimSpace(in.VoicePreference) != "" {
-		user.WriteString("Voice preference:\n" + strings.TrimSpace(in.VoicePreference) + "\n")
-	}
-	if strings.TrimSpace(in.Guardrails) != "" {
-		user.WriteString("User-provided guardrails:\n" + strings.TrimSpace(in.Guardrails) + "\n")
-	}
-	user.WriteString("\nReturn JSON with exactly these keys:\n")
-	user.WriteString("account_positioning, recommended_bot_type, recommended_occupation, recommended_industries, content_themes, safety_guardrails, seven_day_plan, first_posts, comment_examples, bio_suggestion, operating_cadence, create_oaf_bot_cta.\n")
-	user.WriteString("Schema details:\n")
-	user.WriteString("- recommended_industries, content_themes, safety_guardrails are arrays of short strings.\n")
-	user.WriteString("- seven_day_plan is an array of exactly 7 objects: day, theme, action, outcome.\n")
-	user.WriteString("- first_posts is an array of exactly 3 objects: label, content, why. Each content must be publishable as an X post under 220 characters.\n")
-	user.WriteString("- comment_examples is an array of exactly 3 objects: label, content, why. Each content must be a natural X comment under 200 characters.\n")
-	user.WriteString("- bio_suggestion must fit a practical X profile bio.\n")
-	user.WriteString("Rules:\n")
-	user.WriteString("- Output language for natural-language values: " + outputLanguage + ".\n")
-	user.WriteString("- If the user is starting from zero, emphasize launch positioning and the first 7 days of account habit-building.\n")
-	user.WriteString("- If the user has an existing account, emphasize stabilizing voice, content rhythm, and review workflows.\n")
-	user.WriteString("- If the user mentions multi-account or agency operation, mention reusable OAF Bot setup and review control without promising scale outcomes.\n")
-	user.WriteString("- Make the plan specific enough that the user wants to create an OAF Bot from it.\n")
-	user.WriteString("- Use OAF Bot as the core artifact. Do not describe this as generic AI copywriting.\n")
-	user.WriteString("- Keep claims cautious: no guaranteed growth, no spam, no financial promises, no fully autonomous publishing claims.\n")
-
-	result, err := s.generateGuardedTextMaxTokens(ctx, system, user.String(), 1800)
-	if err != nil {
-		return dto.OAFBotLaunchPlanOutput{}, err
-	}
-	plan, err := parseOAFBotLaunchPlan(result.Text)
-	if err != nil {
-		return dto.OAFBotLaunchPlanOutput{}, err
-	}
-	return plan, nil
-}
-
 func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
@@ -2164,39 +2089,6 @@ func parseCompletedOAFBotProfile(raw string) (dto.OAFBotUpsertRequest, error) {
 	out.Hashtags = cleanGeneratedStringList(out.Hashtags, 8)
 	out.Keywords = cleanGeneratedStringList(out.Keywords, 10)
 	out.AvoidClaims = cleanGeneratedStringList(out.AvoidClaims, 8)
-	return out, nil
-}
-
-func parseOAFBotLaunchPlan(raw string) (dto.OAFBotLaunchPlanOutput, error) {
-	text := cleanupGeneratedPayload(raw)
-	var out dto.OAFBotLaunchPlanOutput
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return dto.OAFBotLaunchPlanOutput{}, fmt.Errorf("parse oaf bot launch plan: %w", err)
-	}
-	out.AccountPositioning = strings.TrimSpace(out.AccountPositioning)
-	out.RecommendedBotType = strings.TrimSpace(out.RecommendedBotType)
-	out.RecommendedOccupation = strings.TrimSpace(out.RecommendedOccupation)
-	out.BioSuggestion = strings.TrimSpace(out.BioSuggestion)
-	out.OperatingCadence = strings.TrimSpace(out.OperatingCadence)
-	out.CreateOAFBotCTA = strings.TrimSpace(out.CreateOAFBotCTA)
-	out.RecommendedIndustries = cleanGeneratedStringList(out.RecommendedIndustries, 5)
-	out.ContentThemes = cleanGeneratedStringList(out.ContentThemes, 6)
-	out.SafetyGuardrails = cleanGeneratedStringList(out.SafetyGuardrails, 6)
-	for i := range out.SevenDayPlan {
-		out.SevenDayPlan[i].Theme = strings.TrimSpace(out.SevenDayPlan[i].Theme)
-		out.SevenDayPlan[i].Action = strings.TrimSpace(out.SevenDayPlan[i].Action)
-		out.SevenDayPlan[i].Outcome = strings.TrimSpace(out.SevenDayPlan[i].Outcome)
-	}
-	for i := range out.FirstPosts {
-		out.FirstPosts[i].Label = strings.TrimSpace(out.FirstPosts[i].Label)
-		out.FirstPosts[i].Content = strings.TrimSpace(out.FirstPosts[i].Content)
-		out.FirstPosts[i].Why = strings.TrimSpace(out.FirstPosts[i].Why)
-	}
-	for i := range out.CommentExamples {
-		out.CommentExamples[i].Label = strings.TrimSpace(out.CommentExamples[i].Label)
-		out.CommentExamples[i].Content = strings.TrimSpace(out.CommentExamples[i].Content)
-		out.CommentExamples[i].Why = strings.TrimSpace(out.CommentExamples[i].Why)
-	}
 	return out, nil
 }
 

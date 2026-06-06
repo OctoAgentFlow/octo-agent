@@ -51,7 +51,6 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	trendFeedbackRepo := repository.NewTrendFeedbackRepository(db)
 	contentLibraryRepo := repository.NewContentLibraryRepository(db)
 	dailyXQueueContextRepo := repository.NewDailyXQueueContextRepository(db)
-	oafBotLaunchPlanRepo := repository.NewOAFBotLaunchPlanRepository(db)
 	oafBotRepo := repository.NewOAFBotRepository(db)
 	aiGenerationUsageRepo := repository.NewAIGenerationUsageRepository(db)
 	oafBotFeedbackRepo := repository.NewOAFBotGenerationFeedbackRepository(db)
@@ -97,7 +96,6 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	postService := service.NewPostService(postRepo, twitterAccountRepo, automationRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, trendService, cfg.XPublisher)
 	autoPostService := service.NewAutoPostService(twitterAccountRepo, automationRepo, autoPostPlanRepo, autoPostDraftRepo, autoPostRunRepo, contentLibraryRepo, activityRepo, userRepo, oafBotRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, publishingService, trendService)
 	dailyXQueueService := service.NewDailyXQueueService(dailyXQueueContextRepo, oafBotRepo, twitterAccountRepo, contentLibraryRepo, autoPostDraftRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, activityRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, oafBotService, aiService)
-	oafBotLaunchPlanService := service.NewOAFBotLaunchPlanService(oafBotLaunchPlanRepo, aiService)
 	reviewQueueService := service.NewReviewQueueService(autoCommentTaskRepo, autoReplyDraftRepo, autoPostDraftRepo, publishJobRepo, oafBotRepo, twitterAccountRepo, contentLibraryRepo, reviewQueueVerdictRepo, activityRepo, autoCommentService, autoReplyService, autoPostService, publishingService)
 	a := controller.NewAuthController(authService)
 	wc := controller.NewWalletController(walletService)
@@ -119,7 +117,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	p := controller.NewPostController(postService)
 	ag := controller.NewAgentController(agentService)
 	admin := controller.NewAdminController(service.NewAdminService(db, cfg, userRepo, billingOrderRepo, trendService))
-	pub := controller.NewPublicController(cfg.App, oafBotLaunchPlanService)
+	pub := controller.NewPublicController(cfg.App)
 
 	r.GET("/health", h.Ping)
 

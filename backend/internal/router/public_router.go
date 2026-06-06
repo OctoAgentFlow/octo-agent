@@ -9,5 +9,4 @@ import (
 func RegisterPublic(rg *gin.RouterGroup, c *controller.PublicController) {
 	group := rg.Group("/public")
 	group.GET("/site-links", c.SiteLinks)
-	group.POST("/oaf-bot-launch-plans/generate", c.GenerateOAFBotLaunchPlan)
 }

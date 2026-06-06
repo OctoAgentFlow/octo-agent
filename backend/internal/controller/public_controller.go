@@ -24,7 +24,7 @@ func NewPublicController(app config.AppConfig, launchPlanService *service.OAFBot
 	return &PublicController{
 		app:               app,
 		launchPlanService: launchPlanService,
-		launchPlanLimiter: newPublicLaunchPlanLimiter(5, time.Hour),
+		launchPlanLimiter: newPublicLaunchPlanLimiter(20, time.Hour),
 	}
 }
 
@@ -44,13 +44,13 @@ func (ctl *PublicController) GenerateOAFBotLaunchPlan(c *gin.Context) {
 		response.FailWithCode(c, http.StatusServiceUnavailable, "launch plan service is not configured", "launch_plan_unavailable")
 		return
 	}
-	if ctl.launchPlanLimiter != nil && !ctl.launchPlanLimiter.Allow(c.ClientIP()) {
-		response.FailWithCode(c, http.StatusTooManyRequests, "too many launch plan requests; please retry later", "launch_plan_rate_limited")
-		return
-	}
 	var req dto.OAFBotLaunchPlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailWithCode(c, http.StatusBadRequest, err.Error(), "invalid_launch_plan_request")
+		return
+	}
+	if ctl.launchPlanLimiter != nil && !ctl.launchPlanLimiter.Allow(c.ClientIP()) {
+		response.FailWithCode(c, http.StatusTooManyRequests, "too many launch plan requests; please retry later", "launch_plan_rate_limited")
 		return
 	}
 	out, err := ctl.launchPlanService.Generate(c.Request.Context(), req)

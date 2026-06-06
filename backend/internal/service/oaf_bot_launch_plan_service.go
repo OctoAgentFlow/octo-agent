@@ -42,9 +42,7 @@ func (s *OAFBotLaunchPlanService) Generate(ctx context.Context, req dto.OAFBotLa
 		return nil, err
 	}
 	plan = normalizeLaunchPlanOutput(plan, req)
-	if len(plan.FirstPosts) != 3 || len(plan.CommentExamples) != 3 {
-		return nil, fmt.Errorf("launch plan generation returned incomplete drafts")
-	}
+	plan = completeLaunchPlanOutput(plan, req)
 	token, err := randomLaunchPlanToken()
 	if err != nil {
 		return nil, err
@@ -175,6 +173,32 @@ func normalizeLaunchPlanDays(days []dto.OAFBotLaunchPlanDay) []dto.OAFBotLaunchP
 	return out
 }
 
+func completeLaunchPlanOutput(out dto.OAFBotLaunchPlanOutput, req dto.OAFBotLaunchPlanRequest) dto.OAFBotLaunchPlanOutput {
+	fallbackPosts := fallbackLaunchPlanPosts(req)
+	for len(out.FirstPosts) < 3 && len(fallbackPosts) > 0 {
+		out.FirstPosts = append(out.FirstPosts, fallbackPosts[0])
+		fallbackPosts = fallbackPosts[1:]
+	}
+	out.FirstPosts = normalizeLaunchPlanDrafts(out.FirstPosts, 3, 240)
+
+	fallbackComments := fallbackLaunchPlanComments(req)
+	for len(out.CommentExamples) < 3 && len(fallbackComments) > 0 {
+		out.CommentExamples = append(out.CommentExamples, fallbackComments[0])
+		fallbackComments = fallbackComments[1:]
+	}
+	out.CommentExamples = normalizeLaunchPlanDrafts(out.CommentExamples, 3, 220)
+
+	fallbackDays := fallbackLaunchPlanDays(req)
+	for len(out.SevenDayPlan) < 7 && len(fallbackDays) > 0 {
+		day := fallbackDays[0]
+		day.Day = len(out.SevenDayPlan) + 1
+		out.SevenDayPlan = append(out.SevenDayPlan, day)
+		fallbackDays = fallbackDays[1:]
+	}
+	out.SevenDayPlan = normalizeLaunchPlanDays(out.SevenDayPlan)
+	return out
+}
+
 func normalizeLaunchPlanDrafts(drafts []dto.OAFBotLaunchPlanDraft, limit int, maxContent int) []dto.OAFBotLaunchPlanDraft {
 	out := make([]dto.OAFBotLaunchPlanDraft, 0, limit)
 	for _, draft := range drafts {
@@ -192,6 +216,107 @@ func normalizeLaunchPlanDrafts(drafts []dto.OAFBotLaunchPlanDraft, limit int, ma
 		})
 	}
 	return out
+}
+
+func fallbackLaunchPlanPosts(req dto.OAFBotLaunchPlanRequest) []dto.OAFBotLaunchPlanDraft {
+	if req.OutputLanguage == "zh-CN" {
+		return []dto.OAFBotLaunchPlanDraft{
+			{
+				Label:   "账号定位",
+				Content: "从 0 起号，先别急着追求频率。先让 OAF Bot 明确人设、内容记忆和安全边界，每条内容都经过审核再进入执行。",
+				Why:     "用起号第一原则说明 OAF Bot 的运营价值。",
+			},
+			{
+				Label:   "运营流程",
+				Content: "一个可持续的 X 账号，不只需要灵感，还需要稳定流程：素材进入内容池，OAF Bot 生成草稿，人审核后再发布。",
+				Why:     "把产品能力解释成具体运营流程。",
+			},
+			{
+				Label:   "安全边界",
+				Content: "好的自动化不是盲目代发，而是让人设、语气和边界先被定义清楚，再让 AI 帮你减少重复劳动。",
+				Why:     "强调受控自动化，避免夸张承诺。",
+			},
+		}
+	}
+	return []dto.OAFBotLaunchPlanDraft{
+		{
+			Label:   "Account positioning",
+			Content: "Starting an X account is easier when the OAF Bot has a clear role, content memory, and guardrails before any automation runs.",
+			Why:     "Introduces the operating principle behind the account.",
+		},
+		{
+			Label:   "Operating workflow",
+			Content: "A sustainable X workflow starts with source material, turns it into drafts, reviews every action, then lets feedback improve the next queue.",
+			Why:     "Shows the product as an operating loop, not a writing tool.",
+		},
+		{
+			Label:   "Controlled automation",
+			Content: "Good automation is not blind autopilot. Define the persona, voice, and boundaries first, then let the OAF Bot reduce repeat work safely.",
+			Why:     "Frames automation around control and human review.",
+		},
+	}
+}
+
+func fallbackLaunchPlanComments(req dto.OAFBotLaunchPlanRequest) []dto.OAFBotLaunchPlanDraft {
+	if req.OutputLanguage == "zh-CN" {
+		return []dto.OAFBotLaunchPlanDraft{
+			{
+				Label:   "实用回应",
+				Content: "同意，起号最难的不是每天发什么，而是长期保持同一个人设和边界。",
+				Why:     "用 operator 视角参与讨论。",
+			},
+			{
+				Label:   "流程补充",
+				Content: "我会先把素材、语气和禁止表达放进 OAF Bot，再让它产出可审核草稿，而不是直接自动发布。",
+				Why:     "自然说明审核优先的流程。",
+			},
+			{
+				Label:   "轻问题",
+				Content: "你现在运营 X 账号时，最难稳定的是内容方向、回复语气，还是发布节奏？",
+				Why:     "用问题引导真实互动。",
+			},
+		}
+	}
+	return []dto.OAFBotLaunchPlanDraft{
+		{
+			Label:   "Operator reply",
+			Content: "Exactly. The hard part is not posting more; it is keeping the same voice and boundaries over time.",
+			Why:     "Adds a practical operator perspective.",
+		},
+		{
+			Label:   "Workflow reply",
+			Content: "I would put source material, voice, and blocked claims into the OAF Bot first, then review drafts before anything gets published.",
+			Why:     "Explains the review-first workflow naturally.",
+		},
+		{
+			Label:   "Light question",
+			Content: "What is hardest to keep consistent in your X workflow right now: topics, replies, or publishing rhythm?",
+			Why:     "Invites a focused reply without sounding promotional.",
+		},
+	}
+}
+
+func fallbackLaunchPlanDays(req dto.OAFBotLaunchPlanRequest) []dto.OAFBotLaunchPlanDay {
+	if req.OutputLanguage == "zh-CN" {
+		return []dto.OAFBotLaunchPlanDay{
+			{Day: 1, Theme: "定位", Action: "确定账号代表谁、服务谁，以及绝对不能承诺什么。", Outcome: "形成清晰人设和边界。"},
+			{Day: 2, Theme: "内容池", Action: "整理 3-5 条可信素材，放入 OAF Bot 可引用的内容池。", Outcome: "减少空泛生成。"},
+			{Day: 3, Theme: "语气", Action: "写出 3 条样例内容，审核并编辑，让 Bot 学习表达偏好。", Outcome: "初步稳定语气。"},
+			{Day: 4, Theme: "首发", Action: "生成首批帖子草稿，只复制或发布通过人工审核的内容。", Outcome: "安全开始输出。"},
+			{Day: 5, Theme: "互动", Action: "选择少量高相关讨论，用评论示例练习自然参与。", Outcome: "建立真实互动。"},
+			{Day: 6, Theme: "复盘", Action: "记录被拒绝、被编辑和被复制的内容，更新边界和主题。", Outcome: "让后续草稿更贴近账号。"},
+			{Day: 7, Theme: "节奏", Action: "确定每周发帖、评论和复盘频率，保持审核优先。", Outcome: "形成可持续运营节奏。"},
+		}
+	}
+	return []dto.OAFBotLaunchPlanDay{
+		{Day: 1, Theme: "Positioning", Action: "Define who the account represents, who it serves, and which claims are off-limits.", Outcome: "Clear persona and guardrails."},
+		{Day: 2, Theme: "Content memory", Action: "Collect 3-5 trusted source notes for the OAF Bot to reference.", Outcome: "Less generic generation."},
+		{Day: 3, Theme: "Voice", Action: "Generate three sample posts, edit them, and let the Bot learn your preferences.", Outcome: "Early voice consistency."},
+		{Day: 4, Theme: "First posts", Action: "Create the first post drafts and only copy or publish reviewed content.", Outcome: "Safe public start."},
+		{Day: 5, Theme: "Interaction", Action: "Pick a few relevant conversations and test natural comment examples.", Outcome: "Real engagement practice."},
+		{Day: 6, Theme: "Learning", Action: "Review rejected, edited, and copied content to refine topics and guardrails.", Outcome: "Better future drafts."},
+		{Day: 7, Theme: "Cadence", Action: "Set a weekly rhythm for posts, comments, and review-first operations.", Outcome: "Sustainable operating habit."},
+	}
 }
 
 func limitStringList(values []string, limit int, maxRunes int) []string {

@@ -100,3 +100,34 @@ func TestOAFBotLaunchPlanRequiresProjectSummary(t *testing.T) {
 		t.Fatal("expected missing project summary to fail")
 	}
 }
+
+func TestOAFBotLaunchPlanCompletesPartialAIOutput(t *testing.T) {
+	svc, _ := newOAFBotLaunchPlanTestService(t)
+	svc.generate = func(_ context.Context, _ dto.OAFBotLaunchPlanRequest) (dto.OAFBotLaunchPlanOutput, error) {
+		return dto.OAFBotLaunchPlanOutput{
+			AccountPositioning: "A KOL account for AI social operations.",
+			FirstPosts: []dto.OAFBotLaunchPlanDraft{
+				{Label: "Only one", Content: "One reviewed post about OAF Bot launch workflows.", Why: "Partial AI output."},
+			},
+		}, nil
+	}
+
+	out, err := svc.Generate(context.Background(), dto.OAFBotLaunchPlanRequest{
+		Stage:          "start_from_zero",
+		AccountType:    "kol_creator",
+		ProjectSummary: "Build a KOL account for OAF Bot operations.",
+		OutputLanguage: "en",
+	})
+	if err != nil {
+		t.Fatalf("generate partial output: %v", err)
+	}
+	if len(out.Plan.FirstPosts) != 3 {
+		t.Fatalf("expected fallback to complete 3 first posts, got %d", len(out.Plan.FirstPosts))
+	}
+	if len(out.Plan.CommentExamples) != 3 {
+		t.Fatalf("expected fallback to complete 3 comment examples, got %d", len(out.Plan.CommentExamples))
+	}
+	if len(out.Plan.SevenDayPlan) != 7 {
+		t.Fatalf("expected fallback to complete 7 day plan, got %d", len(out.Plan.SevenDayPlan))
+	}
+}

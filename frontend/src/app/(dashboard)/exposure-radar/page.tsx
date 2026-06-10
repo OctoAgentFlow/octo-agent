@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, Bot, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, BookmarkPlus, Bot, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -12,11 +12,13 @@ import { useT } from "@/i18n/use-t";
 import { broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib/app-page-refresh";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
-import { exposureRadarService, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
+import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
+import { exposureRadarService, type ExposureRadarBriefData, type ExposureRadarBriefItemApi, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
+type RankChange = { kind: "new" | "up" | "down"; delta?: number };
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
@@ -33,21 +35,45 @@ export default function ExposureRadarPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [data, setData] = useState<ExposureRadarData | null>(null);
   const [performance, setPerformance] = useState<ExposureRadarPerformanceData | null>(null);
+  const [brief, setBrief] = useState<ExposureRadarBriefData | null>(null);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
+  const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
+  const previousRanksRef = useRef<Map<string, number>>(new Map());
+  const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
 
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [next, perf] = await Promise.all([
+      const [next, perf, hourlyBrief] = await Promise.all([
         exposureRadarService.list({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours, maxFans, minHotCount, limit: 60 }),
         exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
+        exposureRadarService.brief({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours: Math.min(hours, 4), limit: 10 }),
       ]);
+      const nextRanks = new Map(next.items.map((item, index) => [item.id, index + 1]));
+      const previousRanks = previousRanksRef.current;
+      const changes = new Map<string, RankChange>();
+      if (previousRanks.size > 0) {
+        next.items.forEach((item, index) => {
+          const nextRank = index + 1;
+          const previousRank = previousRanks.get(item.id);
+          if (!previousRank) {
+            changes.set(item.id, { kind: "new" });
+            return;
+          }
+          const delta = previousRank - nextRank;
+          if (delta > 0) changes.set(item.id, { kind: "up", delta });
+          if (delta < 0) changes.set(item.id, { kind: "down", delta: Math.abs(delta) });
+        });
+      }
+      previousRanksRef.current = nextRanks;
+      setRankChanges(changes);
       setData(next);
       setPerformance(perf);
+      setBrief(hourlyBrief);
       setLoadState("ready");
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.loadFailed") : t("exposureRadar.toast.loadFailed"));
@@ -143,40 +169,73 @@ export default function ExposureRadarPage() {
     }
   }, [pushToast, selectedAccountID, selectedBotID, t]);
 
+  const saveRadarMemory = useCallback(async (item: ExposureRadarItemApi) => {
+    if (!selectedAccountID || !selectedBotID) {
+      pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
+      return;
+    }
+    setSavingMemoryID(item.id);
+    try {
+      await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID));
+      pushToast(t("exposureRadar.toast.memorySaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
+    } finally {
+      setSavingMemoryID(null);
+    }
+  }, [pushToast, selectedAccountID, selectedBotID, t]);
+
+  const saveBriefMemory = useCallback(async (item: ExposureRadarBriefItemApi) => {
+    if (!selectedAccountID || !selectedBotID) {
+      pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
+      return;
+    }
+    const memoryID = `brief:${item.signal_id}`;
+    setSavingMemoryID(memoryID);
+    try {
+      await contentLibraryService.create(buildBriefMemoryPayload(item, selectedAccountID, selectedBotID));
+      pushToast(t("exposureRadar.toast.memorySaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
+    } finally {
+      setSavingMemoryID(null);
+    }
+  }, [pushToast, selectedAccountID, selectedBotID, t]);
+
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-[28px] border border-[#2f3336] bg-[#f7f3ea] text-[#171412]">
+      <section className="overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419]">
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="p-5 md:p-7">
+          <div className="p-5 md:p-6">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#171412]/10 bg-white px-3 py-1 text-xs font-semibold">
-                <Zap className="size-3.5 text-[#2563eb]" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+                <Zap className="size-3.5" />
                 {t("exposureRadar.hero.kicker")}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#16a34a]/20 bg-[#dcfce7] px-3 py-1 text-xs font-semibold text-[#15803d]">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
                 <Sparkles className="size-3.5" />
                 {t("exposureRadar.hero.free")}
               </span>
             </div>
-            <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-5xl">{t("exposureRadar.hero.title")}</h1>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-[#5f5a52] md:text-base">{t("exposureRadar.hero.subtitle")}</p>
+            <h1 className="mt-5 max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-[#e7e9ea] md:text-4xl">{t("exposureRadar.hero.title")}</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5] md:text-base">{t("exposureRadar.hero.subtitle")}</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-4">
               <LightMetric icon={<Search className="size-4" />} label={t("exposureRadar.metrics.items")} value={String(items.length)} />
               <LightMetric icon={<Flame className="size-4" />} label={t("exposureRadar.metrics.highScore")} value={String(metrics.highScore)} />
-              <LightMetric icon={<Gauge className="size-4" />} label={t("exposureRadar.metrics.velocity")} value={region === "zh" ? `${metrics.avgVelocity}/min` : "-"} />
+              <LightMetric icon={<Gauge className="size-4" />} label={t("exposureRadar.metrics.velocity")} value={metrics.avgVelocity ? `${metrics.avgVelocity}/min` : "-"} />
               <LightMetric icon={<ShieldAlert className="size-4" />} label={t("exposureRadar.metrics.risky")} value={String(metrics.risky)} />
             </div>
           </div>
-          <div className="border-t border-[#171412]/10 bg-white/70 p-5 md:p-7 xl:border-l xl:border-t-0">
-            <p className="text-sm font-semibold">{t("exposureRadar.playbook.title")}</p>
+          <div className="border-t border-[#2f3336] bg-black/30 p-5 md:p-6 xl:border-l xl:border-t-0">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.playbook.title")}</p>
             <div className="mt-4 space-y-2">
               {["velocity", "lowFans", "review", "memory"].map((key, index) => (
-                <div key={key} className="rounded-2xl border border-[#171412]/10 bg-white p-4">
+                <div key={key} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#171412] text-xs font-semibold text-white">0{index + 1}</span>
+                    <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[11px] font-semibold text-[#8ecdf8]">0{index + 1}</span>
                     <div>
-                      <p className="text-sm font-semibold">{t(`exposureRadar.playbook.${key}.title`)}</p>
-                      <p className="mt-1 text-xs leading-5 text-[#6f695f]">{t(`exposureRadar.playbook.${key}.description`)}</p>
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.playbook.${key}.title`)}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.playbook.${key}.description`)}</p>
                     </div>
                   </div>
                 </div>
@@ -209,35 +268,40 @@ export default function ExposureRadarPage() {
           <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
         </div>
         {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
-      </Card>
-
-      <PerformancePanel data={performance} timeZone={timeZone} />
-
-      <Card className="bg-[#0f1419]">
-        <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} />
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-          <SelectField
-            icon={<Users className="size-4" />}
-            label={t("exposureRadar.draft.account")}
-            value={selectedAccountID}
-            onChange={setSelectedAccountID}
-            emptyLabel={t("exposureRadar.draft.noAccounts")}
-            options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
-          />
-          <SelectField
-            icon={<Bot className="size-4" />}
-            label={t("exposureRadar.draft.bot")}
-            value={selectedBotID}
-            onChange={setSelectedBotID}
-            emptyLabel={t("exposureRadar.draft.noBots")}
-            options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
-          />
-          <Link href="/execution-queue?type=comment&status=pending_review" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
-            <MessageSquarePlus className="size-4" />
-            {t("exposureRadar.draft.openQueue")}
-          </Link>
+        <div className="mt-4 border-t border-[#2f3336] pt-4">
+          <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+            <SelectField
+              icon={<Users className="size-4" />}
+              label={t("exposureRadar.draft.account")}
+              value={selectedAccountID}
+              onChange={setSelectedAccountID}
+              emptyLabel={t("exposureRadar.draft.noAccounts")}
+              options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
+            />
+            <SelectField
+              icon={<Bot className="size-4" />}
+              label={t("exposureRadar.draft.bot")}
+              value={selectedBotID}
+              onChange={setSelectedBotID}
+              emptyLabel={t("exposureRadar.draft.noBots")}
+              options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
+            />
+            <Link href="/execution-queue?type=comment&status=pending_review" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+              <MessageSquarePlus className="size-4" />
+              {t("exposureRadar.draft.openQueue")}
+            </Link>
+          </div>
         </div>
       </Card>
+
+      <HourlyBriefPanel
+        data={brief}
+        timeZone={timeZone}
+        savingMemoryID={savingMemoryID}
+        memoryDisabled={!selectedAccountID || !selectedBotID}
+        onSaveMemory={saveBriefMemory}
+      />
 
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -263,23 +327,29 @@ export default function ExposureRadarPage() {
                 key={item.id}
                 item={item}
                 timeZone={timeZone}
+                rankChange={rankChanges.get(item.id)}
                 drafting={draftingID === item.id}
                 draftDisabled={!selectedAccountID || !selectedBotID}
                 onCreateDraft={createDraft}
+                savingMemory={savingMemoryID === item.id}
+                memoryDisabled={!selectedAccountID || !selectedBotID}
+                onSaveMemory={saveRadarMemory}
               />
             ))}
           </div>
         ) : null}
       </Card>
+
+      <PerformancePanel data={performance} timeZone={timeZone} />
     </div>
   );
 }
 
 function LightMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[#171412]/10 bg-white p-4">
-      <div className="flex items-center gap-2 text-xs font-medium text-[#6f695f]">{icon}{label}</div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-[#71767b]">{icon}{label}</div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</p>
     </div>
   );
 }
@@ -371,6 +441,83 @@ function SourceMetaItem({ icon, label, value, valueClassName }: { icon: ReactNod
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{icon}{label}</p>
       <p className={`mt-1 truncate text-sm font-semibold text-[#e7e9ea] ${valueClassName || ""}`}>{value}</p>
     </div>
+  );
+}
+
+function HourlyBriefPanel({
+  data,
+  timeZone,
+  savingMemoryID,
+  memoryDisabled,
+  onSaveMemory,
+}: {
+  data: ExposureRadarBriefData | null;
+  timeZone: string;
+  savingMemoryID: string | null;
+  memoryDisabled: boolean;
+  onSaveMemory: (item: ExposureRadarBriefItemApi) => void;
+}) {
+  const { t } = useT();
+  const items = data?.items || [];
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <CardHeader title={t("exposureRadar.brief.title")} description={data?.summary || t("exposureRadar.brief.description")} className="mb-0" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Clock3 className="size-3.5" />
+            {data?.generated_at ? formatDateTime(data.generated_at, timeZone) : "-"}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Activity className="size-3.5" />
+            {data?.data_quality || "-"}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {items.length ? items.slice(0, 6).map((item) => (
+          <div key={`${item.rank}:${item.signal_id}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#1d9bf0] text-xs font-semibold text-white">{item.rank}</span>
+                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${velocityStateClass(normalizeVelocityState(item.velocity_state))}`}>
+                    {t(`exposureRadar.velocityState.${normalizeVelocityState(item.velocity_state)}`)}
+                  </span>
+                  <span className="rounded-full border border-[#2f3336] px-2 py-1 text-xs font-semibold text-[#8b98a5]">{item.best_use}</span>
+                </div>
+                <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</h3>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-xl font-semibold text-white">{item.score}</p>
+                <p className="text-[11px] text-[#71767b]">{t("exposureRadar.card.score")}</p>
+              </div>
+            </div>
+            <p className="mt-3 line-clamp-3 text-xs leading-5 text-[#c9d1d9]">{item.summary}</p>
+            <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("exposureRadar.brief.why")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.why_it_matters}</p>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("exposureRadar.brief.action")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.suggested_action}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === `brief:${item.signal_id}`} onClick={() => onSaveMemory(item)}>
+                <BookmarkPlus className="size-3.5" />
+                {savingMemoryID === `brief:${item.signal_id}` ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+              </Button>
+              {item.source_url ? (
+                <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                  {t("exposureRadar.card.openPost")}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+            </div>
+          </div>
+        )) : (
+          <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b] lg:col-span-2">{t("exposureRadar.brief.empty")}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -479,18 +626,48 @@ function PerformanceMetric({ label, value, detail }: { label: string; value: str
   );
 }
 
-function RadarCard({ item, timeZone, drafting, draftDisabled, onCreateDraft }: { item: ExposureRadarItemApi; timeZone: string; drafting: boolean; draftDisabled: boolean; onCreateDraft: (item: ExposureRadarItemApi) => void }) {
+function RadarCard({
+  item,
+  timeZone,
+  rankChange,
+  drafting,
+  draftDisabled,
+  savingMemory,
+  memoryDisabled,
+  onCreateDraft,
+  onSaveMemory,
+}: {
+  item: ExposureRadarItemApi;
+  timeZone: string;
+  rankChange?: RankChange;
+  drafting: boolean;
+  draftDisabled: boolean;
+  savingMemory: boolean;
+  memoryDisabled: boolean;
+  onCreateDraft: (item: ExposureRadarItemApi) => void;
+  onSaveMemory: (item: ExposureRadarItemApi) => void;
+}) {
   const { t } = useT();
   const riskClass = item.risk_level === "high" || item.risk_level === "medium" ? "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" : "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   const hasReviewTask = Boolean(item.review_task_id);
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled && !hasReviewTask;
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   return (
-    <article className="rounded-2xl border border-[#2f3336] bg-black p-4">
+    <article className={`rounded-2xl border p-4 ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-xs font-semibold text-[#8ecdf8]">
           <TrendingUp className="size-3.5" />
           {item.signal_label || item.status}
         </span>
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${velocityStateClass(velocityState)}`}>
+          <span className="size-1.5 rounded-full bg-current" />
+          {t(`exposureRadar.velocityState.${velocityState}`)}
+        </span>
+        {rankChange ? (
+          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${rankChange.kind === "up" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : rankChange.kind === "down" ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" : "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]"}`}>
+            {rankChange.kind === "new" ? "NEW" : rankChange.kind === "up" ? `↑${rankChange.delta}` : `↓${rankChange.delta}`}
+          </span>
+        ) : null}
         <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${riskClass}`}>
           {t(`exposureRadar.risk.${item.risk_level === "medium" || item.risk_level === "high" ? item.risk_level : "low"}`)}
         </span>
@@ -524,6 +701,9 @@ function RadarCard({ item, timeZone, drafting, draftDisabled, onCreateDraft }: {
         <MiniStat icon={<Users className="size-3.5" />} label={t("exposureRadar.card.followers")} value={item.followers_count ? formatCompact(item.followers_count) : "-"} />
         <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.card.heat")} value={item.heat_count ? formatCompact(item.heat_count) : "-"} />
       </div>
+      {item.velocity_history?.length ? (
+        <VelocitySparkline values={item.velocity_history} />
+      ) : null}
       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
         <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.card.recommended")}</p>
         <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.recommended_use}</p>
@@ -547,6 +727,10 @@ function RadarCard({ item, timeZone, drafting, draftDisabled, onCreateDraft }: {
               {drafting ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
             </Button>
           )}
+          <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemory} onClick={() => onSaveMemory(item)}>
+            <BookmarkPlus className="size-3.5" />
+            {savingMemory ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+          </Button>
           {item.url ? (
             <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
               {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
@@ -566,6 +750,93 @@ function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; valu
       <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
     </div>
   );
+}
+
+function VelocitySparkline({ values }: { values: number[] }) {
+  const normalized = values.filter((value) => Number.isFinite(value)).slice(-8);
+  if (normalized.length < 2) return null;
+  const max = Math.max(...normalized, 1);
+  return (
+    <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+      <div className="flex h-8 items-end gap-1">
+        {normalized.map((value, index) => (
+          <span
+            key={`${value}:${index}`}
+            className="flex-1 rounded-t bg-[#1d9bf0]/70"
+            style={{ height: `${Math.max(12, Math.round((value / max) * 100))}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const title = compactTitle(item.topic_name || item.title || "Exposure Radar signal");
+  const bodyLines = [
+    `Signal: ${item.title}`,
+    item.author_handle ? `Author: @${item.author_handle}${item.author_name ? ` (${item.author_name})` : ""}` : "",
+    item.content ? `Context: ${item.content}` : "",
+    item.reason ? `Why it matters: ${item.reason}` : "",
+    item.recommended_use ? `Suggested operator action: ${item.recommended_use}` : "",
+    item.ranking_reason ? `Ranking note: ${item.ranking_reason}` : "",
+    `Radar metadata: region=${item.region}; quality=${item.data_quality}; score=${item.score}; velocity=${velocityState}; risk=${item.risk_level || "unknown"}.`,
+  ].filter(Boolean);
+  return {
+    twitter_account_id: twitterAccountID,
+    bot_id: botID,
+    title,
+    item_type: "data_insight",
+    body: bodyLines.join("\n"),
+    source_url: item.url || undefined,
+    topics: uniqueList(["exposure-radar", item.region, item.topic_name, velocityState, item.opportunity_type, item.data_quality]),
+    growth_goal: "Use as OAF Bot memory for context-aware X replies and posts.",
+    cta_preference: "Use only when relevant. Keep replies review-first and do not force product promotion.",
+    priority: clampPriority(item.score),
+    status: "active",
+  };
+}
+
+function buildBriefMemoryPayload(item: ExposureRadarBriefItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {
+  const velocityState = normalizeVelocityState(item.velocity_state);
+  const title = compactTitle(item.topic_name || item.title || "Hourly opportunity brief");
+  const bodyLines = [
+    `Brief item: ${item.title}`,
+    item.summary ? `Summary: ${item.summary}` : "",
+    item.why_it_matters ? `Why it matters: ${item.why_it_matters}` : "",
+    item.suggested_action ? `Suggested operator action: ${item.suggested_action}` : "",
+    item.best_use ? `Best use: ${item.best_use}` : "",
+    `Radar metadata: region=${item.region}; score=${item.score}; velocity=${velocityState}; risk=${item.risk_level || "unknown"}.`,
+  ].filter(Boolean);
+  return {
+    twitter_account_id: twitterAccountID,
+    bot_id: botID,
+    title,
+    item_type: "data_insight",
+    body: bodyLines.join("\n"),
+    source_url: item.source_url || undefined,
+    topics: uniqueList(["exposure-radar", "hourly-brief", item.region, item.topic_name, velocityState, item.best_use]),
+    growth_goal: "Use as OAF Bot memory for context-aware X replies and posts.",
+    cta_preference: "Use only when relevant. Keep replies review-first and do not force product promotion.",
+    priority: clampPriority(item.score),
+    status: "active",
+  };
+}
+
+function compactTitle(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 96) return normalized;
+  return `${normalized.slice(0, 93).trim()}...`;
+}
+
+function uniqueList(values: Array<string | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).slice(0, 12);
+}
+
+function clampPriority(score: number) {
+  if (!Number.isFinite(score)) return 50;
+  return Math.max(50, Math.min(100, Math.round(score)));
 }
 
 function formatCompact(value: number) {
@@ -607,6 +878,22 @@ function normalizeLearningMode(value?: string) {
 function normalizeLearningScope(value?: string) {
   if (value === "selected_bot_account" || value === "workspace" || value === "disabled" || value === "no_memory") return value;
   return "no_memory";
+}
+
+function normalizeVelocityState(value?: string, fallback?: string) {
+  const raw = (value || fallback || "").toLowerCase();
+  if (raw === "new" || raw === "burst" || raw === "rising" || raw === "steady" || raw === "cooling") return raw;
+  if (raw === "fire") return "burst";
+  if (raw === "hot") return "rising";
+  if (raw === "observed" || raw === "normal") return "steady";
+  return "unknown";
+}
+
+function velocityStateClass(state: string) {
+  if (state === "burst") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+  if (state === "rising" || state === "new") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (state === "cooling") return "border-[#64748b]/30 bg-[#64748b]/10 text-[#94a3b8]";
+  return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
 }
 
 function sourceStatusClass(status: string) {

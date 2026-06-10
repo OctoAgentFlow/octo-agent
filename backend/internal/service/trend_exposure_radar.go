@@ -41,6 +41,7 @@ type tl1PostItem struct {
 	Emoji          string  `json:"emoji"`
 	HotCount       int     `json:"hotCount"`
 	LastCheckTime  string  `json:"lastCheckTime"`
+	History        []int64 `json:"history"`
 	CurrentStats   struct {
 		ViewCount    int64 `json:"viewCount"`
 		LikeCount    int64 `json:"likeCount"`
@@ -84,6 +85,56 @@ func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto
 		resp, err := s.exposureRadarChinese(ctx, query, now)
 		return s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)), err
 	}
+}
+
+func (s *TrendService) ExposureRadarBrief(ctx context.Context, userID uint, query dto.ExposureRadarBriefQuery, now time.Time) (*dto.ExposureRadarBriefResponse, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 20 {
+		limit = 10
+	}
+	hours := query.Hours
+	if hours <= 0 {
+		hours = 1
+	}
+	if hours > 24 {
+		hours = 24
+	}
+	radarQuery := dto.ExposureRadarQuery{
+		Region:     query.Region,
+		BotID:      query.BotID,
+		XAccountID: query.XAccountID,
+		Hours:      hours,
+		MaxFans:    s.englishExposureMaxFans(),
+		Limit:      radarMaxInt(limit*3, limit),
+	}
+	radar, err := s.ExposureRadar(ctx, userID, radarQuery, now)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.ExposureRadarBriefItem, 0, limit)
+	for _, item := range radar.Items {
+		if len(items) >= limit {
+			break
+		}
+		if strings.EqualFold(item.RiskLevel, "high") {
+			continue
+		}
+		items = append(items, exposureRadarBriefItem(len(items)+1, item))
+	}
+	return &dto.ExposureRadarBriefResponse{
+		Region:           radar.Region,
+		HourKey:          now.UTC().Format("2006010215"),
+		GeneratedAt:      now.UTC().Format(time.RFC3339),
+		SourceType:       radar.SourceType,
+		SourceStatus:     radar.SourceStatus,
+		DataQuality:      radar.DataQuality,
+		Summary:          exposureRadarBriefSummary(radar.Region, items),
+		LearningControls: radar.LearningControls,
+		Items:            items,
+	}, nil
 }
 
 func (s *TrendService) ExposureRadarPerformance(userID uint, query dto.ExposureRadarPerformanceQuery, now time.Time) (*dto.ExposureRadarPerformanceResponse, error) {
@@ -267,7 +318,7 @@ func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.Expos
 				FreshnessSeconds: freshnessSeconds,
 				Filters:          query,
 				Items:            items,
-				SourceNotice:     "Chinese-region items are collected by OAF from X recent search using Chinese topic seeds and cached trend topics. TL1 is only used as a fallback when owned signals are unavailable.",
+				SourceNotice:     "Chinese-region items are collected by OAF from X recent search using Chinese topic seeds and cached trend topics. External trend data is only used as a fallback when owned signals are unavailable.",
 			}, nil
 		}
 	}
@@ -308,14 +359,14 @@ func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.Expos
 	}
 	return &dto.ExposureRadarResponse{
 		Region:       "zh",
-		DataSource:   "TL1 / 5118 public trend feed",
+		DataSource:   "External public trend feed",
 		DataQuality:  "tweet_level",
 		SourceType:   "tl1_fallback",
 		SourceStatus: "fallback",
 		UpdatedAt:    radarFirstNonEmpty(payload.UpdatedAt, now.Format(time.RFC3339)),
 		Filters:      query,
 		Items:        items,
-		SourceNotice: "Chinese-region items are proxied from TL1 public trend data because owned OAF Chinese signals are not available yet. TL1 publicly attributes its data to 5118 collection and analysis; use as opportunity discovery, not a guaranteed production dependency.",
+		SourceNotice: "Chinese-region items are proxied from external public trend data because owned OAF Chinese signals are not available yet. Use this as opportunity discovery, not a guaranteed production dependency.",
 	}, nil
 }
 
@@ -804,7 +855,7 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	return dto.ExposureRadarItem{
 		ID:              "zh-tweet-" + row.TweetID,
 		Region:          "zh",
-		DataSource:      "TL1 / 5118 public trend feed",
+		DataSource:      "External public trend feed",
 		DataQuality:     "tweet_level",
 		Title:           radarFirstNonEmpty(row.DisplayName, row.AuthorHandle),
 		AuthorHandle:    row.AuthorHandle,
@@ -819,6 +870,9 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 		FollowersCount:  row.FollowersCount,
 		HotCount:        row.HotCount,
 		AgeLabel:        row.TweetAge,
+		VelocityState:   tl1VelocityState(row.Status),
+		Cooling:         strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped"),
+		VelocityHistory: row.History,
 		Score:           score,
 		RiskLevel:       risk,
 		OpportunityType: "reply",
@@ -843,7 +897,7 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 	if region == "zh" {
 		dataSource = "OAF Chinese tweet collector"
 		signalLabel = "OAF 中文信号"
-		reason = "This Chinese post was collected from OAF's own Chinese recent-search path and is available for contextual reply review without relying on TL1."
+		reason = "This Chinese post was collected from OAF's own Chinese recent-search path and is available for contextual reply review without relying on external fallback data."
 	}
 	url := ""
 	if strings.TrimSpace(row.AuthorHandle) != "" && strings.TrimSpace(row.TweetID) != "" {
@@ -868,6 +922,7 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 	} else if row.ViewsPerMinute <= 0 {
 		status = "observed"
 	}
+	velocityState := exposureVelocityState(row)
 	return dto.ExposureRadarItem{
 		ID:              region + "-tweet-" + row.TweetID,
 		Region:          region,
@@ -885,6 +940,9 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 		HeatCount:       row.CurrentCount,
 		FollowersCount:  row.FollowersCount,
 		AgeLabel:        ageLabel(row.PublishedAt, time.Now().UTC()),
+		VelocityState:   velocityState,
+		Cooling:         velocityState == "cooling",
+		VelocityHistory: exposureVelocityHistory(row),
 		Score:           score,
 		RiskLevel:       radarFirstNonEmpty(row.RiskLevel, "low"),
 		OpportunityType: "reply",
@@ -941,6 +999,162 @@ func (s *TrendService) tweetSearchToExposureSignal(tweet twitter.TweetSearchItem
 		RiskLevel:       risk,
 		RawPayload:      tweet.Raw,
 	}, true
+}
+
+func exposureVelocityState(row *model.ExposureTweetSignal) string {
+	if row == nil {
+		return "unknown"
+	}
+	if row.PreviousCount <= 0 {
+		return "new"
+	}
+	if row.CurrentCount < row.PreviousCount {
+		return "cooling"
+	}
+	delta := row.CurrentCount - row.PreviousCount
+	if row.ViewsPerMinute >= 50 || delta >= 500 {
+		return "burst"
+	}
+	if row.ViewsPerMinute >= 5 || delta >= 50 {
+		return "rising"
+	}
+	if delta == 0 || row.ViewsPerMinute <= 0.05 {
+		return "cooling"
+	}
+	return "steady"
+}
+
+func exposureVelocityHistory(row *model.ExposureTweetSignal) []int64 {
+	if row == nil {
+		return nil
+	}
+	history := []int64{}
+	if row.PreviousCount > 0 {
+		history = append(history, row.PreviousCount)
+	}
+	if row.CurrentCount > 0 && (len(history) == 0 || history[len(history)-1] != row.CurrentCount) {
+		history = append(history, row.CurrentCount)
+	}
+	return history
+}
+
+func exposureRadarBriefItem(rank int, item dto.ExposureRadarItem) dto.ExposureRadarBriefItem {
+	topic := radarFirstNonEmpty(item.TopicName, item.Title)
+	velocity := item.VelocityState
+	if velocity == "" {
+		velocity = tl1VelocityState(item.Status)
+	}
+	return dto.ExposureRadarBriefItem{
+		Rank:            rank,
+		SignalID:        item.ID,
+		Region:          item.Region,
+		TopicName:       item.TopicName,
+		Title:           radarFirstNonEmpty(topic, "Untitled signal"),
+		Summary:         exposureBriefSummaryText(item),
+		WhyItMatters:    exposureBriefWhyItMatters(item, velocity),
+		SuggestedAction: exposureBriefSuggestedAction(item, velocity),
+		BestUse:         exposureBriefBestUse(item),
+		Score:           item.Score,
+		VelocityState:   velocity,
+		RiskLevel:       radarFirstNonEmpty(item.RiskLevel, "low"),
+		SourceURL:       item.URL,
+		Guardrails:      item.Guardrails,
+	}
+}
+
+func exposureBriefSummaryText(item dto.ExposureRadarItem) string {
+	content := strings.TrimSpace(item.Content)
+	if content == "" {
+		return radarFirstNonEmpty(item.Reason, item.RecommendedUse, "A radar signal is available for operator review.")
+	}
+	content = strings.Join(strings.Fields(content), " ")
+	if len([]rune(content)) > 180 {
+		runes := []rune(content)
+		content = string(runes[:180]) + "..."
+	}
+	return content
+}
+
+func exposureBriefWhyItMatters(item dto.ExposureRadarItem, velocity string) string {
+	parts := []string{}
+	switch velocity {
+	case "burst":
+		parts = append(parts, "the conversation is accelerating quickly")
+	case "rising", "new":
+		parts = append(parts, "the signal is still early enough for a timely reply")
+	case "cooling":
+		parts = append(parts, "the signal may be past its best reply window")
+	default:
+		parts = append(parts, "the signal has enough public activity to inspect")
+	}
+	if item.FollowersCount > 0 && item.FollowersCount <= 10000 {
+		parts = append(parts, "the author has a smaller audience, so the reply surface may be less crowded")
+	}
+	if item.TopicName != "" {
+		parts = append(parts, "it connects to "+item.TopicName)
+	}
+	return strings.Join(parts, "; ") + "."
+}
+
+func exposureBriefSuggestedAction(item dto.ExposureRadarItem, velocity string) string {
+	if item.DataQuality != "tweet_level" {
+		return "Use this as a topic lead, then inspect live posts before generating a reply draft."
+	}
+	if velocity == "cooling" {
+		return "Open the thread first; only route a draft if the conversation is still active and persona-fit is clear."
+	}
+	if item.RiskLevel == "medium" || item.RiskLevel == "high" {
+		return "Use review-first mode and keep the reply conservative; avoid claims the Bot cannot support."
+	}
+	return "Inspect the live thread, then generate a contextual reply draft into the review queue."
+}
+
+func exposureBriefBestUse(item dto.ExposureRadarItem) string {
+	switch item.OpportunityType {
+	case "reply":
+		return "comment_review"
+	default:
+		if item.DataQuality == "topic_level" {
+			return "topic_research"
+		}
+		return "operator_review"
+	}
+}
+
+func exposureRadarBriefSummary(region string, items []dto.ExposureRadarBriefItem) string {
+	if len(items) == 0 {
+		return "No eligible radar opportunities are available for this window."
+	}
+	burst := 0
+	cooling := 0
+	for _, item := range items {
+		switch item.VelocityState {
+		case "burst", "rising", "new":
+			burst++
+		case "cooling":
+			cooling++
+		}
+	}
+	label := "English"
+	if normalizeExposureRegion(region) == "zh" {
+		label = "Chinese"
+	}
+	return fmt.Sprintf("%s radar found %d reviewable opportunities in this window: %d still rising and %d cooling.", label, len(items), burst, cooling)
+}
+
+func tl1VelocityState(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "fire":
+		return "burst"
+	case "hot":
+		return "rising"
+	case "cooling", "stopped":
+		return "cooling"
+	case "normal":
+		return "steady"
+	default:
+		return "unknown"
+	}
 }
 
 func buildEnglishRecentSearchQuery(topic string) string {

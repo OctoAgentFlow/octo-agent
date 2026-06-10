@@ -12,6 +12,7 @@ func RegisterTrend(rg *gin.RouterGroup, c *controller.TrendController) {
 	group.Use(middleware.Auth())
 	group.GET("/exposure-radar", c.ExposureRadar)
 	group.GET("/exposure-radar/performance", c.ExposureRadarPerformance)
+	group.GET("/exposure-radar/brief", c.ExposureRadarBrief)
 	group.GET("/topics", c.ListTopics)
 	group.GET("/selected", c.SelectForBot)
 	group.GET("/feedback", c.ListFeedback)

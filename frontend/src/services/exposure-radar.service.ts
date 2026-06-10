@@ -27,6 +27,9 @@ export type ExposureRadarItemApi = {
   followers_count?: number;
   hot_count?: number;
   age_label?: string;
+  velocity_state?: "new" | "burst" | "rising" | "steady" | "cooling" | "unknown" | string;
+  cooling?: boolean;
+  velocity_history?: number[];
   score: number;
   risk_level: string;
   opportunity_type: string;
@@ -115,6 +118,35 @@ export type ExposureRadarPerformanceData = {
   top_topics: ExposureRadarPerformanceTopicApi[];
 };
 
+export type ExposureRadarBriefData = {
+  region: ExposureRadarRegion | string;
+  hour_key: string;
+  generated_at: string;
+  source_type?: string;
+  source_status?: string;
+  data_quality: string;
+  summary: string;
+  learning_controls?: ExposureRadarLearningControlsApi;
+  items: ExposureRadarBriefItemApi[];
+};
+
+export type ExposureRadarBriefItemApi = {
+  rank: number;
+  signal_id: string;
+  region: string;
+  topic_name?: string;
+  title: string;
+  summary: string;
+  why_it_matters: string;
+  suggested_action: string;
+  best_use: string;
+  score: number;
+  velocity_state?: string;
+  risk_level: string;
+  source_url?: string;
+  guardrails?: string[];
+};
+
 export type ExposureRadarPerformanceRegionApi = {
   region: string;
   owned_signal_count: number;
@@ -163,6 +195,18 @@ export const exposureRadarService = {
         bot_id: params.botId || undefined,
         x_account_id: params.xAccountId || undefined,
         days: params.days || 7,
+      },
+    });
+    return res.data.data;
+  },
+  async brief(params: { region: ExposureRadarRegion; botId?: number; xAccountId?: number; hours?: number; limit?: number }) {
+    const res = await request.get<ApiResponse<ExposureRadarBriefData>>("/trends/exposure-radar/brief", {
+      params: {
+        region: params.region,
+        bot_id: params.botId || undefined,
+        x_account_id: params.xAccountId || undefined,
+        hours: params.hours || 1,
+        limit: params.limit || 10,
       },
     });
     return res.data.data;

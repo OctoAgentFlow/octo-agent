@@ -73,6 +73,25 @@ func (ctl *TrendController) ExposureRadarPerformance(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *TrendController) ExposureRadarBrief(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var query dto.ExposureRadarBriefQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.service.ExposureRadarBrief(c.Request.Context(), userID, query, time.Now().UTC())
+	if err != nil {
+		response.Fail(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *TrendController) SelectForBot(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

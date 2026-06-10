@@ -25,6 +25,14 @@ type ExposureRadarPerformanceQuery struct {
 	Days       int    `form:"days"`
 }
 
+type ExposureRadarBriefQuery struct {
+	Region     string `form:"region"`
+	BotID      uint   `form:"bot_id"`
+	XAccountID uint   `form:"x_account_id"`
+	Hours      int    `form:"hours"`
+	Limit      int    `form:"limit"`
+}
+
 type TrendTopicItem struct {
 	ID              uint     `json:"id"`
 	TrendName       string   `json:"trend_name"`
@@ -64,6 +72,9 @@ type ExposureRadarItem struct {
 	FollowersCount  int64    `json:"followers_count,omitempty"`
 	HotCount        int      `json:"hot_count,omitempty"`
 	AgeLabel        string   `json:"age_label,omitempty"`
+	VelocityState   string   `json:"velocity_state,omitempty"`
+	Cooling         bool     `json:"cooling,omitempty"`
+	VelocityHistory []int64  `json:"velocity_history,omitempty"`
 	Score           int      `json:"score"`
 	RiskLevel       string   `json:"risk_level"`
 	OpportunityType string   `json:"opportunity_type"`
@@ -99,6 +110,35 @@ type ExposureRadarLearningControls struct {
 	Mode             string `json:"mode"`
 	WindowDays       int    `json:"window_days"`
 	RankingScope     string `json:"ranking_scope"`
+}
+
+type ExposureRadarBriefResponse struct {
+	Region           string                        `json:"region"`
+	HourKey          string                        `json:"hour_key"`
+	GeneratedAt      string                        `json:"generated_at"`
+	SourceType       string                        `json:"source_type"`
+	SourceStatus     string                        `json:"source_status"`
+	DataQuality      string                        `json:"data_quality"`
+	Summary          string                        `json:"summary"`
+	LearningControls ExposureRadarLearningControls `json:"learning_controls"`
+	Items            []ExposureRadarBriefItem      `json:"items"`
+}
+
+type ExposureRadarBriefItem struct {
+	Rank            int      `json:"rank"`
+	SignalID        string   `json:"signal_id"`
+	Region          string   `json:"region"`
+	TopicName       string   `json:"topic_name,omitempty"`
+	Title           string   `json:"title"`
+	Summary         string   `json:"summary"`
+	WhyItMatters    string   `json:"why_it_matters"`
+	SuggestedAction string   `json:"suggested_action"`
+	BestUse         string   `json:"best_use"`
+	Score           int      `json:"score"`
+	VelocityState   string   `json:"velocity_state,omitempty"`
+	RiskLevel       string   `json:"risk_level"`
+	SourceURL       string   `json:"source_url,omitempty"`
+	Guardrails      []string `json:"guardrails,omitempty"`
 }
 
 type ExposureRadarPerformanceResponse struct {

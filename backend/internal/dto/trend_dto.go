@@ -33,6 +33,13 @@ type ExposureRadarBriefQuery struct {
 	Limit      int    `form:"limit"`
 }
 
+type ExposureRadarArchiveQuery struct {
+	Region     string `form:"region"`
+	BotID      uint   `form:"bot_id"`
+	XAccountID uint   `form:"x_account_id"`
+	Days       int    `form:"days"`
+}
+
 type TrendTopicItem struct {
 	ID              uint     `json:"id"`
 	TrendName       string   `json:"trend_name"`
@@ -161,6 +168,27 @@ type ExposureRadarPerformanceResponse struct {
 	LearningControls    ExposureRadarLearningControls  `json:"learning_controls"`
 	Regions             []ExposureRadarPerformanceStat `json:"regions"`
 	TopTopics           []ExposureRadarTopicStat       `json:"top_topics"`
+}
+
+type ExposureRadarArchiveResponse struct {
+	Region      string                    `json:"region"`
+	BotID       uint                      `json:"bot_id,omitempty"`
+	XAccountID  uint                      `json:"x_account_id,omitempty"`
+	RangeDays   int                       `json:"range_days"`
+	GeneratedAt string                    `json:"generated_at"`
+	Days        []ExposureRadarArchiveDay `json:"days"`
+}
+
+type ExposureRadarArchiveDay struct {
+	DateKey          string                   `json:"date_key"`
+	Region           string                   `json:"region"`
+	SignalCount      int64                    `json:"signal_count"`
+	DraftCount       int64                    `json:"draft_count"`
+	PendingCount     int64                    `json:"pending_count"`
+	PositiveCount    int64                    `json:"positive_count"`
+	RejectedCount    int64                    `json:"rejected_count"`
+	SavedMemoryCount int64                    `json:"saved_memory_count"`
+	TopTopics        []ExposureRadarTopicStat `json:"top_topics"`
 }
 
 type ExposureRadarPerformanceStat struct {

@@ -40,6 +40,21 @@ type ExposureRadarTopicPerformance struct {
 	Total        int64
 }
 
+type ExposureRadarTaskDailyStat struct {
+	DayKey       string
+	SourceRegion string
+	Status       string
+	Count        int64
+}
+
+type ExposureRadarTaskDailyTopicStat struct {
+	DayKey       string
+	SourceRegion string
+	TopicName    string
+	Status       string
+	Count        int64
+}
+
 type ExposureRadarTaskScope struct {
 	UserID     uint
 	Region     string
@@ -289,6 +304,33 @@ func (r *AutoCommentTaskRepository) ExposureRadarGlobalTopicPerformanceByRegionS
 	err := q.Group("source_region, matched_keywords").
 		Having("SUM(CASE WHEN status IN ('approved','ready_to_publish','sending','sent','published','handled') THEN 1 ELSE 0 END) > SUM(CASE WHEN status IN ('rejected','blocked','failed') THEN 1 ELSE 0 END)").
 		Order("positive DESC, rejected ASC, total DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoCommentTaskRepository) CountExposureRadarStatusByDaySince(scope ExposureRadarTaskScope) ([]ExposureRadarTaskDailyStat, error) {
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select("DATE(created_at) AS day_key, source_region, status, COUNT(*) AS count").
+		Where("user_id = ? AND source_type = ?", scope.UserID, "exposure_radar")
+	q = applyExposureRadarTaskScope(q, scope)
+	var rows []ExposureRadarTaskDailyStat
+	err := q.Group("DATE(created_at), source_region, status").Order("day_key DESC, source_region ASC").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoCommentTaskRepository) CountExposureRadarTopicsByDaySince(scope ExposureRadarTaskScope, limit int) ([]ExposureRadarTaskDailyTopicStat, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 60
+	}
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select("DATE(created_at) AS day_key, source_region, matched_keywords AS topic_name, status, COUNT(*) AS count").
+		Where("user_id = ? AND source_type = ?", scope.UserID, "exposure_radar").
+		Where("matched_keywords <> ''")
+	q = applyExposureRadarTaskScope(q, scope)
+	var rows []ExposureRadarTaskDailyTopicStat
+	err := q.Group("DATE(created_at), source_region, matched_keywords, status").
+		Order("day_key DESC, count DESC").
 		Limit(limit).
 		Scan(&rows).Error
 	return rows, err

@@ -130,6 +130,27 @@ export type ExposureRadarBriefData = {
   items: ExposureRadarBriefItemApi[];
 };
 
+export type ExposureRadarArchiveData = {
+  region: ExposureRadarRegion | "all" | string;
+  bot_id?: number;
+  x_account_id?: number;
+  range_days: number;
+  generated_at: string;
+  days: ExposureRadarArchiveDayApi[];
+};
+
+export type ExposureRadarArchiveDayApi = {
+  date_key: string;
+  region: string;
+  signal_count: number;
+  draft_count: number;
+  pending_count: number;
+  positive_count: number;
+  rejected_count: number;
+  saved_memory_count: number;
+  top_topics: ExposureRadarPerformanceTopicApi[];
+};
+
 export type ExposureRadarBriefItemApi = {
   rank: number;
   signal_id: string;
@@ -207,6 +228,17 @@ export const exposureRadarService = {
         x_account_id: params.xAccountId || undefined,
         hours: params.hours || 1,
         limit: params.limit || 10,
+      },
+    });
+    return res.data.data;
+  },
+  async archive(params: { region?: ExposureRadarRegion | "all"; botId?: number; xAccountId?: number; days?: number }) {
+    const res = await request.get<ApiResponse<ExposureRadarArchiveData>>("/trends/exposure-radar/archive", {
+      params: {
+        region: params.region || "all",
+        bot_id: params.botId || undefined,
+        x_account_id: params.xAccountId || undefined,
+        days: params.days || 7,
       },
     });
     return res.data.data;

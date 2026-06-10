@@ -19,6 +19,11 @@ type ContentLibraryQuery struct {
 	Limit            int
 }
 
+type ContentLibraryDailyStat struct {
+	DayKey string
+	Count  int64
+}
+
 func NewContentLibraryRepository(db *gorm.DB) *ContentLibraryRepository {
 	return &ContentLibraryRepository{DB: db}
 }
@@ -120,5 +125,26 @@ func (r *ContentLibraryRepository) ListActiveForGenerationContext(userID, xAccou
 	}
 	var rows []model.ContentLibraryItem
 	err := q.Order("priority DESC, updated_at DESC, id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+func (r *ContentLibraryRepository) CountExposureRadarMemoryByDaySince(userID, xAccountID, botID uint, region string, since time.Time) ([]ContentLibraryDailyStat, error) {
+	q := r.DB.Model(&model.ContentLibraryItem{}).
+		Select("DATE(created_at) AS day_key, COUNT(*) AS count").
+		Where("user_id = ? AND item_type = ? AND topics LIKE ?", userID, "data_insight", "%exposure-radar%")
+	if region != "" && region != "all" {
+		q = q.Where("topics LIKE ?", "%\""+region+"\"%")
+	}
+	if xAccountID > 0 {
+		q = q.Where("(twitter_account_id IS NULL OR twitter_account_id = ?)", xAccountID)
+	}
+	if botID > 0 {
+		q = q.Where("(bot_id IS NULL OR bot_id = ?)", botID)
+	}
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since)
+	}
+	var rows []ContentLibraryDailyStat
+	err := q.Group("DATE(created_at)").Order("day_key DESC").Scan(&rows).Error
 	return rows, err
 }

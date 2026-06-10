@@ -31,6 +31,19 @@ type ExposureSignalTopicStat struct {
 	SignalCount int64
 }
 
+type ExposureSignalDailyStat struct {
+	DayKey      string
+	Region      string
+	SignalCount int64
+}
+
+type ExposureSignalDailyTopicStat struct {
+	DayKey      string
+	Region      string
+	TopicName   string
+	SignalCount int64
+}
+
 func NewExposureTweetSignalRepository(db *gorm.DB) *ExposureTweetSignalRepository {
 	return &ExposureTweetSignalRepository{DB: db}
 }
@@ -156,5 +169,40 @@ func (r *ExposureTweetSignalRepository) TopTopicsByRegionSince(region string, si
 	}
 	var rows []ExposureSignalTopicStat
 	err := q.Group("region, topic_name").Order("signal_count DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *ExposureTweetSignalRepository) CountByDaySince(region string, since time.Time) ([]ExposureSignalDailyStat, error) {
+	q := r.DB.Model(&model.ExposureTweetSignal{}).
+		Select("DATE(last_seen_at) AS day_key, region, COUNT(*) AS signal_count")
+	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
+		q = q.Where("region = ?", strings.TrimSpace(region))
+	}
+	if !since.IsZero() {
+		q = q.Where("last_seen_at >= ?", since)
+	}
+	var rows []ExposureSignalDailyStat
+	err := q.Group("DATE(last_seen_at), region").Order("day_key DESC, region ASC").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *ExposureTweetSignalRepository) TopTopicsByDaySince(region string, since time.Time, limit int) ([]ExposureSignalDailyTopicStat, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 60
+	}
+	q := r.DB.Model(&model.ExposureTweetSignal{}).
+		Select("DATE(last_seen_at) AS day_key, region, topic_name, COUNT(*) AS signal_count").
+		Where("topic_name <> ''")
+	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
+		q = q.Where("region = ?", strings.TrimSpace(region))
+	}
+	if !since.IsZero() {
+		q = q.Where("last_seen_at >= ?", since)
+	}
+	var rows []ExposureSignalDailyTopicStat
+	err := q.Group("DATE(last_seen_at), region, topic_name").
+		Order("day_key DESC, signal_count DESC").
+		Limit(limit).
+		Scan(&rows).Error
 	return rows, err
 }

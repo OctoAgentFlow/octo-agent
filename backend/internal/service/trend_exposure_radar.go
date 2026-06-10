@@ -289,6 +289,169 @@ func (s *TrendService) ExposureRadarPerformance(userID uint, query dto.ExposureR
 	return resp, nil
 }
 
+func (s *TrendService) ExposureRadarArchive(userID uint, query dto.ExposureRadarArchiveQuery, now time.Time) (*dto.ExposureRadarArchiveResponse, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	region := normalizeExposureRegion(query.Region)
+	if strings.TrimSpace(query.Region) == "" || strings.TrimSpace(query.Region) == "all" {
+		region = "all"
+	}
+	days := query.Days
+	if days <= 0 {
+		days = 7
+	}
+	if days > 30 {
+		days = 30
+	}
+	today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	since := today.AddDate(0, 0, -days+1)
+	resp := &dto.ExposureRadarArchiveResponse{
+		Region:      region,
+		BotID:       query.BotID,
+		XAccountID:  query.XAccountID,
+		RangeDays:   days,
+		GeneratedAt: now.UTC().Format(time.RFC3339),
+		Days:        []dto.ExposureRadarArchiveDay{},
+	}
+	dayMap := map[string]*dto.ExposureRadarArchiveDay{}
+	ensureDay := func(dayKey, valueRegion string) *dto.ExposureRadarArchiveDay {
+		dayKey = strings.TrimSpace(dayKey)
+		if dayKey == "" {
+			return nil
+		}
+		valueRegion = normalizeExposureRegion(valueRegion)
+		if valueRegion == "" {
+			valueRegion = region
+		}
+		if valueRegion == "" || valueRegion == "all" {
+			valueRegion = "unknown"
+		}
+		if region != "all" && valueRegion != region {
+			return nil
+		}
+		key := dayKey + ":" + valueRegion
+		if dayMap[key] == nil {
+			dayMap[key] = &dto.ExposureRadarArchiveDay{DateKey: dayKey, Region: valueRegion, TopTopics: []dto.ExposureRadarTopicStat{}}
+		}
+		return dayMap[key]
+	}
+	if region != "all" {
+		for i := 0; i < days; i++ {
+			ensureDay(today.AddDate(0, 0, -i).Format("2006-01-02"), region)
+		}
+	}
+	if s != nil && s.exposure != nil {
+		rows, err := s.exposure.CountByDaySince(region, since)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			day := ensureDay(row.DayKey, row.Region)
+			if day != nil {
+				day.SignalCount += row.SignalCount
+			}
+		}
+		topicRows, err := s.exposure.TopTopicsByDaySince(region, since, days*8)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range topicRows {
+			day := ensureDay(row.DayKey, row.Region)
+			if day != nil {
+				mergeExposureRadarArchiveTopic(day, dto.ExposureRadarTopicStat{TopicName: row.TopicName, Region: normalizeExposureRegion(row.Region), SignalCount: row.SignalCount})
+			}
+		}
+	}
+	scope := repository.ExposureRadarTaskScope{
+		UserID:     userID,
+		Region:     region,
+		BotID:      query.BotID,
+		XAccountID: query.XAccountID,
+		Since:      since,
+	}
+	if s != nil && s.commentRepo != nil {
+		rows, err := s.commentRepo.CountExposureRadarStatusByDaySince(scope)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			day := ensureDay(row.DayKey, row.SourceRegion)
+			if day == nil {
+				continue
+			}
+			day.DraftCount += row.Count
+			switch exposureRadarPerformanceStatus(row.Status) {
+			case "pending_review":
+				day.PendingCount += row.Count
+			case "approved", "published", "handled":
+				day.PositiveCount += row.Count
+			case "rejected":
+				day.RejectedCount += row.Count
+			}
+		}
+		topicRows, err := s.commentRepo.CountExposureRadarTopicsByDaySince(scope, days*12)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range topicRows {
+			day := ensureDay(row.DayKey, row.SourceRegion)
+			if day == nil {
+				continue
+			}
+			topics := decodeStringList(row.TopicName)
+			if len(topics) == 0 {
+				topics = []string{row.TopicName}
+			}
+			for _, topic := range topics {
+				topic = strings.TrimSpace(topic)
+				if topic == "" || isExposureRadarMetaKeyword(topic) {
+					continue
+				}
+				stat := dto.ExposureRadarTopicStat{TopicName: topic, Region: normalizeExposureRegion(row.SourceRegion), DraftCount: row.Count}
+				switch exposureRadarPerformanceStatus(row.Status) {
+				case "approved", "published", "handled":
+					stat.SuccessCount = row.Count
+				}
+				mergeExposureRadarArchiveTopic(day, stat)
+			}
+		}
+	}
+	if s != nil && s.contentRepo != nil {
+		rows, err := s.contentRepo.CountExposureRadarMemoryByDaySince(userID, query.XAccountID, query.BotID, region, since)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			day := ensureDay(row.DayKey, region)
+			if day != nil {
+				day.SavedMemoryCount += row.Count
+			}
+		}
+	}
+	for _, day := range dayMap {
+		sort.SliceStable(day.TopTopics, func(i, j int) bool {
+			left := day.TopTopics[i].SignalCount + day.TopTopics[i].DraftCount*2 + day.TopTopics[i].SuccessCount*3
+			right := day.TopTopics[j].SignalCount + day.TopTopics[j].DraftCount*2 + day.TopTopics[j].SuccessCount*3
+			if left != right {
+				return left > right
+			}
+			return day.TopTopics[i].TopicName < day.TopTopics[j].TopicName
+		})
+		if len(day.TopTopics) > 3 {
+			day.TopTopics = day.TopTopics[:3]
+		}
+		resp.Days = append(resp.Days, *day)
+	}
+	sort.SliceStable(resp.Days, func(i, j int) bool {
+		if resp.Days[i].DateKey != resp.Days[j].DateKey {
+			return resp.Days[i].DateKey > resp.Days[j].DateKey
+		}
+		return resp.Days[i].Region < resp.Days[j].Region
+	})
+	return resp, nil
+}
+
 func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.ExposureRadarQuery, now time.Time) (*dto.ExposureRadarResponse, error) {
 	if s != nil && s.exposure != nil {
 		rows, err := s.exposure.List(repository.ExposureTweetSignalListQuery{
@@ -1495,6 +1658,27 @@ func mergeExposureRadarTaskTopics(resp *dto.ExposureRadarPerformanceResponse, ro
 			}
 		}
 	}
+}
+
+func mergeExposureRadarArchiveTopic(day *dto.ExposureRadarArchiveDay, next dto.ExposureRadarTopicStat) {
+	if day == nil || strings.TrimSpace(next.TopicName) == "" {
+		return
+	}
+	region := normalizeExposureRegion(next.Region)
+	if region == "" {
+		region = normalizeExposureRegion(day.Region)
+	}
+	key := normalizeExposureTopicStatKey(region, next.TopicName)
+	for i := range day.TopTopics {
+		if normalizeExposureTopicStatKey(day.TopTopics[i].Region, day.TopTopics[i].TopicName) == key {
+			day.TopTopics[i].SignalCount += next.SignalCount
+			day.TopTopics[i].DraftCount += next.DraftCount
+			day.TopTopics[i].SuccessCount += next.SuccessCount
+			return
+		}
+	}
+	next.Region = region
+	day.TopTopics = append(day.TopTopics, next)
 }
 
 func normalizeExposureTopicStatKey(region, topic string) string {

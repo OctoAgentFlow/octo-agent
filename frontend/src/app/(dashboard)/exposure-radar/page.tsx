@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, BookmarkPlus, Bot, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
-import { exposureRadarService, type ExposureRadarBriefData, type ExposureRadarBriefItemApi, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
+import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarBriefData, type ExposureRadarBriefItemApi, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -36,6 +36,7 @@ export default function ExposureRadarPage() {
   const [data, setData] = useState<ExposureRadarData | null>(null);
   const [performance, setPerformance] = useState<ExposureRadarPerformanceData | null>(null);
   const [brief, setBrief] = useState<ExposureRadarBriefData | null>(null);
+  const [archive, setArchive] = useState<ExposureRadarArchiveData | null>(null);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
@@ -48,10 +49,11 @@ export default function ExposureRadarPage() {
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [next, perf, hourlyBrief] = await Promise.all([
+      const [next, perf, hourlyBrief, dailyArchive] = await Promise.all([
         exposureRadarService.list({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours, maxFans, minHotCount, limit: 60 }),
         exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
         exposureRadarService.brief({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours: Math.min(hours, 4), limit: 10 }),
+        exposureRadarService.archive({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
       ]);
       const nextRanks = new Map(next.items.map((item, index) => [item.id, index + 1]));
       const previousRanks = previousRanksRef.current;
@@ -74,6 +76,7 @@ export default function ExposureRadarPage() {
       setData(next);
       setPerformance(perf);
       setBrief(hourlyBrief);
+      setArchive(dailyArchive);
       setLoadState("ready");
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.loadFailed") : t("exposureRadar.toast.loadFailed"));
@@ -341,6 +344,8 @@ export default function ExposureRadarPage() {
       </Card>
 
       <PerformancePanel data={performance} timeZone={timeZone} />
+
+      <TopicHistoryPanel data={archive} timeZone={timeZone} />
     </div>
   );
 }
@@ -626,6 +631,87 @@ function PerformanceMetric({ label, value, detail }: { label: string; value: str
   );
 }
 
+function TopicHistoryPanel({ data, timeZone }: { data: ExposureRadarArchiveData | null; timeZone: string }) {
+  const { t } = useT();
+  const days = useMemo(() => data?.days || [], [data?.days]);
+  const totals = useMemo(() => {
+    return days.reduce(
+      (acc, row) => ({
+        signals: acc.signals + row.signal_count,
+        drafts: acc.drafts + row.draft_count,
+        positives: acc.positives + row.positive_count,
+        memories: acc.memories + row.saved_memory_count,
+      }),
+      { signals: 0, drafts: 0, positives: 0, memories: 0 },
+    );
+  }, [days]);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <CardHeader title={t("exposureRadar.archive.title")} description={t("exposureRadar.archive.description", { days: data?.range_days || 7 })} className="mb-0" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <CalendarClock className="size-3.5" />
+            {data?.generated_at ? formatDateTime(data.generated_at, timeZone) : "-"}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Activity className="size-3.5" />
+            {data?.region && data.region !== "all" ? t(`exposureRadar.region.${data.region === "zh" ? "zh" : "en"}`) : t("common.all")}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <PerformanceMetric label={t("exposureRadar.archive.totalSignals")} value={formatCompact(totals.signals)} detail={t("exposureRadar.archive.totalSignalsDetail")} />
+        <PerformanceMetric label={t("exposureRadar.archive.totalDrafts")} value={formatCompact(totals.drafts)} detail={t("exposureRadar.archive.totalDraftsDetail")} />
+        <PerformanceMetric label={t("exposureRadar.archive.totalPositive")} value={formatCompact(totals.positives)} detail={t("exposureRadar.archive.totalPositiveDetail")} />
+        <PerformanceMetric label={t("exposureRadar.archive.totalMemory")} value={formatCompact(totals.memories)} detail={t("exposureRadar.archive.totalMemoryDetail")} />
+      </div>
+      <div className="mt-4 space-y-2">
+        {days.length ? days.map((day) => {
+          const total = day.signal_count + day.draft_count + day.saved_memory_count;
+          const positiveRate = day.draft_count > 0 ? Math.round((day.positive_count / day.draft_count) * 100) : 0;
+          return (
+            <div key={`${day.date_key}:${day.region}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#e7e9ea]">
+                      <CalendarClock className="size-3.5 text-[#8ecdf8]" />
+                      {formatArchiveDate(day.date_key, timeZone)}
+                    </span>
+                    <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#8b98a5]">
+                      {t(`exposureRadar.region.${day.region === "zh" ? "zh" : "en"}`)}
+                    </span>
+                    {total === 0 ? <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#71767b]">{t("exposureRadar.archive.noActivity")}</span> : null}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#8b98a5]">
+                    <span>{t("exposureRadar.archive.signals", { count: day.signal_count })}</span>
+                    <span>{t("exposureRadar.archive.drafts", { count: day.draft_count })}</span>
+                    <span>{t("exposureRadar.archive.positive", { count: day.positive_count })}</span>
+                    <span>{t("exposureRadar.archive.memory", { count: day.saved_memory_count })}</span>
+                    {day.draft_count ? <span>{t("exposureRadar.archive.positiveRate", { rate: positiveRate })}</span> : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  {day.top_topics.length ? day.top_topics.map((topic) => (
+                    <span key={`${day.date_key}:${topic.region}:${topic.topic_name}`} className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs font-semibold text-[#c9d1d9]">
+                      {topic.topic_name}
+                    </span>
+                  )) : (
+                    <span className="text-xs text-[#71767b]">{t("exposureRadar.archive.noTopics")}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }) : (
+          <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b]">{t("exposureRadar.archive.empty")}</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function RadarCard({
   item,
   timeZone,
@@ -837,6 +923,12 @@ function uniqueList(values: Array<string | undefined>) {
 function clampPriority(score: number) {
   if (!Number.isFinite(score)) return 50;
   return Math.max(50, Math.min(100, Math.round(score)));
+}
+
+function formatArchiveDate(value: string, timeZone: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone }).format(date);
 }
 
 function formatCompact(value: number) {

@@ -19,10 +19,12 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
+type RadarViewFilter = "all" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
+const radarViewFilters: RadarViewFilter[] = ["all", "tweet", "high_score", "needs_review", "saved", "drafted"];
 
 export default function ExposureRadarPage() {
   const { t } = useT();
@@ -43,6 +45,8 @@ export default function ExposureRadarPage() {
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
+  const [radarView, setRadarView] = useState<RadarViewFilter>("all");
+  const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
 
@@ -123,6 +127,15 @@ export default function ExposureRadarPage() {
     const avgVelocity = items.length ? Math.round(items.reduce((sum, item) => sum + (item.views_per_min || 0), 0) / items.length) : 0;
     return { tweetLevel, highScore, risky, avgVelocity };
   }, [items]);
+  const radarViewCounts = useMemo(() => {
+    return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
+      acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs)).length;
+      return acc;
+    }, { all: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
+  }, [items, savedMemoryIDs]);
+  const displayedItems = useMemo(() => {
+    return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs));
+  }, [items, radarView, savedMemoryIDs]);
 
   const createDraft = useCallback(async (item: ExposureRadarItemApi) => {
     if (!selectedAccountID || !selectedBotID) {
@@ -180,6 +193,7 @@ export default function ExposureRadarPage() {
     setSavingMemoryID(item.id);
     try {
       await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID));
+      setSavedMemoryIDs((current) => new Set(current).add(item.id));
       pushToast(t("exposureRadar.toast.memorySaved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
@@ -314,6 +328,7 @@ export default function ExposureRadarPage() {
             {data?.data_quality || "-"}
           </span>
         </div>
+        <RadarViewTabs value={radarView} counts={radarViewCounts} onChange={setRadarView} />
         {loadState === "loading" ? (
           <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.loading")}</div>
         ) : null}
@@ -323,14 +338,18 @@ export default function ExposureRadarPage() {
         {loadState === "ready" && items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.empty")}</div>
         ) : null}
-        {loadState === "ready" && items.length ? (
+        {loadState === "ready" && items.length > 0 && displayedItems.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.list.filteredEmpty")}</div>
+        ) : null}
+        {loadState === "ready" && displayedItems.length ? (
           <div className="grid gap-3 xl:grid-cols-2">
-            {items.map((item) => (
+            {displayedItems.map((item) => (
               <RadarCard
                 key={item.id}
                 item={item}
                 timeZone={timeZone}
                 rankChange={rankChanges.get(item.id)}
+                savedMemory={savedMemoryIDs.has(item.id)}
                 drafting={draftingID === item.id}
                 draftDisabled={!selectedAccountID || !selectedBotID}
                 onCreateDraft={createDraft}
@@ -385,6 +404,25 @@ function NumberButtons({ label, values, value, suffix, formatter, onChange, disa
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function RadarViewTabs({ value, counts, onChange }: { value: RadarViewFilter; counts: Record<RadarViewFilter, number>; onChange: (value: RadarViewFilter) => void }) {
+  const { t } = useT();
+  return (
+    <div className="mb-4 flex flex-wrap gap-2">
+      {radarViewFilters.map((filter) => (
+        <button
+          key={filter}
+          type="button"
+          onClick={() => onChange(filter)}
+          className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${value === filter ? "border-[#1d9bf0] bg-[#1d9bf0]/15 text-[#8ecdf8]" : "border-[#2f3336] bg-black text-[#8b98a5] hover:border-[#1d9bf0]/45 hover:text-[#e7e9ea]"}`}
+        >
+          {t(`exposureRadar.list.filter.${filter}`)}
+          <span className="rounded-full bg-[#16181c] px-1.5 py-0.5 text-[10px] text-[#71767b]">{counts[filter] || 0}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -716,6 +754,7 @@ function RadarCard({
   item,
   timeZone,
   rankChange,
+  savedMemory,
   drafting,
   draftDisabled,
   savingMemory,
@@ -726,6 +765,7 @@ function RadarCard({
   item: ExposureRadarItemApi;
   timeZone: string;
   rankChange?: RankChange;
+  savedMemory: boolean;
   drafting: boolean;
   draftDisabled: boolean;
   savingMemory: boolean;
@@ -768,6 +808,12 @@ function RadarCard({
         {item.ranking_delta ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${item.ranking_delta > 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"}`}>
             {item.ranking_delta > 0 ? `+${item.ranking_delta}` : item.ranking_delta}
+          </span>
+        ) : null}
+        {savedMemory ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-xs font-semibold text-[#7ee0b5]">
+            <BookmarkPlus className="size-3.5" />
+            {t("exposureRadar.card.savedMemory")}
           </span>
         ) : null}
       </div>
@@ -882,6 +928,23 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     priority: clampPriority(item.score),
     status: "active",
   };
+}
+
+function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>) {
+  switch (filter) {
+    case "tweet":
+      return item.data_quality === "tweet_level";
+    case "high_score":
+      return item.score >= 75;
+    case "needs_review":
+      return item.risk_level === "medium" || item.risk_level === "high";
+    case "saved":
+      return savedMemoryIDs.has(item.id);
+    case "drafted":
+      return Boolean(item.review_task_id);
+    default:
+      return true;
+  }
 }
 
 function buildBriefMemoryPayload(item: ExposureRadarBriefItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {

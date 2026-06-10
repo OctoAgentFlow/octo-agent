@@ -1,5 +1,7 @@
 # Daily X Queue Test Environment Ops Notes
 
+Deprecated: the test environment servers have been released. This file is retained as historical context only. Do not use the test URLs or test deploy commands below for current development, acceptance, or release work.
+
 ## Test URL
 
 Daily X Queue test URL:
@@ -12,7 +14,7 @@ https://test.octo-agent.com/api/v1
 
 ## Acceptance Source Of Truth
 
-All Daily X Queue E2E acceptance and product readiness checks must run against the test environment.
+Deprecated: this section is historical. Daily X Queue E2E acceptance and product readiness checks that need a server should now run against the prod environment with production-safety precautions.
 
 Local checks may be used only for development sanity, such as lint, build, and unit tests. Local environment is not the acceptance source of truth.
 

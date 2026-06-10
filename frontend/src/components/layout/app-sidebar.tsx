@@ -35,6 +35,7 @@ const navGroups = [
     items: [
       { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
       { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
+      { labelKey: "sidebar.nav.exposureRadar", href: "/exposure-radar", icon: Radar },
       { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
     ],
   },

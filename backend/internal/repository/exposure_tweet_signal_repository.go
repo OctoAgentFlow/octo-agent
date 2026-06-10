@@ -1,0 +1,160 @@
+package repository
+
+import (
+	"strings"
+	"time"
+
+	"octo-agent/backend/internal/model"
+
+	"gorm.io/gorm"
+)
+
+type ExposureTweetSignalRepository struct{ DB *gorm.DB }
+
+type ExposureTweetSignalListQuery struct {
+	Region      string
+	MaxFans     int64
+	MinVelocity float64
+	ActiveAfter time.Time
+	Limit       int
+}
+
+type ExposureSignalRegionStat struct {
+	Region       string
+	SignalCount  int64
+	LatestSeenAt time.Time
+}
+
+type ExposureSignalTopicStat struct {
+	Region      string
+	TopicName   string
+	SignalCount int64
+}
+
+func NewExposureTweetSignalRepository(db *gorm.DB) *ExposureTweetSignalRepository {
+	return &ExposureTweetSignalRepository{DB: db}
+}
+
+func (r *ExposureTweetSignalRepository) UpsertSignal(row *model.ExposureTweetSignal, now time.Time) error {
+	if row == nil || strings.TrimSpace(row.TweetID) == "" {
+		return nil
+	}
+	var existing model.ExposureTweetSignal
+	err := r.DB.Where("tweet_id = ?", row.TweetID).First(&existing).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if row.FirstSeenAt.IsZero() {
+				row.FirstSeenAt = now
+			}
+			if row.LastSeenAt.IsZero() {
+				row.LastSeenAt = now
+			}
+			return r.DB.Create(row).Error
+		}
+		return err
+	}
+	prevCount := existing.CurrentCount
+	prevSeen := existing.LastSeenAt
+	minutes := now.Sub(prevSeen).Minutes()
+	velocity := 0.0
+	if minutes > 0.25 && row.CurrentCount >= prevCount {
+		velocity = float64(row.CurrentCount-prevCount) / minutes
+	}
+	updates := map[string]any{
+		"region":           row.Region,
+		"language":         row.Language,
+		"source":           row.Source,
+		"source_query":     row.SourceQuery,
+		"topic_name":       row.TopicName,
+		"author_id":        row.AuthorID,
+		"author_handle":    row.AuthorHandle,
+		"author_name":      row.AuthorName,
+		"followers_count":  row.FollowersCount,
+		"content":          row.Content,
+		"published_at":     row.PublishedAt,
+		"last_seen_at":     now,
+		"previous_count":   prevCount,
+		"current_count":    row.CurrentCount,
+		"views_per_minute": velocity,
+		"like_count":       row.LikeCount,
+		"reply_count":      row.ReplyCount,
+		"retweet_count":    row.RetweetCount,
+		"quote_count":      row.QuoteCount,
+		"impression_count": row.ImpressionCount,
+		"risk_level":       row.RiskLevel,
+		"raw_payload":      row.RawPayload,
+	}
+	return r.DB.Model(&existing).Updates(updates).Error
+}
+
+func (r *ExposureTweetSignalRepository) LatestSeenAt(region string) (*time.Time, error) {
+	var row model.ExposureTweetSignal
+	q := r.DB.Model(&model.ExposureTweetSignal{})
+	if strings.TrimSpace(region) != "" {
+		q = q.Where("region = ?", strings.TrimSpace(region))
+	}
+	err := q.Order("last_seen_at DESC").First(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	t := row.LastSeenAt
+	return &t, nil
+}
+
+func (r *ExposureTweetSignalRepository) List(query ExposureTweetSignalListQuery) ([]model.ExposureTweetSignal, error) {
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	q := r.DB.Model(&model.ExposureTweetSignal{})
+	if strings.TrimSpace(query.Region) != "" {
+		q = q.Where("region = ?", strings.TrimSpace(query.Region))
+	}
+	if query.MaxFans > 0 {
+		q = q.Where("followers_count = 0 OR followers_count <= ?", query.MaxFans)
+	}
+	if query.MinVelocity > 0 {
+		q = q.Where("views_per_minute >= ?", query.MinVelocity)
+	}
+	if !query.ActiveAfter.IsZero() {
+		q = q.Where("published_at = ? OR published_at >= ? OR last_seen_at >= ?", time.Time{}, query.ActiveAfter, query.ActiveAfter)
+	}
+	var rows []model.ExposureTweetSignal
+	err := q.Order("views_per_minute DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+func (r *ExposureTweetSignalRepository) CountByRegionSince(region string, since time.Time) ([]ExposureSignalRegionStat, error) {
+	q := r.DB.Model(&model.ExposureTweetSignal{}).
+		Select("region, COUNT(*) AS signal_count, MAX(last_seen_at) AS latest_seen_at")
+	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
+		q = q.Where("region = ?", strings.TrimSpace(region))
+	}
+	if !since.IsZero() {
+		q = q.Where("last_seen_at >= ?", since)
+	}
+	var rows []ExposureSignalRegionStat
+	err := q.Group("region").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *ExposureTweetSignalRepository) TopTopicsByRegionSince(region string, since time.Time, limit int) ([]ExposureSignalTopicStat, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 8
+	}
+	q := r.DB.Model(&model.ExposureTweetSignal{}).
+		Select("region, topic_name, COUNT(*) AS signal_count").
+		Where("topic_name <> ''")
+	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
+		q = q.Where("region = ?", strings.TrimSpace(region))
+	}
+	if !since.IsZero() {
+		q = q.Where("last_seen_at >= ?", since)
+	}
+	var rows []ExposureSignalTopicStat
+	err := q.Group("region, topic_name").Order("signal_count DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}

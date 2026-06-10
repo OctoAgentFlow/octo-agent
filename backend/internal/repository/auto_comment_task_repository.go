@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -15,6 +16,36 @@ const autoCommentQueueOrder = "CASE WHEN status IN ('ready_to_publish','approved
 
 type AutoCommentTaskRepository struct {
 	DB *gorm.DB
+}
+
+type AutoCommentStatusStat struct {
+	SourceRegion string
+	Status       string
+	Count        int64
+	LatestAt     time.Time
+}
+
+type AutoCommentTopicStat struct {
+	SourceRegion string
+	TopicName    string
+	Status       string
+	Count        int64
+}
+
+type ExposureRadarTopicPerformance struct {
+	SourceRegion string
+	TopicName    string
+	Positive     int64
+	Rejected     int64
+	Total        int64
+}
+
+type ExposureRadarTaskScope struct {
+	UserID     uint
+	Region     string
+	BotID      uint
+	XAccountID uint
+	Since      time.Time
 }
 
 func NewAutoCommentTaskRepository(db *gorm.DB) *AutoCommentTaskRepository {
@@ -84,6 +115,30 @@ func (r *AutoCommentTaskRepository) GetByTargetTweet(userID, xAccountID uint, tw
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *AutoCommentTaskRepository) ListLatestByUserAndTweetIDs(userID uint, tweetIDs []string) ([]model.AutoCommentTask, error) {
+	clean := make([]string, 0, len(tweetIDs))
+	seen := map[string]bool{}
+	for _, tweetID := range tweetIDs {
+		tweetID = strings.TrimSpace(tweetID)
+		if tweetID == "" || seen[tweetID] {
+			continue
+		}
+		seen[tweetID] = true
+		clean = append(clean, tweetID)
+	}
+	if userID == 0 || len(clean) == 0 {
+		return []model.AutoCommentTask{}, nil
+	}
+	var rows []model.AutoCommentTask
+	err := r.DB.Where("user_id = ? AND target_tweet_id IN ?", userID, clean).
+		Order("updated_at DESC, id DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return dedupeAutoCommentTasksByTweet(rows), nil
 }
 
 func (r *AutoCommentTaskRepository) Create(task *model.AutoCommentTask) error {
@@ -169,6 +224,92 @@ func (r *AutoCommentTaskRepository) CountStatusByUserBots(userID uint, botIDs []
 	return out, err
 }
 
+func (r *AutoCommentTaskRepository) CountExposureRadarStatusByRegionSince(scope ExposureRadarTaskScope) ([]AutoCommentStatusStat, error) {
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select("source_region, status, COUNT(*) AS count, MAX(created_at) AS latest_at").
+		Where("user_id = ? AND source_type = ?", scope.UserID, "exposure_radar")
+	q = applyExposureRadarTaskScope(q, scope)
+	var rows []AutoCommentStatusStat
+	err := q.Group("source_region, status").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoCommentTaskRepository) CountExposureRadarTopicsByRegionSince(scope ExposureRadarTaskScope, limit int) ([]AutoCommentTopicStat, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 8
+	}
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select("source_region, matched_keywords AS topic_name, status, COUNT(*) AS count").
+		Where("user_id = ? AND source_type = ?", scope.UserID, "exposure_radar").
+		Where("matched_keywords <> ''")
+	q = applyExposureRadarTaskScope(q, scope)
+	var rows []AutoCommentTopicStat
+	err := q.Group("source_region, matched_keywords, status").Order("count DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoCommentTaskRepository) ExposureRadarTopicPerformanceByRegionSince(scope ExposureRadarTaskScope) ([]ExposureRadarTopicPerformance, error) {
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select(`
+			source_region,
+			matched_keywords AS topic_name,
+			SUM(CASE WHEN status IN ('approved','ready_to_publish','sending','sent','published','handled') THEN 1 ELSE 0 END) AS positive,
+			SUM(CASE WHEN status IN ('rejected','blocked','failed') THEN 1 ELSE 0 END) AS rejected,
+			COUNT(*) AS total
+		`).
+		Where("user_id = ? AND source_type = ?", scope.UserID, "exposure_radar").
+		Where("matched_keywords <> ''")
+	q = applyExposureRadarTaskScope(q, scope)
+	var rows []ExposureRadarTopicPerformance
+	err := q.Group("source_region, matched_keywords").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AutoCommentTaskRepository) ExposureRadarGlobalTopicPerformanceByRegionSince(region string, since time.Time, limit int) ([]ExposureRadarTopicPerformance, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	q := r.DB.Model(&model.AutoCommentTask{}).
+		Select(`
+			source_region,
+			matched_keywords AS topic_name,
+			SUM(CASE WHEN status IN ('approved','ready_to_publish','sending','sent','published','handled') THEN 1 ELSE 0 END) AS positive,
+			SUM(CASE WHEN status IN ('rejected','blocked','failed') THEN 1 ELSE 0 END) AS rejected,
+			COUNT(*) AS total
+		`).
+		Where("source_type = ?", "exposure_radar").
+		Where("matched_keywords <> ''")
+	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
+		q = q.Where("source_region = ?", strings.TrimSpace(region))
+	}
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since)
+	}
+	var rows []ExposureRadarTopicPerformance
+	err := q.Group("source_region, matched_keywords").
+		Having("SUM(CASE WHEN status IN ('approved','ready_to_publish','sending','sent','published','handled') THEN 1 ELSE 0 END) > SUM(CASE WHEN status IN ('rejected','blocked','failed') THEN 1 ELSE 0 END)").
+		Order("positive DESC, rejected ASC, total DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
+}
+
+func applyExposureRadarTaskScope(q *gorm.DB, scope ExposureRadarTaskScope) *gorm.DB {
+	if strings.TrimSpace(scope.Region) != "" && strings.TrimSpace(scope.Region) != "all" {
+		q = q.Where("source_region = ?", strings.TrimSpace(scope.Region))
+	}
+	if scope.BotID > 0 {
+		q = q.Where("bot_id = ?", scope.BotID)
+	}
+	if scope.XAccountID > 0 {
+		q = q.Where("x_account_id = ?", scope.XAccountID)
+	}
+	if !scope.Since.IsZero() {
+		q = q.Where("created_at >= ?", scope.Since)
+	}
+	return q
+}
+
 func dedupeAutoCommentTasks(rows []model.AutoCommentTask, limit int) []model.AutoCommentTask {
 	if len(rows) == 0 {
 		return rows
@@ -187,6 +328,26 @@ func dedupeAutoCommentTasks(rows []model.AutoCommentTask, limit int) []model.Aut
 		if limit > 0 && len(out) >= limit {
 			break
 		}
+	}
+	return out
+}
+
+func dedupeAutoCommentTasksByTweet(rows []model.AutoCommentTask) []model.AutoCommentTask {
+	if len(rows) == 0 {
+		return rows
+	}
+	seen := map[string]bool{}
+	out := make([]model.AutoCommentTask, 0, len(rows))
+	for _, row := range rows {
+		key := strings.TrimSpace(row.TargetTweetID)
+		if key == "" {
+			key = fmt.Sprintf("id:%d", row.ID)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, row)
 	}
 	return out
 }

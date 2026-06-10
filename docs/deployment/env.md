@@ -1,5 +1,7 @@
 # Environment Variables
 
+Test 环境服务器已释放。`APP_ENV=test`、`backend/configs/config.test*.yaml`、`https://test*.octo-agent.com` 仅保留为历史/兼容引用；当前服务器开发和部署使用 prod 环境配置，并按生产安全流程操作。
+
 - `NEXT_PUBLIC_FRONTEND_ROLE`（前端：`api` / `admin`，决定用户端或后台端入口行为）
 - `NEXT_PUBLIC_API_BASE_URL`（前端，见 `frontend` 本地开发说明）
 - `APP_ENV`（后端：选择环境；未设置时默认为 `local`）
@@ -59,7 +61,7 @@ x_oauth:
 
 ## X Publisher（YAML）
 
-真实 X 发布灰度由 `x_publisher` 配置控制，位于 API 服务 YAML（例如 `backend/configs/config.test.api.yaml`）：
+真实 X 发布灰度由 `x_publisher` 配置控制，位于 API 服务 YAML（当前服务器使用 `backend/configs/config.prod.api.yaml`；`config.test.api.yaml` 已废弃）：
 
 ```yaml
 x_publisher:
@@ -78,7 +80,7 @@ x_publisher:
 - `per_account_daily_limit`：单个 X 账号每日手动发布/演练次数上限。
 - `per_account_min_interval_seconds`：同一 X 账号两次手动发布之间的冷却时间。
 
-测试环境默认必须保持 `real_publish_enabled=false` 或 `dry_run=true`。只有做单账号灰度验收时，才临时改为：
+生产安全默认建议保持 `real_publish_enabled=false` 或 `dry_run=true`。只有做单账号灰度验收时，才临时改为：
 
 ```yaml
 x_publisher:
@@ -90,6 +92,114 @@ x_publisher:
 ```
 
 灰度步骤见 [x-publisher-gray-release.md](./x-publisher-gray-release.md)。scheduler 不会自动真实发布；真实发布只能由用户在 Execution Queue 中手动触发。
+
+## Exposure Radar Data Sources
+
+Release readiness and smoke validation:
+
+- [Exposure Radar Release Readiness](./exposure-radar-release-readiness.md)
+- [Exposure Radar Smoke Test Runbook](../runbooks/exposure-radar-smoke-test.md)
+
+Exposure Radar is available to logged-in free-plan users. It has two data-source modes:
+
+- Chinese region (`region=zh`): uses the project's own X recent-search collector first. It searches Chinese posts from configured seed topics plus cached Chinese-looking trend topics, then stores tweet-level signals in `exposure_tweet_signals`. TL1 is retained only as a fallback when owned Chinese signals are unavailable. TL1 publicly attributes its data to 5118 collection and analysis, but this is not an owned integration, contract, or SLA.
+- English region (`region=en`): uses the project's own X data path. The backend first refreshes X Trends through `x_trends`, then searches recent English tweets for selected trend topics and stores tweet-level signals in `exposure_tweet_signals`.
+
+The English collector reuses the X bearer token already used by trends:
+
+```yaml
+x_trends:
+  enabled: true
+  bearer_token: "<X bearer token with recent search access>"
+  exposure_refresh_minutes: 15
+  exposure_topic_limit: 16
+  exposure_search_results: 25
+  exposure_max_fans: 10000
+  exposure_min_heat: 3
+  exposure_learning:
+    ranking_enabled: true
+    collector_enabled: true
+    mode: "hybrid" # hybrid | workspace | scoped
+    window_days: 30
+  exposure_zh_seed_topics:
+    - "AI"
+    - "AI Agent"
+    - "Web3"
+    - "比特币"
+    - "以太坊"
+    - "加密货币"
+    - "空投"
+    - "链上"
+    - "出海"
+    - "创业"
+    - "SaaS"
+    - "增长"
+```
+
+Environment overrides:
+
+- `X_TRENDS_BEARER_TOKEN`
+- `X_BEARER_TOKEN` as a fallback
+- `X_TRENDS_EXPOSURE_REFRESH_MINUTES`
+- `X_TRENDS_EXPOSURE_TOPIC_LIMIT`
+- `X_TRENDS_EXPOSURE_SEARCH_RESULTS`
+- `X_TRENDS_EXPOSURE_MAX_FANS`
+- `X_TRENDS_EXPOSURE_MIN_HEAT`
+- `X_TRENDS_EXPOSURE_ZH_SEED_TOPICS` comma-separated Chinese collector seed topics
+- `X_TRENDS_EXPOSURE_LEARNING_RANKING_ENABLED`
+- `X_TRENDS_EXPOSURE_LEARNING_COLLECTOR_ENABLED`
+- `X_TRENDS_EXPOSURE_LEARNING_MODE` (`hybrid`, `workspace`, or `scoped`)
+- `X_TRENDS_EXPOSURE_LEARNING_WINDOW_DAYS`
+
+Both owned collectors prefer low-follower authors, skip sensitive or stale posts, and store only posts above the minimum public heat threshold. English uses configured trend regions. Chinese uses Chinese seed topics and any cached trend topics that already look Chinese. If the bearer token is missing, disabled, or does not have recent search access, English Exposure Radar falls back to topic-level X Trends cache and Chinese Exposure Radar falls back to TL1 public data.
+
+The `/api/v1/trends/exposure-radar` response includes source health metadata for the UI:
+
+- `source_type`: `owned_collector`, `tl1_fallback`, or `x_trends_cache`
+- `source_status`: `fresh`, `stale`, `fallback`, `cache`, `empty`, or `unknown`
+- `last_collected_at`: latest owned collector or cache timestamp when available
+- `freshness_seconds`: age of the latest owned collector snapshot
+
+The `/api/v1/trends/exposure-radar/performance` response powers the Radar performance panel. It summarizes the selected region over the requested window:
+
+- owned signal count from `exposure_tweet_signals`
+- review draft counts from `auto_comment_tasks.source_type=exposure_radar`
+- pending, approved, rejected, published, and handled counts
+- approval and completion rates
+- region breakdown and top topic memory
+
+Exposure Radar ranking also uses recent review memory. When a radar item has a `topic_name` that matches recent `auto_comment_tasks.source_type=exposure_radar` feedback, the backend adjusts its card score and returns:
+
+- `ranking_delta`: positive values promote historically useful topics; negative values down-rank topics with recent rejected/failed drafts
+- `ranking_reason`: short explanation shown on the card
+
+New Exposure Radar reply drafts send `topic_name` into `matched_keywords`, so the ranking loop becomes more accurate as operators approve, reject, publish, or mark items handled.
+
+Radar ranking and performance can be scoped with `bot_id` and `x_account_id`:
+
+- `/api/v1/trends/exposure-radar?region=en&bot_id=123&x_account_id=456`
+- `/api/v1/trends/exposure-radar/performance?region=en&bot_id=123&x_account_id=456`
+
+When a selected Bot/account has review memory, card ranking uses that scoped memory first. If the selected scope has no matching topic memory yet, ranking falls back to the user's workspace-level Exposure Radar memory. Owned signal counts are still collector-level because raw X signal collection is shared before a user routes an item into a Bot/account review workflow.
+
+Learning controls:
+
+- `ranking_enabled`: enables or disables review-memory score adjustment on Radar cards.
+- `collector_enabled`: enables or disables review-memory topics entering the owned collector topic pool.
+- `mode=hybrid`: selected Bot/account memory first, then workspace fallback.
+- `mode=workspace`: always use workspace-level memory for ranking.
+- `mode=scoped`: use selected Bot/account memory only; if no selected-scope memory exists, no ranking adjustment is applied.
+- `window_days`: review-memory lookback window for ranking and collector learning. Values above 90 are clamped to 90.
+
+The Exposure Radar performance panel shows these controls as read-only operational state: ranking learning, collector learning, mode, window, and ranking scope. Change them in prod config or environment variables rather than in the end-user UI.
+
+The owned collectors also use review memory when building their recent-search topic pool. Topic priority is:
+
+1. high-performing Exposure Radar topics from recent review memory, where approved/published/handled counts are higher than rejected/failed counts
+2. cached X Trends topics for the configured trend regions
+3. Chinese seed topics from `exposure_zh_seed_topics` for `region=zh`
+
+Review-memory topics use the same safety classifier as trend topics and skip high-risk topics before they are searched.
 
 ## Email Provider
 

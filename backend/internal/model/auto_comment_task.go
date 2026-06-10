@@ -18,6 +18,9 @@ type AutoCommentTask struct {
 	GenerationReason    string     `gorm:"size:1024;comment:生成原因说明" json:"generation_reason,omitempty"`
 	MatchedKeywords     string     `gorm:"type:text;comment:命中的关键词JSON数组" json:"matched_keywords,omitempty"`
 	ReferencedContent   string     `gorm:"type:text;comment:参考的内容池素材标题JSON数组" json:"referenced_content,omitempty"`
+	SourceType          string     `gorm:"size:64;index;comment:来源类型，如exposure_radar" json:"source_type,omitempty"`
+	SourceRef           string     `gorm:"size:128;index;comment:来源引用ID" json:"source_ref,omitempty"`
+	SourceRegion        string     `gorm:"size:16;index;comment:来源区域" json:"source_region,omitempty"`
 	CommentVariants     string     `gorm:"type:text;comment:评论候选JSON数组" json:"comment_variants,omitempty"`
 	DeliveryMode        string     `gorm:"size:32;index;not null;default:manual_comment;comment:推荐投递方式（auto_comment/manual_comment/quote_post/skip/inbound_handoff）" json:"delivery_mode"`
 	DeliveryReason      string     `gorm:"size:1024;comment:推荐投递方式说明" json:"delivery_reason,omitempty"`

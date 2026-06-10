@@ -105,7 +105,7 @@ class CDPSession {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const baseURL = trimRight(args.base || process.env.OAF_AUDIT_BASE_URL || "https://test.octo-agent.com", "/");
+const baseURL = trimRight(args.base || process.env.OAF_AUDIT_BASE_URL || "https://octo-agent.com", "/");
 const timeoutMs = Number(args.timeout || process.env.OAF_AUDIT_TIMEOUT_MS || 9000);
 const outputDir = resolve(args.output || process.env.OAF_AUDIT_OUTPUT_DIR || "logs/audit");
 const headed = Boolean(args.headed || process.env.OAF_AUDIT_HEADED === "1");

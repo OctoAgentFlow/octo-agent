@@ -9,6 +9,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 ## Runbooks
 
 - `runbooks/LOCAL_RUNBOOK.md`：本地四服务启动链路。
+- `runbooks/exposure-radar-smoke-test.md`：Exposure Radar 发布前后冒烟测试 Runbook。
 
 ## Acceptance
 
@@ -20,6 +21,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 
 - `deployment/env.md`：环境变量说明。
 - `deployment/DEPLOYMENT_SCRIPTS.md`：脚本化测试/生产部署说明。
+- `deployment/exposure-radar-release-readiness.md`：Exposure Radar 发布准备、验证与回滚清单。
 - `deployment/x-publisher-gray-release.md`：X Publisher 单账号真实发布灰度 Runbook。
 
 ## Audits

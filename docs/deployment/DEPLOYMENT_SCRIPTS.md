@@ -2,16 +2,18 @@
 
 当前项目部署方式以 `scripts/` 下的脚本为准，参考 `diamond-swap` 的服务拆分方式：每个服务一个部署脚本，`deploy-all-*.sh` 串行编排四个服务。
 
+Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test*.octo-agent.com` 路径均已废弃，仅保留为历史引用；当前服务器部署请使用 prod 脚本。
+
 本阶段不使用 Docker、Docker Compose、systemd 或项目内 Nginx 模板。Nginx 可在服务器上按实际域名单独维护，仓库内不再保留旧模板，避免和当前脚本部署方式混淆。
 
 ## 服务与端口
 
 | 环境 | 服务 | 脚本 | 默认端口 | 说明 |
 | --- | --- | --- | --- | --- |
-| test | API | `scripts/deploy-backend-api-test.sh` | `11001` | `APP_ENV=test APP_SERVICE=api`，读取 `backend/configs/config.test.api.yaml` |
-| test | Admin API | `scripts/deploy-backend-admin-test.sh` | `11002` | `APP_ENV=test APP_SERVICE=admin`，读取 `backend/configs/config.test.admin.yaml` |
-| test | API Front | `scripts/deploy-api-front-test.sh` | `4200` | 请求 `https://test.octo-agent.com/api/v1` |
-| test | Admin Front | `scripts/deploy-admin-front-test.sh` | `4201` | 请求 `https://testadmin.octo-agent.com/api/v1` |
+| test | API | `scripts/deploy-backend-api-test.sh` | `11001` | Deprecated; test server released, script exits without deploying |
+| test | Admin API | `scripts/deploy-backend-admin-test.sh` | `11002` | Deprecated; test server released, script exits without deploying |
+| test | API Front | `scripts/deploy-api-front-test.sh` | `4200` | Deprecated; test server released, script exits without deploying |
+| test | Admin Front | `scripts/deploy-admin-front-test.sh` | `4201` | Deprecated; test server released, script exits without deploying |
 | prod | API | `scripts/deploy-backend-api-prod.sh` | `12001` | `APP_ENV=prod APP_SERVICE=api`，读取 `backend/configs/config.prod.api.yaml` |
 | prod | Admin API | `scripts/deploy-backend-admin-prod.sh` | `12002` | `APP_ENV=prod APP_SERVICE=admin`，读取 `backend/configs/config.prod.admin.yaml` |
 | prod | API Front | `scripts/deploy-api-front-prod.sh` | `4300` | 默认请求 `https://octo-agent.com/api/v1` |
@@ -26,7 +28,7 @@
 
 ## 部署命令
 
-测试环境：
+测试环境（已废弃，会直接退出）：
 
 ```bash
 ./scripts/deploy-all-test.sh
@@ -38,16 +40,16 @@
 ./scripts/deploy-all-prod.sh
 ```
 
-单服务部署：
+当前单服务部署：
 
 ```bash
-./scripts/deploy-backend-api-test.sh
-./scripts/deploy-backend-admin-test.sh
-./scripts/deploy-api-front-test.sh
-./scripts/deploy-admin-front-test.sh
+./scripts/deploy-backend-api-prod.sh
+./scripts/deploy-backend-admin-prod.sh
+./scripts/deploy-api-front-prod.sh
+./scripts/deploy-admin-front-prod.sh
 ```
 
-测试服务器常用流程：
+测试服务器常用流程（已废弃）：
 
 ```bash
 cd /home/ubuntu/octo/octo-agent
@@ -57,7 +59,7 @@ bash scripts/deploy-backend-api-test.sh
 bash scripts/deploy-api-front-test.sh
 ```
 
-如果改动涉及 Admin API 或后台前端，再部署：
+如果改动涉及 Admin API 或后台前端，旧 test 部署也已废弃：
 
 ```bash
 bash scripts/deploy-backend-admin-test.sh
@@ -80,7 +82,7 @@ bash scripts/deploy-admin-front-test.sh
 如果目标端口已被其他进程占用，脚本会失败并输出占用 PID，不会默认 kill 未知进程。确认该端口上的进程就是旧的同服务进程后，可以显式执行：
 
 ```bash
-ALLOW_KILL_PORT=1 ./scripts/deploy-backend-api-test.sh
+ALLOW_KILL_PORT=1 ./scripts/deploy-backend-api-prod.sh
 ```
 
 ## 生产配置 TODO
@@ -105,7 +107,7 @@ ALLOW_KILL_PORT=1 ./scripts/deploy-backend-api-test.sh
 
 ## X Publisher 灰度配置
 
-测试环境默认应保持：
+旧测试环境默认配置（已废弃）：
 
 ```yaml
 x_publisher:

@@ -8,6 +8,23 @@ type TrendTopicQuery struct {
 	Limit     int    `form:"limit"`
 }
 
+type ExposureRadarQuery struct {
+	Region      string `form:"region"`
+	BotID       uint   `form:"bot_id"`
+	XAccountID  uint   `form:"x_account_id"`
+	Hours       int    `form:"hours"`
+	MaxFans     int64  `form:"max_fans"`
+	MinHotCount int    `form:"min_hot_count"`
+	Limit       int    `form:"limit"`
+}
+
+type ExposureRadarPerformanceQuery struct {
+	Region     string `form:"region"`
+	BotID      uint   `form:"bot_id"`
+	XAccountID uint   `form:"x_account_id"`
+	Days       int    `form:"days"`
+}
+
 type TrendTopicItem struct {
 	ID              uint     `json:"id"`
 	TrendName       string   `json:"trend_name"`
@@ -27,6 +44,105 @@ type TrendTopicItem struct {
 
 type TrendTopicListResponse struct {
 	Items []TrendTopicItem `json:"items"`
+}
+
+type ExposureRadarItem struct {
+	ID              string   `json:"id"`
+	Region          string   `json:"region"`
+	DataSource      string   `json:"data_source"`
+	DataQuality     string   `json:"data_quality"`
+	Title           string   `json:"title"`
+	AuthorHandle    string   `json:"author_handle,omitempty"`
+	AuthorName      string   `json:"author_name,omitempty"`
+	Content         string   `json:"content"`
+	URL             string   `json:"url,omitempty"`
+	Status          string   `json:"status"`
+	SignalLabel     string   `json:"signal_label"`
+	TopicName       string   `json:"topic_name,omitempty"`
+	ViewsPerMin     float64  `json:"views_per_min,omitempty"`
+	HeatCount       int64    `json:"heat_count,omitempty"`
+	FollowersCount  int64    `json:"followers_count,omitempty"`
+	HotCount        int      `json:"hot_count,omitempty"`
+	AgeLabel        string   `json:"age_label,omitempty"`
+	Score           int      `json:"score"`
+	RiskLevel       string   `json:"risk_level"`
+	OpportunityType string   `json:"opportunity_type"`
+	RecommendedUse  string   `json:"recommended_use"`
+	Reason          string   `json:"reason"`
+	RankingDelta    int      `json:"ranking_delta,omitempty"`
+	RankingReason   string   `json:"ranking_reason,omitempty"`
+	Guardrails      []string `json:"guardrails,omitempty"`
+	ReviewTaskID    uint     `json:"review_task_id,omitempty"`
+	ReviewStatus    string   `json:"review_status,omitempty"`
+	ReviewQueueURL  string   `json:"review_queue_url,omitempty"`
+	UpdatedAt       string   `json:"updated_at,omitempty"`
+}
+
+type ExposureRadarResponse struct {
+	Region           string                        `json:"region"`
+	DataSource       string                        `json:"data_source"`
+	DataQuality      string                        `json:"data_quality"`
+	SourceType       string                        `json:"source_type"`
+	SourceStatus     string                        `json:"source_status"`
+	UpdatedAt        string                        `json:"updated_at,omitempty"`
+	LastCollectedAt  string                        `json:"last_collected_at,omitempty"`
+	FreshnessSeconds int64                         `json:"freshness_seconds,omitempty"`
+	Filters          ExposureRadarQuery            `json:"filters"`
+	LearningControls ExposureRadarLearningControls `json:"learning_controls"`
+	Items            []ExposureRadarItem           `json:"items"`
+	SourceNotice     string                        `json:"source_notice"`
+}
+
+type ExposureRadarLearningControls struct {
+	RankingEnabled   bool   `json:"ranking_enabled"`
+	CollectorEnabled bool   `json:"collector_enabled"`
+	Mode             string `json:"mode"`
+	WindowDays       int    `json:"window_days"`
+	RankingScope     string `json:"ranking_scope"`
+}
+
+type ExposureRadarPerformanceResponse struct {
+	Region              string                         `json:"region"`
+	BotID               uint                           `json:"bot_id,omitempty"`
+	XAccountID          uint                           `json:"x_account_id,omitempty"`
+	RangeDays           int                            `json:"range_days"`
+	GeneratedAt         string                         `json:"generated_at"`
+	OwnedSignalCount    int64                          `json:"owned_signal_count"`
+	DraftCount          int64                          `json:"draft_count"`
+	PendingReviewCount  int64                          `json:"pending_review_count"`
+	ApprovedCount       int64                          `json:"approved_count"`
+	RejectedCount       int64                          `json:"rejected_count"`
+	PublishedCount      int64                          `json:"published_count"`
+	HandledCount        int64                          `json:"handled_count"`
+	PositiveCount       int64                          `json:"positive_count"`
+	ApprovalRate        float64                        `json:"approval_rate"`
+	CompletionRate      float64                        `json:"completion_rate"`
+	OwnedCollectorShare float64                        `json:"owned_collector_share"`
+	LearningControls    ExposureRadarLearningControls  `json:"learning_controls"`
+	Regions             []ExposureRadarPerformanceStat `json:"regions"`
+	TopTopics           []ExposureRadarTopicStat       `json:"top_topics"`
+}
+
+type ExposureRadarPerformanceStat struct {
+	Region             string `json:"region"`
+	OwnedSignalCount   int64  `json:"owned_signal_count"`
+	DraftCount         int64  `json:"draft_count"`
+	PendingReviewCount int64  `json:"pending_review_count"`
+	ApprovedCount      int64  `json:"approved_count"`
+	RejectedCount      int64  `json:"rejected_count"`
+	PublishedCount     int64  `json:"published_count"`
+	HandledCount       int64  `json:"handled_count"`
+	LatestCollectedAt  string `json:"latest_collected_at,omitempty"`
+	LatestDraftedAt    string `json:"latest_drafted_at,omitempty"`
+	SourceHealthStatus string `json:"source_health_status"`
+}
+
+type ExposureRadarTopicStat struct {
+	TopicName    string `json:"topic_name"`
+	Region       string `json:"region"`
+	SignalCount  int64  `json:"signal_count"`
+	DraftCount   int64  `json:"draft_count"`
+	SuccessCount int64  `json:"success_count"`
 }
 
 type TrendSelectionQuery struct {

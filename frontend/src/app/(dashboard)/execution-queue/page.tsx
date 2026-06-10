@@ -109,6 +109,11 @@ function sourceLabelKey(type: string) {
   return "executionQueue.source.autoDm";
 }
 
+function sourceLabelKeyForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.source_type === "exposure_radar") return "executionQueue.source.exposureRadar";
+  return sourceLabelKey(item.type);
+}
+
 function deliveryLabelKey(item: ReviewQueueItemApi) {
   if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.delivery.quotePost";
   if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.delivery.manualComment";
@@ -124,6 +129,7 @@ function sourceDescriptionKey(type: string) {
 }
 
 function sourceDescriptionForItem(item: ReviewQueueItemApi) {
+  if (item.type === "comment" && item.source_type === "exposure_radar") return "executionQueue.sourceDesc.exposureRadar";
   if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.sourceDesc.quotePost";
   if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.sourceDesc.manualComment";
   return sourceDescriptionKey(item.type);
@@ -857,6 +863,7 @@ export default function ExecutionQueuePage() {
     const issueTags = [draft.reason];
     const sampleContext = [item.target_summary, item.content_title, item.content_direction].filter(Boolean).join("\n");
     if (item.type === "comment") {
+      if (item.source_type === "exposure_radar") return true;
       return automationService.createCommentFeedback(item.source_id, {
         rating: "negative",
         issue_tags: issueTags,
@@ -1522,7 +1529,7 @@ export default function ExecutionQueuePage() {
                         ) : null}
                         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${sourceTone(item.type)}`}>
                           <Icon className="size-3.5" />
-                          {t(sourceLabelKey(item.type))}
+                          {t(sourceLabelKeyForItem(item))}
                         </span>
                         {deliveryLabelKey(item) ? (
                           <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
@@ -1587,7 +1594,7 @@ export default function ExecutionQueuePage() {
                           <QueueInfoCard
                             icon={Sparkles}
                             label={t("executionQueue.item.source")}
-                            title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKey(item.type))}
+                            title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKeyForItem(item))}
                             description={t(sourceDescriptionForItem(item))}
                             tone={sourceTone(item.type)}
                           />
@@ -2132,7 +2139,7 @@ function RejectReasonDialog({
       <div className="space-y-4">
         {item ? (
           <div className="rounded-xl border border-[#2f3336] bg-black/50 p-3">
-            <p className="text-xs text-[#71767b]">{t(sourceLabelKey(item.type))}</p>
+            <p className="text-xs text-[#71767b]">{t(sourceLabelKeyForItem(item))}</p>
             <p className="mt-1 line-clamp-3 text-sm leading-6 text-[#e7e9ea]">{item.content || item.target_summary || "—"}</p>
           </div>
         ) : null}
@@ -2401,7 +2408,7 @@ function QueueFocusCard({
               ? t("executionQueue.focus.missing")
               : item
                 ? t("executionQueue.focus.description", {
-                    type: t(sourceLabelKey(item.type)),
+                    type: t(sourceLabelKeyForItem(item)),
                     status: t(`executionQueue.status.${item.status}`),
                   })
                 : ""}

@@ -25,10 +25,12 @@ var (
 
 type TrendService struct {
 	repo        *repository.TrendTopicRepository
+	exposure    *repository.ExposureTweetSignalRepository
 	feedback    *repository.TrendFeedbackRepository
 	botRepo     *repository.OAFBotRepository
 	planRepo    *repository.AutoPostPlanRepository
 	contentRepo *repository.ContentLibraryRepository
+	commentRepo *repository.AutoCommentTaskRepository
 	cfg         config.XTrendsConfig
 }
 
@@ -39,8 +41,15 @@ type trendSyncResult struct {
 	SkippedReason string
 }
 
-func NewTrendService(repo *repository.TrendTopicRepository, feedback *repository.TrendFeedbackRepository, botRepo *repository.OAFBotRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, cfg config.XTrendsConfig) *TrendService {
-	return &TrendService{repo: repo, feedback: feedback, botRepo: botRepo, planRepo: planRepo, contentRepo: contentRepo, cfg: cfg}
+func NewTrendService(repo *repository.TrendTopicRepository, exposure *repository.ExposureTweetSignalRepository, feedback *repository.TrendFeedbackRepository, botRepo *repository.OAFBotRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, cfg config.XTrendsConfig) *TrendService {
+	return &TrendService{repo: repo, exposure: exposure, feedback: feedback, botRepo: botRepo, planRepo: planRepo, contentRepo: contentRepo, cfg: cfg}
+}
+
+func (s *TrendService) WithAutoCommentTaskRepository(repo *repository.AutoCommentTaskRepository) *TrendService {
+	if s != nil {
+		s.commentRepo = repo
+	}
+	return s
 }
 
 func (s *TrendService) ListTopics(query dto.TrendTopicQuery, now time.Time) (*dto.TrendTopicListResponse, error) {
@@ -297,6 +306,12 @@ func (s *TrendService) runTick(ctx context.Context, now time.Time, force bool) (
 	}
 	if result.SyncedRegions == 0 && result.SyncedTopics == 0 {
 		result.SkippedReason = "all trend regions are still fresh"
+	}
+	if err := s.RefreshEnglishExposureSignals(ctx, now); err != nil {
+		zap.L().Warn("english exposure signal refresh failed", zap.Error(err))
+	}
+	if err := s.RefreshChineseExposureSignals(ctx, now); err != nil {
+		zap.L().Warn("chinese exposure signal refresh failed", zap.Error(err))
 	}
 	return result, nil
 }

@@ -60,7 +60,7 @@ Frontend services:
 - `make admin-local` - run Gin Admin service (10002)
 - `make install` - install frontend deps + tidy go mod
 - `make lint` - frontend lint + backend tests
-- `./scripts/deploy-all-test.sh` - deploy test API/Admin API/API Front/Admin Front with script-managed PID files
+- `./scripts/deploy-all-test.sh` - deprecated; test servers have been released and this script exits without deploying
 - `./scripts/deploy-all-prod.sh` - deploy production API/Admin API/API Front/Admin Front with script-managed PID files
 
 ## Current Scaffold Coverage
@@ -85,5 +85,5 @@ Frontend services:
 
 - `frontend/`: Next.js application
 - `backend/`: Gin API service
-- `scripts/`: Local helpers and script-based test/prod deployment entries
+- `scripts/`: Local helpers and script-based deployment entries; `*-test.sh` deploy scripts are deprecated because test servers have been released
 - `docs/`: Product/API/Database/Deployment/Audit docs, see [docs/README.md](docs/README.md)

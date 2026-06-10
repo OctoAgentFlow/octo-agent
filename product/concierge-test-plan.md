@@ -1,5 +1,7 @@
 # Daily X Queue Concierge Test Plan
 
+Deprecated: the test environment servers have been released. This concierge plan is retained as historical context only; do not use `https://test.octo-agent.com` for current user testing or acceptance.
+
 ## Goal
 
 Validate whether Daily X Queue creates real product pull for users who personally operate an X account.

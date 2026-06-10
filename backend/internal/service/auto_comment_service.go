@@ -573,6 +573,116 @@ func (s *AutoCommentService) GenerateDraft(ctx context.Context, userID, targetID
 	return &item, nil
 }
 
+func (s *AutoCommentService) CreateDraftFromExposureRadar(ctx context.Context, userID uint, req dto.ExposureRadarCommentDraftRequest) (*dto.AutoCommentTaskItem, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(req.DataQuality) != "" && strings.TrimSpace(req.DataQuality) != "tweet_level" {
+		return nil, fmt.Errorf("tweet-level exposure signal is required")
+	}
+	tweetID := strings.TrimSpace(req.TweetID)
+	if tweetID == "" {
+		tweetID = extractTweetID(req.URL)
+	}
+	if tweetID == "" {
+		return nil, fmt.Errorf("target tweet id is required")
+	}
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		return nil, fmt.Errorf("target tweet text is required")
+	}
+	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, req.XAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("x account not found")
+	}
+	bot, err := s.oafBotRepo.GetByUserAndID(userID, req.BotID)
+	if err != nil {
+		return nil, fmt.Errorf("OAF Bot not found")
+	}
+	if completed, err := s.alreadyCompletedAutoCommentForTweet(userID, acc.ID, tweetID); err != nil {
+		return nil, err
+	} else if completed {
+		return nil, autoCommentAlreadyCompletedError(tweetID)
+	}
+	existing, err := s.taskRepo.GetByTargetTweet(userID, acc.ID, tweetID)
+	if err == nil {
+		item := toAutoCommentTaskItem(*existing)
+		return &item, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := assertAIGenerationQuota(s.userRepo, s.usageRepo, userID, now); err != nil {
+		return nil, err
+	}
+	cfg := s.commentConfig(userID)
+	blocked := blockedWordsFromConfig(cfg)
+	handle := normalizeHandle(firstNonEmpty(req.AuthorHandle, exposureRadarHandleFromURL(req.URL), req.AuthorName))
+	contentContext := contentContextForGeneration(s.contentRepo, userID, acc.ID, bot.ID, content, handle, bot)
+	input := autoCommentInputFromValues(handle, content, "Friendly", blocked, bot)
+	input.ContentContext = contentContext
+	input.FeedbackSignals = s.autoCommentFeedbackSignals(userID, bot.ID)
+	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, bot.ID, "comment")
+	generated, err := s.ai.GenerateAutoCommentCandidates(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	comment := generated.Text
+	risk := evaluateAutoCommentRisk(comment, bot, blocked)
+	opportunityScore := req.Score
+	if opportunityScore <= 0 {
+		opportunityScore = autoCommentMinimumOpportunityScore
+	}
+	if opportunityScore > 100 {
+		opportunityScore = 100
+	}
+	generationReason := exposureRadarGenerationReason(req)
+	matchedKeywords := exposureRadarMatchedKeywords(req)
+	task := &model.AutoCommentTask{
+		UserID:            userID,
+		BotID:             bot.ID,
+		XAccountID:        acc.ID,
+		TargetUsername:    handle,
+		TargetTweetID:     tweetID,
+		TargetTweetText:   truncateRunes(content, 1000),
+		TargetTweetAuthor: firstNonEmpty(handle, strings.TrimSpace(req.AuthorName), "unknown"),
+		GeneratedComment:  truncateRunes(comment, autoCommentPreviewRunes),
+		OpportunityScore:  opportunityScore,
+		GenerationReason:  generationReason,
+		MatchedKeywords:   encodeStringList(matchedKeywords),
+		ReferencedContent: encodeStringList(exposureRadarReferencedContent(req)),
+		SourceType:        "exposure_radar",
+		SourceRef:         truncateRunes(firstNonEmpty(strings.TrimSpace(req.SignalID), tweetID), 128),
+		SourceRegion:      truncateRunes(strings.TrimSpace(req.Region), 16),
+		CommentVariants:   encodeAutoCommentVariants(generated.Candidates),
+		Status:            "pending_review",
+		RiskLevel:         mergeExposureRadarRisk(risk.Level, req.RiskLevel),
+		CapabilityStatus:  "exposure_radar_review_required",
+		FailureCategory:   risk.Category,
+		FailureReason:     risk.Reason,
+		ApprovalRequired:  true,
+		DetectedAt:        now,
+		GeneratedAt:       &now,
+	}
+	applyAutoCommentDelivery(task, decideAutoCommentDelivery(content, handle, tweetID, *acc, comment))
+	task.Status = "pending_review"
+	task.CapabilityStatus = "exposure_radar_review_required"
+	task.ApprovalRequired = true
+	task.ApprovedAt = nil
+	created, err := s.taskRepo.CreateIfNotExists(task)
+	if err != nil {
+		return nil, err
+	}
+	if created {
+		if err := recordAIGenerationUsage(s.usageRepo, userID, task.BotID, repository.AIGenerationSceneAutoComment, now, generated.Usage); err != nil {
+			return nil, err
+		}
+	}
+	item := toAutoCommentTaskItem(*task)
+	return &item, nil
+}
+
 func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (*dto.AutoCommentTaskItem, error) {
 	if err := assertAutomationModuleEnabledForAction(s.automationRepo, s.activityRepo, userID, repository.AutomationTypeComment, "approve comment draft"); err != nil {
 		return nil, err
@@ -590,6 +700,7 @@ func (s *AutoCommentService) ApproveTask(ctx context.Context, userID, id uint) (
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
+	s.recordExposureRadarOutcomeFeedback(task, "positive", []string{"good"}, "Exposure Radar draft was approved in review.")
 	item := toAutoCommentTaskItem(*task)
 	return &item, nil
 }
@@ -660,6 +771,7 @@ func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.Au
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
+	s.recordExposureRadarOutcomeFeedback(task, "negative", []string{"irrelevant"}, firstNonEmpty(task.FailureReason, "Exposure Radar draft was rejected in review."))
 	item := toAutoCommentTaskItem(*task)
 	return &item, nil
 }
@@ -691,6 +803,7 @@ func (s *AutoCommentService) MarkTaskHandled(userID, id uint) (*dto.AutoCommentT
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
+	s.recordExposureRadarOutcomeFeedback(task, "positive", []string{"good"}, "Exposure Radar draft was marked handled after review.")
 	item := toAutoCommentTaskItem(*task)
 	return &item, nil
 }
@@ -845,6 +958,29 @@ func (s *AutoCommentService) CreateFeedback(userID, id uint, req dto.AutoComment
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	return &item, nil
+}
+
+func (s *AutoCommentService) recordExposureRadarOutcomeFeedback(task *model.AutoCommentTask, rating string, issueTags []string, comment string) {
+	if s == nil || s.feedbackRepo == nil || task == nil || task.BotID == 0 || strings.TrimSpace(task.SourceType) != "exposure_radar" {
+		return
+	}
+	row := &model.OAFBotGenerationFeedback{
+		UserID:           task.UserID,
+		BotID:            task.BotID,
+		Scene:            "auto_comment",
+		Rating:           normalizeAutoCommentFeedbackRating(rating),
+		IssueTags:        encodeStringList(normalizeAutoCommentFeedbackTags(issueTags)),
+		Comment:          truncateRunes(strings.TrimSpace(comment), 500),
+		SampleContext:    truncateRunes(task.TargetTweetText, 1200),
+		GeneratedContent: truncateRunes(task.GeneratedComment, 1000),
+		Provider:         "exposure_radar_review",
+	}
+	if row.Rating == "" {
+		return
+	}
+	if err := s.feedbackRepo.Create(row); err != nil {
+		zap.L().Warn("auto comment: record exposure radar feedback failed", zap.Uint("user_id", task.UserID), zap.Uint("task_id", task.ID), zap.Error(err))
+	}
 }
 
 func (s *AutoCommentService) BlockTask(userID, id uint, reason string) (*dto.AutoCommentTaskItem, error) {
@@ -1748,6 +1884,90 @@ func extractTweetID(raw string) string {
 		}
 	}
 	return ""
+}
+
+func exposureRadarHandleFromURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) >= 1 && parts[0] != "i" && parts[0] != "search" {
+		return normalizeHandle(parts[0])
+	}
+	return ""
+}
+
+func exposureRadarGenerationReason(req dto.ExposureRadarCommentDraftRequest) string {
+	parts := []string{"Generated from Exposure Radar and routed to review before any publishing action."}
+	if strings.TrimSpace(req.Region) != "" {
+		parts = append(parts, "region="+strings.TrimSpace(req.Region))
+	}
+	if strings.TrimSpace(req.DataSource) != "" {
+		parts = append(parts, "source="+strings.TrimSpace(req.DataSource))
+	}
+	if strings.TrimSpace(req.RecommendedUse) != "" {
+		parts = append(parts, "recommended="+strings.TrimSpace(req.RecommendedUse))
+	}
+	if strings.TrimSpace(req.Reason) != "" {
+		parts = append(parts, "reason="+strings.TrimSpace(req.Reason))
+	}
+	return truncateRunes(strings.Join(parts, " "), 1000)
+}
+
+func exposureRadarReferencedContent(req dto.ExposureRadarCommentDraftRequest) []string {
+	out := []string{}
+	for _, item := range []string{req.Title, req.SignalID, req.URL} {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, truncateRunes(item, 180))
+		}
+	}
+	return out
+}
+
+func exposureRadarMatchedKeywords(req dto.ExposureRadarCommentDraftRequest) []string {
+	out := []string{}
+	for _, item := range []string{req.TopicName, req.OpportunityType, req.Region, "exposure_radar"} {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		seen := false
+		for _, existing := range out {
+			if strings.EqualFold(existing, item) {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			out = append(out, truncateRunes(item, 80))
+		}
+	}
+	return out
+}
+
+func normalizeExposureRadarRisk(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "medium":
+		return "medium"
+	case "high":
+		return "high"
+	default:
+		return "low"
+	}
+}
+
+func mergeExposureRadarRisk(generatedRisk, signalRisk string) string {
+	generated := normalizeExposureRadarRisk(generatedRisk)
+	signal := normalizeExposureRadarRisk(signalRisk)
+	if generated == "high" || signal == "high" {
+		return "high"
+	}
+	if generated == "medium" || signal == "medium" {
+		return "medium"
+	}
+	return "low"
 }
 
 func applyManualCommentTarget(target *model.AutoCommentTarget, req dto.AutoCommentTargetRequest, username, tweetID, targetText string) {
@@ -2773,6 +2993,9 @@ func toAutoCommentTaskItem(row model.AutoCommentTask) dto.AutoCommentTaskItem {
 		GenerationReason:    row.GenerationReason,
 		MatchedKeywords:     decodeStringList(row.MatchedKeywords),
 		ReferencedContent:   decodeStringList(row.ReferencedContent),
+		SourceType:          row.SourceType,
+		SourceRef:           row.SourceRef,
+		SourceRegion:        row.SourceRegion,
 		CommentVariants:     decodeAutoCommentVariants(row.CommentVariants),
 		DeliveryMode:        firstNonEmpty(row.DeliveryMode, autoCommentDeliveryManualComment),
 		DeliveryReason:      row.DeliveryReason,

@@ -1,17 +1,19 @@
 # Test Site Audit Runbook
 
+Deprecated: the test environment servers have been released. This runbook is retained for the isolated-browser audit workflow only. For current server QA, pass a prod base URL explicitly and use production-safety precautions.
+
 Use this when Chrome extension automation is slow, restores old tabs, or cannot reliably inspect the test site.
 
 ## What It Does
 
-`scripts/audit-test-site.mjs` launches a temporary isolated Chrome profile with DevTools enabled, audits the test site, writes JSON and Markdown reports, then closes Chrome and removes the temporary profile.
+`scripts/audit-test-site.mjs` launches a temporary isolated Chrome profile with DevTools enabled, audits the target site, writes JSON and Markdown reports, then closes Chrome and removes the temporary profile.
 
 It does not use the daily Chrome profile, so it does not restore old tabs or mutate the user's browser session.
 
 ## Smoke Audit
 
 ```bash
-node scripts/audit-test-site.mjs --base=https://test.octo-agent.com
+node scripts/audit-test-site.mjs --base=https://octo-agent.com
 ```
 
 Latest reports:
@@ -25,7 +27,7 @@ logs/audit/test-site-audit-latest.md
 
 ```bash
 node scripts/audit-test-site.mjs \
-  --base=https://test.octo-agent.com \
+  --base=https://octo-agent.com \
   '--routes=/dashboard,/opportunities,/execution-queue?publish_outcome=dry_run'
 ```
 
@@ -38,7 +40,7 @@ Use a dedicated test user, not a personal daily Chrome profile:
 ```bash
 OAF_AUDIT_EMAIL='test@example.com' \
 OAF_AUDIT_PASSWORD='...' \
-node scripts/audit-test-site.mjs --base=https://test.octo-agent.com
+node scripts/audit-test-site.mjs --base=https://octo-agent.com
 ```
 
 You can also provide a token directly:
@@ -46,20 +48,20 @@ You can also provide a token directly:
 ```bash
 OAF_AUDIT_ACCESS_TOKEN='...' \
 OAF_AUDIT_REFRESH_TOKEN='...' \
-node scripts/audit-test-site.mjs --base=https://test.octo-agent.com
+node scripts/audit-test-site.mjs --base=https://octo-agent.com
 ```
 
 Or provide the full session JSON:
 
 ```bash
 OAF_AUDIT_AUTH_SESSION='{"loggedIn":true,"loginAt":1760000000000,"accessToken":"...","refreshToken":"..."}' \
-node scripts/audit-test-site.mjs --base=https://test.octo-agent.com
+node scripts/audit-test-site.mjs --base=https://octo-agent.com
 ```
 
 ## Useful Options
 
 ```text
---base=<url>          Target site. Defaults to https://test.octo-agent.com
+--base=<url>          Target site. Do not use released test URLs; pass the current prod URL explicitly.
 --routes=<csv>        Comma-separated routes.
 --timeout=<ms>        Per-route navigation wait. Defaults to 9000.
 --output=<dir>        Report directory. Defaults to logs/audit.

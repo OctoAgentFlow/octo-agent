@@ -3,7 +3,26 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ArrowRight, CheckCircle2, Inbox, MessageCircle, Reply, Search, Send, ShieldAlert, Sparkles, Target, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Gauge,
+  Inbox,
+  MessageCircle,
+  Radar,
+  Reply,
+  Search,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Users,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -257,23 +276,51 @@ export default function OpportunitiesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm text-[#1d9bf0]">{t("opportunities.kicker")}</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">{t("opportunities.title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("opportunities.subtitle")}</p>
+      <section className="overflow-hidden rounded-[28px] border border-[#2f3336] bg-[#f7f3ea] text-[#171412] shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+          <div className="p-5 md:p-7">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#171412]/10 bg-white px-3 py-1 text-xs font-semibold text-[#171412]">
+                <Radar className="size-3.5" />
+                {t("opportunities.kicker")}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#2563eb]/20 bg-[#dbeafe] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
+                <Target className="size-3.5" />
+                {t("opportunities.sprint.badge")}
+              </span>
+            </div>
+            <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-[#171412] md:text-5xl">
+              {t("opportunities.title")}
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#5f5a52] md:text-base">{t("opportunities.subtitle")}</p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <Link href="/trends" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#171412] px-4 text-sm font-semibold text-white transition hover:bg-[#2b2824]">
+                <TrendingUp className="size-4" />
+                {t("opportunities.actions.openRadar")}
+              </Link>
+              <Link href="/execution-queue?status=pending_review" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#171412]/15 bg-white px-4 text-sm font-semibold text-[#171412] transition hover:bg-[#efe8dc]">
+                <Inbox className="size-4" />
+                {t("opportunities.actions.openQueue")}
+              </Link>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <LightMetric icon={Target} label={t("opportunities.sprint.target")} value="5M" />
+              <LightMetric icon={CalendarClock} label={t("opportunities.sprint.window")} value={t("opportunities.sprint.windowValue")} />
+              <LightMetric icon={Gauge} label={t("opportunities.sprint.dailyNeed")} value="357K" />
+            </div>
+          </div>
+          <div className="border-t border-[#171412]/10 bg-white/68 p-5 md:p-7 lg:border-l lg:border-t-0">
+            <p className="text-sm font-semibold text-[#171412]">{t("opportunities.sprint.title")}</p>
+            <p className="mt-2 text-xs leading-5 text-[#6f695f]">{t("opportunities.sprint.description")}</p>
+            <div className="mt-5 grid gap-2">
+              <SprintStep index="01" title={t("opportunities.sprint.step1.title")} description={t("opportunities.sprint.step1.description")} />
+              <SprintStep index="02" title={t("opportunities.sprint.step2.title")} description={t("opportunities.sprint.step2.description")} />
+              <SprintStep index="03" title={t("opportunities.sprint.step3.title")} description={t("opportunities.sprint.step3.description")} />
+              <SprintStep index="04" title={t("opportunities.sprint.step4.title")} description={t("opportunities.sprint.step4.description")} />
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/auto-comments" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            <Target className="size-4" />
-            {t("opportunities.actions.manageTargets")}
-          </Link>
-          <Link href="/execution-queue?status=pending_review" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
-            <Inbox className="size-4" />
-            {t("opportunities.actions.openQueue")}
-          </Link>
-        </div>
-      </div>
+      </section>
 
       <div className="grid gap-3 md:grid-cols-4">
         <Metric icon={Sparkles} label={t("opportunities.stats.average")} value={String(stats.average)} />
@@ -281,6 +328,10 @@ export default function OpportunitiesPage() {
         <Metric icon={Search} label={t("opportunities.stats.highScore")} value={String(stats.highScore)} />
         <Metric icon={ShieldAlert} label={t("opportunities.stats.risky")} value={String(stats.risky)} />
       </div>
+
+      <ExposureStrategyCard stats={stats} />
+
+      <SignalRadarCard stats={stats} />
 
       <GrowthPublishPathCard stats={stats} />
 
@@ -292,6 +343,138 @@ export default function OpportunitiesPage() {
 
       <TodayPlanCard plan={todayPlan} timeZone={timeZone} loadState={loadState} onRetry={() => void load()} />
     </div>
+  );
+}
+
+function LightMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[#171412]/10 bg-white p-4">
+      <div className="flex items-center gap-2 text-xs font-medium text-[#6f695f]">
+        <Icon className="size-4 text-[#2563eb]" />
+        {label}
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-[#171412]">{value}</p>
+    </div>
+  );
+}
+
+function SprintStep({ index, title, description }: { index: string; title: string; description: string }) {
+  return (
+    <div className="rounded-2xl border border-[#171412]/10 bg-white p-4">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[#171412] text-xs font-semibold text-white">{index}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#171412]">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-[#6f695f]">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExposureStrategyCard({ stats }: { stats: OpportunityStats }) {
+  const { t } = useT();
+  const lanes = [
+    {
+      key: "trend",
+      value: stats.highScore,
+      href: "/trends",
+      icon: Activity,
+      tone: "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f7c56a]",
+    },
+    {
+      key: "kol",
+      value: stats.targets,
+      href: "/auto-comments",
+      icon: Users,
+      tone: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]",
+    },
+    {
+      key: "reply",
+      value: stats.replies,
+      href: "/auto-replies",
+      icon: Reply,
+      tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
+    },
+    {
+      key: "publish",
+      value: stats.ready + stats.published,
+      href: "/execution-queue?status=ready_to_publish",
+      icon: Send,
+      tone: "border-[#7856ff]/25 bg-[#7856ff]/10 text-[#b8a7ff]",
+    },
+  ];
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <CardHeader title={t("opportunities.strategy.title")} description={t("opportunities.strategy.description")} />
+        <Link href="/daily-x-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          <Sparkles className="size-4" />
+          {t("opportunities.strategy.cta")}
+        </Link>
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-4">
+        {lanes.map((lane) => {
+          const Icon = lane.icon;
+          return (
+            <Link key={lane.key} href={lane.href} className="rounded-2xl border border-[#2f3336] bg-black p-4 transition hover:border-[#1d9bf0]/50">
+              <div className="flex items-start justify-between gap-3">
+                <span className={`inline-flex size-10 items-center justify-center rounded-full border ${lane.tone}`}>
+                  <Icon className="size-5" />
+                </span>
+                <span className="text-2xl font-semibold text-white">{lane.value}</span>
+              </div>
+              <p className="mt-4 text-sm font-semibold text-[#e7e9ea]">{t(`opportunities.strategy.${lane.key}.title`)}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`opportunities.strategy.${lane.key}.description`)}</p>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#8ecdf8]">
+                {t(`opportunities.strategy.${lane.key}.cta`)}
+                <ArrowRight className="size-3.5" />
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function SignalRadarCard({ stats }: { stats: OpportunityStats }) {
+  const { t } = useT();
+  const signals = [
+    { key: "velocity", value: stats.highScore, icon: Zap },
+    { key: "breakout", value: stats.targets, icon: TrendingUp },
+    { key: "memory", value: stats.generated, icon: Sparkles },
+    { key: "guardrail", value: stats.risky, icon: ShieldAlert },
+  ];
+  return (
+    <Card className="border-[#f59e0b]/20 bg-[#17120a]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div>
+          <CardHeader title={t("opportunities.radar.title")} description={t("opportunities.radar.description")} />
+          <div className="mt-4 rounded-2xl border border-[#f59e0b]/20 bg-black/35 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#f7c56a]">{t("opportunities.radar.operatingRule")}</p>
+            <p className="mt-2 text-sm leading-6 text-[#f1dfbd]">{t("opportunities.radar.ruleText")}</p>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {signals.map((signal) => {
+            const Icon = signal.icon;
+            return (
+              <div key={signal.key} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="inline-flex size-9 items-center justify-center rounded-full border border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f7c56a]">
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="text-xl font-semibold text-white">{signal.value}</span>
+                </div>
+                <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t(`opportunities.radar.${signal.key}.title`)}</p>
+                <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`opportunities.radar.${signal.key}.description`)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
   );
 }
 

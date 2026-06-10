@@ -1,5 +1,7 @@
 # Daily X Queue Test User Onboarding Message
 
+Deprecated: the test environment servers have been released. This onboarding copy is retained as historical context only; do not send users to `https://test.octo-agent.com`.
+
 ## Short Invite Message
 
 Hi [name], we are testing Daily X Queue for OctoAgentFlow with 5 operators who personally run an X account.

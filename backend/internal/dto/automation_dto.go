@@ -532,6 +532,9 @@ type AutoCommentTaskItem struct {
 	GenerationReason      string                       `json:"generation_reason,omitempty"`
 	MatchedKeywords       []string                     `json:"matched_keywords,omitempty"`
 	ReferencedContent     []string                     `json:"referenced_content,omitempty"`
+	SourceType            string                       `json:"source_type,omitempty"`
+	SourceRef             string                       `json:"source_ref,omitempty"`
+	SourceRegion          string                       `json:"source_region,omitempty"`
 	CommentVariants       []AutoCommentVariantItem     `json:"comment_variants,omitempty"`
 	DeliveryMode          string                       `json:"delivery_mode"`
 	DeliveryReason        string                       `json:"delivery_reason,omitempty"`
@@ -649,6 +652,27 @@ type AutoCommentDraftUpdateRequest struct {
 	GeneratedComment string `json:"generated_comment" binding:"required"`
 }
 
+type ExposureRadarCommentDraftRequest struct {
+	BotID           uint   `json:"bot_id" binding:"required"`
+	XAccountID      uint   `json:"x_account_id" binding:"required"`
+	SignalID        string `json:"signal_id"`
+	Region          string `json:"region"`
+	DataSource      string `json:"data_source"`
+	DataQuality     string `json:"data_quality"`
+	TweetID         string `json:"tweet_id"`
+	URL             string `json:"url"`
+	Title           string `json:"title"`
+	AuthorHandle    string `json:"author_handle"`
+	AuthorName      string `json:"author_name"`
+	Content         string `json:"content" binding:"required"`
+	TopicName       string `json:"topic_name"`
+	Score           int    `json:"score"`
+	RiskLevel       string `json:"risk_level"`
+	OpportunityType string `json:"opportunity_type"`
+	RecommendedUse  string `json:"recommended_use"`
+	Reason          string `json:"reason"`
+}
+
 type ReviewQueueQuery struct {
 	Type          string `form:"type"`
 	Status        string `form:"status"`
@@ -692,6 +716,9 @@ type ReviewQueueItem struct {
 	CreatedAt          string           `json:"created_at"`
 	SourceStatus       string           `json:"source_status,omitempty"`
 	SourceID           uint             `json:"source_id"`
+	SourceType         string           `json:"source_type,omitempty"`
+	SourceRef          string           `json:"source_ref,omitempty"`
+	SourceRegion       string           `json:"source_region,omitempty"`
 }
 
 type ReviewQueueResponse struct {

@@ -26,6 +26,7 @@ const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
   { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
+  { labelKey: "sidebar.nav.exposureRadar", href: "/exposure-radar", icon: Radar },
   { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
   { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
   { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },

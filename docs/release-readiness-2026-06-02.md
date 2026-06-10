@@ -1,5 +1,7 @@
 # Release Readiness - 2026-06-02
 
+Historical note: this release-readiness snapshot references the old test environment, which has since been released. Do not use its test URLs or test deploy instructions for current development.
+
 ## Decision
 
 Do not deploy production yet.

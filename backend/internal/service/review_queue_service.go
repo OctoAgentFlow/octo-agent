@@ -800,6 +800,9 @@ func autoCommentTaskToReviewQueueItem(task model.AutoCommentTask, botName string
 		CreatedAt:          task.CreatedAt.UTC().Format(timeRFC3339),
 		SourceStatus:       task.Status,
 		SourceID:           task.ID,
+		SourceType:         task.SourceType,
+		SourceRef:          task.SourceRef,
+		SourceRegion:       task.SourceRegion,
 	}
 }
 

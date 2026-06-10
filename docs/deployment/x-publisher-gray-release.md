@@ -1,5 +1,7 @@
 # X Publisher 灰度验收 Runbook
 
+Deprecated: this runbook was written for the released test environment. Do not use `https://test.octo-agent.com` or `scripts/*-test.sh`; current gray release work must use prod paths with production-safety precautions.
+
 ## 目标
 
 本 Runbook 用于在测试环境逐步验证 Publishing Pipeline V2 的真实 X 发布能力。默认不自动发布，scheduler 仍然只执行 simulated publish；真实发布只能由用户在 Execution Queue 中手动触发。

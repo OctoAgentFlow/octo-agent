@@ -804,6 +804,33 @@ func (ctl *AutomationController) GenerateCommentDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) CreateExposureRadarCommentDraft(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ExposureRadarCommentDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.autoCommentService.CreateDraftFromExposureRadar(c.Request.Context(), userID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
+			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
+			return
+		}
+		if errors.Is(err, service.ErrAutoCommentAlreadyCompleted) {
+			response.FailWithCode(c, http.StatusConflict, err.Error(), "auto_comment_already_completed")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ApproveCommentTask(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

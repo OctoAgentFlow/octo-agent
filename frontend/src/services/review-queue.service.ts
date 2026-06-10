@@ -38,6 +38,9 @@ export type ReviewQueueItemApi = {
   created_at: string;
   source_status?: string;
   source_id: number;
+  source_type?: string;
+  source_ref?: string;
+  source_region?: string;
   feedback_signal_count?: number;
   feedback_signal_summary?: FeedbackSignalSummaryApi;
 };

@@ -1,5 +1,7 @@
 # CONFIG_TEST_REVIEW
 
+Deprecated: test environment servers have been released. This audit is retained as historical context for the old `config.test*.yaml` split; do not use these paths for current server deployment.
+
 本文档是当前测试环境配置结构审计说明。为避免泄露敏感信息，本文只记录字段结构、用途和安全结论，不记录真实 secret。
 
 ## 配置拆分

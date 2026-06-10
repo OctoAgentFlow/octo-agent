@@ -368,6 +368,9 @@ export type AutoCommentTaskApi = {
   generation_reason?: string;
   matched_keywords?: string[];
   referenced_content?: string[];
+  source_type?: string;
+  source_ref?: string;
+  source_region?: string;
   comment_variants?: Array<{
     type: "professional_view" | "engagement_question" | "soft_cta" | string;
     label: string;

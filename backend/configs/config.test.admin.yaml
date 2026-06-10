@@ -1,5 +1,6 @@
-# WARNING: Test admin API config only. Do not use for production.
-# TODO: Before production, move secrets to server private config or secret manager.
+# DEPRECATED: Test environment servers have been released. Keep this file only for
+# historical compatibility and config-path unit tests; do not use it for server deployment.
+# Use config.prod.admin.yaml for current server development.
 
 admin:
   host: "0.0.0.0"

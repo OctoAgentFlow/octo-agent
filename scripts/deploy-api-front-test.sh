@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "[deprecated] test environment servers have been released. Do not use test deploy scripts; use ./scripts/deploy-api-front-prod.sh for server deployment."
+exit 1
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_DIR="$ROOT_DIR/frontend"
 LOG_DIR="$ROOT_DIR/logs/deploy"

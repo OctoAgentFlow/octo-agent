@@ -140,12 +140,26 @@ type XPublisherConfig struct {
 }
 
 type XTrendsConfig struct {
-	Enabled       bool                  `yaml:"enabled"`
-	BearerToken   string                `yaml:"bearer_token"`
-	IntervalHours int                   `yaml:"interval_hours"`
-	MaxTrends     int                   `yaml:"max_trends"`
-	RetentionDays int                   `yaml:"retention_days"`
-	Regions       []XTrendsRegionConfig `yaml:"regions"`
+	Enabled                bool                   `yaml:"enabled"`
+	BearerToken            string                 `yaml:"bearer_token"`
+	IntervalHours          int                    `yaml:"interval_hours"`
+	MaxTrends              int                    `yaml:"max_trends"`
+	RetentionDays          int                    `yaml:"retention_days"`
+	ExposureRefreshMinutes int                    `yaml:"exposure_refresh_minutes"`
+	ExposureTopicLimit     int                    `yaml:"exposure_topic_limit"`
+	ExposureSearchResults  int                    `yaml:"exposure_search_results"`
+	ExposureMaxFans        int64                  `yaml:"exposure_max_fans"`
+	ExposureMinHeat        int64                  `yaml:"exposure_min_heat"`
+	ExposureZhSeedTopics   []string               `yaml:"exposure_zh_seed_topics"`
+	ExposureLearning       ExposureLearningConfig `yaml:"exposure_learning"`
+	Regions                []XTrendsRegionConfig  `yaml:"regions"`
+}
+
+type ExposureLearningConfig struct {
+	RankingEnabled   *bool  `yaml:"ranking_enabled"`
+	CollectorEnabled *bool  `yaml:"collector_enabled"`
+	Mode             string `yaml:"mode"`
+	WindowDays       int    `yaml:"window_days"`
 }
 
 type XTrendsRegionConfig struct {
@@ -601,6 +615,50 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 			cfg.RetentionDays = n
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_REFRESH_MINUTES")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ExposureRefreshMinutes = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_TOPIC_LIMIT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ExposureTopicLimit = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_SEARCH_RESULTS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ExposureSearchResults = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_MAX_FANS")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.ExposureMaxFans = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_MIN_HEAT")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.ExposureMinHeat = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_ZH_SEED_TOPICS")); v != "" {
+		cfg.ExposureZhSeedTopics = splitCommaList(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_LEARNING_RANKING_ENABLED")); v != "" {
+		enabled := parseBool(v)
+		cfg.ExposureLearning.RankingEnabled = &enabled
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_LEARNING_COLLECTOR_ENABLED")); v != "" {
+		enabled := parseBool(v)
+		cfg.ExposureLearning.CollectorEnabled = &enabled
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_LEARNING_MODE")); v != "" {
+		cfg.ExposureLearning.Mode = v
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_LEARNING_WINDOW_DAYS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ExposureLearning.WindowDays = n
+		}
+	}
 	if cfg.IntervalHours <= 0 {
 		cfg.IntervalHours = 12
 	}
@@ -610,11 +668,56 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 	if cfg.RetentionDays <= 0 {
 		cfg.RetentionDays = 14
 	}
+	if cfg.ExposureRefreshMinutes <= 0 {
+		cfg.ExposureRefreshMinutes = 15
+	}
+	if cfg.ExposureTopicLimit <= 0 || cfg.ExposureTopicLimit > 50 {
+		cfg.ExposureTopicLimit = 16
+	}
+	if cfg.ExposureSearchResults <= 0 || cfg.ExposureSearchResults > 100 {
+		cfg.ExposureSearchResults = 25
+	}
+	if cfg.ExposureSearchResults < 10 {
+		cfg.ExposureSearchResults = 10
+	}
+	if cfg.ExposureMaxFans <= 0 {
+		cfg.ExposureMaxFans = 10000
+	}
+	if cfg.ExposureMinHeat <= 0 {
+		cfg.ExposureMinHeat = 3
+	}
+	if len(cfg.ExposureZhSeedTopics) == 0 {
+		cfg.ExposureZhSeedTopics = []string{"AI", "AI Agent", "Web3", "比特币", "以太坊", "加密货币", "空投", "链上", "出海", "创业", "SaaS", "增长"}
+	}
+	if strings.TrimSpace(cfg.ExposureLearning.Mode) == "" {
+		cfg.ExposureLearning.Mode = "hybrid"
+	}
+	cfg.ExposureLearning.Mode = normalizeExposureLearningMode(cfg.ExposureLearning.Mode)
+	if cfg.ExposureLearning.WindowDays <= 0 || cfg.ExposureLearning.WindowDays > 90 {
+		cfg.ExposureLearning.WindowDays = 30
+	}
+	if cfg.ExposureLearning.RankingEnabled == nil {
+		enabled := true
+		cfg.ExposureLearning.RankingEnabled = &enabled
+	}
+	if cfg.ExposureLearning.CollectorEnabled == nil {
+		enabled := true
+		cfg.ExposureLearning.CollectorEnabled = &enabled
+	}
 	if len(cfg.Regions) == 0 {
 		cfg.Regions = []XTrendsRegionConfig{
 			{WOEID: "1", Name: "Worldwide"},
 			{WOEID: "23424977", Name: "United States"},
 		}
+	}
+}
+
+func normalizeExposureLearningMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "workspace", "scoped", "hybrid":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "hybrid"
 	}
 }
 
@@ -625,6 +728,22 @@ func parseBool(raw string) bool {
 	default:
 		return false
 	}
+}
+
+func splitCommaList(raw string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '，' || r == '\n' || r == ';' || r == '；'
+	}) {
+		part = strings.TrimSpace(part)
+		if part == "" || seen[part] {
+			continue
+		}
+		seen[part] = true
+		out = append(out, part)
+	}
+	return out
 }
 
 func applyJWTConfig(env string, cfg *JWTConfig) error {

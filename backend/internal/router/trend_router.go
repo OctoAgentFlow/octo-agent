@@ -10,6 +10,8 @@ import (
 func RegisterTrend(rg *gin.RouterGroup, c *controller.TrendController) {
 	group := rg.Group("/trends")
 	group.Use(middleware.Auth())
+	group.GET("/exposure-radar", c.ExposureRadar)
+	group.GET("/exposure-radar/performance", c.ExposureRadarPerformance)
 	group.GET("/topics", c.ListTopics)
 	group.GET("/selected", c.SelectForBot)
 	group.GET("/feedback", c.ListFeedback)

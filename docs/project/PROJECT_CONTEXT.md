@@ -219,11 +219,13 @@ make admin-front-local
 - API Front：`http://localhost:3000`
 - Admin Front：`http://localhost:3001`
 
-## 6. 测试环境部署
+## 6. 测试环境部署（已废弃）
+
+Test 环境服务器已释放。以下 test 部署路径仅保留为历史记录，不再作为开发、联调或验收入口。需要部署到服务器时使用 prod 脚本。
 
 当前项目不使用 Docker、Docker Compose、systemd 或仓库内 Nginx 模板。以 `scripts/` 脚本化部署为准。
 
-常用测试部署：
+已废弃的测试部署：
 
 ```bash
 bash scripts/deploy-backend-api-test.sh
@@ -232,13 +234,22 @@ bash scripts/deploy-api-front-test.sh
 bash scripts/deploy-admin-front-test.sh
 ```
 
+当前服务器部署入口：
+
+```bash
+bash scripts/deploy-backend-api-prod.sh
+bash scripts/deploy-backend-admin-prod.sh
+bash scripts/deploy-api-front-prod.sh
+bash scripts/deploy-admin-front-prod.sh
+```
+
 当前服务器路径：
 
 ```text
 /home/ubuntu/octo/octo-agent
 ```
 
-当前测试域名：
+已废弃测试域名：
 
 - 用户端：`https://test.octo-agent.com`
 - 后台端：`https://testadmin.octo-agent.com`

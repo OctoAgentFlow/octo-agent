@@ -214,7 +214,11 @@ export default function ExposureRadarPage() {
     const memoryID = `brief:${item.signal_id}`;
     setSavingMemoryID(memoryID);
     try {
-      await contentLibraryService.create(buildBriefMemoryPayload(item, selectedAccountID, selectedBotID));
+      const memory = await contentLibraryService.create(buildBriefMemoryPayload(item, selectedAccountID, selectedBotID));
+      setBrief((current) => current ? {
+        ...current,
+        items: current.items.map((row) => row.signal_id === item.signal_id ? { ...row, saved_memory_id: memory.id } : row),
+      } : current);
       pushToast(t("exposureRadar.toast.memorySaved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
@@ -321,6 +325,7 @@ export default function ExposureRadarPage() {
         timeZone={timeZone}
         savingMemoryID={savingMemoryID}
         memoryDisabled={!selectedAccountID || !selectedBotID}
+        memoryAccountID={selectedAccountID}
         onSaveMemory={saveBriefMemory}
       />
 
@@ -497,12 +502,14 @@ function HourlyBriefPanel({
   timeZone,
   savingMemoryID,
   memoryDisabled,
+  memoryAccountID,
   onSaveMemory,
 }: {
   data: ExposureRadarBriefData | null;
   timeZone: string;
   savingMemoryID: string | null;
   memoryDisabled: boolean;
+  memoryAccountID: number;
   onSaveMemory: (item: ExposureRadarBriefItemApi) => void;
 }) {
   const { t } = useT();
@@ -549,10 +556,17 @@ function HourlyBriefPanel({
               <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.suggested_action}</p>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === `brief:${item.signal_id}`} onClick={() => onSaveMemory(item)}>
-                <BookmarkPlus className="size-3.5" />
-                {savingMemoryID === `brief:${item.signal_id}` ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
-              </Button>
+              {item.saved_memory_id ? (
+                <Link href={memoryLink(item.saved_memory_id, memoryAccountID)} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                  <Database className="size-3.5" />
+                  {t("exposureRadar.card.openMemory")}
+                </Link>
+              ) : (
+                <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === `brief:${item.signal_id}`} onClick={() => onSaveMemory(item)}>
+                  <BookmarkPlus className="size-3.5" />
+                  {savingMemoryID === `brief:${item.signal_id}` ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+                </Button>
+              )}
               {item.source_url ? (
                 <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
                   {t("exposureRadar.card.openPost")}

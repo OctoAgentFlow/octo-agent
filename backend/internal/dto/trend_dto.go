@@ -147,6 +147,7 @@ type ExposureRadarBriefItem struct {
 	RiskLevel       string   `json:"risk_level"`
 	SourceURL       string   `json:"source_url,omitempty"`
 	Guardrails      []string `json:"guardrails,omitempty"`
+	SavedMemoryID   uint     `json:"saved_memory_id,omitempty"`
 }
 
 type ExposureRadarPerformanceResponse struct {

@@ -167,6 +167,7 @@ export type ExposureRadarBriefItemApi = {
   risk_level: string;
   source_url?: string;
   guardrails?: string[];
+  saved_memory_id?: number;
 };
 
 export type ExposureRadarPerformanceRegionApi = {

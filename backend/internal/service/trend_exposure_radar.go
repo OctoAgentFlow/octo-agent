@@ -1257,6 +1257,7 @@ func exposureRadarBriefItem(rank int, item dto.ExposureRadarItem) dto.ExposureRa
 		RiskLevel:       radarFirstNonEmpty(item.RiskLevel, "low"),
 		SourceURL:       item.URL,
 		Guardrails:      item.Guardrails,
+		SavedMemoryID:   item.SavedMemoryID,
 	}
 }
 

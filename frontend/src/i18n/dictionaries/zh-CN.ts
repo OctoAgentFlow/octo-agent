@@ -864,6 +864,7 @@ export const dict: I18nDict = {
   "exposureRadar.card.saveMemory": "保存记忆",
   "exposureRadar.card.savingMemory": "保存中...",
   "exposureRadar.card.savedMemory": "已保存",
+  "exposureRadar.card.openMemory": "打开记忆",
   "exposureRadar.card.openReview": "打开审核",
   "exposureRadar.card.reviewStatus": "审核：{status}",
   "exposureRadar.card.topicDraftDisabled": "话题级信号需要先定位到具体帖子，才能生成进入审核的回复草稿。",

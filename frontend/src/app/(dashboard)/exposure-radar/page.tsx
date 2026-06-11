@@ -353,12 +353,13 @@ export default function ExposureRadarPage() {
                 item={item}
                 timeZone={timeZone}
                 rankChange={rankChanges.get(item.id)}
-                savedMemory={isRadarItemSaved(item, savedMemoryIDs)}
+                savedMemoryID={radarItemSavedMemoryID(item, savedMemoryIDs)}
                 drafting={draftingID === item.id}
                 draftDisabled={!selectedAccountID || !selectedBotID}
                 onCreateDraft={createDraft}
                 savingMemory={savingMemoryID === item.id}
                 memoryDisabled={!selectedAccountID || !selectedBotID}
+                memoryAccountID={selectedAccountID}
                 onSaveMemory={saveRadarMemory}
               />
             ))}
@@ -758,22 +759,24 @@ function RadarCard({
   item,
   timeZone,
   rankChange,
-  savedMemory,
+  savedMemoryID,
   drafting,
   draftDisabled,
   savingMemory,
   memoryDisabled,
+  memoryAccountID,
   onCreateDraft,
   onSaveMemory,
 }: {
   item: ExposureRadarItemApi;
   timeZone: string;
   rankChange?: RankChange;
-  savedMemory: boolean;
+  savedMemoryID: number;
   drafting: boolean;
   draftDisabled: boolean;
   savingMemory: boolean;
   memoryDisabled: boolean;
+  memoryAccountID: number;
   onCreateDraft: (item: ExposureRadarItemApi) => void;
   onSaveMemory: (item: ExposureRadarItemApi) => void;
 }) {
@@ -814,7 +817,7 @@ function RadarCard({
             {item.ranking_delta > 0 ? `+${item.ranking_delta}` : item.ranking_delta}
           </span>
         ) : null}
-        {savedMemory ? (
+        {savedMemoryID > 0 ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-xs font-semibold text-[#7ee0b5]">
             <BookmarkPlus className="size-3.5" />
             {t("exposureRadar.card.savedMemory")}
@@ -863,10 +866,17 @@ function RadarCard({
               {drafting ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
             </Button>
           )}
-          <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemory} onClick={() => onSaveMemory(item)}>
-            <BookmarkPlus className="size-3.5" />
-            {savingMemory ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
-          </Button>
+          {savedMemoryID > 0 ? (
+            <Link href={memoryLink(savedMemoryID, memoryAccountID)} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+              <BookmarkPlus className="size-3.5" />
+              {t("exposureRadar.card.openMemory")}
+            </Link>
+          ) : (
+            <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemory} onClick={() => onSaveMemory(item)}>
+              <BookmarkPlus className="size-3.5" />
+              {savingMemory ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+            </Button>
+          )}
           {item.url ? (
             <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
               {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
@@ -953,6 +963,18 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
 
 function isRadarItemSaved(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
   return Boolean(item.saved_memory_id) || savedMemoryIDs.has(item.id);
+}
+
+function radarItemSavedMemoryID(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
+  if (item.saved_memory_id) return item.saved_memory_id;
+  return savedMemoryIDs.has(item.id) ? -1 : 0;
+}
+
+function memoryLink(id: number, accountID: number) {
+  const params = new URLSearchParams({ panel: "content" });
+  if (id > 0) params.set("content_item_id", String(id));
+  if (accountID > 0) params.set("account", String(accountID));
+  return `/auto-post?${params.toString()}`;
 }
 
 function buildBriefMemoryPayload(item: ExposureRadarBriefItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {

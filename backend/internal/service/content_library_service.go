@@ -49,6 +49,16 @@ func (s *ContentLibraryService) Create(userID uint, req dto.ContentLibraryItemRe
 	if err := s.validateScope(userID, req.TwitterAccountID, req.BotID); err != nil {
 		return nil, err
 	}
+	if isExposureRadarMemoryRequest(req) && s.repo != nil {
+		rows, err := s.repo.ListExposureRadarMemoryBySourceURLs(userID, req.TwitterAccountID, req.BotID, []string{req.SourceURL})
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			out := contentLibraryItemToDTO(rows[0])
+			return &out, nil
+		}
+	}
 	item := &model.ContentLibraryItem{UserID: userID}
 	applyContentLibraryRequest(item, req)
 	if err := s.repo.Create(item); err != nil {
@@ -117,6 +127,18 @@ func applyContentLibraryRequest(item *model.ContentLibraryItem, req dto.ContentL
 		item.Priority = 50
 	}
 	item.Status = normalizeContentLibraryStatus(req.Status)
+}
+
+func isExposureRadarMemoryRequest(req dto.ContentLibraryItemRequest) bool {
+	if normalizeContentLibraryType(req.ItemType) != "data_insight" || strings.TrimSpace(req.SourceURL) == "" {
+		return false
+	}
+	for _, topic := range req.Topics {
+		if strings.EqualFold(strings.TrimSpace(topic), "exposure-radar") {
+			return true
+		}
+	}
+	return false
 }
 
 func contentLibraryItemToDTO(row model.ContentLibraryItem) dto.ContentLibraryItem {

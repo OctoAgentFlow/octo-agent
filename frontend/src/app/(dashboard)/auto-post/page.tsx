@@ -248,6 +248,11 @@ function readAccountID(value: string | null) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+function readContentItemID(value: string | null) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -265,7 +270,7 @@ export default function AutoPostPage() {
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [selectedAccountID, setSelectedAccountID] = useState(() => readAccountID(searchParams.get("account")));
-  const [selectedContentItemID, setSelectedContentItemID] = useState(0);
+  const [selectedContentItemID, setSelectedContentItemID] = useState(() => readContentItemID(searchParams.get("content_item_id")));
   const [form, setForm] = useState<PlannerForm>(() => defaultForm());
   const [libraryForm, setLibraryForm] = useState<LibraryForm>(() => defaultLibraryForm());
   const [editingLibraryID, setEditingLibraryID] = useState<number | null>(null);
@@ -467,6 +472,8 @@ export default function AutoPostPage() {
     if (accountID) {
       setSelectedAccountID((current) => (current === accountID ? current : accountID));
     }
+    const contentItemID = readContentItemID(searchParams.get("content_item_id"));
+    setSelectedContentItemID((current) => (current === contentItemID ? current : contentItemID));
   }, [searchParams]);
 
   useEffect(() => {
@@ -477,12 +484,13 @@ export default function AutoPostPage() {
     if (runAccountScope !== "selected") next.set("account_scope", runAccountScope);
     if (runRangeFilter !== "all") next.set("run_range", runRangeFilter);
     if (runPage > 1) next.set("run_page", String(runPage));
+    if (activePanel === "content" && selectedContentItemID > 0) next.set("content_item_id", String(selectedContentItemID));
     const nextQuery = next.toString();
     const currentQuery = searchParams.toString();
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams, selectedAccountID]);
+  }, [activePanel, pathname, router, runAccountScope, runPage, runRangeFilter, runStatusFilter, searchParams, selectedAccountID, selectedContentItemID]);
 
   const fetchRuns = useCallback(async () => {
     if (runAccountScope === "selected" && !selectedAccountID) {

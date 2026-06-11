@@ -892,6 +892,7 @@ export const dict: I18nDict = {
   "exposureRadar.card.saveMemory": "Save memory",
   "exposureRadar.card.savingMemory": "Saving...",
   "exposureRadar.card.savedMemory": "Saved",
+  "exposureRadar.card.openMemory": "Open memory",
   "exposureRadar.card.openReview": "Open review",
   "exposureRadar.card.reviewStatus": "Review: {status}",
   "exposureRadar.card.topicDraftDisabled": "Topic-level signals need a specific post before a reply draft can enter review.",

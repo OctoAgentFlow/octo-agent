@@ -66,6 +66,15 @@ type ContentExposureFilter = "all" | "exposure" | "radar" | "brief";
 type ContentRegionFilter = "all" | "zh" | "en";
 type ContentVelocityFilter = "all" | "rising" | "steady" | "cooling";
 type ContentSortMode = "default" | "score_desc" | "newest" | "usage_desc";
+type ExposureStrategyRecommendation = {
+  items: ContentLibraryItemApi[];
+  title: string;
+  summary: string;
+  direction: string;
+  topics: string[];
+  regions: string[];
+  averageScore: number;
+};
 
 type PlannerForm = {
   enabled: boolean;
@@ -335,6 +344,49 @@ function normalizeContentVelocity(value: string): ContentVelocityFilter {
   return "all";
 }
 
+function buildExposureStrategyRecommendation(items: ContentLibraryItemApi[]): ExposureStrategyRecommendation | null {
+  const ranked = sortContentItems(
+    items.filter((item) => item.status === "active" && parseContentSourceTrace(item)),
+    "score_desc"
+  ).slice(0, 3);
+  if (ranked.length === 0) return null;
+  const traces = ranked.map((item) => parseContentSourceTrace(item)).filter((trace): trace is ContentSourceTrace => Boolean(trace));
+  const topics = uniqueStrings(ranked.flatMap((item) => item.topics.filter((topic) => !["exposure-radar", "hourly-brief", "zh", "en"].includes(topic.toLowerCase())))).slice(0, 5);
+  const regions = uniqueStrings(traces.map((trace) => trace.region).filter(Boolean));
+  const averageScore = Math.round(traces.reduce((sum, trace) => sum + (Number(trace.score) || 0), 0) / Math.max(traces.length, 1));
+  const primary = traces[0];
+  const actions = uniqueStrings(traces.map((trace) => trace.suggestedAction || trace.bestUse).filter(Boolean)).slice(0, 3);
+  const directionLines = [
+    `Use today as a controlled Exposure memory sprint.`,
+    `Primary signal: ${primary.signalTitle}.`,
+    topics.length ? `Focus topics: ${topics.join(", ")}.` : "",
+    regions.length ? `Region context: ${regions.join(", ")}.` : "",
+    `Recommended workflow: create 1 high-context post or reply angle from the primary signal, then queue 2 review-first follow-up drafts from related memories.`,
+    actions.length ? `Operator angles: ${actions.join(" | ")}` : "",
+    `Guardrail: keep the post practical, avoid broad growth promises, and route output through the review queue before publishing.`,
+  ].filter(Boolean);
+  return {
+    items: ranked,
+    title: primary.signalTitle,
+    summary: actions[0] || primary.whyItMatters || primary.summary,
+    direction: directionLines.join("\n"),
+    topics,
+    regions,
+    averageScore,
+  };
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const next = value.trim();
+    const key = next.toLowerCase();
+    if (!next || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -446,6 +498,7 @@ export default function AutoPostPage() {
       ),
     [availableContentItems, contentExposureFilter, contentRegionFilter, contentSortMode, contentVelocityFilter]
   );
+  const exposureStrategyRecommendation = useMemo(() => buildExposureStrategyRecommendation(availableContentItems), [availableContentItems]);
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
   const accountRuns = runs;
@@ -989,6 +1042,14 @@ export default function AutoPostPage() {
       setGenerating(false);
     }
   };
+
+  const applyExposureStrategyRecommendation = useCallback(() => {
+    if (!exposureStrategyRecommendation) return;
+    setContentDirection(exposureStrategyRecommendation.direction);
+    const primary = exposureStrategyRecommendation.items[0];
+    if (primary) setSelectedContentItemID(primary.id);
+    pushToast(t("autoPost.generate.strategy.toastApplied"));
+  }, [exposureStrategyRecommendation, pushToast, t]);
 
   const runPlannerNow = async () => {
     if (!selectedPlan) {
@@ -1748,6 +1809,7 @@ export default function AutoPostPage() {
                     <ContentSourceTracePanel item={selectedContentItem} compact />
                   </div>
                 ) : null}
+                <ExposureStrategyPanel recommendation={exposureStrategyRecommendation} onApply={applyExposureStrategyRecommendation} />
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.directionLabel")}</span>
                   <textarea
@@ -2405,6 +2467,71 @@ function ContentLibraryFilterSelect<T extends string>({
         ))}
       </select>
     </label>
+  );
+}
+
+function ExposureStrategyPanel({ recommendation, onApply }: { recommendation: ExposureStrategyRecommendation | null; onApply: () => void }) {
+  const { t } = useT();
+  if (!recommendation) {
+    return (
+      <div className="mb-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-5 text-sm leading-6 text-[#71767b]">
+        <p className="font-semibold text-[#e7e9ea]">{t("autoPost.generate.strategy.title")}</p>
+        <p className="mt-1">{t("autoPost.generate.strategy.empty")}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-4 rounded-2xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00ba7c]/30 bg-black px-2.5 py-1 text-xs font-semibold text-[#7ee0b5]">
+              <Sparkles className="size-3.5" />
+              {t("autoPost.generate.strategy.title")}
+            </span>
+            <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              {t("autoPost.generate.strategy.score", { score: recommendation.averageScore })}
+            </span>
+          </div>
+          <h3 className="mt-3 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{recommendation.title}</h3>
+          <p className="mt-2 text-sm leading-6 text-[#c9d1d9]">{recommendation.summary || t("autoPost.generate.strategy.summaryFallback")}</p>
+        </div>
+        <Button type="button" className="w-full shrink-0 lg:w-auto" onClick={onApply}>
+          <Wand2 className="size-4" />
+          {t("autoPost.generate.strategy.apply")}
+        </Button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {recommendation.regions.map((region) => (
+          <span key={region} className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+            {t("autoPost.generate.strategy.region", { region })}
+          </span>
+        ))}
+        {recommendation.topics.map((topic) => (
+          <span key={topic} className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+            {topic}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        {recommendation.items.map((item, index) => {
+          const trace = parseContentSourceTrace(item);
+          return (
+            <div key={item.id} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.generate.strategy.memoryRank", { rank: index + 1 })}</p>
+              <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{trace?.signalTitle || item.title}</p>
+              <p className="mt-1 text-xs text-[#71767b]">
+                {t("autoPost.generate.strategy.memoryMeta", { score: trace?.score || "-", velocity: trace?.velocity || "-" })}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+        <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.generate.strategy.directionPreview")}</p>
+        <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[#c9d1d9]">{recommendation.direction}</p>
+      </div>
+    </div>
   );
 }
 

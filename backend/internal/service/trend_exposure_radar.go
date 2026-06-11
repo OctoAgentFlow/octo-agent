@@ -76,14 +76,14 @@ func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto
 	switch region {
 	case "zh", "cn", "chinese":
 		resp, err := s.exposureRadarChinese(ctx, query, now)
-		return s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)), err
+		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
 	case "en", "english":
 		resp, err := s.exposureRadarEnglish(query, now)
-		return s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)), err
+		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
 	default:
 		query.Region = "zh"
 		resp, err := s.exposureRadarChinese(ctx, query, now)
-		return s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)), err
+		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
 	}
 }
 
@@ -677,6 +677,41 @@ func (s *TrendService) annotateExposureRadarReviewState(userID uint, resp *dto.E
 		resp.Items[i].ReviewTaskID = row.ID
 		resp.Items[i].ReviewStatus = row.Status
 		resp.Items[i].ReviewQueueURL = fmt.Sprintf("/execution-queue?type=comment&status=%s&focus_type=comment&focus_source_id=%d", url.QueryEscape(reviewQueueRadarStatus(row.Status)), row.ID)
+	}
+	return resp
+}
+
+func (s *TrendService) annotateExposureRadarMemoryState(userID uint, query dto.ExposureRadarQuery, resp *dto.ExposureRadarResponse) *dto.ExposureRadarResponse {
+	if resp == nil || userID == 0 || s == nil || s.contentRepo == nil || len(resp.Items) == 0 {
+		return resp
+	}
+	sourceURLs := make([]string, 0, len(resp.Items))
+	itemURLs := make([]string, len(resp.Items))
+	for i, item := range resp.Items {
+		sourceURL := strings.TrimSpace(item.URL)
+		itemURLs[i] = sourceURL
+		if sourceURL != "" {
+			sourceURLs = append(sourceURLs, sourceURL)
+		}
+	}
+	rows, err := s.contentRepo.ListExposureRadarMemoryBySourceURLs(userID, query.XAccountID, query.BotID, sourceURLs)
+	if err != nil || len(rows) == 0 {
+		if err != nil {
+			zap.L().Warn("exposure radar memory state lookup failed", zap.Uint("user_id", userID), zap.Error(err))
+		}
+		return resp
+	}
+	byURL := map[string]uint{}
+	for _, row := range rows {
+		sourceURL := strings.TrimSpace(row.SourceURL)
+		if sourceURL != "" && byURL[sourceURL] == 0 {
+			byURL[sourceURL] = row.ID
+		}
+	}
+	for i := range resp.Items {
+		if id := byURL[itemURLs[i]]; id > 0 {
+			resp.Items[i].SavedMemoryID = id
+		}
 	}
 	return resp
 }

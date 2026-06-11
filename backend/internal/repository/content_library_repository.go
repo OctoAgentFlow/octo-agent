@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"time"
 
 	"octo-agent/backend/internal/model"
@@ -146,5 +147,31 @@ func (r *ContentLibraryRepository) CountExposureRadarMemoryByDaySince(userID, xA
 	}
 	var rows []ContentLibraryDailyStat
 	err := q.Group("DATE(created_at)").Order("day_key DESC").Scan(&rows).Error
+	return rows, err
+}
+
+func (r *ContentLibraryRepository) ListExposureRadarMemoryBySourceURLs(userID, xAccountID, botID uint, sourceURLs []string) ([]model.ContentLibraryItem, error) {
+	clean := make([]string, 0, len(sourceURLs))
+	seen := map[string]bool{}
+	for _, value := range sourceURLs {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		clean = append(clean, value)
+	}
+	if userID == 0 || len(clean) == 0 {
+		return []model.ContentLibraryItem{}, nil
+	}
+	q := r.DB.Where("user_id = ? AND item_type = ? AND status <> ? AND topics LIKE ? AND source_url IN ?", userID, "data_insight", "archived", "%exposure-radar%", clean)
+	if xAccountID > 0 {
+		q = q.Where("(twitter_account_id IS NULL OR twitter_account_id = ?)", xAccountID)
+	}
+	if botID > 0 {
+		q = q.Where("(bot_id IS NULL OR bot_id = ?)", botID)
+	}
+	var rows []model.ContentLibraryItem
+	err := q.Order("updated_at DESC, id DESC").Find(&rows).Error
 	return rows, err
 }

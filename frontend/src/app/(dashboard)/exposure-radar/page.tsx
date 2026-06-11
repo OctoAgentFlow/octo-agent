@@ -192,7 +192,11 @@ export default function ExposureRadarPage() {
     }
     setSavingMemoryID(item.id);
     try {
-      await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID));
+      const memory = await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID));
+      setData((current) => current ? {
+        ...current,
+        items: current.items.map((row) => row.id === item.id ? { ...row, saved_memory_id: memory.id } : row),
+      } : current);
       setSavedMemoryIDs((current) => new Set(current).add(item.id));
       pushToast(t("exposureRadar.toast.memorySaved"));
     } catch (error) {
@@ -349,7 +353,7 @@ export default function ExposureRadarPage() {
                 item={item}
                 timeZone={timeZone}
                 rankChange={rankChanges.get(item.id)}
-                savedMemory={savedMemoryIDs.has(item.id)}
+                savedMemory={isRadarItemSaved(item, savedMemoryIDs)}
                 drafting={draftingID === item.id}
                 draftDisabled={!selectedAccountID || !selectedBotID}
                 onCreateDraft={createDraft}
@@ -939,12 +943,16 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
     case "needs_review":
       return item.risk_level === "medium" || item.risk_level === "high";
     case "saved":
-      return savedMemoryIDs.has(item.id);
+      return isRadarItemSaved(item, savedMemoryIDs);
     case "drafted":
       return Boolean(item.review_task_id);
     default:
       return true;
   }
+}
+
+function isRadarItemSaved(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
+  return Boolean(item.saved_memory_id) || savedMemoryIDs.has(item.id);
 }
 
 function buildBriefMemoryPayload(item: ExposureRadarBriefItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {

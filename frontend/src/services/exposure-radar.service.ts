@@ -41,6 +41,7 @@ export type ExposureRadarItemApi = {
   review_task_id?: number;
   review_status?: string;
   review_queue_url?: string;
+  saved_memory_id?: number;
   updated_at?: string;
 };
 

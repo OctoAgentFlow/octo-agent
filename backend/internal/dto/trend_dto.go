@@ -93,6 +93,7 @@ type ExposureRadarItem struct {
 	ReviewTaskID    uint     `json:"review_task_id,omitempty"`
 	ReviewStatus    string   `json:"review_status,omitempty"`
 	ReviewQueueURL  string   `json:"review_queue_url,omitempty"`
+	SavedMemoryID   uint     `json:"saved_memory_id,omitempty"`
 	UpdatedAt       string   `json:"updated_at,omitempty"`
 }
 

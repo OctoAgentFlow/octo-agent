@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  ExternalLink,
   ListChecks,
   Loader2,
   Pencil,
@@ -251,6 +252,47 @@ function readAccountID(value: string | null) {
 function readContentItemID(value: string | null) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function parseContentSourceTrace(item: ContentLibraryItemApi): ContentSourceTrace | null {
+  if (!item.topics.some((topic) => topic.toLowerCase() === "exposure-radar")) return null;
+  const lines = item.body.split("\n").map((line) => line.trim()).filter(Boolean);
+  const metadata = parseRadarMetadata(readTraceLine(lines, "Radar metadata"));
+  const kind = item.topics.some((topic) => topic.toLowerCase() === "hourly-brief") || Boolean(readTraceLine(lines, "Brief item")) ? "brief" : "radar";
+  const signalTitle = readTraceLine(lines, kind === "brief" ? "Brief item" : "Signal") || item.title;
+  const summary = readTraceLine(lines, "Summary") || readTraceLine(lines, "Context");
+  const region = metadata.region || item.topics.find((topic) => ["zh", "en"].includes(topic.toLowerCase())) || "";
+  return {
+    kind,
+    signalTitle,
+    summary,
+    whyItMatters: readTraceLine(lines, "Why it matters"),
+    suggestedAction: readTraceLine(lines, "Suggested operator action"),
+    bestUse: readTraceLine(lines, "Best use"),
+    region,
+    score: metadata.score || "",
+    velocity: metadata.velocity || "",
+    risk: metadata.risk || "",
+    quality: metadata.quality || "",
+    sourceURL: item.source_url || "",
+  };
+}
+
+function readTraceLine(lines: string[], label: string) {
+  const prefix = `${label}:`;
+  const row = lines.find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()));
+  return row ? row.slice(prefix.length).trim() : "";
+}
+
+function parseRadarMetadata(value: string) {
+  const out: Record<string, string> = {};
+  value.split(";").forEach((part) => {
+    const [rawKey, ...rawValue] = part.split("=");
+    const key = rawKey?.trim().toLowerCase();
+    const next = rawValue.join("=").trim().replace(/[.。]+$/, "");
+    if (key && next) out[key] = next;
+  });
+  return out;
 }
 
 export default function AutoPostPage() {
@@ -1540,6 +1582,7 @@ export default function AutoPostPage() {
                             {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDateTime(item.last_used_at, timeZone) })}</span> : null}
                           </div>
                         </button>
+                        {selectedContentItemID === item.id ? <ContentSourceTracePanel item={item} /> : null}
                         <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
                           <Button
                             size="sm"
@@ -1631,6 +1674,7 @@ export default function AutoPostPage() {
                       </span>
                     </div>
                     <p className="mt-3 line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]/78 [overflow-wrap:anywhere]">{selectedContentItem.body}</p>
+                    <ContentSourceTracePanel item={selectedContentItem} compact />
                   </div>
                 ) : null}
                 <label className="block space-y-2">
@@ -2176,6 +2220,94 @@ function WorkbenchSignal({
           <span className="mt-1 block truncate text-sm font-semibold text-[#e7e9ea]">{title}</span>
           <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[#71767b]">{description}</span>
         </span>
+      </div>
+    </div>
+  );
+}
+
+type ContentSourceTrace = {
+  kind: "radar" | "brief";
+  signalTitle: string;
+  summary: string;
+  whyItMatters: string;
+  suggestedAction: string;
+  bestUse: string;
+  region: string;
+  score: string;
+  velocity: string;
+  risk: string;
+  quality: string;
+  sourceURL: string;
+};
+
+function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibraryItemApi; compact?: boolean }) {
+  const { t } = useT();
+  const trace = parseContentSourceTrace(item);
+  if (!trace) return null;
+  const metrics = [
+    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
+    { label: t("autoPost.contentLibrary.sourceTrace.quality"), value: trace.quality },
+  ].filter((metric) => metric.value);
+
+  return (
+    <div className={`${compact ? "mt-3" : "mt-4"} rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
+              {t("autoPost.contentLibrary.sourceTrace.title")}
+            </span>
+            <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind}`)}
+            </span>
+          </div>
+          <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signalTitle || item.title}</p>
+        </div>
+        {trace.sourceURL ? (
+          <a href={trace.sourceURL} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            <ExternalLink className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
+      {metrics.length ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{metric.label}</p>
+              <p className="mt-1 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{metric.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {trace.summary ? (
+        <div className="mt-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.summary")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.summary}</p>
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        {trace.whyItMatters ? (
+          <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.why")}</p>
+            <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.whyItMatters}</p>
+          </div>
+        ) : null}
+        {trace.suggestedAction ? (
+          <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.action")}</p>
+            <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.suggestedAction}</p>
+          </div>
+        ) : null}
+        {trace.bestUse ? (
+          <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2 lg:col-span-2">
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.bestUse")}</p>
+            <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.bestUse}</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

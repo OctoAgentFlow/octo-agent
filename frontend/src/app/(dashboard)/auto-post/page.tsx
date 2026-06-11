@@ -62,6 +62,10 @@ type WorkbenchPanel = "generate" | "planner" | "content" | "history";
 type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
 type RunAccountScope = "selected" | "all";
 type RunRangeFilter = "all" | "24h" | "7d" | "30d";
+type ContentExposureFilter = "all" | "exposure" | "radar" | "brief";
+type ContentRegionFilter = "all" | "zh" | "en";
+type ContentVelocityFilter = "all" | "rising" | "steady" | "cooling";
+type ContentSortMode = "default" | "score_desc" | "newest" | "usage_desc";
 
 type PlannerForm = {
   enabled: boolean;
@@ -101,6 +105,10 @@ const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; description
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 const runAccountScopes: RunAccountScope[] = ["selected", "all"];
 const runRangeFilters: RunRangeFilter[] = ["all", "24h", "7d", "30d"];
+const contentExposureFilters: ContentExposureFilter[] = ["all", "exposure", "radar", "brief"];
+const contentRegionFilters: ContentRegionFilter[] = ["all", "zh", "en"];
+const contentVelocityFilters: ContentVelocityFilter[] = ["all", "rising", "steady", "cooling"];
+const contentSortModes: ContentSortMode[] = ["default", "score_desc", "newest", "usage_desc"];
 const postingWindowHours = Array.from({ length: 24 }, (_, hour) => hour);
 const postingWindowPresets = [
   { key: "business", hours: [9, 10, 11, 12, 13, 14, 15, 16, 17] },
@@ -295,6 +303,38 @@ function parseRadarMetadata(value: string) {
   return out;
 }
 
+function contentItemMatchesExposureFilters(item: ContentLibraryItemApi, exposure: ContentExposureFilter, region: ContentRegionFilter, velocity: ContentVelocityFilter) {
+  const trace = parseContentSourceTrace(item);
+  if (exposure === "exposure" && !trace) return false;
+  if (exposure === "radar" && trace?.kind !== "radar") return false;
+  if (exposure === "brief" && trace?.kind !== "brief") return false;
+  if (region !== "all" && trace?.region?.toLowerCase() !== region) return false;
+  if (velocity !== "all" && normalizeContentVelocity(trace?.velocity || "") !== velocity) return false;
+  return true;
+}
+
+function sortContentItems(items: ContentLibraryItemApi[], sortMode: ContentSortMode) {
+  return [...items].sort((a, b) => {
+    if (sortMode === "score_desc") return traceScore(b) - traceScore(a) || b.priority - a.priority || b.id - a.id;
+    if (sortMode === "newest") return Date.parse(b.created_at || "") - Date.parse(a.created_at || "") || b.id - a.id;
+    if (sortMode === "usage_desc") return b.usage_count - a.usage_count || b.id - a.id;
+    return b.priority - a.priority || b.id - a.id;
+  });
+}
+
+function traceScore(item: ContentLibraryItemApi) {
+  const score = Number(parseContentSourceTrace(item)?.score || "");
+  return Number.isFinite(score) ? score : -1;
+}
+
+function normalizeContentVelocity(value: string): ContentVelocityFilter {
+  const next = value.trim().toLowerCase();
+  if (next.includes("cool")) return "cooling";
+  if (next.includes("steady") || next.includes("stable")) return "steady";
+  if (next.includes("rising") || next.includes("hot") || next.includes("new")) return "rising";
+  return "all";
+}
+
 export default function AutoPostPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
@@ -317,6 +357,10 @@ export default function AutoPostPage() {
   const [libraryForm, setLibraryForm] = useState<LibraryForm>(() => defaultLibraryForm());
   const [editingLibraryID, setEditingLibraryID] = useState<number | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [contentExposureFilter, setContentExposureFilter] = useState<ContentExposureFilter>("all");
+  const [contentRegionFilter, setContentRegionFilter] = useState<ContentRegionFilter>("all");
+  const [contentVelocityFilter, setContentVelocityFilter] = useState<ContentVelocityFilter>("all");
+  const [contentSortMode, setContentSortMode] = useState<ContentSortMode>("default");
   const [contentDirection, setContentDirection] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingLibrary, setSavingLibrary] = useState(false);
@@ -392,6 +436,15 @@ export default function AutoPostPage() {
   const selectedContentItem = useMemo(
     () => availableContentItems.find((item) => item.id === selectedContentItemID) || null,
     [availableContentItems, selectedContentItemID]
+  );
+  const exposureContentCount = useMemo(() => availableContentItems.filter((item) => Boolean(parseContentSourceTrace(item))).length, [availableContentItems]);
+  const filteredContentItems = useMemo(
+    () =>
+      sortContentItems(
+        availableContentItems.filter((item) => contentItemMatchesExposureFilters(item, contentExposureFilter, contentRegionFilter, contentVelocityFilter)),
+        contentSortMode
+      ),
+    [availableContentItems, contentExposureFilter, contentRegionFilter, contentSortMode, contentVelocityFilter]
   );
   const accountDraftsAll = useMemo(() => drafts.filter((draft) => draft.x_account_id === selectedAccountID), [drafts, selectedAccountID]);
   const accountDrafts = useMemo(() => accountDraftsAll.slice(0, 5), [accountDraftsAll]);
@@ -1417,9 +1470,10 @@ export default function AutoPostPage() {
                     </Button>
                   }
                 />
-                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <div className="mb-4 grid gap-3 md:grid-cols-4">
                   <LibraryMetric label={t("autoPost.contentLibrary.metrics.active")} value={activeContentCount} />
                   <LibraryMetric label={t("autoPost.contentLibrary.metrics.total")} value={availableContentItems.length} />
+                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.exposure")} value={exposureContentCount} />
                   <LibraryMetric
                     label={t("autoPost.contentLibrary.metrics.selected")}
                     value={selectedContentItem ? t("autoPost.contentLibrary.metrics.selectedYes") : t("autoPost.contentLibrary.metrics.selectedNo")}
@@ -1535,6 +1589,18 @@ export default function AutoPostPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    <ContentLibraryExposureFilters
+                      exposureFilter={contentExposureFilter}
+                      regionFilter={contentRegionFilter}
+                      velocityFilter={contentVelocityFilter}
+                      sortMode={contentSortMode}
+                      resultCount={filteredContentItems.length}
+                      totalCount={availableContentItems.length}
+                      onExposureFilterChange={setContentExposureFilter}
+                      onRegionFilterChange={setContentRegionFilter}
+                      onVelocityFilterChange={setContentVelocityFilter}
+                      onSortModeChange={setContentSortMode}
+                    />
                     <button
                       type="button"
                       onClick={() => setSelectedContentItemID(0)}
@@ -1551,7 +1617,12 @@ export default function AutoPostPage() {
                         ) : null}
                       </span>
                     </button>
-                    {availableContentItems.map((item) => (
+                    {filteredContentItems.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
+                        {t("autoPost.contentLibrary.filters.empty")}
+                      </div>
+                    ) : null}
+                    {filteredContentItems.map((item) => (
                       <div
                         key={item.id}
                         className={`rounded-xl border p-4 transition ${
@@ -2222,6 +2293,118 @@ function WorkbenchSignal({
         </span>
       </div>
     </div>
+  );
+}
+
+function ContentLibraryExposureFilters({
+  exposureFilter,
+  regionFilter,
+  velocityFilter,
+  sortMode,
+  resultCount,
+  totalCount,
+  onExposureFilterChange,
+  onRegionFilterChange,
+  onVelocityFilterChange,
+  onSortModeChange,
+}: {
+  exposureFilter: ContentExposureFilter;
+  regionFilter: ContentRegionFilter;
+  velocityFilter: ContentVelocityFilter;
+  sortMode: ContentSortMode;
+  resultCount: number;
+  totalCount: number;
+  onExposureFilterChange: (value: ContentExposureFilter) => void;
+  onRegionFilterChange: (value: ContentRegionFilter) => void;
+  onVelocityFilterChange: (value: ContentVelocityFilter) => void;
+  onSortModeChange: (value: ContentSortMode) => void;
+}) {
+  const { t } = useT();
+  const resetDisabled = exposureFilter === "all" && regionFilter === "all" && velocityFilter === "all" && sortMode === "default";
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.contentLibrary.filters.title")}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("autoPost.contentLibrary.filters.result", { count: resultCount, total: totalCount })}</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={resetDisabled}
+          onClick={() => {
+            onExposureFilterChange("all");
+            onRegionFilterChange("all");
+            onVelocityFilterChange("all");
+            onSortModeChange("default");
+          }}
+        >
+          {t("autoPost.contentLibrary.filters.reset")}
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <ContentLibraryFilterSelect
+          label={t("autoPost.contentLibrary.filters.source")}
+          value={exposureFilter}
+          options={contentExposureFilters}
+          labelFor={(value) => t(`autoPost.contentLibrary.filters.source.${value}`)}
+          onChange={(value) => onExposureFilterChange(value as ContentExposureFilter)}
+        />
+        <ContentLibraryFilterSelect
+          label={t("autoPost.contentLibrary.filters.region")}
+          value={regionFilter}
+          options={contentRegionFilters}
+          labelFor={(value) => t(`autoPost.contentLibrary.filters.region.${value}`)}
+          onChange={(value) => onRegionFilterChange(value as ContentRegionFilter)}
+        />
+        <ContentLibraryFilterSelect
+          label={t("autoPost.contentLibrary.filters.velocity")}
+          value={velocityFilter}
+          options={contentVelocityFilters}
+          labelFor={(value) => t(`autoPost.contentLibrary.filters.velocity.${value}`)}
+          onChange={(value) => onVelocityFilterChange(value as ContentVelocityFilter)}
+        />
+        <ContentLibraryFilterSelect
+          label={t("autoPost.contentLibrary.filters.sort")}
+          value={sortMode}
+          options={contentSortModes}
+          labelFor={(value) => t(`autoPost.contentLibrary.filters.sort.${value}`)}
+          onChange={(value) => onSortModeChange(value as ContentSortMode)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ContentLibraryFilterSelect<T extends string>({
+  label,
+  value,
+  options,
+  labelFor,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  labelFor: (value: T) => string;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium text-[#71767b]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {labelFor(option)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

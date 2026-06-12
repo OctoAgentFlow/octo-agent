@@ -19,6 +19,7 @@ API_PORT="${API_PORT:-12001}"
 ADMIN_PORT="${ADMIN_PORT:-12002}"
 API_FRONT_PORT="${API_FRONT_PORT:-4300}"
 ADMIN_FRONT_PORT="${ADMIN_FRONT_PORT:-4301}"
+KEEP_RELEASES="${PROD_LITE_KEEP_RELEASES:-3}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
@@ -95,6 +96,41 @@ wait_port() {
   return 1
 }
 
+cleanup_old_releases() {
+  if ! [[ "$KEEP_RELEASES" =~ ^[0-9]+$ ]] || [ "$KEEP_RELEASES" -lt 1 ]; then
+    KEEP_RELEASES=3
+  fi
+
+  local current_real
+  current_real="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
+
+  echo "[lite] cleanup old releases: keep=$KEEP_RELEASES"
+  local release_index=0
+  local release_dir
+  while IFS= read -r release_dir; do
+    release_index=$((release_index + 1))
+    if [ "$release_index" -le "$KEEP_RELEASES" ]; then
+      continue
+    fi
+    if [ -n "$current_real" ] && [ "$(readlink -f "$release_dir" 2>/dev/null || true)" = "$current_real" ]; then
+      continue
+    fi
+    echo "[lite] removing old release $release_dir"
+    rm -rf "$release_dir"
+  done < <(find "$BASE_DIR/releases" -maxdepth 1 -mindepth 1 -type d -name 'octo-*' -print | sort -r)
+
+  local upload_index=0
+  local upload_file
+  while IFS= read -r upload_file; do
+    upload_index=$((upload_index + 1))
+    if [ "$upload_index" -le "$KEEP_RELEASES" ]; then
+      continue
+    fi
+    echo "[lite] removing old upload $upload_file"
+    rm -f "$upload_file"
+  done < <(find "$BASE_DIR/uploads" -maxdepth 1 -mindepth 1 -type f -name 'octo-*.tar.gz' -print | sort -r)
+}
+
 echo "[lite] activating $VERSION"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
@@ -145,4 +181,5 @@ curl -fsS -o /dev/null "http://127.0.0.1:$API_FRONT_PORT/"
 curl -fsS -o /dev/null "http://127.0.0.1:$ADMIN_FRONT_PORT/admin"
 sudo nginx -t >/dev/null
 sudo systemctl reload nginx
+cleanup_old_releases
 echo "[lite] deploy success: $VERSION"

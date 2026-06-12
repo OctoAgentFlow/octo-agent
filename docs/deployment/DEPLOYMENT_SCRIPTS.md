@@ -49,6 +49,8 @@ Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test
 ./scripts/prod-lite-health-check.sh <your-server-ip>
 ```
 
+`prod-lite-build-upload.sh` packages the current commit, activates it on the server, and the remote activator removes old release directories and upload archives after health checks pass. Default retention is 3 releases; set `PROD_LITE_KEEP_RELEASES=5` when you want extra rollback points.
+
 当前单服务部署：
 
 ```bash

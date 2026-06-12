@@ -80,6 +80,13 @@ The script:
 - switches `/home/ubuntu/octo/current`
 - restarts the four services
 - runs local health checks before reporting success
+- after successful health checks, keeps the latest 3 releases and upload archives, then removes older ones to protect disk space
+
+To keep more rollback points during a risky deploy, override the cleanup retention:
+
+```bash
+PROD_LITE_KEEP_RELEASES=5 scripts/prod-lite-build-upload.sh <your-server-ip>
+```
 
 ## Health Check
 
@@ -143,3 +150,4 @@ scripts/prod-lite-health-check.sh <your-server-ip>
 - Keep production secrets only in `/home/ubuntu/octo/shared/backend/configs/.env` or other server-local secret stores.
 - t3.micro is enough for the current lightweight runtime, but local builds are preferred because installing/building on the server uses swap and can be slow.
 - If package runtime dependencies change heavily, the first deployment of a new release may spend several minutes in `npm install --omit=dev`.
+- The release activator cleans old `/home/ubuntu/octo/releases/octo-*` directories and `/home/ubuntu/octo/uploads/octo-*.tar.gz` archives only after health checks pass. The default retention is 3 and can be changed with `PROD_LITE_KEEP_RELEASES`.

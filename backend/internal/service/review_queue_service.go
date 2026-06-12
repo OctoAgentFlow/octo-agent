@@ -858,39 +858,53 @@ func (s *ReviewQueueService) autoPostDraftToReviewQueueItem(draft model.AutoPost
 	if target == "" {
 		target = "Auto Post"
 	}
+	contentTitle := ""
+	var exposureTrace *dto.ExposureSourceTrace
+	if contentItem := s.contentItem(draft.UserID, draft.ContentLibraryID); contentItem != nil {
+		contentTitle = contentItem.Title
+		exposureTrace = exposureSourceTraceFromContentItem(contentItem)
+	}
 	return dto.ReviewQueueItem{
-		ID:                 draft.ID,
-		Type:               "post",
-		Content:            draft.GeneratedContent,
-		Status:             status,
-		ExecutionMode:      mode,
-		BotID:              draft.BotID,
-		BotName:            botName,
-		TwitterAccountID:   draft.XAccountID,
-		TwitterAccountName: accountName,
-		TargetSummary:      truncateRunes(target, 120),
-		RiskLevel:          draft.RiskLevel,
-		RiskReasons:        reasons,
-		PlanID:             draft.PlanID,
-		ContentLibraryID:   draft.ContentLibraryID,
-		ContentTitle:       s.contentTitle(draft.UserID, draft.ContentLibraryID),
-		ContentDirection:   draft.ContentDirection,
-		SelectedTrends:     decodeTrendTopicItems(draft.SelectedTrends),
-		CreatedAt:          draft.CreatedAt.UTC().Format(timeRFC3339),
-		SourceStatus:       draft.Status,
-		SourceID:           draft.ID,
+		ID:                  draft.ID,
+		Type:                "post",
+		Content:             draft.GeneratedContent,
+		Status:              status,
+		ExecutionMode:       mode,
+		BotID:               draft.BotID,
+		BotName:             botName,
+		TwitterAccountID:    draft.XAccountID,
+		TwitterAccountName:  accountName,
+		TargetSummary:       truncateRunes(target, 120),
+		RiskLevel:           draft.RiskLevel,
+		RiskReasons:         reasons,
+		PlanID:              draft.PlanID,
+		ContentLibraryID:    draft.ContentLibraryID,
+		ContentTitle:        contentTitle,
+		ExposureSourceTrace: exposureTrace,
+		ContentDirection:    draft.ContentDirection,
+		SelectedTrends:      decodeTrendTopicItems(draft.SelectedTrends),
+		CreatedAt:           draft.CreatedAt.UTC().Format(timeRFC3339),
+		SourceStatus:        draft.Status,
+		SourceID:            draft.ID,
 	}
 }
 
 func (s *ReviewQueueService) contentTitle(userID, contentID uint) string {
+	if item := s.contentItem(userID, contentID); item != nil {
+		return item.Title
+	}
+	return ""
+}
+
+func (s *ReviewQueueService) contentItem(userID, contentID uint) *model.ContentLibraryItem {
 	if s == nil || s.contentRepo == nil || contentID == 0 {
-		return ""
+		return nil
 	}
 	item, err := s.contentRepo.GetByUserAndID(userID, contentID)
 	if err != nil {
-		return ""
+		return nil
 	}
-	return item.Title
+	return item
 }
 
 func inferReviewQueueExecutionMode(capabilityStatus string) string {

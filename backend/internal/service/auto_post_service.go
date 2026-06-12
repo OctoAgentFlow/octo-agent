@@ -1049,44 +1049,58 @@ func (s *AutoPostService) toDraftItem(row model.AutoPostDraft) dto.AutoPostDraft
 			botName = bot.Name
 		}
 	}
+	contentTitle := ""
+	var exposureTrace *dto.ExposureSourceTrace
+	if contentItem := s.contentItem(row.UserID, row.ContentLibraryID); contentItem != nil {
+		contentTitle = contentItem.Title
+		exposureTrace = exposureSourceTraceFromContentItem(contentItem)
+	}
 	return dto.AutoPostDraftItem{
-		ID:               row.ID,
-		UserID:           row.UserID,
-		PlanID:           row.PlanID,
-		BotID:            row.BotID,
-		XAccountID:       row.XAccountID,
-		ActivityLogID:    row.ActivityLogID,
-		BotName:          botName,
-		AccountHandle:    accountHandle,
-		ContentLibraryID: row.ContentLibraryID,
-		ContentTitle:     s.contentTitle(row.UserID, row.ContentLibraryID),
-		ContentDirection: row.ContentDirection,
-		ContentHash:      row.ContentHash,
-		SelectedTrends:   decodeTrendTopicItems(row.SelectedTrends),
-		GeneratedContent: row.GeneratedContent,
-		Status:           row.Status,
-		RiskLevel:        row.RiskLevel,
-		CapabilityStatus: row.CapabilityStatus,
-		FailureCategory:  row.FailureCategory,
-		FailureReason:    row.FailureReason,
-		ApprovalRequired: row.ApprovalRequired,
-		CreatedAt:        row.CreatedAt.UTC().Format(timeRFC3339),
-		GeneratedAt:      formatOptionalTime(row.GeneratedAt),
-		ApprovedAt:       formatOptionalTime(row.ApprovedAt),
-		RejectedAt:       formatOptionalTime(row.RejectedAt),
-		PublishedAt:      formatOptionalTime(row.PublishedAt),
+		ID:                  row.ID,
+		UserID:              row.UserID,
+		PlanID:              row.PlanID,
+		BotID:               row.BotID,
+		XAccountID:          row.XAccountID,
+		ActivityLogID:       row.ActivityLogID,
+		BotName:             botName,
+		AccountHandle:       accountHandle,
+		ContentLibraryID:    row.ContentLibraryID,
+		ContentTitle:        contentTitle,
+		ExposureSourceTrace: exposureTrace,
+		ContentDirection:    row.ContentDirection,
+		ContentHash:         row.ContentHash,
+		SelectedTrends:      decodeTrendTopicItems(row.SelectedTrends),
+		GeneratedContent:    row.GeneratedContent,
+		Status:              row.Status,
+		RiskLevel:           row.RiskLevel,
+		CapabilityStatus:    row.CapabilityStatus,
+		FailureCategory:     row.FailureCategory,
+		FailureReason:       row.FailureReason,
+		ApprovalRequired:    row.ApprovalRequired,
+		CreatedAt:           row.CreatedAt.UTC().Format(timeRFC3339),
+		GeneratedAt:         formatOptionalTime(row.GeneratedAt),
+		ApprovedAt:          formatOptionalTime(row.ApprovedAt),
+		RejectedAt:          formatOptionalTime(row.RejectedAt),
+		PublishedAt:         formatOptionalTime(row.PublishedAt),
 	}
 }
 
 func (s *AutoPostService) contentTitle(userID, contentID uint) string {
+	if item := s.contentItem(userID, contentID); item != nil {
+		return item.Title
+	}
+	return ""
+}
+
+func (s *AutoPostService) contentItem(userID, contentID uint) *model.ContentLibraryItem {
 	if s.contentRepo == nil || contentID == 0 {
-		return ""
+		return nil
 	}
 	item, err := s.contentRepo.GetByUserAndID(userID, contentID)
 	if err != nil {
-		return ""
+		return nil
 	}
-	return item.Title
+	return item
 }
 
 func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, accountTier string) {

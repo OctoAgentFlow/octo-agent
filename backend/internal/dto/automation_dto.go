@@ -181,6 +181,7 @@ type AutoPostDraftItem struct {
 	XAccountID            uint                         `json:"x_account_id"`
 	ContentLibraryID      uint                         `json:"content_library_item_id,omitempty"`
 	ContentTitle          string                       `json:"content_title,omitempty"`
+	ExposureSourceTrace   *ExposureSourceTrace         `json:"exposure_source_trace,omitempty"`
 	AccountHandle         string                       `json:"account_handle,omitempty"`
 	ContentDirection      string                       `json:"content_direction,omitempty"`
 	ContentHash           string                       `json:"content_hash,omitempty"`
@@ -690,35 +691,51 @@ type ReviewQueueStats struct {
 }
 
 type ReviewQueueItem struct {
-	ID                 uint             `json:"id"`
-	Type               string           `json:"type"`
-	DeliveryMode       string           `json:"delivery_mode,omitempty"`
-	Content            string           `json:"content"`
-	Status             string           `json:"status"`
-	ExecutionMode      string           `json:"execution_mode"`
-	BotID              uint             `json:"bot_id"`
-	BotName            string           `json:"bot_name,omitempty"`
-	TwitterAccountID   uint             `json:"twitter_account_id"`
-	TwitterAccountName string           `json:"twitter_account_name,omitempty"`
-	TargetSummary      string           `json:"target_summary,omitempty"`
-	RiskLevel          string           `json:"risk_level"`
-	RiskReasons        []string         `json:"risk_reasons"`
-	PlanID             uint             `json:"plan_id,omitempty"`
-	ContentLibraryID   uint             `json:"content_library_item_id,omitempty"`
-	ContentTitle       string           `json:"content_title,omitempty"`
-	ContentDirection   string           `json:"content_direction,omitempty"`
-	SelectedTrends     []TrendTopicItem `json:"selected_trends,omitempty"`
-	PublishJobID       uint             `json:"publish_job_id,omitempty"`
-	PublishStatus      string           `json:"publish_status,omitempty"`
-	PublishMode        string           `json:"publish_mode,omitempty"`
-	PublishLastError   string           `json:"publish_last_error,omitempty"`
-	PublishExternalURL string           `json:"publish_external_url,omitempty"`
-	CreatedAt          string           `json:"created_at"`
-	SourceStatus       string           `json:"source_status,omitempty"`
-	SourceID           uint             `json:"source_id"`
-	SourceType         string           `json:"source_type,omitempty"`
-	SourceRef          string           `json:"source_ref,omitempty"`
-	SourceRegion       string           `json:"source_region,omitempty"`
+	ID                  uint                 `json:"id"`
+	Type                string               `json:"type"`
+	DeliveryMode        string               `json:"delivery_mode,omitempty"`
+	Content             string               `json:"content"`
+	Status              string               `json:"status"`
+	ExecutionMode       string               `json:"execution_mode"`
+	BotID               uint                 `json:"bot_id"`
+	BotName             string               `json:"bot_name,omitempty"`
+	TwitterAccountID    uint                 `json:"twitter_account_id"`
+	TwitterAccountName  string               `json:"twitter_account_name,omitempty"`
+	TargetSummary       string               `json:"target_summary,omitempty"`
+	RiskLevel           string               `json:"risk_level"`
+	RiskReasons         []string             `json:"risk_reasons"`
+	PlanID              uint                 `json:"plan_id,omitempty"`
+	ContentLibraryID    uint                 `json:"content_library_item_id,omitempty"`
+	ContentTitle        string               `json:"content_title,omitempty"`
+	ExposureSourceTrace *ExposureSourceTrace `json:"exposure_source_trace,omitempty"`
+	ContentDirection    string               `json:"content_direction,omitempty"`
+	SelectedTrends      []TrendTopicItem     `json:"selected_trends,omitempty"`
+	PublishJobID        uint                 `json:"publish_job_id,omitempty"`
+	PublishStatus       string               `json:"publish_status,omitempty"`
+	PublishMode         string               `json:"publish_mode,omitempty"`
+	PublishLastError    string               `json:"publish_last_error,omitempty"`
+	PublishExternalURL  string               `json:"publish_external_url,omitempty"`
+	CreatedAt           string               `json:"created_at"`
+	SourceStatus        string               `json:"source_status,omitempty"`
+	SourceID            uint                 `json:"source_id"`
+	SourceType          string               `json:"source_type,omitempty"`
+	SourceRef           string               `json:"source_ref,omitempty"`
+	SourceRegion        string               `json:"source_region,omitempty"`
+}
+
+type ExposureSourceTrace struct {
+	Kind            string `json:"kind"`
+	SignalTitle     string `json:"signal_title"`
+	Summary         string `json:"summary,omitempty"`
+	WhyItMatters    string `json:"why_it_matters,omitempty"`
+	SuggestedAction string `json:"suggested_action,omitempty"`
+	BestUse         string `json:"best_use,omitempty"`
+	Region          string `json:"region,omitempty"`
+	Score           string `json:"score,omitempty"`
+	Velocity        string `json:"velocity,omitempty"`
+	Risk            string `json:"risk,omitempty"`
+	Quality         string `json:"quality,omitempty"`
+	SourceURL       string `json:"source_url,omitempty"`
 }
 
 type ReviewQueueResponse struct {

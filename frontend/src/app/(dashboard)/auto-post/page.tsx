@@ -40,6 +40,7 @@ import {
   type AutoPostExecutionMode,
   type AutoPostGenerationRunApi,
   type AutoPostLengthMode,
+  type ExposureSourceTraceApi,
   type AutoPostPlanApi,
   type TrendFeedbackApi,
   type TrendFeedbackListData,
@@ -417,6 +418,7 @@ export default function AutoPostPage() {
   const [saving, setSaving] = useState(false);
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingExposureStrategy, setGeneratingExposureStrategy] = useState(false);
   const [runningPlanner, setRunningPlanner] = useState(false);
   const [savingAccountTier, setSavingAccountTier] = useState(false);
   const [syncingAccountTier, setSyncingAccountTier] = useState(false);
@@ -996,48 +998,65 @@ export default function AutoPostPage() {
     }
   };
 
+  const ensureAutoPostPlan = async () => {
+    const plan = selectedPlan;
+    if (!selectedAccountID) {
+      pushToast(t("autoPost.errors.needAccount"));
+      return null;
+    }
+    if (plan) return plan;
+    const saved = await autoPostService.createPlan({
+      x_account_id: selectedAccountID,
+      enabled: form.enabled,
+      execution_mode: form.executionMode,
+      min_interval_minutes: Number(form.minIntervalMinutes) || 1,
+      posting_windows: form.postingWindows.trim(),
+      timezone: form.timezone.trim() || "UTC",
+      content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
+      excluded_trend_names: form.excludedTrendNames,
+    });
+    setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
+    return saved;
+  };
+
+  const handleGenerateError = (error: unknown) => {
+    const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
+    if (code === "ai_generation_quota_exceeded") {
+      setQuotaUpgradeVisible(true);
+      pushToast(t("autoPost.errors.aiQuotaExceeded"));
+    } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
+      setQuotaUpgradeVisible(true);
+      pushToast(t("autoPost.errors.dailyLimitExceeded"));
+    } else if (code === "auto_post_duplicate_content") {
+      pushToast(t("autoPost.errors.duplicateContent"));
+    } else {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.generate") : t("autoPost.errors.generate"));
+    }
+  };
+
+  const createAutoPostDraft = async (options: { direction: string; contentItemID?: number; successToast?: string }) => {
+    const plan = await ensureAutoPostPlan();
+    if (!plan) return null;
+    const draft = await autoPostService.generateDraft(plan.id, options.direction.trim(), options.contentItemID, form.excludedTrendNames);
+    setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
+    setQuotaUpgradeVisible(false);
+    pushToast(options.successToast || t("autoPost.toast.generated"));
+    setActivePanel("history");
+    void load();
+    return draft;
+  };
+
   const generateDraft = async () => {
-    let plan = selectedPlan;
     if (!selectedAccountID) {
       pushToast(t("autoPost.errors.needAccount"));
       return;
     }
     setGenerating(true);
     try {
-      if (!plan) {
-        const saved = await autoPostService.createPlan({
-          x_account_id: selectedAccountID,
-          enabled: form.enabled,
-          execution_mode: form.executionMode,
-          min_interval_minutes: Number(form.minIntervalMinutes) || 1,
-          posting_windows: form.postingWindows.trim(),
-          timezone: form.timezone.trim() || "UTC",
-          content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
-          excluded_trend_names: form.excludedTrendNames,
-        });
-        plan = saved;
-        setPlans((current) => [saved, ...current.filter((item) => item.x_account_id !== saved.x_account_id)]);
-      }
-      const draft = await autoPostService.generateDraft(plan.id, contentDirection.trim(), selectedContentItem?.id, form.excludedTrendNames);
-      setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
+      await createAutoPostDraft({ direction: contentDirection, contentItemID: selectedContentItem?.id });
       setContentDirection("");
-      setQuotaUpgradeVisible(false);
-      pushToast(t("autoPost.toast.generated"));
-      setActivePanel("history");
-      void load();
     } catch (error) {
-      const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
-      if (code === "ai_generation_quota_exceeded") {
-        setQuotaUpgradeVisible(true);
-        pushToast(t("autoPost.errors.aiQuotaExceeded"));
-      } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
-        setQuotaUpgradeVisible(true);
-        pushToast(t("autoPost.errors.dailyLimitExceeded"));
-      } else if (code === "auto_post_duplicate_content") {
-        pushToast(t("autoPost.errors.duplicateContent"));
-      } else {
-        pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.generate") : t("autoPost.errors.generate"));
-      }
+      handleGenerateError(error);
     } finally {
       setGenerating(false);
     }
@@ -1050,6 +1069,29 @@ export default function AutoPostPage() {
     if (primary) setSelectedContentItemID(primary.id);
     pushToast(t("autoPost.generate.strategy.toastApplied"));
   }, [exposureStrategyRecommendation, pushToast, t]);
+
+  const generateExposureStrategyDraft = async () => {
+    if (!exposureStrategyRecommendation) return;
+    if (!selectedAccountID) {
+      pushToast(t("autoPost.errors.needAccount"));
+      return;
+    }
+    const primary = exposureStrategyRecommendation.items[0];
+    setGeneratingExposureStrategy(true);
+    try {
+      await createAutoPostDraft({
+        direction: exposureStrategyRecommendation.direction,
+        contentItemID: primary?.id,
+        successToast: t("autoPost.generate.strategy.toastQueued"),
+      });
+      setContentDirection(exposureStrategyRecommendation.direction);
+      if (primary) setSelectedContentItemID(primary.id);
+    } catch (error) {
+      handleGenerateError(error);
+    } finally {
+      setGeneratingExposureStrategy(false);
+    }
+  };
 
   const runPlannerNow = async () => {
     if (!selectedPlan) {
@@ -1809,7 +1851,13 @@ export default function AutoPostPage() {
                     <ContentSourceTracePanel item={selectedContentItem} compact />
                   </div>
                 ) : null}
-                <ExposureStrategyPanel recommendation={exposureStrategyRecommendation} onApply={applyExposureStrategyRecommendation} />
+                <ExposureStrategyPanel
+                  recommendation={exposureStrategyRecommendation}
+                  onApply={applyExposureStrategyRecommendation}
+                  onGenerate={() => void generateExposureStrategyDraft()}
+                  generating={generatingExposureStrategy}
+                  generateDisabled={!selectedAccountID || aiRemaining <= 0 || generating}
+                />
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.directionLabel")}</span>
                   <textarea
@@ -1862,6 +1910,7 @@ export default function AutoPostPage() {
                           <span className="text-xs text-[#71767b]">{formatDateTime(draft.created_at, timeZone)}</span>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#e7e9ea]">{draft.generated_content}</p>
+                        {draft.exposure_source_trace ? <ExposureSourceTraceBadgePanel trace={draft.exposure_source_trace} /> : null}
                         {draft.selected_trends?.length ? (
                           <TrendSourceChips
                             trends={draft.selected_trends}
@@ -2470,7 +2519,19 @@ function ContentLibraryFilterSelect<T extends string>({
   );
 }
 
-function ExposureStrategyPanel({ recommendation, onApply }: { recommendation: ExposureStrategyRecommendation | null; onApply: () => void }) {
+function ExposureStrategyPanel({
+  recommendation,
+  onApply,
+  onGenerate,
+  generating,
+  generateDisabled,
+}: {
+  recommendation: ExposureStrategyRecommendation | null;
+  onApply: () => void;
+  onGenerate: () => void;
+  generating: boolean;
+  generateDisabled: boolean;
+}) {
   const { t } = useT();
   if (!recommendation) {
     return (
@@ -2496,10 +2557,16 @@ function ExposureStrategyPanel({ recommendation, onApply }: { recommendation: Ex
           <h3 className="mt-3 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{recommendation.title}</h3>
           <p className="mt-2 text-sm leading-6 text-[#c9d1d9]">{recommendation.summary || t("autoPost.generate.strategy.summaryFallback")}</p>
         </div>
-        <Button type="button" className="w-full shrink-0 lg:w-auto" onClick={onApply}>
-          <Wand2 className="size-4" />
-          {t("autoPost.generate.strategy.apply")}
-        </Button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto lg:flex-col">
+          <Button type="button" className="w-full" onClick={onGenerate} disabled={generateDisabled || generating}>
+            {generating ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />}
+            {t("autoPost.generate.strategy.queueDraft")}
+          </Button>
+          <Button type="button" className="w-full" variant="outline" onClick={onApply} disabled={generating}>
+            <Wand2 className="size-4" />
+            {t("autoPost.generate.strategy.apply")}
+          </Button>
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {recommendation.regions.map((region) => (
@@ -2619,6 +2686,54 @@ function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibra
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ExposureSourceTraceBadgePanel({ trace }: { trace: ExposureSourceTraceApi }) {
+  const { t } = useT();
+  const metrics = [
+    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
+  ].filter((metric) => metric.value);
+  return (
+    <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
+              {t("autoPost.contentLibrary.sourceTrace.title")}
+            </span>
+            <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
+            </span>
+          </div>
+          <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signal_title}</p>
+        </div>
+        {trace.source_url ? (
+          <a href={trace.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            <ExternalLink className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
+      {metrics.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {metrics.map((metric) => (
+            <span key={metric.label} className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              <span className="text-[#71767b]">{metric.label}: </span>
+              <span className="text-[#cfd9e2]">{metric.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {trace.suggested_action ? (
+        <p className="mt-2 text-xs leading-5 text-[#8b98a5]">
+          <span className="font-semibold text-[#cfd9e2]">{t("autoPost.contentLibrary.sourceTrace.action")}:</span> {trace.suggested_action}
+        </p>
+      ) : null}
     </div>
   );
 }

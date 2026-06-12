@@ -5079,6 +5079,8 @@ export const dict: I18nDict = {
   "autoPost.generate.strategy.summaryFallback": "使用最强的曝光记忆作为今天的内容来源。",
   "autoPost.generate.strategy.apply": "应用策略",
   "autoPost.generate.strategy.toastApplied": "已把曝光策略写入生成方向。",
+  "autoPost.generate.strategy.queueDraft": "生成审核草稿",
+  "autoPost.generate.strategy.toastQueued": "已把曝光策略草稿加入执行队列，等待审核。",
   "autoPost.generate.strategy.region": "区域：{region}",
   "autoPost.generate.strategy.memoryRank": "记忆 #{rank}",
   "autoPost.generate.strategy.memoryMeta": "评分 {score} · {velocity}",

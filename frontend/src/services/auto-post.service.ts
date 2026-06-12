@@ -45,6 +45,7 @@ export type AutoPostDraftApi = {
   x_account_id: number;
   content_library_item_id?: number;
   content_title?: string;
+  exposure_source_trace?: ExposureSourceTraceApi;
   bot_name?: string;
   account_handle?: string;
   content_direction?: string;
@@ -78,6 +79,21 @@ export type AutoPostDraftApi = {
   approved_at?: string;
   rejected_at?: string;
   published_at?: string;
+};
+
+export type ExposureSourceTraceApi = {
+  kind: "radar" | "brief" | string;
+  signal_title: string;
+  summary?: string;
+  why_it_matters?: string;
+  suggested_action?: string;
+  best_use?: string;
+  region?: string;
+  score?: string;
+  velocity?: string;
+  risk?: string;
+  quality?: string;
+  source_url?: string;
 };
 
 export type AutoPostRewriteMode = "more_specific" | "shorter" | "founder_voice" | "announcement" | "interactive" | "less_marketing";

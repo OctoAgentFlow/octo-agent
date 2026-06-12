@@ -168,6 +168,100 @@ func contentLibraryItemToDTO(row model.ContentLibraryItem) dto.ContentLibraryIte
 	return out
 }
 
+func exposureSourceTraceFromContentItem(row *model.ContentLibraryItem) *dto.ExposureSourceTrace {
+	if row == nil {
+		return nil
+	}
+	topics := decodeStringList(row.Topics)
+	if !hasTopic(topics, "exposure-radar") {
+		return nil
+	}
+	lines := traceLines(row.Body)
+	metadata := parseTraceMetadata(readTraceLine(lines, "Radar metadata"))
+	kind := "radar"
+	if hasTopic(topics, "hourly-brief") || readTraceLine(lines, "Brief item") != "" {
+		kind = "brief"
+	}
+	signalTitle := readTraceLine(lines, "Signal")
+	if kind == "brief" {
+		signalTitle = readTraceLine(lines, "Brief item")
+	}
+	if signalTitle == "" {
+		signalTitle = row.Title
+	}
+	region := metadata["region"]
+	if region == "" {
+		for _, topic := range topics {
+			next := strings.ToLower(strings.TrimSpace(topic))
+			if next == "zh" || next == "en" {
+				region = next
+				break
+			}
+		}
+	}
+	return &dto.ExposureSourceTrace{
+		Kind:            kind,
+		SignalTitle:     signalTitle,
+		Summary:         firstNonEmpty(readTraceLine(lines, "Summary"), readTraceLine(lines, "Context")),
+		WhyItMatters:    readTraceLine(lines, "Why it matters"),
+		SuggestedAction: readTraceLine(lines, "Suggested operator action"),
+		BestUse:         readTraceLine(lines, "Best use"),
+		Region:          region,
+		Score:           metadata["score"],
+		Velocity:        metadata["velocity"],
+		Risk:            metadata["risk"],
+		Quality:         metadata["quality"],
+		SourceURL:       row.SourceURL,
+	}
+}
+
+func hasTopic(topics []string, expected string) bool {
+	for _, topic := range topics {
+		if strings.EqualFold(strings.TrimSpace(topic), expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func traceLines(body string) []string {
+	raw := strings.Split(body, "\n")
+	lines := make([]string, 0, len(raw))
+	for _, line := range raw {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func readTraceLine(lines []string, label string) string {
+	prefix := strings.ToLower(label + ":")
+	for _, line := range lines {
+		if strings.HasPrefix(strings.ToLower(line), prefix) {
+			return strings.TrimSpace(line[len(label)+1:])
+		}
+	}
+	return ""
+}
+
+func parseTraceMetadata(value string) map[string]string {
+	out := map[string]string{}
+	for _, part := range strings.Split(value, ";") {
+		rawKey, rawValue, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(rawKey))
+		next := strings.Trim(strings.TrimSpace(rawValue), ".。")
+		if key != "" && next != "" {
+			out[key] = next
+		}
+	}
+	return out
+}
+
 func normalizeContentLibraryType(value string) string {
 	switch strings.TrimSpace(value) {
 	case "product_update", "feature_highlight", "pain_point", "faq", "case_study", "comparison", "tutorial", "data_insight", "announcement", "campaign", "link", "thread_seed":

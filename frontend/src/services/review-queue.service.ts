@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { TrendTopicApi } from "@/services/auto-post.service";
+import type { ExposureSourceTraceApi, TrendTopicApi } from "@/services/auto-post.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -28,6 +28,7 @@ export type ReviewQueueItemApi = {
   plan_id?: number;
   content_library_item_id?: number;
   content_title?: string;
+  exposure_source_trace?: ExposureSourceTraceApi;
   content_direction?: string;
   selected_trends?: TrendTopicApi[];
   publish_job_id?: number;

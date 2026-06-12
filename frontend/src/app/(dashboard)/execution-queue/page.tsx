@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clock, FileText, MessageCircle, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, MessageCircle, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -790,6 +790,7 @@ export default function ExecutionQueuePage() {
       risk_reasons: [updated.failure_category, updated.failure_reason].filter(Boolean) as string[],
       content_library_item_id: updated.content_library_item_id || item.content_library_item_id,
       content_title: updated.content_title || item.content_title,
+      exposure_source_trace: updated.exposure_source_trace || item.exposure_source_trace,
       content_direction: updated.content_direction || item.content_direction,
       selected_trends: updated.selected_trends || item.selected_trends,
       feedback_signal_count: updated.feedback_signal_count,
@@ -1686,6 +1687,10 @@ export default function ExecutionQueuePage() {
                           onToggleLearningIssue={(issue) => void toggleLearningIssue(itemKey, item.bot_id, issue)}
                           onRewrite={() => void rewritePostDraft(item)}
                         />
+                      ) : null}
+
+                      {heavyPanelsOpen && item.type === "post" && item.exposure_source_trace ? (
+                        <QueueExposureSourceTrace trace={item.exposure_source_trace} />
                       ) : null}
 
                       {heavyPanelsOpen && (item.type === "comment" || item.type === "reply") ? (
@@ -2655,6 +2660,64 @@ function QueueQualityLoop({
       </div>
       <FeedbackSignalSummary summary={item.feedback_signal_summary} count={item.feedback_signal_count || 0} disabledLearningIssues={disabledLearningIssues} onToggleLearningIssue={onToggleLearningIssue} />
       {disabled ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("executionQueue.quality.disabledHint")}</p> : null}
+    </div>
+  );
+}
+
+function QueueExposureSourceTrace({ trace }: { trace: NonNullable<ReviewQueueItemApi["exposure_source_trace"]> }) {
+  const { t } = useT();
+  const metrics = [
+    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
+    { label: t("autoPost.contentLibrary.sourceTrace.quality"), value: trace.quality },
+  ].filter((metric) => metric.value);
+  return (
+    <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
+              {t("autoPost.contentLibrary.sourceTrace.title")}
+            </span>
+            <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
+            </span>
+          </div>
+          <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signal_title}</p>
+        </div>
+        {trace.source_url ? (
+          <a href={trace.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            <ExternalLink className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
+      {metrics.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {metrics.map((metric) => (
+            <span key={metric.label} className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
+              <span className="text-[#71767b]">{metric.label}: </span>
+              <span className="text-[#cfd9e2]">{metric.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        {trace.summary ? <TraceTextBlock label={t("autoPost.contentLibrary.sourceTrace.summary")} value={trace.summary} /> : null}
+        {trace.suggested_action ? <TraceTextBlock label={t("autoPost.contentLibrary.sourceTrace.action")} value={trace.suggested_action} /> : null}
+        {trace.best_use ? <TraceTextBlock className="lg:col-span-2" label={t("autoPost.contentLibrary.sourceTrace.bestUse")} value={trace.best_use} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function TraceTextBlock({ label, value, className = "" }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={`rounded-xl border border-[#2f3336] bg-black px-3 py-2 ${className}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{label}</p>
+      <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{value}</p>
     </div>
   );
 }

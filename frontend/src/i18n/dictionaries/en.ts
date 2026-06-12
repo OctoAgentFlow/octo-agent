@@ -5111,6 +5111,8 @@ export const dict: I18nDict = {
   "autoPost.generate.strategy.summaryFallback": "Use the strongest Exposure memories as today’s content source.",
   "autoPost.generate.strategy.apply": "Apply strategy",
   "autoPost.generate.strategy.toastApplied": "Exposure strategy applied to the generation direction.",
+  "autoPost.generate.strategy.queueDraft": "Generate review draft",
+  "autoPost.generate.strategy.toastQueued": "Exposure strategy draft added to the execution queue for review.",
   "autoPost.generate.strategy.region": "Region: {region}",
   "autoPost.generate.strategy.memoryRank": "Memory #{rank}",
   "autoPost.generate.strategy.memoryMeta": "Score {score} · {velocity}",

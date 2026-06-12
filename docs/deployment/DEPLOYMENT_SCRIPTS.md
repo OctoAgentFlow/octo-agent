@@ -1,6 +1,8 @@
 # Script Deployment Runbook
 
-当前项目部署方式以 `scripts/` 下的脚本为准，参考 `diamond-swap` 的服务拆分方式：每个服务一个部署脚本，`deploy-all-*.sh` 串行编排四个服务。
+当前项目部署方式以 `scripts/` 下的脚本为准。新 prod 服务器推荐使用轻量部署脚本：本地构建 Go/Next.js，上传 runtime artifact 到 t3.micro 后只做解包、依赖安装和进程切换。完整流程见 [prod-lite-deployment.md](./prod-lite-deployment.md)。
+
+旧部署脚本参考 `diamond-swap` 的服务拆分方式：每个服务一个部署脚本，`deploy-all-*.sh` 串行编排四个服务。
 
 Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test*.octo-agent.com` 路径均已废弃，仅保留为历史引用；当前服务器部署请使用 prod 脚本。
 
@@ -38,6 +40,13 @@ Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test
 
 ```bash
 ./scripts/deploy-all-prod.sh
+```
+
+当前新 prod 轻量部署：
+
+```bash
+./scripts/prod-lite-build-upload.sh <your-server-ip>
+./scripts/prod-lite-health-check.sh <your-server-ip>
 ```
 
 当前单服务部署：

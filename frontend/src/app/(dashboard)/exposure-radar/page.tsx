@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
-import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarBriefData, type ExposureRadarBriefItemApi, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
+import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -40,14 +40,12 @@ export default function ExposureRadarPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [data, setData] = useState<ExposureRadarData | null>(null);
   const [performance, setPerformance] = useState<ExposureRadarPerformanceData | null>(null);
-  const [brief, setBrief] = useState<ExposureRadarBriefData | null>(null);
   const [archive, setArchive] = useState<ExposureRadarArchiveData | null>(null);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
-  const [briefDraftingID, setBriefDraftingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
@@ -78,10 +76,9 @@ export default function ExposureRadarPage() {
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [next, perf, hourlyBrief, dailyArchive] = await Promise.all([
+      const [next, perf, dailyArchive] = await Promise.all([
         exposureRadarService.list({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours, maxFans, minHotCount, limit: 60 }),
         exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
-        exposureRadarService.brief({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours: Math.min(hours, 4), limit: 10 }),
         exposureRadarService.archive({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
       ]);
       const nextRanks = new Map(next.items.map((item, index) => [item.id, index + 1]));
@@ -106,7 +103,6 @@ export default function ExposureRadarPage() {
       setRankChanges(changes);
       setData(next);
       setPerformance(perf);
-      setBrief(hourlyBrief);
       setArchive(dailyArchive);
       setLastRefreshedAt(new Date().toISOString());
       setLoadState("ready");
@@ -207,7 +203,7 @@ export default function ExposureRadarPage() {
           generated_comment: task.generated_comment,
         } : row),
       } : current);
-      pushToast(t("exposureRadar.brief.toast.commentGenerated"));
+      pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.draftFailed") : t("exposureRadar.toast.draftFailed"));
     } finally {
@@ -233,87 +229,6 @@ export default function ExposureRadarPage() {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
     } finally {
       setSavingMemoryID(null);
-    }
-  }, [pushToast, selectedAccountID, selectedBotID, t]);
-
-  const saveBriefMemory = useCallback(async (item: ExposureRadarBriefItemApi) => {
-    if (!selectedAccountID || !selectedBotID) {
-      pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
-      return;
-    }
-    const memoryID = `brief:${item.signal_id}`;
-    setSavingMemoryID(memoryID);
-    try {
-      const memory = await contentLibraryService.create(buildBriefMemoryPayload(item, selectedAccountID, selectedBotID));
-      setBrief((current) => current ? {
-        ...current,
-        items: current.items.map((row) => row.signal_id === item.signal_id ? { ...row, saved_memory_id: memory.id } : row),
-      } : current);
-      pushToast(t("exposureRadar.toast.memorySaved"));
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
-    } finally {
-      setSavingMemoryID(null);
-    }
-  }, [pushToast, selectedAccountID, selectedBotID, t]);
-
-  const createBriefDraft = useCallback(async (item: ExposureRadarBriefItemApi) => {
-    if (!selectedAccountID || !selectedBotID) {
-      pushToast(t("exposureRadar.toast.selectBotAccount"));
-      return;
-    }
-    if (item.data_quality !== "tweet_level") {
-      pushToast(t("exposureRadar.toast.tweetLevelRequired"));
-      return;
-    }
-    const content = item.content || item.summary;
-    setBriefDraftingID(item.signal_id);
-    try {
-      const task = await exposureRadarService.createCommentDraft({
-        bot_id: selectedBotID,
-        x_account_id: selectedAccountID,
-        signal_id: item.signal_id,
-        region: item.region === "en" ? "en" : "zh",
-        data_source: item.data_source || "hourly_brief",
-        data_quality: item.data_quality || "tweet_level",
-        tweet_id: extractTweetID(item.source_url || item.signal_id),
-        url: item.source_url,
-        title: item.title,
-        author_handle: item.author_handle,
-        author_name: item.author_name,
-        content,
-        topic_name: item.topic_name,
-        score: item.score,
-        risk_level: item.risk_level,
-        opportunity_type: item.best_use,
-        recommended_use: item.suggested_action,
-        reason: item.why_it_matters,
-      });
-      setBrief((current) => current ? {
-        ...current,
-        items: current.items.map((row) => row.signal_id === item.signal_id ? {
-          ...row,
-          review_task_id: task.id,
-          review_status: task.status,
-          review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
-          generated_comment: task.generated_comment,
-        } : row),
-      } : current);
-      setData((current) => current ? {
-        ...current,
-        items: current.items.map((row) => row.id === item.signal_id ? {
-          ...row,
-          review_task_id: task.id,
-          review_status: task.status,
-          review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
-          generated_comment: task.generated_comment,
-        } : row),
-      } : current);
-      pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
-    } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.draftFailed") : t("exposureRadar.toast.draftFailed"));
-    } finally {
-      setBriefDraftingID(null);
     }
   }, [pushToast, selectedAccountID, selectedBotID, t]);
 
@@ -409,18 +324,6 @@ export default function ExposureRadarPage() {
           </div>
         </div>
       </Card>
-
-      <HourlyBriefPanel
-        data={brief}
-        timeZone={timeZone}
-        savingMemoryID={savingMemoryID}
-        memoryDisabled={!selectedAccountID || !selectedBotID}
-        memoryAccountID={selectedAccountID}
-        draftingID={briefDraftingID}
-        draftDisabled={!selectedAccountID || !selectedBotID}
-        onCreateDraft={createBriefDraft}
-        onSaveMemory={saveBriefMemory}
-      />
 
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -631,151 +534,6 @@ function SourceMetaItem({ icon, label, value, valueClassName }: { icon: ReactNod
       <p className={`mt-1 truncate text-sm font-semibold text-[#e7e9ea] ${valueClassName || ""}`}>{value}</p>
     </div>
   );
-}
-
-function HourlyBriefPanel({
-  data,
-  timeZone,
-  savingMemoryID,
-  memoryDisabled,
-  memoryAccountID,
-  draftingID,
-  draftDisabled,
-  onCreateDraft,
-  onSaveMemory,
-}: {
-  data: ExposureRadarBriefData | null;
-  timeZone: string;
-  savingMemoryID: string | null;
-  memoryDisabled: boolean;
-  memoryAccountID: number;
-  draftingID: string | null;
-  draftDisabled: boolean;
-  onCreateDraft: (item: ExposureRadarBriefItemApi) => void;
-  onSaveMemory: (item: ExposureRadarBriefItemApi) => void;
-}) {
-  const { t } = useT();
-  const { pushToast } = useToast();
-  const items = data?.items || [];
-  const copyComment = async (text?: string) => {
-    const value = (text || "").trim();
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      pushToast(t("autoComment.manualAction.copied"));
-    } catch {
-      pushToast(t("autoComment.manualAction.copyFailed"));
-    }
-  };
-  return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <CardHeader title={t("exposureRadar.brief.title")} description={data?.summary || t("exposureRadar.brief.description")} className="mb-0" />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <Clock3 className="size-3.5" />
-            {data?.generated_at ? formatDateTime(data.generated_at, timeZone) : "-"}
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <Activity className="size-3.5" />
-            {data?.data_quality || "-"}
-          </span>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {items.length ? items.slice(0, 6).map((item) => {
-          const generatedComment = item.generated_comment?.trim() || "";
-          const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
-          return (
-          <div key={`${item.rank}:${item.signal_id}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#1d9bf0] text-xs font-semibold text-white">{item.rank}</span>
-                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${velocityStateClass(normalizeVelocityState(item.velocity_state))}`}>
-                    {t(`exposureRadar.velocityState.${normalizeVelocityState(item.velocity_state)}`)}
-                  </span>
-                  <span className="rounded-full border border-[#2f3336] px-2 py-1 text-xs font-semibold text-[#8b98a5]">{briefBestUseLabel(item.best_use, t)}</span>
-                </div>
-                <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</h3>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-xl font-semibold text-white">{item.score}</p>
-                <p className="text-[11px] text-[#71767b]">{t("exposureRadar.card.score")}</p>
-              </div>
-            </div>
-            <p className="mt-3 line-clamp-3 text-xs leading-5 text-[#c9d1d9]">{item.summary}</p>
-            <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("exposureRadar.brief.why")}</p>
-              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.why_it_matters}</p>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("exposureRadar.brief.action")}</p>
-              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.suggested_action}</p>
-            </div>
-            {generatedComment ? (
-              <div className="mt-3 rounded-xl border border-[#1d9bf0]/35 bg-[#07111a] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-normal text-[#8ecdf8]">{t("exposureRadar.brief.generatedComment")}</p>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea]">{generatedComment}</p>
-                <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.brief.manualPublishHint")}</p>
-              </div>
-            ) : null}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {generatedComment ? (
-                <>
-                  <Button type="button" size="sm" variant="outline" onClick={() => void copyComment(generatedComment)}>
-                    <Clipboard className="size-3.5" />
-                    {t("autoComment.manualAction.copy")}
-                  </Button>
-                  {item.source_url ? (
-                    <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                      <ExternalLink className="size-3.5" />
-                      {t("autoComment.manualAction.open")}
-                    </a>
-                  ) : null}
-                </>
-              ) : (
-                <Button type="button" size="sm" variant="outline" disabled={!canDraft || draftingID === item.signal_id} title={!canDraft && item.data_quality !== "tweet_level" ? t("exposureRadar.card.topicDraftDisabled") : undefined} onClick={() => onCreateDraft(item)}>
-                  <MessageSquarePlus className="size-3.5" />
-                  {draftingID === item.signal_id ? t("exposureRadar.brief.generatingComment") : t("exposureRadar.brief.generateComment")}
-                </Button>
-              )}
-              {item.saved_memory_id ? (
-                <Link href={memoryLink(item.saved_memory_id, memoryAccountID)} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                  <Database className="size-3.5" />
-                  {t("exposureRadar.card.openMemory")}
-                </Link>
-              ) : (
-                <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === `brief:${item.signal_id}`} onClick={() => onSaveMemory(item)}>
-                  <BookmarkPlus className="size-3.5" />
-                  {savingMemoryID === `brief:${item.signal_id}` ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
-                </Button>
-              )}
-              {!generatedComment && item.source_url ? (
-                <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                  {t("exposureRadar.card.openPost")}
-                  <ExternalLink className="size-3.5" />
-                </a>
-              ) : null}
-            </div>
-          </div>
-          );
-        }) : (
-          <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b] lg:col-span-2">{t("exposureRadar.brief.empty")}</p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function briefBestUseLabel(value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
-  switch (value) {
-    case "comment_review":
-    case "operator_review":
-      return t("exposureRadar.brief.bestUse.manualComment");
-    case "topic_research":
-      return t("exposureRadar.brief.bestUse.topicResearch");
-    default:
-      return value || t("exposureRadar.brief.bestUse.manualComment");
-  }
 }
 
 function PerformancePanel({ data, timeZone }: { data: ExposureRadarPerformanceData | null; timeZone: string }) {
@@ -1195,32 +953,6 @@ function memoryLink(id: number, accountID: number) {
   if (id > 0) params.set("content_item_id", String(id));
   if (accountID > 0) params.set("account", String(accountID));
   return `/auto-post?${params.toString()}`;
-}
-
-function buildBriefMemoryPayload(item: ExposureRadarBriefItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {
-  const velocityState = normalizeVelocityState(item.velocity_state);
-  const title = compactTitle(item.topic_name || item.title || "Hourly opportunity brief");
-  const bodyLines = [
-    `Brief item: ${item.title}`,
-    item.summary ? `Summary: ${item.summary}` : "",
-    item.why_it_matters ? `Why it matters: ${item.why_it_matters}` : "",
-    item.suggested_action ? `Suggested operator action: ${item.suggested_action}` : "",
-    item.best_use ? `Best use: ${item.best_use}` : "",
-    `Radar metadata: region=${item.region}; score=${item.score}; velocity=${velocityState}; risk=${item.risk_level || "unknown"}.`,
-  ].filter(Boolean);
-  return {
-    twitter_account_id: twitterAccountID,
-    bot_id: botID,
-    title,
-    item_type: "data_insight",
-    body: bodyLines.join("\n"),
-    source_url: item.source_url || undefined,
-    topics: uniqueList(["exposure-radar", "hourly-brief", item.region, item.topic_name, velocityState, item.best_use]),
-    growth_goal: "Use as OAF Bot memory for context-aware X replies and posts.",
-    cta_preference: "Use only when relevant. Keep replies review-first and do not force product promotion.",
-    priority: clampPriority(item.score),
-    status: "active",
-  };
 }
 
 function compactTitle(value: string) {

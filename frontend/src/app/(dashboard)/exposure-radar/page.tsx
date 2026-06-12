@@ -749,7 +749,7 @@ function HourlyBriefPanel({
                   {savingMemoryID === `brief:${item.signal_id}` ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
                 </Button>
               )}
-              {item.source_url ? (
+              {!generatedComment && item.source_url ? (
                 <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
                   {t("exposureRadar.card.openPost")}
                   <ExternalLink className="size-3.5" />

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -300,7 +300,7 @@ export default function ExposureRadarPage() {
         {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
         <div className="mt-4 border-t border-[#2f3336] pt-4">
           <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <div className="grid gap-3 md:grid-cols-2 md:items-end">
             <SelectField
               icon={<Users className="size-4" />}
               label={t("exposureRadar.draft.account")}
@@ -317,10 +317,6 @@ export default function ExposureRadarPage() {
               emptyLabel={t("exposureRadar.draft.noBots")}
               options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
             />
-            <Link href="/execution-queue?type=comment&status=pending_review" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
-              <MessageSquarePlus className="size-4" />
-              {t("exposureRadar.draft.openQueue")}
-            </Link>
           </div>
         </div>
       </Card>
@@ -750,9 +746,10 @@ function RadarCard({
   onSaveMemory: (item: ExposureRadarItemApi) => void;
 }) {
   const { t } = useT();
+  const { pushToast } = useToast();
   const riskClass = item.risk_level === "high" || item.risk_level === "medium" ? "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" : "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  const hasReviewTask = Boolean(item.review_task_id);
-  const canDraft = item.data_quality === "tweet_level" && !draftDisabled && !hasReviewTask;
+  const generatedComment = item.generated_comment?.trim() || "";
+  const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
@@ -760,6 +757,16 @@ function RadarCard({
     : rankChange?.kind === "down"
       ? "shadow-[0_0_0_1px_rgba(244,33,46,0.20)]"
       : "";
+  const copyComment = async () => {
+    if (!generatedComment) return;
+    try {
+      await navigator.clipboard.writeText(generatedComment);
+      pushToast(t("autoComment.manualAction.copied"));
+    } catch {
+      pushToast(t("autoComment.manualAction.copyFailed"));
+    }
+  };
+
   return (
     <article className={`rounded-2xl border p-4 transition-shadow ${highlightClass} ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
       <div className="flex flex-wrap items-center gap-2">
@@ -785,11 +792,6 @@ function RadarCard({
         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
           {item.data_quality === "tweet_level" ? t("exposureRadar.quality.tweet") : t("exposureRadar.quality.topic")}
         </span>
-        {hasReviewTask ? (
-          <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-1 text-xs font-semibold text-[#8ecdf8]">
-            {t("exposureRadar.card.reviewStatus", { status: t(`executionQueue.status.${normalizeReviewStatus(item.review_status)}`) })}
-          </span>
-        ) : null}
         {item.ranking_delta ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${item.ranking_delta > 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"}`}>
             {item.ranking_delta > 0 ? `+${item.ranking_delta}` : item.ranking_delta}
@@ -827,17 +829,32 @@ function RadarCard({
         <p className="mt-2 text-xs leading-5 text-[#71767b]">{item.reason}</p>
         {item.ranking_reason ? <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{item.ranking_reason}</p> : null}
       </div>
+      {generatedComment ? (
+        <div className="mt-4 rounded-2xl border border-[#1d9bf0]/35 bg-[#07111a] p-3">
+          <p className="text-xs font-semibold text-[#8ecdf8]">{t("exposureRadar.card.generatedComment")}</p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea]">{generatedComment}</p>
+          <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.card.manualPublishHint")}</p>
+        </div>
+      ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#71767b]">
         <span className="inline-flex items-center gap-1">
           <Clock3 className="size-3.5" />
           {item.age_label || (item.updated_at ? formatDateTime(item.updated_at, timeZone) : "-")}
         </span>
         <div className="flex flex-wrap items-center gap-2">
-          {hasReviewTask ? (
-            <Link href={item.review_queue_url || `/execution-queue?type=comment&status=pending_review&focus_type=comment&focus_source_id=${item.review_task_id}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-              <MessageSquarePlus className="size-3.5" />
-              {t("exposureRadar.card.openReview")}
-            </Link>
+          {generatedComment ? (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={() => void copyComment()}>
+                <Clipboard className="size-3.5" />
+                {t("autoComment.manualAction.copy")}
+              </Button>
+              {item.url ? (
+                <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
+                  {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+            </>
           ) : (
             <Button type="button" size="sm" variant="outline" disabled={!canDraft || drafting} title={!canDraft && item.data_quality !== "tweet_level" ? t("exposureRadar.card.topicDraftDisabled") : undefined} onClick={() => onCreateDraft(item)}>
               <MessageSquarePlus className="size-3.5" />
@@ -855,7 +872,7 @@ function RadarCard({
               {savingMemory ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
             </Button>
           )}
-          {item.url ? (
+          {!generatedComment && item.url ? (
             <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
               {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
               <ExternalLink className="size-3.5" />
@@ -933,7 +950,7 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
     case "saved":
       return isRadarItemSaved(item, savedMemoryIDs);
     case "drafted":
-      return Boolean(item.review_task_id);
+      return Boolean(item.generated_comment || item.review_task_id);
     default:
       return true;
   }
@@ -1049,12 +1066,6 @@ function formatPercent(value: number) {
 function extractTweetID(raw: string) {
   const match = raw.match(/\/status(?:es)?\/(\d+)/);
   return match?.[1] || "";
-}
-
-function normalizeReviewStatus(status?: string) {
-  if (!status || status === "review") return "pending_review";
-  if (status === "sent" || status === "handled") return "published";
-  return status;
 }
 
 function normalizeSourceType(value?: string) {

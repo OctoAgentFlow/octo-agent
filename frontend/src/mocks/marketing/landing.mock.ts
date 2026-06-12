@@ -12,6 +12,7 @@ import type {
 } from "@/types/marketing";
 
 export const navItems: NavItem[] = [
+  { labelKey: "marketing.nav.exposureRadar", href: "#exposure-radar" },
   { labelKey: "marketing.nav.oafBot", href: "#oaf-bot" },
   { labelKey: "marketing.nav.capabilities", href: "#capabilities" },
   { labelKey: "marketing.nav.autoPost", href: "#auto-post" },

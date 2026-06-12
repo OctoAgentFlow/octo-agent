@@ -677,6 +677,7 @@ func (s *TrendService) annotateExposureRadarReviewState(userID uint, resp *dto.E
 		resp.Items[i].ReviewTaskID = row.ID
 		resp.Items[i].ReviewStatus = row.Status
 		resp.Items[i].ReviewQueueURL = fmt.Sprintf("/execution-queue?type=comment&status=%s&focus_type=comment&focus_source_id=%d", url.QueryEscape(reviewQueueRadarStatus(row.Status)), row.ID)
+		resp.Items[i].GeneratedComment = row.GeneratedComment
 	}
 	return resp
 }
@@ -1243,21 +1244,30 @@ func exposureRadarBriefItem(rank int, item dto.ExposureRadarItem) dto.ExposureRa
 		velocity = tl1VelocityState(item.Status)
 	}
 	return dto.ExposureRadarBriefItem{
-		Rank:            rank,
-		SignalID:        item.ID,
-		Region:          item.Region,
-		TopicName:       item.TopicName,
-		Title:           radarFirstNonEmpty(topic, "Untitled signal"),
-		Summary:         exposureBriefSummaryText(item),
-		WhyItMatters:    exposureBriefWhyItMatters(item, velocity),
-		SuggestedAction: exposureBriefSuggestedAction(item, velocity),
-		BestUse:         exposureBriefBestUse(item),
-		Score:           item.Score,
-		VelocityState:   velocity,
-		RiskLevel:       radarFirstNonEmpty(item.RiskLevel, "low"),
-		SourceURL:       item.URL,
-		Guardrails:      item.Guardrails,
-		SavedMemoryID:   item.SavedMemoryID,
+		Rank:             rank,
+		SignalID:         item.ID,
+		Region:           item.Region,
+		DataSource:       item.DataSource,
+		DataQuality:      item.DataQuality,
+		TopicName:        item.TopicName,
+		Title:            radarFirstNonEmpty(topic, "Untitled signal"),
+		Summary:          exposureBriefSummaryText(item),
+		Content:          item.Content,
+		AuthorHandle:     item.AuthorHandle,
+		AuthorName:       item.AuthorName,
+		WhyItMatters:     exposureBriefWhyItMatters(item, velocity),
+		SuggestedAction:  exposureBriefSuggestedAction(item, velocity),
+		BestUse:          exposureBriefBestUse(item),
+		Score:            item.Score,
+		VelocityState:    velocity,
+		RiskLevel:        radarFirstNonEmpty(item.RiskLevel, "low"),
+		SourceURL:        item.URL,
+		Guardrails:       item.Guardrails,
+		ReviewTaskID:     item.ReviewTaskID,
+		ReviewStatus:     item.ReviewStatus,
+		ReviewQueueURL:   item.ReviewQueueURL,
+		GeneratedComment: item.GeneratedComment,
+		SavedMemoryID:    item.SavedMemoryID,
 	}
 }
 

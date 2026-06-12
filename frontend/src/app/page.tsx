@@ -14,6 +14,7 @@ import { AutoPostSection } from "@/components/marketing/auto-post-section";
 import { ComparisonSection } from "@/components/marketing/comparison-section";
 import { GrowthOperationsLoopSection } from "@/components/marketing/growth-operations-loop-section";
 import { OperatingLoopSection } from "@/components/marketing/operating-loop-section";
+import { ExposureRadarSection } from "@/components/marketing/exposure-radar-section";
 
 export default function Home() {
   if (process.env.NEXT_PUBLIC_FRONTEND_ROLE === "admin") {
@@ -26,6 +27,7 @@ export default function Home() {
       <main className="pb-20 md:pb-0">
         <HeroSection />
         <GrowthOperationsLoopSection />
+        <ExposureRadarSection />
         <OAFBotSection />
         <FeatureCardsSection />
         <WorkflowSection />

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -20,11 +20,14 @@ import type { OAFBot } from "@/types/oaf-bot";
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
 type RadarViewFilter = "all" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
+type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
+type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
 const radarViewFilters: RadarViewFilter[] = ["all", "tweet", "high_score", "needs_review", "saved", "drafted"];
+const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 
 export default function ExposureRadarPage() {
   const { t } = useT();
@@ -44,11 +47,33 @@ export default function ExposureRadarPage() {
   const [selectedAccountID, setSelectedAccountID] = useState(0);
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
+  const [briefDraftingID, setBriefDraftingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
+  const [lastRefreshedAt, setLastRefreshedAt] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const nextRegion = params.get("region");
+    if (nextRegion === "zh" || nextRegion === "en") setRegion(nextRegion);
+    setHours((current) => getPositiveParam(params, "hours", current));
+    setMaxFans((current) => getPositiveParam(params, "max_fans", getPositiveParam(params, "maxFans", current)));
+    setMinHotCount((current) => getNonNegativeParam(params, "min_hot_count", getNonNegativeParam(params, "minHotCount", current)));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("region", region);
+    params.set("hours", String(hours));
+    params.set("max_fans", String(maxFans));
+    params.set("min_hot_count", String(minHotCount));
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  }, [hours, maxFans, minHotCount, region]);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -60,7 +85,8 @@ export default function ExposureRadarPage() {
         exposureRadarService.archive({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
       ]);
       const nextRanks = new Map(next.items.map((item, index) => [item.id, index + 1]));
-      const previousRanks = previousRanksRef.current;
+      const rankStorageKey = radarRankStorageKey(region, hours, maxFans, minHotCount);
+      const previousRanks = previousRanksRef.current.size > 0 ? previousRanksRef.current : readStoredRadarRanks(rankStorageKey);
       const changes = new Map<string, RankChange>();
       if (previousRanks.size > 0) {
         next.items.forEach((item, index) => {
@@ -76,11 +102,13 @@ export default function ExposureRadarPage() {
         });
       }
       previousRanksRef.current = nextRanks;
+      writeStoredRadarRanks(rankStorageKey, nextRanks);
       setRankChanges(changes);
       setData(next);
       setPerformance(perf);
       setBrief(hourlyBrief);
       setArchive(dailyArchive);
+      setLastRefreshedAt(new Date().toISOString());
       setLoadState("ready");
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.loadFailed") : t("exposureRadar.toast.loadFailed"));
@@ -127,6 +155,7 @@ export default function ExposureRadarPage() {
     const avgVelocity = items.length ? Math.round(items.reduce((sum, item) => sum + (item.views_per_min || 0), 0) / items.length) : 0;
     return { tweetLevel, highScore, risky, avgVelocity };
   }, [items]);
+  const leaderboardStats = useMemo(() => buildLeaderboardStats(items, rankChanges), [items, rankChanges]);
   const radarViewCounts = useMemo(() => {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs)).length;
@@ -175,6 +204,7 @@ export default function ExposureRadarPage() {
           review_task_id: task.id,
           review_status: task.status,
           review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
+          generated_comment: task.generated_comment,
         } : row),
       } : current);
       pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
@@ -224,6 +254,66 @@ export default function ExposureRadarPage() {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
     } finally {
       setSavingMemoryID(null);
+    }
+  }, [pushToast, selectedAccountID, selectedBotID, t]);
+
+  const createBriefDraft = useCallback(async (item: ExposureRadarBriefItemApi) => {
+    if (!selectedAccountID || !selectedBotID) {
+      pushToast(t("exposureRadar.toast.selectBotAccount"));
+      return;
+    }
+    if (item.data_quality !== "tweet_level") {
+      pushToast(t("exposureRadar.toast.tweetLevelRequired"));
+      return;
+    }
+    const content = item.content || item.summary;
+    setBriefDraftingID(item.signal_id);
+    try {
+      const task = await exposureRadarService.createCommentDraft({
+        bot_id: selectedBotID,
+        x_account_id: selectedAccountID,
+        signal_id: item.signal_id,
+        region: item.region === "en" ? "en" : "zh",
+        data_source: item.data_source || "hourly_brief",
+        data_quality: item.data_quality || "tweet_level",
+        tweet_id: extractTweetID(item.source_url || item.signal_id),
+        url: item.source_url,
+        title: item.title,
+        author_handle: item.author_handle,
+        author_name: item.author_name,
+        content,
+        topic_name: item.topic_name,
+        score: item.score,
+        risk_level: item.risk_level,
+        opportunity_type: item.best_use,
+        recommended_use: item.suggested_action,
+        reason: item.why_it_matters,
+      });
+      setBrief((current) => current ? {
+        ...current,
+        items: current.items.map((row) => row.signal_id === item.signal_id ? {
+          ...row,
+          review_task_id: task.id,
+          review_status: task.status,
+          review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
+          generated_comment: task.generated_comment,
+        } : row),
+      } : current);
+      setData((current) => current ? {
+        ...current,
+        items: current.items.map((row) => row.id === item.signal_id ? {
+          ...row,
+          review_task_id: task.id,
+          review_status: task.status,
+          review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
+          generated_comment: task.generated_comment,
+        } : row),
+      } : current);
+      pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.draftFailed") : t("exposureRadar.toast.draftFailed"));
+    } finally {
+      setBriefDraftingID(null);
     }
   }, [pushToast, selectedAccountID, selectedBotID, t]);
 
@@ -326,6 +416,9 @@ export default function ExposureRadarPage() {
         savingMemoryID={savingMemoryID}
         memoryDisabled={!selectedAccountID || !selectedBotID}
         memoryAccountID={selectedAccountID}
+        draftingID={briefDraftingID}
+        draftDisabled={!selectedAccountID || !selectedBotID}
+        onCreateDraft={createBriefDraft}
         onSaveMemory={saveBriefMemory}
       />
 
@@ -338,6 +431,7 @@ export default function ExposureRadarPage() {
           </span>
         </div>
         <RadarViewTabs value={radarView} counts={radarViewCounts} onChange={setRadarView} />
+        <LeaderboardStatusStrip stats={leaderboardStats} data={data} lastRefreshedAt={lastRefreshedAt} timeZone={timeZone} />
         {loadState === "loading" ? (
           <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.loading")}</div>
         ) : null}
@@ -352,10 +446,11 @@ export default function ExposureRadarPage() {
         ) : null}
         {loadState === "ready" && displayedItems.length ? (
           <div className="grid gap-3 xl:grid-cols-2">
-            {displayedItems.map((item) => (
+            {displayedItems.map((item, index) => (
               <RadarCard
                 key={item.id}
                 item={item}
+                rank={index + 1}
                 timeZone={timeZone}
                 rankChange={rankChanges.get(item.id)}
                 savedMemoryID={radarItemSavedMemoryID(item, savedMemoryIDs)}
@@ -437,6 +532,47 @@ function RadarViewTabs({ value, counts, onChange }: { value: RadarViewFilter; co
   );
 }
 
+function LeaderboardStatusStrip({ stats, data, lastRefreshedAt, timeZone }: { stats: LeaderboardStats; data: ExposureRadarData | null; lastRefreshedAt: string; timeZone: string }) {
+  const { t } = useT();
+  const freshest = data?.last_collected_at || data?.updated_at || lastRefreshedAt;
+  const freshnessLabel = data?.freshness_seconds ? formatFreshness(data.freshness_seconds, t) : freshest ? formatDateTime(freshest, timeZone) : "-";
+  return (
+    <div className="mb-4 rounded-2xl border border-[#2f3336] bg-black p-3">
+      <div className="grid gap-2 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+        <div className="flex flex-wrap gap-2">
+          <LeaderboardPill label={t("exposureRadar.leaderboard.status.new")} value={stats.newCount} tone="border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]" />
+          <LeaderboardPill label={t("exposureRadar.leaderboard.status.burst")} value={stats.burst} tone="border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" />
+          <LeaderboardPill label={t("exposureRadar.leaderboard.status.rising")} value={stats.rising} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
+          <LeaderboardPill label={t("exposureRadar.leaderboard.status.cooling")} value={stats.cooling} tone="border-[#64748b]/30 bg-[#64748b]/10 text-[#94a3b8]" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <RefreshCw className="size-3.5" />
+            {t("exposureRadar.leaderboard.manualRefresh")}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Clock3 className="size-3.5" />
+            {t("exposureRadar.leaderboard.freshness", { value: freshnessLabel })}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <TrendingUp className="size-3.5" />
+            {t("exposureRadar.leaderboard.movers", { count: stats.movers })}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardPill({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}>
+      <span>{label}</span>
+      <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px]">{value}</span>
+    </span>
+  );
+}
+
 function SelectField({ icon, label, value, options, emptyLabel, onChange }: { icon: ReactNode; label: string; value: number; options: Array<{ value: number; label: string }>; emptyLabel: string; onChange: (value: number) => void }) {
   return (
     <label className="block space-y-2">
@@ -503,6 +639,9 @@ function HourlyBriefPanel({
   savingMemoryID,
   memoryDisabled,
   memoryAccountID,
+  draftingID,
+  draftDisabled,
+  onCreateDraft,
   onSaveMemory,
 }: {
   data: ExposureRadarBriefData | null;
@@ -510,10 +649,24 @@ function HourlyBriefPanel({
   savingMemoryID: string | null;
   memoryDisabled: boolean;
   memoryAccountID: number;
+  draftingID: string | null;
+  draftDisabled: boolean;
+  onCreateDraft: (item: ExposureRadarBriefItemApi) => void;
   onSaveMemory: (item: ExposureRadarBriefItemApi) => void;
 }) {
   const { t } = useT();
+  const { pushToast } = useToast();
   const items = data?.items || [];
+  const copyComment = async (text?: string) => {
+    const value = (text || "").trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      pushToast(t("autoComment.manualAction.copied"));
+    } catch {
+      pushToast(t("autoComment.manualAction.copyFailed"));
+    }
+  };
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -530,7 +683,11 @@ function HourlyBriefPanel({
         </div>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {items.length ? items.slice(0, 6).map((item) => (
+        {items.length ? items.slice(0, 6).map((item) => {
+          const hasReviewTask = Boolean(item.review_task_id);
+          const generatedComment = item.generated_comment?.trim() || "";
+          const canDraft = item.data_quality === "tweet_level" && !draftDisabled && !hasReviewTask;
+          return (
           <div key={`${item.rank}:${item.signal_id}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -540,6 +697,11 @@ function HourlyBriefPanel({
                     {t(`exposureRadar.velocityState.${normalizeVelocityState(item.velocity_state)}`)}
                   </span>
                   <span className="rounded-full border border-[#2f3336] px-2 py-1 text-xs font-semibold text-[#8b98a5]">{item.best_use}</span>
+                  {hasReviewTask ? (
+                    <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-1 text-xs font-semibold text-[#8ecdf8]">
+                      {t("exposureRadar.card.reviewStatus", { status: t(`executionQueue.status.${normalizeReviewStatus(item.review_status)}`) })}
+                    </span>
+                  ) : null}
                 </div>
                 <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</h3>
               </div>
@@ -555,7 +717,38 @@ function HourlyBriefPanel({
               <p className="mt-2 text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("exposureRadar.brief.action")}</p>
               <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.suggested_action}</p>
             </div>
+            {generatedComment ? (
+              <div className="mt-3 rounded-xl border border-[#1d9bf0]/35 bg-[#07111a] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-normal text-[#8ecdf8]">{t("exposureRadar.brief.generatedComment")}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea]">{generatedComment}</p>
+                <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.brief.manualPublishHint")}</p>
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              {generatedComment ? (
+                <>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void copyComment(generatedComment)}>
+                    <Clipboard className="size-3.5" />
+                    {t("autoComment.manualAction.copy")}
+                  </Button>
+                  {item.source_url ? (
+                    <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                      <ExternalLink className="size-3.5" />
+                      {t("autoComment.manualAction.open")}
+                    </a>
+                  ) : null}
+                </>
+              ) : hasReviewTask ? (
+                <Link href={item.review_queue_url || `/execution-queue?type=comment&status=pending_review&focus_type=comment&focus_source_id=${item.review_task_id}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                  <MessageSquarePlus className="size-3.5" />
+                  {t("exposureRadar.card.openReview")}
+                </Link>
+              ) : (
+                <Button type="button" size="sm" variant="outline" disabled={!canDraft || draftingID === item.signal_id} title={!canDraft && item.data_quality !== "tweet_level" ? t("exposureRadar.card.topicDraftDisabled") : undefined} onClick={() => onCreateDraft(item)}>
+                  <MessageSquarePlus className="size-3.5" />
+                  {draftingID === item.signal_id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
+                </Button>
+              )}
               {item.saved_memory_id ? (
                 <Link href={memoryLink(item.saved_memory_id, memoryAccountID)} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
                   <Database className="size-3.5" />
@@ -575,7 +768,8 @@ function HourlyBriefPanel({
               ) : null}
             </div>
           </div>
-        )) : (
+          );
+        }) : (
           <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b] lg:col-span-2">{t("exposureRadar.brief.empty")}</p>
         )}
       </div>
@@ -771,6 +965,7 @@ function TopicHistoryPanel({ data, timeZone }: { data: ExposureRadarArchiveData 
 
 function RadarCard({
   item,
+  rank,
   timeZone,
   rankChange,
   savedMemoryID,
@@ -783,6 +978,7 @@ function RadarCard({
   onSaveMemory,
 }: {
   item: ExposureRadarItemApi;
+  rank: number;
   timeZone: string;
   rankChange?: RankChange;
   savedMemoryID: number;
@@ -799,9 +995,18 @@ function RadarCard({
   const hasReviewTask = Boolean(item.review_task_id);
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled && !hasReviewTask;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
+  const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
+    ? "shadow-[0_0_0_1px_rgba(0,186,124,0.24),0_18px_46px_rgba(0,186,124,0.08)]"
+    : rankChange?.kind === "down"
+      ? "shadow-[0_0_0_1px_rgba(244,33,46,0.20)]"
+      : "";
   return (
-    <article className={`rounded-2xl border p-4 ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
+    <article className={`rounded-2xl border p-4 transition-shadow ${highlightClass} ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
       <div className="flex flex-wrap items-center gap-2">
+        <span className={`inline-flex h-7 min-w-8 items-center justify-center rounded-full border px-2 text-xs font-bold ${rankTone}`}>
+          #{rank}
+        </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-xs font-semibold text-[#8ecdf8]">
           <TrendingUp className="size-3.5" />
           {item.signal_label || item.status}
@@ -1030,6 +1235,66 @@ function uniqueList(values: Array<string | undefined>) {
 function clampPriority(score: number) {
   if (!Number.isFinite(score)) return 50;
   return Math.max(50, Math.min(100, Math.round(score)));
+}
+
+function buildLeaderboardStats(items: ExposureRadarItemApi[], rankChanges: Map<string, RankChange>): LeaderboardStats {
+  const stats: LeaderboardStats = { new: 0, burst: 0, rising: 0, steady: 0, cooling: 0, unknown: 0, newCount: 0, movers: 0 };
+  items.forEach((item) => {
+    const state = normalizeVelocityState(item.velocity_state, item.status) as LeaderboardStatus;
+    stats[state] = (stats[state] || 0) + 1;
+  });
+  rankChanges.forEach((change) => {
+    if (change.kind === "new") stats.newCount += 1;
+    if (change.kind === "up" || change.kind === "down") stats.movers += 1;
+  });
+  return stats;
+}
+
+function radarRankStorageKey(region: ExposureRadarRegion, hours: number, maxFans: number, minHotCount: number) {
+  return `${radarRankStorageKeyPrefix}:${region}:${hours}:${maxFans}:${minHotCount}`;
+}
+
+function readStoredRadarRanks(key: string) {
+  const out = new Map<string, number>();
+  if (typeof window === "undefined") return out;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return out;
+    const parsed = JSON.parse(raw) as Array<[string, number]>;
+    parsed.forEach(([id, rank]) => {
+      if (typeof id === "string" && Number.isFinite(rank) && rank > 0) out.set(id, rank);
+    });
+  } catch {
+    return new Map<string, number>();
+  }
+  return out;
+}
+
+function writeStoredRadarRanks(key: string, ranks: Map<string, number>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(Array.from(ranks.entries()).slice(0, 100)));
+  } catch {
+    // Local ranking memory is a UI hint only; ignore storage failures.
+  }
+}
+
+function getPositiveParam(params: URLSearchParams, key: string, fallback: number) {
+  const value = Number(params.get(key));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function getNonNegativeParam(params: URLSearchParams, key: string, fallback: number) {
+  const value = Number(params.get(key));
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function formatFreshness(seconds: number, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "-";
+  if (seconds < 60) return t("exposureRadar.leaderboard.secondsAgo", { count: Math.round(seconds) });
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return t("exposureRadar.leaderboard.minutesAgo", { count: minutes });
+  return t("exposureRadar.leaderboard.hoursAgo", { count: Math.round(minutes / 60) });
 }
 
 function formatArchiveDate(value: string, timeZone: string) {

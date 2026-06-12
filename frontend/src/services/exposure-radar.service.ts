@@ -41,6 +41,7 @@ export type ExposureRadarItemApi = {
   review_task_id?: number;
   review_status?: string;
   review_queue_url?: string;
+  generated_comment?: string;
   saved_memory_id?: number;
   updated_at?: string;
 };
@@ -156,9 +157,14 @@ export type ExposureRadarBriefItemApi = {
   rank: number;
   signal_id: string;
   region: string;
+  data_source?: string;
+  data_quality?: string;
   topic_name?: string;
   title: string;
   summary: string;
+  content?: string;
+  author_handle?: string;
+  author_name?: string;
   why_it_matters: string;
   suggested_action: string;
   best_use: string;
@@ -167,6 +173,10 @@ export type ExposureRadarBriefItemApi = {
   risk_level: string;
   source_url?: string;
   guardrails?: string[];
+  review_task_id?: number;
+  review_status?: string;
+  review_queue_url?: string;
+  generated_comment?: string;
   saved_memory_id?: number;
 };
 

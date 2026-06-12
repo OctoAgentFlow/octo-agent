@@ -93,6 +93,7 @@ func (r *ExposureTweetSignalRepository) UpsertSignal(row *model.ExposureTweetSig
 		"reply_count":      row.ReplyCount,
 		"retweet_count":    row.RetweetCount,
 		"quote_count":      row.QuoteCount,
+		"bookmark_count":   row.BookmarkCount,
 		"impression_count": row.ImpressionCount,
 		"risk_level":       row.RiskLevel,
 		"raw_payload":      row.RawPayload,

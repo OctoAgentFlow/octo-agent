@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Flame, Gauge, Info, MessageSquarePlus, RefreshCw, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -820,6 +820,19 @@ function RadarCard({
         <MiniStat icon={<Users className="size-3.5" />} label={t("exposureRadar.card.followers")} value={item.followers_count ? formatCompact(item.followers_count) : "-"} />
         <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.card.heat")} value={item.heat_count ? formatCompact(item.heat_count) : "-"} />
       </div>
+      {hasEngagementMetrics(item) ? (
+        <div className="mt-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.card.publicMetrics")}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <MetricPill icon={<MessageCircle className="size-3.5" />} label={t("exposureRadar.card.replies")} value={item.reply_count} />
+            <MetricPill icon={<Repeat2 className="size-3.5" />} label={t("exposureRadar.card.reposts")} value={item.retweet_count} />
+            <MetricPill icon={<Heart className="size-3.5" />} label={t("exposureRadar.card.likes")} value={item.like_count} />
+            <MetricPill icon={<Quote className="size-3.5" />} label={t("exposureRadar.card.quotes")} value={item.quote_count} />
+            <MetricPill icon={<Bookmark className="size-3.5" />} label={t("exposureRadar.card.bookmarks")} value={item.bookmark_count} />
+            <MetricPill icon={<Eye className="size-3.5" />} label={t("exposureRadar.card.impressions")} value={item.impression_count} />
+          </div>
+        </div>
+      ) : null}
       {item.velocity_history?.length ? (
         <VelocitySparkline values={item.velocity_history} />
       ) : null}
@@ -893,6 +906,15 @@ function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; valu
   );
 }
 
+function MetricPill({ icon, label, value }: { icon: ReactNode; label: string; value?: number }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+      <p className="flex items-center gap-1 text-[11px] text-[#71767b]">{icon}{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{typeof value === "number" ? formatCompact(value) : "-"}</p>
+    </div>
+  );
+}
+
 function VelocitySparkline({ values }: { values: number[] }) {
   const normalized = values.filter((value) => Number.isFinite(value)).slice(-8);
   if (normalized.length < 2) return null;
@@ -919,6 +941,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     `Signal: ${item.title}`,
     item.author_handle ? `Author: @${item.author_handle}${item.author_name ? ` (${item.author_name})` : ""}` : "",
     item.content ? `Context: ${item.content}` : "",
+    exposureMetricSummary(item),
     item.reason ? `Why it matters: ${item.reason}` : "",
     item.recommended_use ? `Suggested operator action: ${item.recommended_use}` : "",
     item.ranking_reason ? `Ranking note: ${item.ranking_reason}` : "",
@@ -954,6 +977,22 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
     default:
       return true;
   }
+}
+
+function hasEngagementMetrics(item: ExposureRadarItemApi) {
+  return [item.reply_count, item.retweet_count, item.like_count, item.quote_count, item.bookmark_count, item.impression_count].some((value) => typeof value === "number");
+}
+
+function exposureMetricSummary(item: ExposureRadarItemApi) {
+  const values = [
+    typeof item.reply_count === "number" ? `replies=${item.reply_count}` : "",
+    typeof item.retweet_count === "number" ? `reposts=${item.retweet_count}` : "",
+    typeof item.like_count === "number" ? `likes=${item.like_count}` : "",
+    typeof item.quote_count === "number" ? `quotes=${item.quote_count}` : "",
+    typeof item.bookmark_count === "number" ? `bookmarks=${item.bookmark_count}` : "",
+    typeof item.impression_count === "number" ? `impressions=${item.impression_count}` : "",
+  ].filter(Boolean);
+  return values.length ? `Public metrics: ${values.join("; ")}` : "";
 }
 
 function isRadarItemSaved(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {

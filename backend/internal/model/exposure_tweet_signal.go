@@ -25,6 +25,7 @@ type ExposureTweetSignal struct {
 	ReplyCount      int64     `gorm:"comment:回复数" json:"reply_count"`
 	RetweetCount    int64     `gorm:"comment:转发数" json:"retweet_count"`
 	QuoteCount      int64     `gorm:"comment:引用数" json:"quote_count"`
+	BookmarkCount   int64     `gorm:"comment:收藏数，如 API 返回" json:"bookmark_count"`
 	ImpressionCount int64     `gorm:"comment:曝光数，如 API 返回" json:"impression_count"`
 	RiskLevel       string    `gorm:"size:16;index;not null;default:low;comment:风险等级" json:"risk_level"`
 	RawPayload      string    `gorm:"type:text;comment:X 原始 payload" json:"raw_payload,omitempty"`

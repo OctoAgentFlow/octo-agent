@@ -26,6 +26,7 @@ type TweetSearchItem struct {
 	ReplyCount      int64
 	RetweetCount    int64
 	QuoteCount      int64
+	BookmarkCount   int64
 	ImpressionCount int64
 	Raw             string
 }
@@ -137,6 +138,7 @@ func SearchRecentTweetsWithClient(ctx context.Context, client *http.Client, bear
 			ReplyCount:      row.PublicMetrics.ReplyCount,
 			RetweetCount:    row.PublicMetrics.RetweetCount,
 			QuoteCount:      row.PublicMetrics.QuoteCount,
+			BookmarkCount:   row.PublicMetrics.BookmarkCount,
 			ImpressionCount: row.PublicMetrics.ImpressionCount,
 			Raw:             string(rowRaw),
 		})

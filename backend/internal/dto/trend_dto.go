@@ -69,14 +69,23 @@ type ExposureRadarItem struct {
 	Title            string   `json:"title"`
 	AuthorHandle     string   `json:"author_handle,omitempty"`
 	AuthorName       string   `json:"author_name,omitempty"`
+	AuthorID         string   `json:"author_id,omitempty"`
 	Content          string   `json:"content"`
 	URL              string   `json:"url,omitempty"`
+	TweetID          string   `json:"tweet_id,omitempty"`
 	Status           string   `json:"status"`
 	SignalLabel      string   `json:"signal_label"`
 	TopicName        string   `json:"topic_name,omitempty"`
+	PublishedAt      string   `json:"published_at,omitempty"`
 	ViewsPerMin      float64  `json:"views_per_min,omitempty"`
 	HeatCount        int64    `json:"heat_count,omitempty"`
 	FollowersCount   int64    `json:"followers_count,omitempty"`
+	LikeCount        int64    `json:"like_count,omitempty"`
+	ReplyCount       int64    `json:"reply_count,omitempty"`
+	RetweetCount     int64    `json:"retweet_count,omitempty"`
+	QuoteCount       int64    `json:"quote_count,omitempty"`
+	BookmarkCount    int64    `json:"bookmark_count,omitempty"`
+	ImpressionCount  int64    `json:"impression_count,omitempty"`
 	HotCount         int      `json:"hot_count,omitempty"`
 	AgeLabel         string   `json:"age_label,omitempty"`
 	VelocityState    string   `json:"velocity_state,omitempty"`

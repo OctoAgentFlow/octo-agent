@@ -89,6 +89,8 @@ type ExposureRadarItem struct {
 	HotCount         int      `json:"hot_count,omitempty"`
 	AgeLabel         string   `json:"age_label,omitempty"`
 	VelocityState    string   `json:"velocity_state,omitempty"`
+	OpportunityTier  string   `json:"opportunity_tier,omitempty"`
+	TierReason       string   `json:"tier_reason,omitempty"`
 	Cooling          bool     `json:"cooling,omitempty"`
 	VelocityHistory  []int64  `json:"velocity_history,omitempty"`
 	Score            int      `json:"score"`

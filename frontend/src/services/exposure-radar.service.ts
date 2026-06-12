@@ -37,6 +37,8 @@ export type ExposureRadarItemApi = {
   hot_count?: number;
   age_label?: string;
   velocity_state?: "new" | "burst" | "rising" | "steady" | "cooling" | "unknown" | string;
+  opportunity_tier?: "hot_opportunity" | "early_signal" | string;
+  tier_reason?: string;
   cooling?: boolean;
   velocity_history?: number[];
   score: number;

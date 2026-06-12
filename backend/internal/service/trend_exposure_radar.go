@@ -55,6 +55,13 @@ type exposureRadarTopicPerformance struct {
 	Rejected int64
 }
 
+const (
+	exposureHotOpportunityTier = "hot_opportunity"
+	exposureEarlySignalTier    = "early_signal"
+	exposureHotMinViews        = int64(3000)
+	exposureHotMinVelocity     = 30.0
+)
+
 func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto.ExposureRadarQuery, now time.Time) (*dto.ExposureRadarResponse, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -1042,6 +1049,7 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	if containsSensitiveRadarText(row.Content) {
 		risk = "medium"
 	}
+	tier, tierReason := exposureOpportunityTier(row.CurrentStats.ViewCount, row.ViewsPerMin, tl1VelocityState(row.Status))
 	url := ""
 	if row.TweetID != "" {
 		handle := strings.TrimPrefix(strings.TrimSpace(row.AuthorHandle), "@")
@@ -1075,6 +1083,8 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 		HotCount:        row.HotCount,
 		AgeLabel:        row.TweetAge,
 		VelocityState:   tl1VelocityState(row.Status),
+		OpportunityTier: tier,
+		TierReason:      tierReason,
 		Cooling:         strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped"),
 		VelocityHistory: row.History,
 		Score:           score,
@@ -1127,6 +1137,7 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 		status = "observed"
 	}
 	velocityState := exposureVelocityState(row)
+	tier, tierReason := exposureOpportunityTier(row.CurrentCount, row.ViewsPerMinute, velocityState)
 	return dto.ExposureRadarItem{
 		ID:              region + "-tweet-" + row.TweetID,
 		Region:          region,
@@ -1154,6 +1165,8 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 		ImpressionCount: row.ImpressionCount,
 		AgeLabel:        ageLabel(row.PublishedAt, time.Now().UTC()),
 		VelocityState:   velocityState,
+		OpportunityTier: tier,
+		TierReason:      tierReason,
 		Cooling:         velocityState == "cooling",
 		VelocityHistory: exposureVelocityHistory(row),
 		Score:           score,
@@ -1402,6 +1415,16 @@ func englishTweetHeat(tweet twitter.TweetSearchItem) int64 {
 		return tweet.ImpressionCount
 	}
 	return tweet.LikeCount + tweet.ReplyCount*3 + tweet.RetweetCount*4 + tweet.QuoteCount*4
+}
+
+func exposureOpportunityTier(views int64, viewsPerMinute float64, velocityState string) (string, string) {
+	if views >= exposureHotMinViews && (viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst" || velocityState == "rising") {
+		return exposureHotOpportunityTier, fmt.Sprintf("views >= %s and momentum is active", compactCount(views))
+	}
+	if views >= exposureHotMinViews {
+		return exposureEarlySignalTier, fmt.Sprintf("views reached %s, but momentum is not confirmed yet", compactCount(views))
+	}
+	return exposureEarlySignalTier, fmt.Sprintf("below %s views; keep watching before treating it as a hot opportunity", compactCount(exposureHotMinViews))
 }
 
 func (s *TrendService) englishExposureTopicLimit() int {
@@ -1822,4 +1845,14 @@ func radarMaxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func compactCount(value int64) string {
+	if value >= 1000000 {
+		return fmt.Sprintf("%.1fM", float64(value)/1000000)
+	}
+	if value >= 1000 {
+		return fmt.Sprintf("%.1fK", float64(value)/1000)
+	}
+	return strconv.FormatInt(value, 10)
 }

@@ -19,14 +19,14 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "all" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
+type RadarViewFilter = "hot" | "early" | "all" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["all", "tweet", "high_score", "needs_review", "saved", "drafted"];
+const radarViewFilters: RadarViewFilter[] = ["hot", "early", "all", "tweet", "high_score", "needs_review", "saved", "drafted"];
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 
 export default function ExposureRadarPage() {
@@ -47,7 +47,7 @@ export default function ExposureRadarPage() {
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
-  const [radarView, setRadarView] = useState<RadarViewFilter>("all");
+  const [radarView, setRadarView] = useState<RadarViewFilter>("hot");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
@@ -156,7 +156,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs)).length;
       return acc;
-    }, { all: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
+    }, { hot: 0, early: 0, all: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
   }, [items, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs));
@@ -751,6 +751,7 @@ function RadarCard({
   const generatedComment = item.generated_comment?.trim() || "";
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
   const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
     ? "shadow-[0_0_0_1px_rgba(0,186,124,0.24),0_18px_46px_rgba(0,186,124,0.08)]"
@@ -780,6 +781,10 @@ function RadarCard({
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${velocityStateClass(velocityState)}`}>
           <span className="size-1.5 rounded-full bg-current" />
           {t(`exposureRadar.velocityState.${velocityState}`)}
+        </span>
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${opportunityTierClass(opportunityTier)}`} title={item.tier_reason || undefined}>
+          <Flame className="size-3.5" />
+          {t(`exposureRadar.tier.${opportunityTier}`)}
         </span>
         {rankChange ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${rankChange.kind === "up" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : rankChange.kind === "down" ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" : "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]"}`}>
@@ -966,6 +971,10 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
   switch (filter) {
     case "tweet":
       return item.data_quality === "tweet_level";
+    case "hot":
+      return normalizeOpportunityTier(item.opportunity_tier) === "hot_opportunity";
+    case "early":
+      return normalizeOpportunityTier(item.opportunity_tier) === "early_signal";
     case "high_score":
       return item.score >= 75;
     case "needs_review":
@@ -977,6 +986,10 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
     default:
       return true;
   }
+}
+
+function normalizeOpportunityTier(value?: string) {
+  return value === "hot_opportunity" ? "hot_opportunity" : "early_signal";
 }
 
 function hasEngagementMetrics(item: ExposureRadarItemApi) {
@@ -1141,6 +1154,11 @@ function velocityStateClass(state: string) {
   if (state === "rising" || state === "new") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   if (state === "cooling") return "border-[#64748b]/30 bg-[#64748b]/10 text-[#94a3b8]";
   return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
+}
+
+function opportunityTierClass(tier: string) {
+  if (tier === "hot_opportunity") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+  return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
 }
 
 function sourceStatusClass(status: string) {

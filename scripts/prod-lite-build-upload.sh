@@ -50,7 +50,7 @@ chmod +x "$WORK_DIR/backend/bin/api" "$WORK_DIR/backend/bin/admin" "$WORK_DIR/sc
 echo "$COMMIT" >"$WORK_DIR/REVISION"
 
 echo "[pack] $TARBALL"
-COPYFILE_DISABLE=1 tar -C "$WORK_DIR/.." -czf "$TARBALL" "$VERSION"
+COPYFILE_DISABLE=1 tar --format ustar -C "$WORK_DIR/.." -czf "$TARBALL" "$VERSION"
 
 echo "[upload] $HOST:$BASE_DIR/uploads/"
 ssh "$USER_NAME@$HOST" "mkdir -p '$BASE_DIR/uploads' '$BASE_DIR/releases'"

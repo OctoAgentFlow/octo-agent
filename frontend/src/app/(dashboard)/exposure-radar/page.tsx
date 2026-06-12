@@ -207,7 +207,7 @@ export default function ExposureRadarPage() {
           generated_comment: task.generated_comment,
         } : row),
       } : current);
-      pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
+      pushToast(t("exposureRadar.brief.toast.commentGenerated"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.draftFailed") : t("exposureRadar.toast.draftFailed"));
     } finally {
@@ -684,9 +684,8 @@ function HourlyBriefPanel({
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {items.length ? items.slice(0, 6).map((item) => {
-          const hasReviewTask = Boolean(item.review_task_id);
           const generatedComment = item.generated_comment?.trim() || "";
-          const canDraft = item.data_quality === "tweet_level" && !draftDisabled && !hasReviewTask;
+          const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
           return (
           <div key={`${item.rank}:${item.signal_id}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
             <div className="flex items-start justify-between gap-3">
@@ -696,12 +695,7 @@ function HourlyBriefPanel({
                   <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${velocityStateClass(normalizeVelocityState(item.velocity_state))}`}>
                     {t(`exposureRadar.velocityState.${normalizeVelocityState(item.velocity_state)}`)}
                   </span>
-                  <span className="rounded-full border border-[#2f3336] px-2 py-1 text-xs font-semibold text-[#8b98a5]">{item.best_use}</span>
-                  {hasReviewTask ? (
-                    <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-1 text-xs font-semibold text-[#8ecdf8]">
-                      {t("exposureRadar.card.reviewStatus", { status: t(`executionQueue.status.${normalizeReviewStatus(item.review_status)}`) })}
-                    </span>
-                  ) : null}
+                  <span className="rounded-full border border-[#2f3336] px-2 py-1 text-xs font-semibold text-[#8b98a5]">{briefBestUseLabel(item.best_use, t)}</span>
                 </div>
                 <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{item.title}</h3>
               </div>
@@ -738,15 +732,10 @@ function HourlyBriefPanel({
                     </a>
                   ) : null}
                 </>
-              ) : hasReviewTask ? (
-                <Link href={item.review_queue_url || `/execution-queue?type=comment&status=pending_review&focus_type=comment&focus_source_id=${item.review_task_id}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                  <MessageSquarePlus className="size-3.5" />
-                  {t("exposureRadar.card.openReview")}
-                </Link>
               ) : (
                 <Button type="button" size="sm" variant="outline" disabled={!canDraft || draftingID === item.signal_id} title={!canDraft && item.data_quality !== "tweet_level" ? t("exposureRadar.card.topicDraftDisabled") : undefined} onClick={() => onCreateDraft(item)}>
                   <MessageSquarePlus className="size-3.5" />
-                  {draftingID === item.signal_id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
+                  {draftingID === item.signal_id ? t("exposureRadar.brief.generatingComment") : t("exposureRadar.brief.generateComment")}
                 </Button>
               )}
               {item.saved_memory_id ? (
@@ -775,6 +764,18 @@ function HourlyBriefPanel({
       </div>
     </Card>
   );
+}
+
+function briefBestUseLabel(value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
+  switch (value) {
+    case "comment_review":
+    case "operator_review":
+      return t("exposureRadar.brief.bestUse.manualComment");
+    case "topic_research":
+      return t("exposureRadar.brief.bestUse.topicResearch");
+    default:
+      return value || t("exposureRadar.brief.bestUse.manualComment");
+  }
 }
 
 function PerformancePanel({ data, timeZone }: { data: ExposureRadarPerformanceData | null; timeZone: string }) {

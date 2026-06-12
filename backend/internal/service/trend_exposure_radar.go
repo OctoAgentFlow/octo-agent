@@ -1307,15 +1307,15 @@ func exposureBriefWhyItMatters(item dto.ExposureRadarItem, velocity string) stri
 
 func exposureBriefSuggestedAction(item dto.ExposureRadarItem, velocity string) string {
 	if item.DataQuality != "tweet_level" {
-		return "Use this as a topic lead, then inspect live posts before generating a reply draft."
+		return "Use this as a topic lead, then inspect live posts before writing a manual comment."
 	}
 	if velocity == "cooling" {
-		return "Open the thread first; only route a draft if the conversation is still active and persona-fit is clear."
+		return "Open the thread first; only write a comment if the conversation is still active and persona-fit is clear."
 	}
 	if item.RiskLevel == "medium" || item.RiskLevel == "high" {
-		return "Use review-first mode and keep the reply conservative; avoid claims the Bot cannot support."
+		return "Keep the manual comment conservative; avoid claims the Bot cannot support."
 	}
-	return "Inspect the live thread, then generate a contextual reply draft into the review queue."
+	return "Generate a contextual comment, copy it, then open the original post and publish manually on X."
 }
 
 func exposureBriefBestUse(item dto.ExposureRadarItem) string {
@@ -1348,7 +1348,7 @@ func exposureRadarBriefSummary(region string, items []dto.ExposureRadarBriefItem
 	if normalizeExposureRegion(region) == "zh" {
 		label = "Chinese"
 	}
-	return fmt.Sprintf("%s radar found %d reviewable opportunities in this window: %d still rising and %d cooling.", label, len(items), burst, cooling)
+	return fmt.Sprintf("%s radar found %d comment opportunities in this window: %d still rising and %d cooling.", label, len(items), burst, cooling)
 }
 
 func tl1VelocityState(status string) string {

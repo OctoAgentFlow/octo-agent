@@ -762,9 +762,9 @@ function RadarCard({
     if (!generatedComment) return;
     try {
       await navigator.clipboard.writeText(generatedComment);
-      pushToast(t("autoComment.manualAction.copied"));
+      pushToast(t("exposureRadar.manualAction.copied"));
     } catch {
-      pushToast(t("autoComment.manualAction.copyFailed"));
+      pushToast(t("exposureRadar.manualAction.copyFailed"));
     }
   };
 
@@ -864,7 +864,7 @@ function RadarCard({
             <>
               <Button type="button" size="sm" variant="outline" onClick={() => void copyComment()}>
                 <Clipboard className="size-3.5" />
-                {t("autoComment.manualAction.copy")}
+                {t("exposureRadar.manualAction.copy")}
               </Button>
               {item.url ? (
                 <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">

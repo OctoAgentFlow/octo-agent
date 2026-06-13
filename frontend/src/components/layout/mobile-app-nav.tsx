@@ -16,7 +16,6 @@ import {
   Sparkles,
   UserCircle,
   Users,
-  Workflow,
 } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
@@ -28,9 +27,7 @@ const navItems = [
   { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.exposureRadar", href: "/exposure-radar", icon: Radar },
   { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
-  { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
   { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
-  { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },

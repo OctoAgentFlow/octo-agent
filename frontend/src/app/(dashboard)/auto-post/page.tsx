@@ -984,7 +984,7 @@ export default function AutoPostPage() {
   const deleteLibraryItem = async (item: ContentLibraryItemApi) => {
     const confirmed = await confirm({
       description: t("autoPost.contentLibrary.confirmDelete"),
-      confirmLabel: t("autoComment.review.delete"),
+      confirmLabel: t("executionQueue.actions.delete"),
       tone: "destructive",
     });
     if (!confirmed) return;

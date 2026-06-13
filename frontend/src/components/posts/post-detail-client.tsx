@@ -131,7 +131,7 @@ export function PostDetailClient({ postId }: { postId: number }) {
     if (!post) return;
     const confirmed = await confirm({
       description: t("posts.detail.deleteConfirm"),
-      confirmLabel: t("autoComment.review.delete"),
+      confirmLabel: t("posts.actions.delete"),
       tone: "destructive",
     });
     if (!confirmed) return;

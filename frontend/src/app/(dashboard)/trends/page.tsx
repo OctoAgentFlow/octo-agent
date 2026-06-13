@@ -321,7 +321,7 @@ function trendCategoryLabel(category: string, t: (key: string) => string) {
 
 function riskLabel(risk: string, t: (key: string) => string) {
   const normalized = risk === "high" || risk === "medium" || risk === "low" ? risk : "low";
-  return t(`opportunities.risk.${normalized}`);
+  return t(`trends.risk.${normalized}`);
 }
 
 function riskTone(risk: string) {

@@ -18,6 +18,7 @@ import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { automationService } from "@/services/automation.service";
 import { activityService, type ActivityItemApi } from "@/services/activity.service";
 import { autoPostService, type AutoPostDraftApi, type AutoPostRewriteMode, type TrendFeedbackRating, type TrendTopicApi } from "@/services/auto-post.service";
+import { exposureRadarService } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
 import {
@@ -809,7 +810,7 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       if (item.type === "comment") {
-        const updated = await automationService.updateCommentDraft(item.source_id, editingContent.trim());
+        const updated = await exposureRadarService.updateDraft(item.source_id, editingContent.trim());
         updateLocalItem(item, {
           content: updated.generated_comment || editingContent.trim(),
           status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
@@ -840,7 +841,7 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
-        ? await automationService.approveCommentTask(item.source_id)
+        ? await exposureRadarService.approveDraft(item.source_id)
         : item.type === "reply"
           ? await automationService.approveReplyDraft(item.source_id)
           : await autoPostService.approveDraft(item.source_id);
@@ -864,8 +865,7 @@ export default function ExecutionQueuePage() {
     const issueTags = [draft.reason];
     const sampleContext = [item.target_summary, item.content_title, item.content_direction].filter(Boolean).join("\n");
     if (item.type === "comment") {
-      if (item.source_type === "exposure_radar") return true;
-      return automationService.createCommentFeedback(item.source_id, {
+      return exposureRadarService.createDraftFeedback(item.source_id, {
         rating: "negative",
         issue_tags: issueTags,
         comment: reasonText,
@@ -892,7 +892,7 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
-        ? await automationService.rejectCommentDraft(item.source_id, reasonText || t("executionQueue.rejectReason"))
+        ? await exposureRadarService.rejectDraft(item.source_id, reasonText || t("executionQueue.rejectReason"))
         : item.type === "reply"
           ? await automationService.rejectReplyDraft(item.source_id, reasonText || t("executionQueue.rejectReason"))
           : await autoPostService.rejectDraft(item.source_id, reasonText || t("executionQueue.rejectReason"));
@@ -1009,7 +1009,7 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       if (item.type === "comment") {
-        const updated = await automationService.rewriteCommentDraft(item.source_id, {
+        const updated = await exposureRadarService.rewriteDraft(item.source_id, {
           rewrite_mode: rewriteMode,
           feedback,
           disabled_learning_issues: disabledLearningIssues,
@@ -2081,7 +2081,7 @@ function PublishReadinessCard({
       ? "/execution-queue?status=ready_to_publish"
       : missingScope > 0
         ? "/accounts?filter=needs_reauth"
-        : "/opportunities";
+        : "/exposure-radar";
   return (
     <Card className="border-[#00ba7c]/20 bg-[#04130f] p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2423,7 +2423,7 @@ function QueueFocusCard({
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/opportunities" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          <Link href="/exposure-radar" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
             <ArrowRight className="size-4 rotate-180" />
             {t("executionQueue.focus.backToOpportunities")}
           </Link>

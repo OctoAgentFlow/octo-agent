@@ -36,9 +36,9 @@ const automationIcon = {
 
 const automationWorkbenchHref = {
   post: "/auto-post",
-  reply: "/auto-replies",
-  comment: "/auto-comments",
-  dm: "/auto-dms",
+  reply: "/review-queue",
+  comment: "/exposure-radar",
+  dm: "/review-queue",
 } satisfies Record<AnalyticsAutomationType, string>;
 
 const moduleHealthOrder: AnalyticsAutomationType[] = ["post", "reply", "comment", "dm"];
@@ -556,7 +556,7 @@ export default function AnalyticsPage() {
           right={
             <Link
               className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-              href="/auto-dms"
+              href="/review-queue"
             >
               {t("analytics.autoDMOps.manage")}
             </Link>

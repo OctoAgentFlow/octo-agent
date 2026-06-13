@@ -22,6 +22,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Crown,
+  ListChecks,
   type LucideIcon,
   Sparkles,
   Users,
@@ -312,14 +313,20 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
   if (!subscription) return null;
 
   const monthlyItems: Array<[string, number, number, LucideIcon]> = [
+    ["billing.usage.items.aiGenerations", subscription.usage.aiGenerationsMonth, subscription.limits.aiGenerationsMonthly, Sparkles],
     ["billing.usage.items.autoPosts", subscription.usage.autoPostsMonth, subscription.limits.monthlyAutoPosts, Zap],
     ["billing.usage.items.autoReplies", subscription.usage.autoRepliesMonth, subscription.limits.monthlyAutoReplies, Zap],
     ["billing.usage.items.autoComments", subscription.usage.autoCommentsMonth, subscription.limits.monthlyAutoComments, Zap],
-    ["billing.usage.items.autoDMs", subscription.usage.autoDMsMonth, subscription.limits.monthlyAutoDMs, Zap],
+    ["billing.usage.items.reviewCapacity", subscription.usage.autoDMsMonth, subscription.limits.monthlyAutoDMs, ListChecks],
   ];
   const capabilityItems: Array<[string, string, LucideIcon]> = [
     ["billing.usage.capabilities.analytics", t("billing.usage.capabilities.analyticsValue", { days: subscription.limits.analyticsDays }), CalendarClock],
     ["billing.usage.capabilities.teamSeats", t("billing.usage.capabilities.teamSeatsValue", { count: subscription.limits.teamSeats }), Users],
+    [
+      "billing.usage.capabilities.contentMemory",
+      t(subscription.limits.autoDMImport ? "billing.usage.capabilities.available" : "billing.usage.capabilities.locked"),
+      Sparkles,
+    ],
     [
       "billing.usage.capabilities.advanced",
       t(subscription.limits.advancedBotStrategy ? "billing.usage.capabilities.available" : "billing.usage.capabilities.locked"),
@@ -340,7 +347,7 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {monthlyItems.map(([labelKey, used, limit, Icon]) => {
             const pct = usagePercent(used, limit);
             const isHot = pct >= 80;

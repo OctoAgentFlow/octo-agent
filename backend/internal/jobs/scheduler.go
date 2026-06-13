@@ -18,8 +18,6 @@ func Start(
 	postService *service.PostService,
 	postRepo *repository.PostRepository,
 	autoReply *service.AutoReplyService,
-	autoDM *service.AutoDMService,
-	autoComment *service.AutoCommentService,
 	autoPost *service.AutoPostService,
 	trends *service.TrendService,
 	publishing *service.PublishingService,
@@ -109,8 +107,6 @@ func Start(
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunAutoReplyOnce(context.Background(), autoReply)
-		RunAutoDMOnce(context.Background(), autoDM)
-		RunAutoCommentOnce(context.Background(), autoComment)
 		RunAutoPostOnce(context.Background(), autoPost)
 		runTrends()
 		RunPublishingOnce(context.Background(), publishing)
@@ -121,8 +117,6 @@ func Start(
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
 			RunAutoReplyOnce(context.Background(), autoReply)
-			RunAutoDMOnce(context.Background(), autoDM)
-			RunAutoCommentOnce(context.Background(), autoComment)
 			RunAutoPostOnce(context.Background(), autoPost)
 			runTrends()
 			RunPublishingOnce(context.Background(), publishing)

@@ -7,9 +7,6 @@ import {
   AlertTriangle,
   FileText,
   ListChecks,
-  Mail,
-  MessageCircle,
-  MessagesSquare,
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
@@ -43,7 +40,7 @@ type RelativeTimeLabel = {
   params?: Record<string, string | number>;
 };
 
-const moduleOrder: AutomationModuleType[] = ["post", "reply", "comment", "dm"];
+const moduleOrder: AutomationModuleType[] = ["post"];
 
 function mapTimeToKey(iso?: string, timeZone?: string): RelativeTimeLabel {
   if (!iso) return { key: "automation.time.paused" };
@@ -151,7 +148,7 @@ export default function AutomationsPage() {
           automationService.runtimeStatus(),
           accountService.list(),
         ]);
-        setModules(sortModules(automationData.modules.map((item) => mapModule(item, timeZone))));
+        setModules(sortModules(automationData.modules.filter((item) => item.type === "post").map((item) => mapModule(item, timeZone))));
         setRuntimeStatus(mapRuntime(runtimeData, timeZone));
         setAccounts(accountData.items);
         setLoadState("ready");
@@ -391,9 +388,6 @@ function AutomationTabs() {
   const tabs = [
     { href: "/automations", label: t("automation.tabs.overview"), icon: ListChecks, active: true },
     { href: "/auto-post", label: t("automation.tabs.autoPost"), icon: FileText },
-    { href: "/auto-replies", label: t("automation.tabs.autoReply"), icon: MessageCircle },
-    { href: "/auto-comments", label: t("automation.tabs.autoComment"), icon: MessagesSquare },
-    { href: "/auto-dms", label: t("automation.tabs.autoDm"), icon: Mail },
     { href: "/execution-queue", label: t("automation.tabs.executionQueue"), icon: ShieldCheck },
   ];
   return (

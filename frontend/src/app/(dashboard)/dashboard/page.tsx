@@ -160,7 +160,6 @@ function automationMonthlyUsage(data: OAFBotDashboardData | null): Partial<Recor
     post: { used: data.usage.autoPostsMonth, limit: data.limits.monthlyAutoPosts },
     reply: { used: data.usage.autoRepliesMonth, limit: data.limits.monthlyAutoReplies },
     comment: { used: data.usage.autoCommentsMonth, limit: data.limits.monthlyAutoComments },
-    dm: { used: data.usage.autoDMsMonth, limit: data.limits.monthlyAutoDMs },
   };
 }
 
@@ -171,7 +170,6 @@ function quotaExhausted(data: OAFBotDashboardData | null) {
     [data.usage.autoPostsMonth, data.limits.monthlyAutoPosts],
     [data.usage.autoRepliesMonth, data.limits.monthlyAutoReplies],
     [data.usage.autoCommentsMonth, data.limits.monthlyAutoComments],
-    [data.usage.autoDMsMonth, data.limits.monthlyAutoDMs],
   ];
   return pairs.some(([used, limit]) => limit > 0 && used >= limit);
 }
@@ -857,7 +855,7 @@ function TodayOpsWorkbench({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/opportunities" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+          <Link href="/exposure-radar" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
             <MessageCircle className="size-4" />
             {t("dashboard.todayOps.openOpportunities")}
           </Link>
@@ -1119,7 +1117,7 @@ function PublishReviewCard({
     published > 0
       ? {
           key: "growFromPublished",
-          href: "/opportunities?urgency=high_score",
+          href: "/exposure-radar",
           icon: Sparkles,
           count: published,
           tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
@@ -1184,7 +1182,7 @@ function PublishReviewCard({
               <p className="text-sm font-semibold text-[#e7e9ea]">{t("dashboard.publishReview.next.title")}</p>
               <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("dashboard.publishReview.next.description")}</p>
             </div>
-            <Link href="/opportunities" className="inline-flex h-8 w-fit items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#16181c]">
+            <Link href="/exposure-radar" className="inline-flex h-8 w-fit items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#16181c]">
               {t("dashboard.publishReview.next.openGrowth")}
               <ChevronRight className="size-4" />
             </Link>

@@ -1,5 +1,4 @@
 import { request } from "@/lib/request";
-import type { AutoCommentTaskApi } from "@/services/automation.service";
 
 type ApiResponse<T> = {
   code: number;
@@ -107,6 +106,37 @@ export type ExposureRadarDraftPayload = {
   opportunity_type: string;
   recommended_use: string;
   reason: string;
+};
+
+export type ExposureRadarDraftApi = {
+  id: number;
+  generated_comment?: string;
+  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "sending" | "blocked" | "failed" | "sent" | "handled" | "skipped" | string;
+  risk_level: "low" | "medium" | "high" | string;
+  capability_status?: string;
+  failure_category?: string;
+  failure_reason?: string;
+  feedback_signal_count?: number;
+  feedback_signal_summary?: {
+    count: number;
+    scenes: string[];
+    issue_tags: string[];
+    latest_comment?: string;
+    applied_learning_rules?: Array<{
+      issue: string;
+      confidence: number;
+      accurate_judgments: number;
+      instruction: string;
+      evidence?: string[];
+      preference_status?: string;
+    }>;
+  };
+};
+
+export type ExposureRadarDraftFeedbackPayload = {
+  rating: "positive" | "negative";
+  issue_tags: string[];
+  comment?: string;
 };
 
 export type ExposureRadarPerformanceData = {
@@ -229,7 +259,29 @@ export const exposureRadarService = {
     return res.data.data;
   },
   async createCommentDraft(payload: ExposureRadarDraftPayload) {
-    const res = await request.post<ApiResponse<AutoCommentTaskApi>>("/auto-comments/exposure-radar-drafts", payload);
+    const res = await request.post<ApiResponse<ExposureRadarDraftApi>>("/exposure-radar/drafts", payload);
+    return res.data.data;
+  },
+  async updateDraft(id: number, generatedComment: string) {
+    const res = await request.patch<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}`, {
+      generated_comment: generatedComment,
+    });
+    return res.data.data;
+  },
+  async rewriteDraft(id: number, payload: { rewrite_mode: string; feedback?: string; disabled_learning_issues?: string[] }) {
+    const res = await request.post<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}/rewrite`, payload);
+    return res.data.data;
+  },
+  async approveDraft(id: number) {
+    const res = await request.post<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}/approve`);
+    return res.data.data;
+  },
+  async rejectDraft(id: number, reason: string) {
+    const res = await request.post<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}/reject`, { reason });
+    return res.data.data;
+  },
+  async createDraftFeedback(id: number, payload: ExposureRadarDraftFeedbackPayload) {
+    const res = await request.post<ApiResponse<unknown>>(`/exposure-radar/drafts/${id}/feedback`, payload);
     return res.data.data;
   },
   async performance(params: { region?: ExposureRadarRegion | "all"; botId?: number; xAccountId?: number; days?: number }) {

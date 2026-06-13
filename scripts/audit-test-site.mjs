@@ -7,16 +7,11 @@ import { join, resolve } from "node:path";
 
 const defaultRoutes = [
   ["/dashboard", "Dashboard"],
-  ["/opportunities", "Opportunities"],
-  ["/opportunities?urgency=high_score", "Opportunities high score"],
-  ["/opportunities?urgency=risky", "Opportunities risky"],
+  ["/exposure-radar", "Exposure Radar"],
   ["/execution-queue", "Execution Queue"],
   ["/execution-queue?publish_outcome=dry_run", "Execution Queue Dry Run"],
   ["/oaf-bots", "OAF Bots"],
   ["/auto-post", "Auto Post"],
-  ["/auto-comments", "Auto Comments"],
-  ["/auto-replies", "Auto Replies"],
-  ["/auto-dms", "Auto DMs"],
   ["/activity", "Activity"],
   ["/accounts", "Accounts"],
   ["/automations", "Automations"],
@@ -31,13 +26,10 @@ const defaultRoutes = [
 
 const expectedControlsByPath = {
   "/dashboard": ["Refresh", "Log out"],
-  "/opportunities": ["Manage targets", "Open queue"],
+  "/exposure-radar": ["Refresh"],
   "/execution-queue": ["Select eligible visible items", "Approve", "Retry", "Reject"],
   "/oaf-bots": ["New OAF Bot"],
   "/auto-post": ["Generate"],
-  "/auto-comments": ["Generate"],
-  "/auto-replies": ["Generate"],
-  "/auto-dms": ["Import", "Generate"],
   "/activity": ["Refresh"],
   "/accounts": ["Connect"],
   "/automations": ["View Logs"],
@@ -424,7 +416,7 @@ async function readPageSnapshot(session) {
     expression: `(() => {
       const text = document.body?.innerText || "";
       const missing = Array.from(new Set((text.match(/[a-zA-Z0-9_.-]+\\.[a-zA-Z0-9_.-]+\\.[a-zA-Z0-9_.-]+/g) || [])
-        .filter((key) => /^(dashboard|opportunities|executionQueue|oafBots|autoPost|autoComment|autoReply|autoDm|accounts|automation|billing|settings|posts|points|analytics|agents|admin)\\./.test(key)))).slice(0, 30);
+        .filter((key) => /^(dashboard|exposureRadar|executionQueue|oafBots|autoPost|accounts|automation|billing|settings|posts|points|analytics|agents|admin)\\./.test(key)))).slice(0, 30);
       const visibleErrors = text.split("\\n").filter((line) => /failed|error|失败|錯誤|报错|Cannot|undefined/i.test(line)).slice(0, 20);
       const buttons = Array.from(document.querySelectorAll("button,a,[role=button],select,input,textarea")).map((el) => {
         el.scrollIntoView({ block: "center", inline: "center" });

@@ -188,7 +188,7 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
       limit: subscription?.limits.monthly_auto_comments ?? 0,
     },
     {
-      label: t("dashboard.subscription.autoDMs"),
+      label: t("dashboard.subscription.reviewCapacity"),
       used: subscription?.usage.auto_dms_month ?? 0,
       limit: subscription?.limits.monthly_auto_dms ?? 0,
     },

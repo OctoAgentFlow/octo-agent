@@ -18,7 +18,6 @@ import {
   ShieldCheck,
   UserCircle,
   Users,
-  Workflow,
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
@@ -42,9 +41,7 @@ const navGroups = [
   {
     labelKey: "sidebar.group.operations",
     items: [
-      { labelKey: "sidebar.nav.automations", href: "/automations", icon: Workflow },
       { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
-      { labelKey: "sidebar.nav.opportunities", href: "/opportunities", icon: Radar },
       { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
     ],
   },

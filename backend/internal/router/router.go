@@ -144,7 +144,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterPost(v1, p)
 	RegisterAgent(v1, ag)
 	RegisterAdmin(v1, admin)
-	jobs.Start(authService, postService, postRepo, autoReplyService, autoDMService, autoCommentService, autoPostService, trendService, publishingService, billingService, pointRepo)
+	jobs.Start(authService, postService, postRepo, autoReplyService, autoPostService, trendService, publishingService, billingService, pointRepo)
 
 	return r
 }

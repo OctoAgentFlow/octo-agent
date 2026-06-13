@@ -245,6 +245,19 @@ type AutoPostGenerationRunsResponse struct {
 	Pagination ActivityPagination          `json:"pagination"`
 }
 
+type ContentDraftPlanRequest = AutoPostPlanRequest
+type ContentDraftGenerateRequest = AutoPostGenerateRequest
+type ContentDraftUpdateRequest = AutoPostDraftUpdateRequest
+type ContentDraftRewriteRequest = AutoPostDraftRewriteRequest
+type ContentDraftRejectRequest = AutoPostDraftRejectRequest
+type ContentDraftPlanItem = AutoPostPlanItem
+type ContentDraftItem = AutoPostDraftItem
+type ContentDraftPlansResponse = AutoPostPlansResponse
+type ContentDraftsResponse = AutoPostDraftsResponse
+type ContentDraftGenerationRunItem = AutoPostGenerationRunItem
+type ContentDraftGenerationRunQuery = AutoPostGenerationRunQuery
+type ContentDraftGenerationRunsResponse = AutoPostGenerationRunsResponse
+
 type AutoDMTaskItem struct {
 	ID                  uint                       `json:"id"`
 	XAccountID          uint                       `json:"x_account_id,omitempty"`

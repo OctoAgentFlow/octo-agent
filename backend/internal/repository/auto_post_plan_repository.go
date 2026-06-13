@@ -12,8 +12,14 @@ type AutoPostPlanRepository struct {
 	DB *gorm.DB
 }
 
+type ContentDraftPlanRepository = AutoPostPlanRepository
+
 func NewAutoPostPlanRepository(db *gorm.DB) *AutoPostPlanRepository {
 	return &AutoPostPlanRepository{DB: db}
+}
+
+func NewContentDraftPlanRepository(db *gorm.DB) *ContentDraftPlanRepository {
+	return NewAutoPostPlanRepository(db)
 }
 
 func (r *AutoPostPlanRepository) ListByUser(userID uint) ([]model.AutoPostPlan, error) {

@@ -26,7 +26,7 @@
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
 | P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
-| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases and billing semantic aliases done |
+| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases, billing semantic aliases, P3.3-a inventory, and P3.3-b DTO/repository aliases done |
 
 ## Compatibility Notes
 
@@ -83,3 +83,40 @@
 - Kept legacy billing JSON fields such as `monthly_auto_posts`, `monthly_auto_comments`, and `auto_posts_month` in the response for older clients and rollback safety.
 - Updated frontend billing, dashboard, OAF Bot quota, and plan-benefit displays to prefer the new content/opportunity/review semantic fields with old-field fallback.
 - Did not rename database columns, subscription package fields, repositories, quota storage, historical activity keys, or scheduler internals in this batch.
+
+## P3.3-a Backend Naming Risk Inventory
+
+This batch is intentionally documentation and test hardening only. It does not rename backend models, database tables, repositories, quota storage, historical activity keys, or AI usage scene keys.
+
+| Area | Current Legacy Surface | Risk | Decision Before P3.3-b |
+| --- | --- | --- | --- |
+| Public API routes | `/api/v1/auto-post/*` plus `/api/v1/content-drafts/*` aliases | Low | Keep both routes. New clients use `/content-drafts/*`; legacy route stays until production access logs are clean. |
+| Controller/service runtime | `ContentDraftController` / `ContentDraftService` aliases over legacy `AutoPost*` implementation | Low | Keep current aliases. Further renames should be internal-only and covered by existing route tests. |
+| Scheduler entrypoint | Active scheduler calls `RunContentDraftOnce`; `RunAutoPostOnce` remains a wrapper | Low | No behavior change needed. Do not remove wrapper until no old tests/jobs/imports reference it. |
+| DTO type names | `AutoPostPlanRequest`, `AutoPostDraftItem`, `AutoPostGenerationRunItem` | Medium | Add `ContentDraft*` aliases before renaming call sites. Keep JSON payload fields unchanged in the first pass. |
+| Repository names | `AutoPostPlanRepository`, `AutoPostDraftRepository`, `AutoPostGenerationRunRepository` | Medium | Introduce repository type aliases or wrapper constructors first; do not change query behavior or model targets. |
+| Models and tables | `AutoPostPlan`, `AutoPostDraft`, `AutoPostGenerationRun`; GORM tables `auto_post_plans`, `auto_post_drafts`, `auto_post_generation_runs` | High | Do not rename tables in P3.3. If Go model names change later, add explicit `TableName()` methods to keep the existing tables. |
+| Subscription quota internals | `MonthlyAutoPosts`, `MonthlyAutoComments`, `MonthlyAutoDMs`, related daily fields | High | Keep internal fields until all usage paths read semantic aliases. Billing API already emits new and old fields. |
+| AI usage scenes | `AIGenerationSceneAutoPost = "auto_post"` and sibling legacy scene strings | High | Keep historical scene strings. Add display aliases if user-facing labels need new wording. |
+| Activity preview keys | `activity.preview.autoPost*` stored in `activity_logs.preview_key` | High | Keep keys stable for historical logs. Add dictionary aliases/display mapping before any new key emission. |
+| Admin metrics DTO | `auto_post_enabled_plans`, `auto_post_due_now`, `auto_post_failed_24h` | Medium | Add admin semantic aliases before changing field names; admin API consumers may still read old keys. |
+| Local helper names | `autoPostDraftMaxFor`, `autoPostContentHash`, `autoPostRunTimeRange`, `autoPostLocation` | Low | These can be renamed gradually with wrapper helpers because they are not persisted or public. |
+| Cross-feature dependencies | Daily X Queue, Review Queue, Publishing, Trend preference, Dashboard all read `AutoPostDraft` or `AutoPostPlan` | High | Rename only after repository/model compatibility tests are in place and each consumer has a small targeted diff. |
+
+### P3.3-a Compatibility Tests Added
+
+- `backend/internal/dto/billing_dto_test.go` checks that billing usage aliases and subscription JSON keep both semantic and legacy quota fields.
+- `backend/internal/model/auto_post_compat_test.go` checks that the three legacy `auto_post_*` GORM table names remain stable during backend renaming.
+
+## P3.3-b DTO And Repository Alias Layer
+
+- Added `ContentDraft*` DTO type aliases over the existing `AutoPost*` DTO types, including plan requests, draft items, run items, list queries, and response wrappers.
+- Added repository aliases and constructors:
+  - `ContentDraftPlanRepository` / `NewContentDraftPlanRepository`
+  - `ContentDraftRepository` / `NewContentDraftRepository`
+  - `ContentDraftGenerationRunRepository` / `NewContentDraftGenerationRunRepository`
+  - `ContentDraftGenerationRunListQuery`
+- Kept all JSON payload fields unchanged, including `generated_content`, `daily_limit`, and the existing response shapes.
+- Kept all GORM models and tables unchanged; new repository names still target the legacy `auto_post_*` tables through the same implementation.
+- Kept historical activity preview keys and AI usage scene strings unchanged.
+- Added alias tests so future migrations can safely move call sites to the new names without accidentally changing public contracts.

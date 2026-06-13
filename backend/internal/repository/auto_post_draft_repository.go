@@ -12,8 +12,14 @@ type AutoPostDraftRepository struct {
 	DB *gorm.DB
 }
 
+type ContentDraftRepository = AutoPostDraftRepository
+
 func NewAutoPostDraftRepository(db *gorm.DB) *AutoPostDraftRepository {
 	return &AutoPostDraftRepository{DB: db}
+}
+
+func NewContentDraftRepository(db *gorm.DB) *ContentDraftRepository {
+	return NewAutoPostDraftRepository(db)
 }
 
 func (r *AutoPostDraftRepository) ListByUser(userID uint, limit int) ([]model.AutoPostDraft, error) {

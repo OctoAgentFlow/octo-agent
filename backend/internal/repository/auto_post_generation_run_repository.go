@@ -12,6 +12,8 @@ type AutoPostGenerationRunRepository struct {
 	DB *gorm.DB
 }
 
+type ContentDraftGenerationRunRepository = AutoPostGenerationRunRepository
+
 type AutoPostGenerationRunListQuery struct {
 	UserID      uint
 	Status      string
@@ -22,8 +24,14 @@ type AutoPostGenerationRunListQuery struct {
 	PageSize    int
 }
 
+type ContentDraftGenerationRunListQuery = AutoPostGenerationRunListQuery
+
 func NewAutoPostGenerationRunRepository(db *gorm.DB) *AutoPostGenerationRunRepository {
 	return &AutoPostGenerationRunRepository{DB: db}
+}
+
+func NewContentDraftGenerationRunRepository(db *gorm.DB) *ContentDraftGenerationRunRepository {
+	return NewAutoPostGenerationRunRepository(db)
 }
 
 func (r *AutoPostGenerationRunRepository) Create(run *model.AutoPostGenerationRun) error {

@@ -1679,7 +1679,11 @@ export default function OAFBotsPage() {
           <QuotaCard label={t("oafBots.quota.oafBots")} used={usage.oafBots} limit={limits.maxBots} />
           <QuotaCard label={t("oafBots.quota.xAccounts")} used={usage.twitterAccounts} limit={limits.maxTwitterAccounts} />
           <QuotaCard label={t("oafBots.quota.aiMonthly")} used={usage.aiGenerationsMonth} limit={limits.aiGenerationsMonthly} />
-          <QuotaCard label={t("oafBots.quota.autoComments")} used={usage.autoCommentsMonth} limit={limits.monthlyAutoComments} />
+          <QuotaCard
+            label={t("oafBots.quota.opportunityDrafts")}
+            used={usage.opportunityDraftsMonth ?? usage.autoCommentsMonth}
+            limit={limits.monthlyOpportunityDrafts ?? limits.monthlyAutoComments}
+          />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2f3336] bg-[#0f1419] px-4 py-3 text-sm text-[#e7e9ea]">
           <p className="min-w-0 break-words">{t("oafBots.planHint", { bots: limits.maxBots, accounts: limits.maxTwitterAccounts })}</p>

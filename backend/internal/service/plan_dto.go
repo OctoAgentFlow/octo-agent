@@ -6,7 +6,7 @@ import (
 )
 
 func planLimitsToDTO(l subscription.PlanLimits) dto.PlanLimitsData {
-	return dto.PlanLimitsData{
+	out := dto.PlanLimitsData{
 		MaxBots:                 l.MaxBots,
 		MaxTwitterAccounts:      l.MaxTwitterAccounts,
 		AIGenerationsMonthly:    l.AIGenerationsMonthly,
@@ -37,6 +37,8 @@ func planLimitsToDTO(l subscription.PlanLimits) dto.PlanLimitsData {
 		AdvancedRiskRules:       l.AdvancedRiskRules,
 		PrioritySupport:         l.PrioritySupport,
 	}
+	out.ApplySemanticAliases()
+	return out
 }
 
 func planFeaturesToDTO(items []subscription.PlanFeature) []dto.PlanFeatureData {

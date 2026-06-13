@@ -171,26 +171,27 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const aiBlocked = aiPct >= 100;
   const aiWarning = aiPct >= 80;
   const remainingAI = Math.max(0, maxAI - usedAI);
+  const apiMetric = (primary: number | undefined, fallback: number | undefined) => primary ?? fallback ?? 0;
   const automationItems = [
     {
-      label: t("dashboard.subscription.autoPosts"),
-      used: subscription?.usage.auto_posts_month ?? 0,
-      limit: subscription?.limits.monthly_auto_posts ?? 0,
+      label: t("dashboard.subscription.contentDrafts"),
+      used: apiMetric(subscription?.usage.content_drafts_month, subscription?.usage.auto_posts_month),
+      limit: apiMetric(subscription?.limits.monthly_content_drafts, subscription?.limits.monthly_auto_posts),
     },
     {
-      label: t("dashboard.subscription.autoReplies"),
-      used: subscription?.usage.auto_replies_month ?? 0,
-      limit: subscription?.limits.monthly_auto_replies ?? 0,
+      label: t("dashboard.subscription.replyDrafts"),
+      used: apiMetric(subscription?.usage.reply_drafts_month, subscription?.usage.auto_replies_month),
+      limit: apiMetric(subscription?.limits.monthly_reply_drafts, subscription?.limits.monthly_auto_replies),
     },
     {
-      label: t("dashboard.subscription.autoComments"),
-      used: subscription?.usage.auto_comments_month ?? 0,
-      limit: subscription?.limits.monthly_auto_comments ?? 0,
+      label: t("dashboard.subscription.opportunityDrafts"),
+      used: apiMetric(subscription?.usage.opportunity_drafts_month, subscription?.usage.auto_comments_month),
+      limit: apiMetric(subscription?.limits.monthly_opportunity_drafts, subscription?.limits.monthly_auto_comments),
     },
     {
       label: t("dashboard.subscription.reviewCapacity"),
-      used: subscription?.usage.auto_dms_month ?? 0,
-      limit: subscription?.limits.monthly_auto_dms ?? 0,
+      used: apiMetric(subscription?.usage.review_capacity_month, subscription?.usage.auto_dms_month),
+      limit: apiMetric(subscription?.limits.monthly_review_capacity, subscription?.limits.monthly_auto_dms),
     },
   ];
   const automationBlocked = automationItems.some((item) => item.limit > 0 && item.used >= item.limit);

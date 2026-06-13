@@ -6,7 +6,7 @@
 - Navigation, internal links, dashboard shortcuts, account cards, admin links, and smoke-test scripts were still pointing at the old route names.
 - Frontend Content Draft API calls use `/content-drafts/*`; the legacy `/auto-post/*` contract remains available for compatibility.
 - i18n keys still use `autoPost` and `executionQueue`. The visible copy has already moved toward manual, safe growth language, but key renames are medium risk because many pages share them.
-- Backend services, repositories, DTOs, models, quota fields, activity keys, and scheduler internals still use `AutoPost` naming. These are high risk because they touch database tables, historical events, and scheduled behavior.
+- Backend repositories, models, database quota fields, and historical activity keys still use `AutoPost` naming. Billing DTOs now expose content/opportunity/review semantic aliases while keeping the old JSON fields available.
 
 ## Migration Target
 
@@ -26,7 +26,7 @@
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
 | P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
-| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | First runtime alias batch done |
+| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases and billing semantic aliases done |
 
 ## Compatibility Notes
 
@@ -76,3 +76,10 @@
 - Switched API router wiring and the scheduler dependency from `autoPost` naming to `contentDraft` naming.
 - Added `RunContentDraftOnce` for the scheduler while retaining `RunAutoPostOnce` as a compatibility wrapper.
 - Did not rename database models, repository types, table names, DTO JSON fields, quota fields, or activity keys in this batch.
+
+## P3.2 Quota And Billing Semantic Alias
+
+- Added billing API semantic aliases such as `monthly_content_drafts`, `monthly_opportunity_drafts`, `monthly_review_capacity`, `content_drafts_month`, and `opportunity_drafts_month`.
+- Kept legacy billing JSON fields such as `monthly_auto_posts`, `monthly_auto_comments`, and `auto_posts_month` in the response for older clients and rollback safety.
+- Updated frontend billing, dashboard, OAF Bot quota, and plan-benefit displays to prefer the new content/opportunity/review semantic fields with old-field fallback.
+- Did not rename database columns, subscription package fields, repositories, quota storage, historical activity keys, or scheduler internals in this batch.

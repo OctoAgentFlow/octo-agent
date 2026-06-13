@@ -622,6 +622,7 @@ func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 			usage.AutoDMsMonth = n
 		}
 	}
+	usage.ApplySemanticAliases()
 	return usage
 }
 

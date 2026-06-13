@@ -33,35 +33,45 @@ type BillingPlansResponse struct {
 }
 
 type PlanLimitsData struct {
-	MaxBots                 int64 `json:"max_bots"`
-	MaxTwitterAccounts      int64 `json:"max_twitter_accounts"`
-	AIGenerationsMonthly    int64 `json:"ai_generations_monthly"`
-	MonthlyXWrites          int64 `json:"monthly_x_writes"`
-	MonthlyXURLPosts        int64 `json:"monthly_x_url_posts"`
-	MonthlyCostCapCents     int64 `json:"monthly_cost_cap_cents"`
-	MonthlyAutoPosts        int64 `json:"monthly_auto_posts"`
-	MonthlyAutoReplies      int64 `json:"monthly_auto_replies"`
-	MonthlyAutoComments     int64 `json:"monthly_auto_comments"`
-	MonthlyAutoDMs          int64 `json:"monthly_auto_dms"`
-	AutoCommentTargets      int64 `json:"auto_comment_targets"`
-	MonthlyAutoCommentScans int64 `json:"monthly_auto_comment_scans"`
-	DailyAutoPosts          int64 `json:"daily_auto_posts"`
-	DailyAutoReplies        int64 `json:"daily_auto_replies"`
-	DailyAutoComments       int64 `json:"daily_auto_comments"`
-	DailyAutoDMs            int64 `json:"daily_auto_dms"`
-	AnalyticsDays           int64 `json:"analytics_days"`
-	TeamSeats               int64 `json:"team_seats"`
-	FullPersonaFields       bool  `json:"full_persona_fields"`
-	AutoDMImport            bool  `json:"auto_dm_import"`
-	AdvancedBotStrategy     bool  `json:"advanced_bot_strategy"`
-	BulkReview              bool  `json:"bulk_review"`
-	BotPerformance          bool  `json:"bot_performance"`
-	DataExport              bool  `json:"data_export"`
-	MultiBotMatrix          bool  `json:"multi_bot_matrix"`
-	ABTesting               bool  `json:"ab_testing"`
-	AdvancedFlowBuilder     bool  `json:"advanced_flow_builder"`
-	AdvancedRiskRules       bool  `json:"advanced_risk_rules"`
-	PrioritySupport         bool  `json:"priority_support"`
+	MaxBots                  int64 `json:"max_bots"`
+	MaxTwitterAccounts       int64 `json:"max_twitter_accounts"`
+	AIGenerationsMonthly     int64 `json:"ai_generations_monthly"`
+	MonthlyXWrites           int64 `json:"monthly_x_writes"`
+	MonthlyXURLPosts         int64 `json:"monthly_x_url_posts"`
+	MonthlyCostCapCents      int64 `json:"monthly_cost_cap_cents"`
+	MonthlyContentDrafts     int64 `json:"monthly_content_drafts"`
+	MonthlyReplyDrafts       int64 `json:"monthly_reply_drafts"`
+	MonthlyOpportunityDrafts int64 `json:"monthly_opportunity_drafts"`
+	MonthlyReviewCapacity    int64 `json:"monthly_review_capacity"`
+	ContentMemorySources     int64 `json:"content_memory_sources"`
+	MonthlyRadarRefreshes    int64 `json:"monthly_radar_refreshes"`
+	DailyContentDrafts       int64 `json:"daily_content_drafts"`
+	DailyReplyDrafts         int64 `json:"daily_reply_drafts"`
+	DailyOpportunityDrafts   int64 `json:"daily_opportunity_drafts"`
+	DailyReviewCapacity      int64 `json:"daily_review_capacity"`
+	MonthlyAutoPosts         int64 `json:"monthly_auto_posts"`
+	MonthlyAutoReplies       int64 `json:"monthly_auto_replies"`
+	MonthlyAutoComments      int64 `json:"monthly_auto_comments"`
+	MonthlyAutoDMs           int64 `json:"monthly_auto_dms"`
+	AutoCommentTargets       int64 `json:"auto_comment_targets"`
+	MonthlyAutoCommentScans  int64 `json:"monthly_auto_comment_scans"`
+	DailyAutoPosts           int64 `json:"daily_auto_posts"`
+	DailyAutoReplies         int64 `json:"daily_auto_replies"`
+	DailyAutoComments        int64 `json:"daily_auto_comments"`
+	DailyAutoDMs             int64 `json:"daily_auto_dms"`
+	AnalyticsDays            int64 `json:"analytics_days"`
+	TeamSeats                int64 `json:"team_seats"`
+	FullPersonaFields        bool  `json:"full_persona_fields"`
+	AutoDMImport             bool  `json:"auto_dm_import"`
+	AdvancedBotStrategy      bool  `json:"advanced_bot_strategy"`
+	BulkReview               bool  `json:"bulk_review"`
+	BotPerformance           bool  `json:"bot_performance"`
+	DataExport               bool  `json:"data_export"`
+	MultiBotMatrix           bool  `json:"multi_bot_matrix"`
+	ABTesting                bool  `json:"ab_testing"`
+	AdvancedFlowBuilder      bool  `json:"advanced_flow_builder"`
+	AdvancedRiskRules        bool  `json:"advanced_risk_rules"`
+	PrioritySupport          bool  `json:"priority_support"`
 }
 
 type PlanFeatureData struct {
@@ -72,17 +82,55 @@ type PlanFeatureData struct {
 }
 
 type PlanUsageData struct {
-	OAFBots            int64 `json:"oaf_bots"`
-	TwitterAccounts    int64 `json:"twitter_accounts"`
-	AIGenerationsMonth int64 `json:"ai_generations_month"`
-	AutoPostsMonth     int64 `json:"auto_posts_month"`
-	AutoRepliesMonth   int64 `json:"auto_replies_month"`
-	AutoCommentsMonth  int64 `json:"auto_comments_month"`
-	AutoDMsMonth       int64 `json:"auto_dms_month"`
-	AutoPostsToday     int64 `json:"auto_posts_today"`
-	AutoRepliesToday   int64 `json:"auto_replies_today"`
-	AutoCommentsToday  int64 `json:"auto_comments_today"`
-	AutoDMsToday       int64 `json:"auto_dms_today"`
+	OAFBots                int64 `json:"oaf_bots"`
+	TwitterAccounts        int64 `json:"twitter_accounts"`
+	AIGenerationsMonth     int64 `json:"ai_generations_month"`
+	AutoPostsMonth         int64 `json:"auto_posts_month"`
+	AutoRepliesMonth       int64 `json:"auto_replies_month"`
+	AutoCommentsMonth      int64 `json:"auto_comments_month"`
+	AutoDMsMonth           int64 `json:"auto_dms_month"`
+	ContentDraftsMonth     int64 `json:"content_drafts_month"`
+	ReplyDraftsMonth       int64 `json:"reply_drafts_month"`
+	OpportunityDraftsMonth int64 `json:"opportunity_drafts_month"`
+	ReviewCapacityMonth    int64 `json:"review_capacity_month"`
+	AutoPostsToday         int64 `json:"auto_posts_today"`
+	AutoRepliesToday       int64 `json:"auto_replies_today"`
+	AutoCommentsToday      int64 `json:"auto_comments_today"`
+	AutoDMsToday           int64 `json:"auto_dms_today"`
+	ContentDraftsToday     int64 `json:"content_drafts_today"`
+	ReplyDraftsToday       int64 `json:"reply_drafts_today"`
+	OpportunityDraftsToday int64 `json:"opportunity_drafts_today"`
+	ReviewCapacityToday    int64 `json:"review_capacity_today"`
+}
+
+func (d *PlanLimitsData) ApplySemanticAliases() {
+	if d == nil {
+		return
+	}
+	d.MonthlyContentDrafts = d.MonthlyAutoPosts
+	d.MonthlyReplyDrafts = d.MonthlyAutoReplies
+	d.MonthlyOpportunityDrafts = d.MonthlyAutoComments
+	d.MonthlyReviewCapacity = d.MonthlyAutoDMs
+	d.ContentMemorySources = d.AutoCommentTargets
+	d.MonthlyRadarRefreshes = d.MonthlyAutoCommentScans
+	d.DailyContentDrafts = d.DailyAutoPosts
+	d.DailyReplyDrafts = d.DailyAutoReplies
+	d.DailyOpportunityDrafts = d.DailyAutoComments
+	d.DailyReviewCapacity = d.DailyAutoDMs
+}
+
+func (d *PlanUsageData) ApplySemanticAliases() {
+	if d == nil {
+		return
+	}
+	d.ContentDraftsMonth = d.AutoPostsMonth
+	d.ReplyDraftsMonth = d.AutoRepliesMonth
+	d.OpportunityDraftsMonth = d.AutoCommentsMonth
+	d.ReviewCapacityMonth = d.AutoDMsMonth
+	d.ContentDraftsToday = d.AutoPostsToday
+	d.ReplyDraftsToday = d.AutoRepliesToday
+	d.OpportunityDraftsToday = d.AutoCommentsToday
+	d.ReviewCapacityToday = d.AutoDMsToday
 }
 
 // BillingPaymentMethodItem is one USDT route (multi-chain).

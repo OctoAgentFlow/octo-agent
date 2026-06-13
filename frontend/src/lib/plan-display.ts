@@ -45,15 +45,19 @@ export function formatPlanNumber(value: number, locale: Language) {
 export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Language, options?: { includeTeamSeats?: boolean }) {
   const limits = plan.limits;
   const count = (value: number) => formatPlanNumber(value, lang);
+  const contentDrafts = limits.monthlyContentDrafts ?? limits.monthlyAutoPosts;
+  const replyDrafts = limits.monthlyReplyDrafts ?? limits.monthlyAutoReplies;
+  const opportunityDrafts = limits.monthlyOpportunityDrafts ?? limits.monthlyAutoComments;
+  const reviewCapacity = limits.monthlyReviewCapacity ?? limits.monthlyAutoDMs;
   const benefits = [
     t("planBenefits.oafBots", { count: count(limits.maxBots) }),
     t("planBenefits.xAccounts", { count: count(limits.maxTwitterAccounts) }),
     t("planBenefits.aiGenerationsMonthly", { count: count(limits.aiGenerationsMonthly) }),
     t("planBenefits.monthlyXWrites", { count: count(limits.monthlyXWrites) }),
-    t("planBenefits.monthlyAutoPost", { count: count(limits.monthlyAutoPosts) }),
-    t("planBenefits.monthlyAutoReply", { count: count(limits.monthlyAutoReplies) }),
-    t("planBenefits.monthlyAutoComment", { count: count(limits.monthlyAutoComments) }),
-    t("planBenefits.reviewCapacity", { count: count(limits.monthlyAutoDMs) }),
+    t("planBenefits.monthlyContentDraft", { count: count(contentDrafts) }),
+    t("planBenefits.monthlyReplyDraft", { count: count(replyDrafts) }),
+    t("planBenefits.monthlyOpportunityDraft", { count: count(opportunityDrafts) }),
+    t("planBenefits.reviewCapacity", { count: count(reviewCapacity) }),
     t("planBenefits.analyticsDays", { days: count(limits.analyticsDays) }),
   ];
 

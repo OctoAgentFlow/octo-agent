@@ -125,6 +125,17 @@ function mapPaymentRecord(order: BillingOrderListItemApi, timeZone: string): Pay
 }
 
 function mapLimits(item: PlanLimitsApi): PlanLimits {
+  const monthlyContentDrafts = item.monthly_content_drafts ?? item.monthly_auto_posts;
+  const monthlyReplyDrafts = item.monthly_reply_drafts ?? item.monthly_auto_replies;
+  const monthlyOpportunityDrafts = item.monthly_opportunity_drafts ?? item.monthly_auto_comments;
+  const monthlyReviewCapacity = item.monthly_review_capacity ?? item.monthly_auto_dms;
+  const contentMemorySources = item.content_memory_sources ?? item.auto_comment_targets;
+  const monthlyRadarRefreshes = item.monthly_radar_refreshes ?? item.monthly_auto_comment_scans;
+  const dailyContentDrafts = item.daily_content_drafts ?? item.daily_auto_posts;
+  const dailyReplyDrafts = item.daily_reply_drafts ?? item.daily_auto_replies;
+  const dailyOpportunityDrafts = item.daily_opportunity_drafts ?? item.daily_auto_comments;
+  const dailyReviewCapacity = item.daily_review_capacity ?? item.daily_auto_dms;
+
   return {
     maxBots: item.max_bots,
     maxTwitterAccounts: item.max_twitter_accounts,
@@ -132,16 +143,26 @@ function mapLimits(item: PlanLimitsApi): PlanLimits {
     monthlyXWrites: item.monthly_x_writes,
     monthlyXUrlPosts: item.monthly_x_url_posts,
     monthlyCostCapCents: item.monthly_cost_cap_cents,
-    monthlyAutoPosts: item.monthly_auto_posts,
-    monthlyAutoReplies: item.monthly_auto_replies,
-    monthlyAutoComments: item.monthly_auto_comments,
-    monthlyAutoDMs: item.monthly_auto_dms,
-    autoCommentTargets: item.auto_comment_targets,
-    monthlyAutoCommentScans: item.monthly_auto_comment_scans,
-    dailyAutoPosts: item.daily_auto_posts,
-    dailyAutoReplies: item.daily_auto_replies,
-    dailyAutoComments: item.daily_auto_comments,
-    dailyAutoDMs: item.daily_auto_dms,
+    monthlyContentDrafts,
+    monthlyReplyDrafts,
+    monthlyOpportunityDrafts,
+    monthlyReviewCapacity,
+    contentMemorySources,
+    monthlyRadarRefreshes,
+    dailyContentDrafts,
+    dailyReplyDrafts,
+    dailyOpportunityDrafts,
+    dailyReviewCapacity,
+    monthlyAutoPosts: monthlyContentDrafts,
+    monthlyAutoReplies: monthlyReplyDrafts,
+    monthlyAutoComments: monthlyOpportunityDrafts,
+    monthlyAutoDMs: monthlyReviewCapacity,
+    autoCommentTargets: contentMemorySources,
+    monthlyAutoCommentScans: monthlyRadarRefreshes,
+    dailyAutoPosts: dailyContentDrafts,
+    dailyAutoReplies: dailyReplyDrafts,
+    dailyAutoComments: dailyOpportunityDrafts,
+    dailyAutoDMs: dailyReviewCapacity,
     analyticsDays: item.analytics_days,
     teamSeats: item.team_seats,
     fullPersonaFields: item.full_persona_fields,
@@ -159,18 +180,35 @@ function mapLimits(item: PlanLimitsApi): PlanLimits {
 }
 
 function mapUsage(item: PlanUsageApi): PlanUsage {
+  const contentDraftsMonth = item.content_drafts_month ?? item.auto_posts_month;
+  const replyDraftsMonth = item.reply_drafts_month ?? item.auto_replies_month;
+  const opportunityDraftsMonth = item.opportunity_drafts_month ?? item.auto_comments_month;
+  const reviewCapacityMonth = item.review_capacity_month ?? item.auto_dms_month;
+  const contentDraftsToday = item.content_drafts_today ?? item.auto_posts_today;
+  const replyDraftsToday = item.reply_drafts_today ?? item.auto_replies_today;
+  const opportunityDraftsToday = item.opportunity_drafts_today ?? item.auto_comments_today;
+  const reviewCapacityToday = item.review_capacity_today ?? item.auto_dms_today;
+
   return {
     oafBots: item.oaf_bots,
     twitterAccounts: item.twitter_accounts,
     aiGenerationsMonth: item.ai_generations_month,
-    autoPostsMonth: item.auto_posts_month,
-    autoRepliesMonth: item.auto_replies_month,
-    autoCommentsMonth: item.auto_comments_month,
-    autoDMsMonth: item.auto_dms_month,
-    autoPostsToday: item.auto_posts_today,
-    autoRepliesToday: item.auto_replies_today,
-    autoCommentsToday: item.auto_comments_today,
-    autoDMsToday: item.auto_dms_today,
+    contentDraftsMonth,
+    replyDraftsMonth,
+    opportunityDraftsMonth,
+    reviewCapacityMonth,
+    autoPostsMonth: contentDraftsMonth,
+    autoRepliesMonth: replyDraftsMonth,
+    autoCommentsMonth: opportunityDraftsMonth,
+    autoDMsMonth: reviewCapacityMonth,
+    contentDraftsToday,
+    replyDraftsToday,
+    opportunityDraftsToday,
+    reviewCapacityToday,
+    autoPostsToday: contentDraftsToday,
+    autoRepliesToday: replyDraftsToday,
+    autoCommentsToday: opportunityDraftsToday,
+    autoDMsToday: reviewCapacityToday,
   };
 }
 

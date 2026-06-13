@@ -154,12 +154,25 @@ function isBotReady(bot: OAFBot) {
   return Boolean(bot.twitter_account_id) && botPersonaScore(bot) >= 60;
 }
 
+function quotaMetric(primary: number | undefined, fallback: number) {
+  return primary ?? fallback;
+}
+
 function automationMonthlyUsage(data: OAFBotDashboardData | null): Partial<Record<AutomationModule["type"], { used: number; limit: number }>> {
   if (!data?.usage || !data.limits) return {};
   return {
-    post: { used: data.usage.autoPostsMonth, limit: data.limits.monthlyAutoPosts },
-    reply: { used: data.usage.autoRepliesMonth, limit: data.limits.monthlyAutoReplies },
-    comment: { used: data.usage.autoCommentsMonth, limit: data.limits.monthlyAutoComments },
+    post: {
+      used: quotaMetric(data.usage.contentDraftsMonth, data.usage.autoPostsMonth),
+      limit: quotaMetric(data.limits.monthlyContentDrafts, data.limits.monthlyAutoPosts),
+    },
+    reply: {
+      used: quotaMetric(data.usage.replyDraftsMonth, data.usage.autoRepliesMonth),
+      limit: quotaMetric(data.limits.monthlyReplyDrafts, data.limits.monthlyAutoReplies),
+    },
+    comment: {
+      used: quotaMetric(data.usage.opportunityDraftsMonth, data.usage.autoCommentsMonth),
+      limit: quotaMetric(data.limits.monthlyOpportunityDrafts, data.limits.monthlyAutoComments),
+    },
   };
 }
 
@@ -167,9 +180,12 @@ function quotaExhausted(data: OAFBotDashboardData | null) {
   if (!data?.usage || !data.limits) return false;
   const pairs = [
     [data.usage.aiGenerationsMonth, data.limits.aiGenerationsMonthly],
-    [data.usage.autoPostsMonth, data.limits.monthlyAutoPosts],
-    [data.usage.autoRepliesMonth, data.limits.monthlyAutoReplies],
-    [data.usage.autoCommentsMonth, data.limits.monthlyAutoComments],
+    [quotaMetric(data.usage.contentDraftsMonth, data.usage.autoPostsMonth), quotaMetric(data.limits.monthlyContentDrafts, data.limits.monthlyAutoPosts)],
+    [quotaMetric(data.usage.replyDraftsMonth, data.usage.autoRepliesMonth), quotaMetric(data.limits.monthlyReplyDrafts, data.limits.monthlyAutoReplies)],
+    [
+      quotaMetric(data.usage.opportunityDraftsMonth, data.usage.autoCommentsMonth),
+      quotaMetric(data.limits.monthlyOpportunityDrafts, data.limits.monthlyAutoComments),
+    ],
   ];
   return pairs.some(([used, limit]) => limit > 0 && used >= limit);
 }

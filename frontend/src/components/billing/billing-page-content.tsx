@@ -312,19 +312,41 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
   const { t } = useT();
   if (!subscription) return null;
 
+  const metric = (primary: number | undefined, fallback: number) => primary ?? fallback;
+  const contentMemoryEnabled = metric(subscription.limits.contentMemorySources, subscription.limits.autoCommentTargets) > 0 || subscription.limits.autoDMImport;
   const monthlyItems: Array<[string, number, number, LucideIcon]> = [
     ["billing.usage.items.aiGenerations", subscription.usage.aiGenerationsMonth, subscription.limits.aiGenerationsMonthly, Sparkles],
-    ["billing.usage.items.autoPosts", subscription.usage.autoPostsMonth, subscription.limits.monthlyAutoPosts, Zap],
-    ["billing.usage.items.autoReplies", subscription.usage.autoRepliesMonth, subscription.limits.monthlyAutoReplies, Zap],
-    ["billing.usage.items.autoComments", subscription.usage.autoCommentsMonth, subscription.limits.monthlyAutoComments, Zap],
-    ["billing.usage.items.reviewCapacity", subscription.usage.autoDMsMonth, subscription.limits.monthlyAutoDMs, ListChecks],
+    [
+      "billing.usage.items.contentDrafts",
+      metric(subscription.usage.contentDraftsMonth, subscription.usage.autoPostsMonth),
+      metric(subscription.limits.monthlyContentDrafts, subscription.limits.monthlyAutoPosts),
+      Zap,
+    ],
+    [
+      "billing.usage.items.replyDrafts",
+      metric(subscription.usage.replyDraftsMonth, subscription.usage.autoRepliesMonth),
+      metric(subscription.limits.monthlyReplyDrafts, subscription.limits.monthlyAutoReplies),
+      Zap,
+    ],
+    [
+      "billing.usage.items.opportunityDrafts",
+      metric(subscription.usage.opportunityDraftsMonth, subscription.usage.autoCommentsMonth),
+      metric(subscription.limits.monthlyOpportunityDrafts, subscription.limits.monthlyAutoComments),
+      Zap,
+    ],
+    [
+      "billing.usage.items.reviewCapacity",
+      metric(subscription.usage.reviewCapacityMonth, subscription.usage.autoDMsMonth),
+      metric(subscription.limits.monthlyReviewCapacity, subscription.limits.monthlyAutoDMs),
+      ListChecks,
+    ],
   ];
   const capabilityItems: Array<[string, string, LucideIcon]> = [
     ["billing.usage.capabilities.analytics", t("billing.usage.capabilities.analyticsValue", { days: subscription.limits.analyticsDays }), CalendarClock],
     ["billing.usage.capabilities.teamSeats", t("billing.usage.capabilities.teamSeatsValue", { count: subscription.limits.teamSeats }), Users],
     [
       "billing.usage.capabilities.contentMemory",
-      t(subscription.limits.autoDMImport ? "billing.usage.capabilities.available" : "billing.usage.capabilities.locked"),
+      t(contentMemoryEnabled ? "billing.usage.capabilities.available" : "billing.usage.capabilities.locked"),
       Sparkles,
     ],
     [

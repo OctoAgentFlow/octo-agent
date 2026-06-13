@@ -31,10 +31,18 @@ type OAFBotListApi = {
     oaf_bots: number;
     twitter_accounts: number;
     ai_generations_month: number;
+    content_drafts_month?: number;
+    reply_drafts_month?: number;
+    opportunity_drafts_month?: number;
+    review_capacity_month?: number;
     auto_posts_month: number;
     auto_replies_month: number;
     auto_comments_month: number;
     auto_dms_month: number;
+    content_drafts_today?: number;
+    reply_drafts_today?: number;
+    opportunity_drafts_today?: number;
+    review_capacity_today?: number;
     auto_posts_today: number;
     auto_replies_today: number;
     auto_comments_today: number;
@@ -47,6 +55,16 @@ type OAFBotListApi = {
     monthly_x_writes: number;
     monthly_x_url_posts: number;
     monthly_cost_cap_cents: number;
+    monthly_content_drafts?: number;
+    monthly_reply_drafts?: number;
+    monthly_opportunity_drafts?: number;
+    monthly_review_capacity?: number;
+    content_memory_sources?: number;
+    monthly_radar_refreshes?: number;
+    daily_content_drafts?: number;
+    daily_reply_drafts?: number;
+    daily_opportunity_drafts?: number;
+    daily_review_capacity?: number;
     monthly_auto_posts: number;
     monthly_auto_replies: number;
     monthly_auto_comments: number;
@@ -92,8 +110,8 @@ type OAFBotLearningRulePreferencesApi = {
 };
 type OAFBotDashboardSummaryApi = {
   bots: OAFBot[];
-  usage: OAFBotListData["usage"];
-  limits: OAFBotListData["limits"];
+  usage: OAFBotListApi["usage"];
+  limits: OAFBotListApi["limits"];
   inspection_summary: OAFBotMatrixInspectionSummary;
   feedback_summary: OAFBotFeedbackSummary;
   verdict_stats: ReviewQueueFeedbackIssueVerdictStatApi[];
@@ -101,20 +119,47 @@ type OAFBotDashboardSummaryApi = {
 };
 
 function mapList(data: OAFBotListApi): OAFBotListData {
+  const contentDraftsMonth = data.usage.content_drafts_month ?? data.usage.auto_posts_month;
+  const replyDraftsMonth = data.usage.reply_drafts_month ?? data.usage.auto_replies_month;
+  const opportunityDraftsMonth = data.usage.opportunity_drafts_month ?? data.usage.auto_comments_month;
+  const reviewCapacityMonth = data.usage.review_capacity_month ?? data.usage.auto_dms_month;
+  const contentDraftsToday = data.usage.content_drafts_today ?? data.usage.auto_posts_today;
+  const replyDraftsToday = data.usage.reply_drafts_today ?? data.usage.auto_replies_today;
+  const opportunityDraftsToday = data.usage.opportunity_drafts_today ?? data.usage.auto_comments_today;
+  const reviewCapacityToday = data.usage.review_capacity_today ?? data.usage.auto_dms_today;
+  const monthlyContentDrafts = data.limits.monthly_content_drafts ?? data.limits.monthly_auto_posts;
+  const monthlyReplyDrafts = data.limits.monthly_reply_drafts ?? data.limits.monthly_auto_replies;
+  const monthlyOpportunityDrafts = data.limits.monthly_opportunity_drafts ?? data.limits.monthly_auto_comments;
+  const monthlyReviewCapacity = data.limits.monthly_review_capacity ?? data.limits.monthly_auto_dms;
+  const contentMemorySources = data.limits.content_memory_sources ?? data.limits.auto_comment_targets;
+  const monthlyRadarRefreshes = data.limits.monthly_radar_refreshes ?? data.limits.monthly_auto_comment_scans;
+  const dailyContentDrafts = data.limits.daily_content_drafts ?? data.limits.daily_auto_posts;
+  const dailyReplyDrafts = data.limits.daily_reply_drafts ?? data.limits.daily_auto_replies;
+  const dailyOpportunityDrafts = data.limits.daily_opportunity_drafts ?? data.limits.daily_auto_comments;
+  const dailyReviewCapacity = data.limits.daily_review_capacity ?? data.limits.daily_auto_dms;
+
   return {
     items: data.items,
     usage: {
       oafBots: data.usage.oaf_bots,
       twitterAccounts: data.usage.twitter_accounts,
       aiGenerationsMonth: data.usage.ai_generations_month,
-      autoPostsMonth: data.usage.auto_posts_month,
-      autoRepliesMonth: data.usage.auto_replies_month,
-      autoCommentsMonth: data.usage.auto_comments_month,
-      autoDMsMonth: data.usage.auto_dms_month,
-      autoPostsToday: data.usage.auto_posts_today,
-      autoRepliesToday: data.usage.auto_replies_today,
-      autoCommentsToday: data.usage.auto_comments_today,
-      autoDMsToday: data.usage.auto_dms_today,
+      contentDraftsMonth,
+      replyDraftsMonth,
+      opportunityDraftsMonth,
+      reviewCapacityMonth,
+      autoPostsMonth: contentDraftsMonth,
+      autoRepliesMonth: replyDraftsMonth,
+      autoCommentsMonth: opportunityDraftsMonth,
+      autoDMsMonth: reviewCapacityMonth,
+      contentDraftsToday,
+      replyDraftsToday,
+      opportunityDraftsToday,
+      reviewCapacityToday,
+      autoPostsToday: contentDraftsToday,
+      autoRepliesToday: replyDraftsToday,
+      autoCommentsToday: opportunityDraftsToday,
+      autoDMsToday: reviewCapacityToday,
     },
     limits: {
       maxBots: data.limits.max_bots,
@@ -123,16 +168,26 @@ function mapList(data: OAFBotListApi): OAFBotListData {
       monthlyXWrites: data.limits.monthly_x_writes,
       monthlyXUrlPosts: data.limits.monthly_x_url_posts,
       monthlyCostCapCents: data.limits.monthly_cost_cap_cents,
-      monthlyAutoPosts: data.limits.monthly_auto_posts,
-      monthlyAutoReplies: data.limits.monthly_auto_replies,
-      monthlyAutoComments: data.limits.monthly_auto_comments,
-      monthlyAutoDMs: data.limits.monthly_auto_dms,
-      autoCommentTargets: data.limits.auto_comment_targets,
-      monthlyAutoCommentScans: data.limits.monthly_auto_comment_scans,
-      dailyAutoPosts: data.limits.daily_auto_posts,
-      dailyAutoReplies: data.limits.daily_auto_replies,
-      dailyAutoComments: data.limits.daily_auto_comments,
-      dailyAutoDMs: data.limits.daily_auto_dms,
+      monthlyContentDrafts,
+      monthlyReplyDrafts,
+      monthlyOpportunityDrafts,
+      monthlyReviewCapacity,
+      contentMemorySources,
+      monthlyRadarRefreshes,
+      dailyContentDrafts,
+      dailyReplyDrafts,
+      dailyOpportunityDrafts,
+      dailyReviewCapacity,
+      monthlyAutoPosts: monthlyContentDrafts,
+      monthlyAutoReplies: monthlyReplyDrafts,
+      monthlyAutoComments: monthlyOpportunityDrafts,
+      monthlyAutoDMs: monthlyReviewCapacity,
+      autoCommentTargets: contentMemorySources,
+      monthlyAutoCommentScans: monthlyRadarRefreshes,
+      dailyAutoPosts: dailyContentDrafts,
+      dailyAutoReplies: dailyReplyDrafts,
+      dailyAutoComments: dailyOpportunityDrafts,
+      dailyAutoDMs: dailyReviewCapacity,
       analyticsDays: data.limits.analytics_days,
       teamSeats: data.limits.team_seats,
       fullPersonaFields: data.limits.full_persona_fields,
@@ -201,7 +256,14 @@ export const oafBotService = {
   },
   async dashboardSummary(days = 7) {
     const res = await request.get<ApiResponse<OAFBotDashboardSummaryApi>>("/oaf-bots/dashboard-summary", { params: { days } });
-    return res.data.data;
+    const data = res.data.data;
+    const mapped = mapList({ items: data.bots, usage: data.usage, limits: data.limits });
+    return {
+      ...data,
+      bots: mapped.items,
+      usage: mapped.usage,
+      limits: mapped.limits,
+    };
   },
   async learningRulePreferences(id: number) {
     const res = await request.get<ApiResponse<OAFBotLearningRulePreferencesApi>>(`/oaf-bots/${id}/learning-rule-preferences`);

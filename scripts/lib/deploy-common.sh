@@ -360,21 +360,21 @@ octo_wait_for_port() {
 octo_prepare_node_runtime() {
   local label="$1"
 
-  if command -v node >/dev/null 2>&1 && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
+  if command -v node >/dev/null 2>&1 && node -e 'const [major] = process.versions.node.split(".").map(Number); process.exit(major >= 22 ? 0 : 1)' >/dev/null 2>&1; then
     echo "[$label] node=$(node -v) npm=$(npm -v)"
     return 0
   fi
 
   local candidate
-  for candidate in "$HOME"/.nvm/versions/node/v20*/bin "$HOME/.nvm/versions/node/v20.20.2/bin" "$HOME/.nvm/versions/node/v20.11.1/bin" "$HOME/.nvm/versions/node/v20.9.0/bin"; do
+  for candidate in "$HOME"/.nvm/versions/node/v22*/bin; do
     if [ -x "$candidate/node" ]; then
       export PATH="$candidate:$PATH"
       break
     fi
   done
 
-  if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
-    echo "[$label] Node.js 20.9+ is required. Current: $(node -v 2>/dev/null || echo not-found)"
+  if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major] = process.versions.node.split(".").map(Number); process.exit(major >= 22 ? 0 : 1)' >/dev/null 2>&1; then
+    echo "[$label] Node.js 22+ is required. Current: $(node -v 2>/dev/null || echo not-found)"
     return 1
   fi
 

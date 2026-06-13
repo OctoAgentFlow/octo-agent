@@ -18,9 +18,9 @@ echo "[init] base=$BASE_DIR"
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg nginx rsync tar gzip lsof
 
-if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1; then
-  echo "[init] installing Node.js 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+if ! command -v node >/dev/null 2>&1 || ! node -e 'const [major] = process.versions.node.split(".").map(Number); process.exit(major >= 22 ? 0 : 1)' >/dev/null 2>&1; then
+  echo "[init] installing Node.js 22"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
 fi
 
@@ -99,4 +99,3 @@ echo "[init] node=$(node -v) npm=$(npm -v)"
 free -h
 echo "[init] done"
 REMOTE
-

@@ -148,6 +148,7 @@ scripts/prod-lite-health-check.sh <your-server-ip>
 
 - Test deployment scripts are deprecated because the test server was released.
 - Keep production secrets only in `/home/ubuntu/octo/shared/backend/configs/.env` or other server-local secret stores.
+- Production Node.js runtime is Node 22+. Run `scripts/prod-lite-init-server.sh` on a fresh host before deploying.
 - t3.micro is enough for the current lightweight runtime, but local builds are preferred because installing/building on the server uses swap and can be slow.
 - If package runtime dependencies change heavily, the first deployment of a new release may spend several minutes in `npm install --omit=dev`.
 - The release activator cleans old `/home/ubuntu/octo/releases/octo-*` directories and `/home/ubuntu/octo/uploads/octo-*.tar.gz` archives only after health checks pass. The default retention is 3 and can be changed with `PROD_LITE_KEEP_RELEASES`.

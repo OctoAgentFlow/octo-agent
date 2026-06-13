@@ -186,7 +186,7 @@ x_publisher:
 
 ### 前置依赖
 
-- Node.js 20+
+- Node.js 22+
 - npm 10+
 - Go 1.25+
 - MySQL 8+

@@ -19,14 +19,14 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "hot" | "early" | "all" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
+type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["hot", "early", "all", "tweet", "high_score", "needs_review", "saved", "drafted"];
+const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted"];
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 
 export default function ExposureRadarPage() {
@@ -47,7 +47,7 @@ export default function ExposureRadarPage() {
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
-  const [radarView, setRadarView] = useState<RadarViewFilter>("hot");
+  const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
@@ -156,7 +156,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs)).length;
       return acc;
-    }, { hot: 0, early: 0, all: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
+    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
   }, [items, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs));
@@ -973,6 +973,8 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
       return item.data_quality === "tweet_level";
     case "hot":
       return normalizeOpportunityTier(item.opportunity_tier) === "hot_opportunity";
+    case "rising":
+      return normalizeOpportunityTier(item.opportunity_tier) === "rising_signal";
     case "early":
       return normalizeOpportunityTier(item.opportunity_tier) === "early_signal";
     case "high_score":
@@ -989,7 +991,8 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
 }
 
 function normalizeOpportunityTier(value?: string) {
-  return value === "hot_opportunity" ? "hot_opportunity" : "early_signal";
+  if (value === "hot_opportunity" || value === "rising_signal") return value;
+  return "early_signal";
 }
 
 function hasEngagementMetrics(item: ExposureRadarItemApi) {
@@ -1158,6 +1161,7 @@ function velocityStateClass(state: string) {
 
 function opportunityTierClass(tier: string) {
   if (tier === "hot_opportunity") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+  if (tier === "rising_signal") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
 }
 

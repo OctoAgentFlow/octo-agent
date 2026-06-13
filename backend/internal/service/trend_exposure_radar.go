@@ -57,9 +57,12 @@ type exposureRadarTopicPerformance struct {
 
 const (
 	exposureHotOpportunityTier = "hot_opportunity"
+	exposureRisingSignalTier   = "rising_signal"
 	exposureEarlySignalTier    = "early_signal"
 	exposureHotMinViews        = int64(3000)
 	exposureHotMinVelocity     = 30.0
+	exposureRisingMinViews     = int64(100)
+	exposureRisingMinVelocity  = 5.0
 )
 
 func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto.ExposureRadarQuery, now time.Time) (*dto.ExposureRadarResponse, error) {
@@ -1422,7 +1425,10 @@ func exposureOpportunityTier(views int64, viewsPerMinute float64, velocityState 
 		return exposureHotOpportunityTier, fmt.Sprintf("views >= %s and momentum is active", compactCount(views))
 	}
 	if views >= exposureHotMinViews {
-		return exposureEarlySignalTier, fmt.Sprintf("views reached %s, but momentum is not confirmed yet", compactCount(views))
+		return exposureRisingSignalTier, fmt.Sprintf("views reached %s, but hot momentum is not confirmed yet", compactCount(views))
+	}
+	if views >= exposureRisingMinViews || viewsPerMinute >= exposureRisingMinVelocity || velocityState == "burst" || velocityState == "rising" {
+		return exposureRisingSignalTier, fmt.Sprintf("views >= %s or momentum is emerging", compactCount(exposureRisingMinViews))
 	}
 	return exposureEarlySignalTier, fmt.Sprintf("below %s views; keep watching before treating it as a hot opportunity", compactCount(exposureHotMinViews))
 }

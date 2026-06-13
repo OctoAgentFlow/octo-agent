@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CheckCircle2, FileText, Radar, Send, ShieldCheck } from "lucide-react";
+import { CheckCircle2, FileText, ListChecks, Radar, Send, ShieldCheck } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
 
@@ -8,7 +8,7 @@ import { SectionShell } from "./section-shell";
 
 const autoPostSteps = [
   { icon: FileText, titleKey: "marketing.autoPost.steps.queue.title", descKey: "marketing.autoPost.steps.queue.desc" },
-  { icon: CalendarClock, titleKey: "marketing.autoPost.steps.schedule.title", descKey: "marketing.autoPost.steps.schedule.desc" },
+  { icon: ListChecks, titleKey: "marketing.autoPost.steps.schedule.title", descKey: "marketing.autoPost.steps.schedule.desc" },
   { icon: ShieldCheck, titleKey: "marketing.autoPost.steps.guard.title", descKey: "marketing.autoPost.steps.guard.desc" },
   { icon: Send, titleKey: "marketing.autoPost.steps.publish.title", descKey: "marketing.autoPost.steps.publish.desc" },
 ];

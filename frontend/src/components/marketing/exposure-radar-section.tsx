@@ -75,7 +75,7 @@ export function ExposureRadarSection() {
             <Link href="/login" className={cn(buttonVariants({ variant: "default" }), "h-10 bg-white text-[#07111f] hover:bg-white/90")}>
               {t("marketing.exposureRadar.cta")}
             </Link>
-            <a href="#auto-post" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-semibold text-cyan-100 hover:text-white">
+            <a href="#operating-loop" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-semibold text-cyan-100 hover:text-white">
               {t("marketing.exposureRadar.secondaryCta")}
               <ArrowRight className="size-4" />
             </a>

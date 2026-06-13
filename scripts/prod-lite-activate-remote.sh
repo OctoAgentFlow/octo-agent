@@ -117,7 +117,7 @@ cleanup_old_releases() {
     fi
     echo "[lite] removing old release $release_dir"
     rm -rf "$release_dir"
-  done < <(find "$BASE_DIR/releases" -maxdepth 1 -mindepth 1 -type d -name 'octo-*' -print | sort -r)
+  done < <(find "$BASE_DIR/releases" -maxdepth 1 -mindepth 1 -type d -name 'octo-*' -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-)
 
   local upload_index=0
   local upload_file
@@ -128,7 +128,7 @@ cleanup_old_releases() {
     fi
     echo "[lite] removing old upload $upload_file"
     rm -f "$upload_file"
-  done < <(find "$BASE_DIR/uploads" -maxdepth 1 -mindepth 1 -type f -name 'octo-*.tar.gz' -print | sort -r)
+  done < <(find "$BASE_DIR/uploads" -maxdepth 1 -mindepth 1 -type f -name 'octo-*.tar.gz' -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-)
 }
 
 echo "[lite] activating $VERSION"

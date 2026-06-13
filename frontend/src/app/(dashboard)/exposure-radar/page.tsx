@@ -293,8 +293,8 @@ export default function ExposureRadarPage() {
             value={region}
             onChange={(value) => setRegion(value as ExposureRadarRegion)}
           />
-          <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} disabled={region === "en"} />
-          <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} disabled={region === "en"} />
+          <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} />
+          <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} />
           <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
         </div>
         {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}

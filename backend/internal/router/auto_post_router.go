@@ -8,7 +8,14 @@ import (
 )
 
 func RegisterAutoPost(rg *gin.RouterGroup, c *controller.AutoPostController) {
-	group := rg.Group("/auto-post")
+	registerAutoPostRoutes(rg.Group("/auto-post"), c)
+}
+
+func RegisterContentDrafts(rg *gin.RouterGroup, c *controller.AutoPostController) {
+	registerAutoPostRoutes(rg.Group("/content-drafts"), c)
+}
+
+func registerAutoPostRoutes(group *gin.RouterGroup, c *controller.AutoPostController) {
 	group.Use(middleware.Auth())
 	group.GET("/plans", c.ListPlans)
 	group.POST("/plans", c.CreatePlan)

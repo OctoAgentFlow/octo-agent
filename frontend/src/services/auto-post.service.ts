@@ -222,17 +222,17 @@ export type TrendFeedbackListData = {
   };
 };
 
-export const autoPostService = {
+const createAutoPostService = (basePath: "/auto-post" | "/content-drafts") => ({
   async plans() {
-    const res = await request.get<ApiResponse<AutoPostPlansData>>("/auto-post/plans");
+    const res = await request.get<ApiResponse<AutoPostPlansData>>(`${basePath}/plans`);
     return res.data.data;
   },
   async createPlan(payload: AutoPostPlanPayload) {
-    const res = await request.post<ApiResponse<AutoPostPlanApi>>("/auto-post/plans", payload);
+    const res = await request.post<ApiResponse<AutoPostPlanApi>>(`${basePath}/plans`, payload);
     return res.data.data;
   },
   async updatePlan(id: number, payload: AutoPostPlanPayload) {
-    const res = await request.put<ApiResponse<AutoPostPlanApi>>(`/auto-post/plans/${id}`, payload);
+    const res = await request.put<ApiResponse<AutoPostPlanApi>>(`${basePath}/plans/${id}`, payload);
     return res.data.data;
   },
   async selectedTrends(params: { planID?: number; botID?: number; limit?: number; excludedTrendNames?: string[] }) {
@@ -276,7 +276,7 @@ export const autoPostService = {
     return res.data.data;
   },
   async generateDraft(planID: number, contentDirection: string, contentLibraryItemID?: number, excludedTrendNames?: string[]) {
-    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/plans/${planID}/generate`, {
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`${basePath}/plans/${planID}/generate`, {
       content_direction: contentDirection,
       content_library_item_id: contentLibraryItemID || 0,
       excluded_trend_names: excludedTrendNames || [],
@@ -284,11 +284,11 @@ export const autoPostService = {
     return res.data.data;
   },
   async drafts() {
-    const res = await request.get<ApiResponse<AutoPostDraftsData>>("/auto-post/drafts");
+    const res = await request.get<ApiResponse<AutoPostDraftsData>>(`${basePath}/drafts`);
     return res.data.data;
   },
   async runs(query?: AutoPostGenerationRunQuery) {
-    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>("/auto-post/runs", {
+    const res = await request.get<ApiResponse<AutoPostGenerationRunsData>>(`${basePath}/runs`, {
       params: {
         status: query?.status && query.status !== "all" ? query.status : undefined,
         x_account_id: query?.xAccountID || undefined,
@@ -302,29 +302,32 @@ export const autoPostService = {
     return res.data.data;
   },
   async runNow(planID: number) {
-    const res = await request.post<ApiResponse<AutoPostGenerationRunApi>>(`/auto-post/plans/${planID}/run-now`);
+    const res = await request.post<ApiResponse<AutoPostGenerationRunApi>>(`${basePath}/plans/${planID}/run-now`);
     return res.data.data;
   },
   async updateDraft(id: number, generatedContent: string) {
-    const res = await request.patch<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}`, {
+    const res = await request.patch<ApiResponse<AutoPostDraftApi>>(`${basePath}/drafts/${id}`, {
       generated_content: generatedContent,
     });
     return res.data.data;
   },
   async rewriteDraft(id: number, payload: { rewrite_mode: AutoPostRewriteMode; feedback?: string; disabled_learning_issues?: string[] }) {
-    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/rewrite`, payload);
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`${basePath}/drafts/${id}/rewrite`, payload);
     return res.data.data;
   },
   async approveDraft(id: number) {
-    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/approve`);
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`${basePath}/drafts/${id}/approve`);
     return res.data.data;
   },
   async preparePublish(id: number) {
-    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/prepare-publish`);
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`${basePath}/drafts/${id}/prepare-publish`);
     return res.data.data;
   },
   async rejectDraft(id: number, reason: string) {
-    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`/auto-post/drafts/${id}/reject`, { reason });
+    const res = await request.post<ApiResponse<AutoPostDraftApi>>(`${basePath}/drafts/${id}/reject`, { reason });
     return res.data.data;
   },
-};
+});
+
+export const autoPostService = createAutoPostService("/auto-post");
+export const contentDraftService = createAutoPostService("/content-drafts");

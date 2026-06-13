@@ -82,7 +82,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1
 - Dashboard：`/dashboard/overview`
 - OAF Bot：`/oaf-bots`
 - Automations：`/automations`、`/automations/:type/execution-mode`
-- Content Drafts：页面使用 `/content-drafts`，后端 API 仍为 `/auto-post/plans`、`/auto-post/drafts`、`/auto-post/runs`
+- Content Drafts：页面使用 `/content-drafts`，前端默认调用 `/content-drafts/plans`、`/content-drafts/drafts`、`/content-drafts/runs`；后端仍保留 `/auto-post/*` 兼容入口
 - Content Library：`/content-library/items`
 - Auto Reply：`/auto-replies/drafts`
 - Auto Comment：`/auto-comments/targets`、`/auto-comments/drafts`

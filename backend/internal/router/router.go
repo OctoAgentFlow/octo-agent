@@ -130,6 +130,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	RegisterAccount(v1, acc)
 	RegisterAutomation(v1, auto)
 	RegisterAutoPost(v1, autoPost)
+	RegisterContentDrafts(v1, autoPost)
 	RegisterDailyXQueue(v1, dailyXQueue)
 	RegisterTrend(v1, trends)
 	RegisterContentLibrary(v1, contentLibrary)

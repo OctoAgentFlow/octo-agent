@@ -1,5 +1,5 @@
 export * from "@/services/auto-post.service";
-export { autoPostService as contentDraftService } from "@/services/auto-post.service";
+export { contentDraftService } from "@/services/auto-post.service";
 
 export type {
   AutoPostDraftApi as ContentDraftApi,

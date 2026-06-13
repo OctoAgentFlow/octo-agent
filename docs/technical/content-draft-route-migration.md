@@ -4,7 +4,7 @@
 
 - Public frontend routes still existed at `/auto-post` and `/execution-queue`.
 - Navigation, internal links, dashboard shortcuts, account cards, admin links, and smoke-test scripts were still pointing at the old route names.
-- Frontend API calls still use `/auto-post/*`; this is the current backend contract and should stay compatible until backend route aliases exist.
+- Frontend Content Draft API calls use `/content-drafts/*`; the legacy `/auto-post/*` contract remains available for compatibility.
 - i18n keys still use `autoPost` and `executionQueue`. The visible copy has already moved toward manual, safe growth language, but key renames are medium risk because many pages share them.
 - Backend services, repositories, DTOs, models, quota fields, activity keys, and scheduler internals still use `AutoPost` naming. These are high risk because they touch database tables, historical events, and scheduled behavior.
 
@@ -13,7 +13,7 @@
 - New public route for the former Auto Post workbench: `/content-drafts`.
 - New public route for the former Execution Queue page: `/handling-list`.
 - Existing legacy routes stay available for compatibility: `/auto-post`, `/execution-queue`.
-- New frontend service import paths: `content-draft.service.ts` and `content-drafts.service.ts`, both aliasing the existing `auto-post.service.ts` contract.
+- New frontend service import paths: `content-draft.service.ts` and `content-drafts.service.ts`, both using the `/content-drafts/*` API alias while old `autoPostService` keeps `/auto-post/*`.
 
 ## Executable Checklist
 
@@ -25,7 +25,7 @@
 | P0 | Frontend service imports | Add `contentDraftService` and `content-drafts.service.ts` aliases so new code can avoid old import paths. | Done |
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
-| P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Pending |
+| P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
 | P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Pending |
 
 ## Compatibility Notes
@@ -33,7 +33,7 @@
 - Do not remove `/auto-post` or `/execution-queue` until production logs show no meaningful traffic.
 - Do not rename database tables or JSON fields in the same step as route cleanup.
 - Keep old activity event keys stable unless a migration maps historical events to the new labels.
-- Keep `/api/v1/auto-post/*` documented as the active API until backend route aliases are implemented.
+- Keep `/api/v1/auto-post/*` available as a legacy API until production logs show no meaningful usage.
 
 ## P1 First Batch
 
@@ -61,3 +61,10 @@
 - Added `marketing.contentDrafts.*` aliases and moved the public marketing Content Drafts section off `marketing.autoPost.*`.
 - Added `posts.guide.contentDraft.*` aliases and moved the Posts guide card off `posts.guide.autoPost.*`.
 - Kept the old `marketing.autoPost.*` and `posts.guide.autoPost.*` keys for compatibility until a later dictionary cleanup confirms no legacy references remain.
+
+## P2 Backend API Alias
+
+- Registered `/api/v1/content-drafts/*` with the same controller handlers as `/api/v1/auto-post/*`.
+- Kept `/api/v1/auto-post/*` stable for legacy pages, historical clients, and rollback safety.
+- Switched the frontend `contentDraftService` to call `/content-drafts/*`; `autoPostService` still calls `/auto-post/*`.
+- Added router coverage to assert that the Content Draft aliases mirror the legacy Auto Post endpoints.

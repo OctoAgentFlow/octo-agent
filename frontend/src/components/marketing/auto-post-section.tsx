@@ -113,15 +113,15 @@ export function AutoPostSection() {
           <div className="grid grid-cols-3 gap-2 border-t border-white/10 p-4 sm:gap-3 md:p-5">
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.today")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">6</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.todayValue")}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.success")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">100%</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.successValue")}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.next")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">42m</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.nextValue")}</p>
             </div>
           </div>
         </div>

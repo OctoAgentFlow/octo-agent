@@ -17,7 +17,6 @@ func Start(
 	authService *service.AuthService,
 	postService *service.PostService,
 	postRepo *repository.PostRepository,
-	autoReply *service.AutoReplyService,
 	autoPost *service.AutoPostService,
 	trends *service.TrendService,
 	publishing *service.PublishingService,
@@ -106,7 +105,6 @@ func Start(
 		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
-		RunAutoReplyOnce(context.Background(), autoReply)
 		RunAutoPostOnce(context.Background(), autoPost)
 		runTrends()
 		RunPublishingOnce(context.Background(), publishing)
@@ -116,7 +114,6 @@ func Start(
 		for range ticker.C {
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
-			RunAutoReplyOnce(context.Background(), autoReply)
 			RunAutoPostOnce(context.Background(), autoPost)
 			runTrends()
 			RunPublishingOnce(context.Background(), publishing)

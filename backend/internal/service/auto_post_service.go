@@ -48,6 +48,15 @@ type AutoPostService struct {
 	trends         *TrendService
 }
 
+// ContentDraftService is the new runtime name for the former AutoPost service.
+// It intentionally aliases AutoPostService while database models and response
+// fields remain on their legacy names for compatibility.
+type ContentDraftService = AutoPostService
+
+func NewContentDraftService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *ContentDraftService {
+	return NewAutoPostService(accountRepo, automationRepo, planRepo, draftRepo, runRepo, contentRepo, activityRepo, userRepo, oafBotRepo, usageRepo, feedbackRepo, verdictRepo, prefRepo, ai, publishing, trends)
+}
+
 func NewAutoPostService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *AutoPostService {
 	return &AutoPostService{
 		accountRepo:    accountRepo,

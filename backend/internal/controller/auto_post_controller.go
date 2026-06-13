@@ -12,21 +12,27 @@ import (
 	"gorm.io/gorm"
 )
 
-type AutoPostController struct {
-	autoPostService *service.AutoPostService
+type ContentDraftController struct {
+	contentDraftService *service.ContentDraftService
+}
+
+type AutoPostController = ContentDraftController
+
+func NewContentDraftController(contentDraftService *service.ContentDraftService) *ContentDraftController {
+	return &ContentDraftController{contentDraftService: contentDraftService}
 }
 
 func NewAutoPostController(autoPostService *service.AutoPostService) *AutoPostController {
-	return &AutoPostController{autoPostService: autoPostService}
+	return NewContentDraftController(autoPostService)
 }
 
-func (ctl *AutoPostController) ListPlans(c *gin.Context) {
+func (ctl *ContentDraftController) ListPlans(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoPostService.ListPlans(userID)
+	data, err := ctl.contentDraftService.ListPlans(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -34,7 +40,7 @@ func (ctl *AutoPostController) ListPlans(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) CreatePlan(c *gin.Context) {
+func (ctl *ContentDraftController) CreatePlan(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -45,7 +51,7 @@ func (ctl *AutoPostController) CreatePlan(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoPostService.CreatePlan(userID, req)
+	data, err := ctl.contentDraftService.CreatePlan(userID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -53,7 +59,7 @@ func (ctl *AutoPostController) CreatePlan(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) GetPlan(c *gin.Context) {
+func (ctl *ContentDraftController) GetPlan(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -64,7 +70,7 @@ func (ctl *AutoPostController) GetPlan(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid plan id")
 		return
 	}
-	data, err := ctl.autoPostService.GetPlan(userID, planID)
+	data, err := ctl.contentDraftService.GetPlan(userID, planID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, http.StatusNotFound, "auto post plan not found")
@@ -76,7 +82,7 @@ func (ctl *AutoPostController) GetPlan(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) UpdatePlan(c *gin.Context) {
+func (ctl *ContentDraftController) UpdatePlan(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -92,7 +98,7 @@ func (ctl *AutoPostController) UpdatePlan(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoPostService.UpdatePlan(userID, planID, req)
+	data, err := ctl.contentDraftService.UpdatePlan(userID, planID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -100,13 +106,13 @@ func (ctl *AutoPostController) UpdatePlan(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) ListDrafts(c *gin.Context) {
+func (ctl *ContentDraftController) ListDrafts(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	data, err := ctl.autoPostService.ListDrafts(userID)
+	data, err := ctl.contentDraftService.ListDrafts(userID)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -114,7 +120,7 @@ func (ctl *AutoPostController) ListDrafts(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) ListRuns(c *gin.Context) {
+func (ctl *ContentDraftController) ListRuns(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -125,7 +131,7 @@ func (ctl *AutoPostController) ListRuns(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoPostService.ListRuns(userID, query)
+	data, err := ctl.contentDraftService.ListRuns(userID, query)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -133,7 +139,7 @@ func (ctl *AutoPostController) ListRuns(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
+func (ctl *ContentDraftController) GenerateDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -146,7 +152,7 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 	}
 	var req dto.AutoPostGenerateRequest
 	_ = c.ShouldBindJSON(&req)
-	data, err := ctl.autoPostService.GenerateDraft(c.Request.Context(), userID, planID, req)
+	data, err := ctl.contentDraftService.GenerateDraft(c.Request.Context(), userID, planID, req)
 	if err != nil {
 		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
@@ -166,7 +172,7 @@ func (ctl *AutoPostController) GenerateDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
+func (ctl *ContentDraftController) RunPlanNow(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -177,7 +183,7 @@ func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid plan id")
 		return
 	}
-	data, err := ctl.autoPostService.RunPlanNow(c.Request.Context(), userID, planID)
+	data, err := ctl.contentDraftService.RunPlanNow(c.Request.Context(), userID, planID)
 	if err != nil {
 		if automationActionError(c, err) {
 			return
@@ -192,7 +198,7 @@ func (ctl *AutoPostController) RunPlanNow(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) UpdateDraft(c *gin.Context) {
+func (ctl *ContentDraftController) UpdateDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -208,7 +214,7 @@ func (ctl *AutoPostController) UpdateDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := ctl.autoPostService.UpdateDraft(userID, draftID, req.GeneratedContent)
+	data, err := ctl.contentDraftService.UpdateDraft(userID, draftID, req.GeneratedContent)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -216,7 +222,7 @@ func (ctl *AutoPostController) UpdateDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) RewriteDraft(c *gin.Context) {
+func (ctl *ContentDraftController) RewriteDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -229,7 +235,7 @@ func (ctl *AutoPostController) RewriteDraft(c *gin.Context) {
 	}
 	var req dto.AutoPostDraftRewriteRequest
 	_ = c.ShouldBindJSON(&req)
-	data, err := ctl.autoPostService.RewriteDraft(c.Request.Context(), userID, draftID, req)
+	data, err := ctl.contentDraftService.RewriteDraft(c.Request.Context(), userID, draftID, req)
 	if err != nil {
 		if errors.Is(err, service.ErrAIGenerationQuotaExceeded) {
 			response.FailWithCode(c, http.StatusForbidden, err.Error(), "ai_generation_quota_exceeded")
@@ -241,7 +247,7 @@ func (ctl *AutoPostController) RewriteDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
+func (ctl *ContentDraftController) ApproveDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -252,7 +258,7 @@ func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	data, err := ctl.autoPostService.ApproveDraft(userID, draftID)
+	data, err := ctl.contentDraftService.ApproveDraft(userID, draftID)
 	if err != nil {
 		if automationActionError(c, err) {
 			return
@@ -263,7 +269,7 @@ func (ctl *AutoPostController) ApproveDraft(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
+func (ctl *ContentDraftController) PrepareDraftPublish(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -274,7 +280,7 @@ func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	data, err := ctl.autoPostService.PreparePublish(userID, draftID)
+	data, err := ctl.contentDraftService.PreparePublish(userID, draftID)
 	if err != nil {
 		if automationActionError(c, err) {
 			return
@@ -285,7 +291,7 @@ func (ctl *AutoPostController) PrepareDraftPublish(c *gin.Context) {
 	response.OK(c, data)
 }
 
-func (ctl *AutoPostController) RejectDraft(c *gin.Context) {
+func (ctl *ContentDraftController) RejectDraft(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
@@ -298,7 +304,7 @@ func (ctl *AutoPostController) RejectDraft(c *gin.Context) {
 	}
 	var req dto.AutoPostDraftRejectRequest
 	_ = c.ShouldBindJSON(&req)
-	data, err := ctl.autoPostService.RejectDraft(userID, draftID, req.Reason)
+	data, err := ctl.contentDraftService.RejectDraft(userID, draftID, req.Reason)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

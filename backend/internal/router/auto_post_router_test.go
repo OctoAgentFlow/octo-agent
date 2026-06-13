@@ -12,7 +12,7 @@ func TestRegisterContentDraftsMirrorsAutoPostRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	v1 := r.Group("/api/v1")
-	c := controller.NewAutoPostController(nil)
+	c := controller.NewContentDraftController(nil)
 
 	RegisterAutoPost(v1, c)
 	RegisterContentDrafts(v1, c)

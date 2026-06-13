@@ -7,8 +7,8 @@ import (
 	"octo-agent/backend/internal/service"
 )
 
-// RunAutoPostOnce runs one scheduler pass for Auto Post Planner due jobs.
-func RunAutoPostOnce(ctx context.Context, svc *service.AutoPostService) {
+// RunContentDraftOnce runs one scheduler pass for due Content Draft Planner jobs.
+func RunContentDraftOnce(ctx context.Context, svc *service.ContentDraftService) {
 	if svc == nil {
 		return
 	}
@@ -16,4 +16,9 @@ func RunAutoPostOnce(ctx context.Context, svc *service.AutoPostService) {
 		ctx = context.Background()
 	}
 	svc.RunTick(requestid.NewContext(ctx, "scheduler"))
+}
+
+// RunAutoPostOnce is the legacy scheduler entrypoint retained for compatibility.
+func RunAutoPostOnce(ctx context.Context, svc *service.AutoPostService) {
+	RunContentDraftOnce(ctx, svc)
 }

@@ -26,7 +26,7 @@
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
 | P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
-| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Pending |
+| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | First runtime alias batch done |
 
 ## Compatibility Notes
 
@@ -68,3 +68,11 @@
 - Kept `/api/v1/auto-post/*` stable for legacy pages, historical clients, and rollback safety.
 - Switched the frontend `contentDraftService` to call `/content-drafts/*`; `autoPostService` still calls `/auto-post/*`.
 - Added router coverage to assert that the Content Draft aliases mirror the legacy Auto Post endpoints.
+
+## P3.1 Backend Runtime Alias
+
+- Introduced `ContentDraftController` and `ContentDraftService` as the runtime names for new backend wiring.
+- Kept `AutoPostController`, `NewAutoPostController`, `AutoPostService`, and `NewAutoPostService` as legacy aliases/wrappers so existing services and tests remain compatible.
+- Switched API router wiring and the scheduler dependency from `autoPost` naming to `contentDraft` naming.
+- Added `RunContentDraftOnce` for the scheduler while retaining `RunAutoPostOnce` as a compatibility wrapper.
+- Did not rename database models, repository types, table names, DTO JSON fields, quota fields, or activity keys in this batch.

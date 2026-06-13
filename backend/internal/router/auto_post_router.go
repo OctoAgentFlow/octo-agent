@@ -7,15 +7,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterAutoPost(rg *gin.RouterGroup, c *controller.AutoPostController) {
+func RegisterAutoPost(rg *gin.RouterGroup, c *controller.ContentDraftController) {
 	registerAutoPostRoutes(rg.Group("/auto-post"), c)
 }
 
-func RegisterContentDrafts(rg *gin.RouterGroup, c *controller.AutoPostController) {
+func RegisterContentDrafts(rg *gin.RouterGroup, c *controller.ContentDraftController) {
 	registerAutoPostRoutes(rg.Group("/content-drafts"), c)
 }
 
-func registerAutoPostRoutes(group *gin.RouterGroup, c *controller.AutoPostController) {
+func registerAutoPostRoutes(group *gin.RouterGroup, c *controller.ContentDraftController) {
 	group.Use(middleware.Auth())
 	group.GET("/plans", c.ListPlans)
 	group.POST("/plans", c.CreatePlan)

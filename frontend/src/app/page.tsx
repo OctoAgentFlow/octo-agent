@@ -10,7 +10,7 @@ import { PricingSection } from "@/components/marketing/pricing-section";
 import { DashboardPreviewSection } from "@/components/marketing/dashboard-preview-section";
 import { WorkflowSection } from "@/components/marketing/workflow-section";
 import { OAFBotSection } from "@/components/marketing/oaf-bot-section";
-import { AutoPostSection } from "@/components/marketing/auto-post-section";
+import { ContentDraftsSection } from "@/components/marketing/content-drafts-section";
 import { ComparisonSection } from "@/components/marketing/comparison-section";
 import { GrowthOperationsLoopSection } from "@/components/marketing/growth-operations-loop-section";
 import { OperatingLoopSection } from "@/components/marketing/operating-loop-section";
@@ -31,7 +31,7 @@ export default function Home() {
         <OAFBotSection />
         <FeatureCardsSection />
         <WorkflowSection />
-        <AutoPostSection />
+        <ContentDraftsSection />
         <OperatingLoopSection />
         <ComparisonSection />
         <DashboardPreviewSection />

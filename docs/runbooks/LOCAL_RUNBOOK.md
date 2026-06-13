@@ -82,7 +82,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1
 - Dashboard：`/dashboard/overview`
 - OAF Bot：`/oaf-bots`
 - Automations：`/automations`、`/automations/:type/execution-mode`
-- Auto Post：`/auto-post/plans`、`/auto-post/drafts`、`/auto-post/runs`
+- Content Drafts：页面使用 `/content-drafts`，后端 API 仍为 `/auto-post/plans`、`/auto-post/drafts`、`/auto-post/runs`
 - Content Library：`/content-library/items`
 - Auto Reply：`/auto-replies/drafts`
 - Auto Comment：`/auto-comments/targets`、`/auto-comments/drafts`
@@ -148,7 +148,7 @@ curl -i http://localhost:10002/api/v1/admin/overview
 
 ### Auto Post Planner
 
-1. 打开 `/auto-post`。
+1. 打开 `/content-drafts`。
 2. 选择 X 账号。
 3. 确认该账号有绑定 OAF Bot。
 4. 新增 Content Library 素材。
@@ -159,7 +159,7 @@ curl -i http://localhost:10002/api/v1/admin/overview
 
 ### Execution Queue / Publishing
 
-1. 打开 `/execution-queue`。
+1. 打开 `/handling-list`。
 2. 查找 post/comment/reply 内容。
 3. review 模式内容应可批准/拒绝。
 4. ready_to_publish 内容应关联 publish job。

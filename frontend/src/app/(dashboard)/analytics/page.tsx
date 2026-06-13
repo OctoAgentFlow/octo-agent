@@ -35,7 +35,7 @@ const automationIcon = {
 } satisfies Record<AnalyticsAutomationType, typeof FileText>;
 
 const automationWorkbenchHref = {
-  post: "/auto-post",
+  post: "/content-drafts",
   reply: "/review-queue",
   comment: "/exposure-radar",
   dm: "/review-queue",
@@ -451,7 +451,7 @@ export default function AnalyticsPage() {
           right={
             <Link
               className="rounded-full border border-[#2f3336] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#16181c]"
-              href="/execution-queue?type=post"
+              href="/handling-list?type=post"
             >
               {t("analytics.contentEffect.manage")}
             </Link>
@@ -997,7 +997,7 @@ function AnalyticsInsightPanel({
               {t("analytics.insights.ctaFailures")}
               <ArrowUpRight className="size-3.5" />
             </Link>
-            <Link href="/execution-queue" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-white hover:bg-[#16181c]">
+            <Link href="/handling-list" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-white hover:bg-[#16181c]">
               {t("analytics.insights.ctaQueue")}
               <ArrowUpRight className="size-3.5" />
             </Link>

@@ -102,7 +102,7 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
                   {t("dashboard.activity.emptyAutomationCta")}
                   <ChevronRight className="size-4" />
                 </Link>
-                <Link href="/execution-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+                <Link href="/handling-list" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
                   {t("dashboard.activity.emptyQueueCta")}
                   <ChevronRight className="size-4" />
                 </Link>

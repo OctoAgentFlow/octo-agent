@@ -41,7 +41,7 @@ const navGroups = [
   {
     labelKey: "sidebar.group.operations",
     items: [
-      { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
+      { labelKey: "sidebar.nav.executionQueue", href: "/handling-list", icon: ListChecks },
       { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
     ],
   },

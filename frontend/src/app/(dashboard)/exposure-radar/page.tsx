@@ -199,7 +199,7 @@ export default function ExposureRadarPage() {
           ...row,
           review_task_id: task.id,
           review_status: task.status,
-          review_queue_url: `/execution-queue?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
+          review_queue_url: `/handling-list?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
           generated_comment: task.generated_comment,
         } : row),
       } : current);
@@ -1024,7 +1024,7 @@ function memoryLink(id: number, accountID: number) {
   const params = new URLSearchParams({ panel: "content" });
   if (id > 0) params.set("content_item_id", String(id));
   if (accountID > 0) params.set("account", String(accountID));
-  return `/auto-post?${params.toString()}`;
+  return `/content-drafts?${params.toString()}`;
 }
 
 function compactTitle(value: string) {

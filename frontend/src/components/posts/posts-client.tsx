@@ -116,11 +116,11 @@ export function PostsClient() {
               <Sparkles className="size-4" />
               {t("posts.actions.openDailyDrafts")}
             </Link>
-            <Link href="/auto-post" className={cn(buttonVariants({ variant: "outline" }))}>
+            <Link href="/content-drafts" className={cn(buttonVariants({ variant: "outline" }))}>
               <CalendarClock className="size-4" />
               {t("posts.actions.openAutoPost")}
             </Link>
-            <Link href="/execution-queue" className={cn(buttonVariants({ variant: "outline" }))}>
+            <Link href="/handling-list" className={cn(buttonVariants({ variant: "outline" }))}>
               <ListChecks className="size-4" />
               {t("posts.actions.openExecutionQueue")}
             </Link>
@@ -154,7 +154,7 @@ export function PostsClient() {
                 {t("posts.create.goAccounts")}
               </Link>
             ) : null}
-            <Link href="/auto-post" className={cn(buttonVariants({ variant: "outline" }))}>
+            <Link href="/content-drafts" className={cn(buttonVariants({ variant: "outline" }))}>
               <CalendarClock className="size-4" />
               {t("posts.actions.openAutoPost")}
             </Link>
@@ -185,8 +185,8 @@ export function PostsClient() {
               />
               <SourceGuide
                 icon={CalendarClock}
-                title={t("posts.guide.autoPost.title")}
-                description={t("posts.guide.autoPost.description")}
+                title={t("posts.guide.contentDraft.title")}
+                description={t("posts.guide.contentDraft.description")}
               />
               <SourceGuide
                 icon={Sparkles}

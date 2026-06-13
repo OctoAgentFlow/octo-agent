@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { ExposureSourceTraceApi, TrendTopicApi } from "@/services/auto-post.service";
+import type { ExposureSourceTraceApi, TrendTopicApi } from "@/services/content-drafts.service";
 
 type ApiResponse<T> = {
   code: number;

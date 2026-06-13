@@ -28,7 +28,7 @@ logs/audit/test-site-audit-latest.md
 ```bash
 node scripts/audit-test-site.mjs \
   --base=https://octo-agent.com \
-  '--routes=/dashboard,/opportunities,/execution-queue?publish_outcome=dry_run'
+  '--routes=/dashboard,/opportunities,/handling-list?publish_outcome=dry_run'
 ```
 
 ## Authenticated Audit

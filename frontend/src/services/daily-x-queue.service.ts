@@ -1,7 +1,7 @@
 import { request } from "@/lib/request";
 import type { OAFBot } from "@/types/oaf-bot";
 import type { ContentLibraryItemApi } from "@/services/content-library.service";
-import type { AutoPostDraftApi } from "@/services/auto-post.service";
+import type { AutoPostDraftApi } from "@/services/content-drafts.service";
 
 type ApiResponse<T> = {
   code: number;

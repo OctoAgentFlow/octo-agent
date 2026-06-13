@@ -134,7 +134,7 @@ export function AccountCard({
               <Bot className="size-3.5" />
               {boundBot ? t("accounts.actions.manageBot") : t("accounts.actions.bindBot")}
             </Link>
-            <Link href="/auto-post" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+            <Link href="/content-drafts" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
               <Rocket className="size-3.5" />
               {t("accounts.actions.openAutomation")}
             </Link>
@@ -225,7 +225,7 @@ export function AccountCard({
               label={t("accounts.relationship.queue")}
               title={queueSummary.total > 0 ? t("accounts.queue.total", { count: queueSummary.total }) : t("accounts.queue.emptyTitle")}
               description={queueSummary.total > 0 ? t("accounts.queue.description") : t("accounts.queue.emptyDescription")}
-              href="/execution-queue"
+              href="/handling-list"
               cta={t("accounts.actions.openQueue")}
               tone={queueSummary.failed > 0 ? "warning" : queueSummary.total > 0 ? "info" : "muted"}
             />
@@ -316,7 +316,7 @@ function AutomationPill({ item }: { item: AccountAutomationState }) {
           {item.enabled ? t("accounts.automation.enabled") : item.configured ? t("accounts.automation.paused") : t("accounts.automation.notConfigured")}
         </span>
       </div>
-      <p className="mt-2 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`executionQueue.executionMode.${item.mode}`) })}</p>
+      <p className="mt-2 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`handlingList.executionMode.${item.mode}`) })}</p>
     </Link>
   );
 }
@@ -331,7 +331,7 @@ function QueueMetric({ label, value, tone = "default" }: { label: string; value:
 }
 
 function automationHref(type: AccountAutomationState["type"]) {
-  if (type === "post") return "/auto-post";
+  if (type === "post") return "/content-drafts";
   if (type === "comment") return "/exposure-radar";
   return "/review-queue";
 }

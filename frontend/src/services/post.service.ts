@@ -1,7 +1,7 @@
 import { request } from "@/lib/request";
 
 import type { PostExecuteResult, PostItem, PostListData } from "@/types/post";
-import type { TrendTopicApi } from "@/services/auto-post.service";
+import type { TrendTopicApi } from "@/services/content-drafts.service";
 
 type ApiResponse<T> = {
   code: number;

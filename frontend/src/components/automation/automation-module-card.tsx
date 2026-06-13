@@ -16,7 +16,7 @@ type Props = {
 };
 
 const workspaceHref: Record<AutomationModule["type"], string> = {
-  post: "/auto-post",
+  post: "/content-drafts",
   reply: "/review-queue",
   comment: "/exposure-radar",
   dm: "/review-queue",

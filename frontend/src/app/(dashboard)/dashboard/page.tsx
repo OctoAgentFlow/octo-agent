@@ -509,7 +509,7 @@ export default function DashboardPage() {
   const boundBotCount = oafBotDashboard?.bots.filter((bot) => Boolean(bot.twitter_account_id)).length ?? 0;
   const readyBotCount = oafBotDashboard?.bots.filter(isBotReady).length ?? 0;
   const notReadyBotCount = Math.max(0, botCount - readyBotCount);
-  const autoPostNotReadyCount = oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0;
+  const contentDraftNotReadyCount = oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0;
   const pendingReviewCount = (reviewStats?.pending_review ?? 0) + (reviewStats?.ready_to_publish ?? 0);
   const failedQueueCount = reviewStats?.failed ?? 0;
   const approvedQueueCount = reviewStats?.approved ?? 0;
@@ -529,20 +529,20 @@ export default function DashboardPage() {
       key: "review",
       count: pendingReviewCount,
       labelKey: "dashboard.attention.reviewBacklog",
-      href: "/execution-queue?status=pending_review",
+      href: "/handling-list?status=pending_review",
       tone: "warning" as const,
     },
     {
       key: "failed",
       count: failedQueueCount,
       labelKey: "dashboard.attention.failedQueue",
-      href: "/execution-queue",
+      href: "/handling-list",
       tone: "danger" as const,
     },
     {
       key: "auto_post",
       count: oafBotDashboard?.inspectionSummary?.auto_post_not_ready_count ?? 0,
-      labelKey: "dashboard.attention.autoPostNotReady",
+      labelKey: "dashboard.attention.contentDraftNotReady",
       href: "/oaf-bots",
       tone: "warning" as const,
     },
@@ -556,8 +556,8 @@ export default function DashboardPage() {
   ].filter((item) => item.count > 0);
 
   const mapWorkbenchItem = (item: DashboardWorkbenchItem): TodayOpsItem => {
-    const typeLabel = t(`executionQueue.type.${item.type}`);
-    const statusLabel = item.status ? t(`executionQueue.status.${item.status}`) : "";
+    const typeLabel = t(`handlingList.type.${item.type}`);
+    const statusLabel = item.status ? t(`handlingList.status.${item.status}`) : "";
     const score = item.score || 0;
     const isOpportunity = score > 0;
     return {
@@ -681,7 +681,7 @@ export default function DashboardPage() {
           bound={boundBotCount}
           ready={readyBotCount}
           notReady={notReadyBotCount}
-          autoPostNotReady={autoPostNotReadyCount}
+          contentDraftNotReady={contentDraftNotReadyCount}
           onRetry={() => void fetchOAFBotDashboard()}
         />
       ) : null}
@@ -859,7 +859,7 @@ function TodayOpsWorkbench({
             <MessageCircle className="size-4" />
             {t("dashboard.todayOps.openOpportunities")}
           </Link>
-          <Link href="/execution-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+          <Link href="/handling-list" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
             <Inbox className="size-4" />
             {t("dashboard.todayOps.openQueue")}
           </Link>
@@ -1035,9 +1035,9 @@ function WorkflowProgressCard({
   const total = pending + completed + failed;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 100;
   const items = [
-    { key: "pending", value: pending, tone: "text-amber-100", href: "/execution-queue?status=pending_review" },
-    { key: "completed", value: completed, tone: "text-emerald-100", href: "/execution-queue?status=approved" },
-    { key: "failed", value: failed, tone: "text-rose-100", href: "/execution-queue?status=failed" },
+    { key: "pending", value: pending, tone: "text-amber-100", href: "/handling-list?status=pending_review" },
+    { key: "completed", value: completed, tone: "text-emerald-100", href: "/handling-list?status=approved" },
+    { key: "failed", value: failed, tone: "text-rose-100", href: "/handling-list?status=failed" },
     { key: "paused", value: paused, tone: "text-[#8ecdf8]", href: "/automations#automation-modules" },
   ];
   return (
@@ -1099,7 +1099,7 @@ function PublishReviewCard({
     failed > 0
       ? {
           key: "fixFailed",
-          href: "/execution-queue?status=failed",
+          href: "/handling-list?status=failed",
           icon: AlertTriangle,
           count: failed,
           tone: "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]",
@@ -1108,7 +1108,7 @@ function PublishReviewCard({
     dryRun > 0
       ? {
           key: "reviewDryRun",
-          href: "/execution-queue?publish_outcome=dry_run",
+          href: "/handling-list?publish_outcome=dry_run",
           icon: Send,
           count: dryRun,
           tone: "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]",
@@ -1126,7 +1126,7 @@ function PublishReviewCard({
     jobs.length === 0
       ? {
           key: "startQueue",
-          href: "/execution-queue",
+          href: "/handling-list",
           icon: Inbox,
           count: 0,
           tone: "border-[#2f3336] bg-black text-[#8b98a5]",
@@ -1148,10 +1148,10 @@ function PublishReviewCard({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/execution-queue?status=failed" className="inline-flex h-9 items-center justify-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-3 text-sm font-semibold text-[#ff8a91] hover:bg-[#f4212e]/15">
+          <Link href="/handling-list?status=failed" className="inline-flex h-9 items-center justify-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-3 text-sm font-semibold text-[#ff8a91] hover:bg-[#f4212e]/15">
             {t("dashboard.publishReview.openFailed")}
           </Link>
-          <Link href="/execution-queue?status=published" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          <Link href="/handling-list?status=published" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
             {t("dashboard.publishReview.openPublished")}
           </Link>
         </div>
@@ -1224,7 +1224,7 @@ function PublishReviewCard({
                   <span className={`rounded-full border px-2.5 py-1 text-xs ${job.status === "published" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : job.status === "failed" ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]"}`}>
                     {t(`dashboard.publishReview.status.${job.status}`)}
                   </span>
-                  <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs text-[#8b98a5]">{t(`executionQueue.publishMode.${job.publish_mode || "simulated"}`)}</span>
+                  <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs text-[#8b98a5]">{t(`handlingList.publishMode.${job.publish_mode || "simulated"}`)}</span>
                   <span className="text-xs text-[#71767b]">{formatDateTime(job.published_at || job.updated_at || job.created_at, timeZone)}</span>
                 </div>
                 <p className="mt-2 line-clamp-1 text-sm font-semibold text-[#e7e9ea]">{job.content || `#${job.id}`}</p>
@@ -1237,7 +1237,7 @@ function PublishReviewCard({
                   </a>
                 ) : null}
                 {job.status === "failed" ? (
-                  <Link href="/execution-queue?status=failed" className="inline-flex h-8 items-center justify-center rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+                  <Link href="/handling-list?status=failed" className="inline-flex h-8 items-center justify-center rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
                     {t("dashboard.publishReview.fixFailed")}
                   </Link>
                 ) : null}
@@ -1291,8 +1291,11 @@ function FeedbackLearningCard({
   const hasVerdictLearning = topVerdictStats.length > 0;
   const hasLearning = hasFeedback || hasVerdictLearning;
   const primaryIssue = topIssues[0]?.tag || primaryVerdictIssue || "";
-  const queueHref = primaryIssue ? `/execution-queue?status=pending_review&feedback_issue=${encodeURIComponent(primaryIssue)}` : "/execution-queue?status=pending_review";
-  const reasonLabel = (reason: string) => (reason.startsWith("executionQueue.") ? t(reason) : reason);
+  const queueHref = primaryIssue ? `/handling-list?status=pending_review&feedback_issue=${encodeURIComponent(primaryIssue)}` : "/handling-list?status=pending_review";
+  const reasonLabel = (reason: string) => {
+    const key = reason.startsWith("executionQueue.") ? reason.replace("executionQueue.", "handlingList.") : reason;
+    return key.startsWith("handlingList.") ? t(key) : reason;
+  };
   useEffect(() => {
     if (detailsOpen && !verdictDetailsRequested && !verdictDetailsLoading) {
       void onLoadVerdictDetails();
@@ -1398,12 +1401,12 @@ function FeedbackLearningCard({
               <div className="mt-3 flex flex-wrap gap-2">
                 {topIssues.length > 0
                   ? topIssues.slice(0, 3).map((issue) => (
-                      <Link key={issue.tag} href={`/execution-queue?status=pending_review&feedback_issue=${encodeURIComponent(issue.tag)}`} className="rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-100 transition hover:border-rose-200/40 hover:bg-rose-500/20">
+                      <Link key={issue.tag} href={`/handling-list?status=pending_review&feedback_issue=${encodeURIComponent(issue.tag)}`} className="rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-100 transition hover:border-rose-200/40 hover:bg-rose-500/20">
                         {t(`dashboard.feedbackLearning.issue.${issue.tag}`)} · {issue.count}
                       </Link>
                     ))
                   : topVerdictStats.slice(0, 3).map((stat) => (
-                      <Link key={stat.feedback_issue} href={`/execution-queue?status=pending_review&feedback_issue=${encodeURIComponent(stat.feedback_issue)}`} className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-medium text-[#8ecdf8] transition hover:border-[#1d9bf0]/45">
+                      <Link key={stat.feedback_issue} href={`/handling-list?status=pending_review&feedback_issue=${encodeURIComponent(stat.feedback_issue)}`} className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-medium text-[#8ecdf8] transition hover:border-[#1d9bf0]/45">
                         {t(`dashboard.feedbackLearning.issue.${stat.feedback_issue}`)} · {stat.total}
                       </Link>
                     ))}
@@ -1469,7 +1472,7 @@ function FeedbackLearningCard({
               <div key={item.id} className="rounded-xl border border-[#2f3336] bg-black p-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">{t(`executionQueue.type.${item.queue_type}`)}</span>
+                    <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">{t(`handlingList.type.${item.queue_type}`)}</span>
                     <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs text-[#e7e9ea]">{t(`dashboard.feedbackLearning.issue.${item.feedback_issue}`)}</span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs ${item.verdict === "accurate" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-rose-300/20 bg-rose-500/10 text-rose-100"}`}>
                       {t(`dashboard.feedbackLearning.verdict.${item.verdict}`)}
@@ -1626,7 +1629,7 @@ function OAFBotReadinessCard({
   bound,
   ready,
   notReady,
-  autoPostNotReady,
+  contentDraftNotReady,
   onRetry,
 }: {
   loading: boolean;
@@ -1635,7 +1638,7 @@ function OAFBotReadinessCard({
   bound: number;
   ready: number;
   notReady: number;
-  autoPostNotReady: number;
+  contentDraftNotReady: number;
   onRetry: () => void;
 }) {
   const { t } = useT();
@@ -1687,7 +1690,7 @@ function OAFBotReadinessCard({
           <div className="grid gap-2 sm:grid-cols-3">
             <MiniMetric label={t("dashboard.oafBots.metric.bound")} value={bound} />
             <MiniMetric label={t("dashboard.oafBots.metric.notReady")} value={notReady} />
-            <MiniMetric label={t("dashboard.oafBots.metric.autoPost")} value={autoPostNotReady} />
+            <MiniMetric label={t("dashboard.oafBots.metric.contentDraft")} value={contentDraftNotReady} />
           </div>
           <Link href="/oaf-bots" className="inline-flex items-center gap-2 text-sm font-semibold text-[#1d9bf0] hover:underline">
             {t(total > 0 ? "dashboard.oafBots.ctaManage" : "dashboard.oafBots.ctaCreate")}

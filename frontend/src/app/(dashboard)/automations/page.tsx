@@ -230,7 +230,7 @@ export default function AutomationsPage() {
         id: "needs_review",
         title: t("automation.blockers.needsReview.title", { count: runtimeStatus.needsReview }),
         description: t("automation.blockers.needsReview.description"),
-        href: "/execution-queue?status=pending_review",
+        href: "/handling-list?status=pending_review",
         actionLabel: t("automation.blockers.needsReview.action"),
         severity: "warning",
         countLabel: String(runtimeStatus.needsReview),
@@ -241,7 +241,7 @@ export default function AutomationsPage() {
         id: "queue_depth",
         title: t("automation.blockers.queueDepth.title", { count: runtimeStatus.queueDepth }),
         description: t("automation.blockers.queueDepth.description"),
-        href: "/execution-queue",
+        href: "/handling-list",
         actionLabel: t("automation.blockers.queueDepth.action"),
         severity: "info",
         countLabel: String(runtimeStatus.queueDepth),
@@ -362,7 +362,7 @@ function AutomationControlHero({
                 {t("automation.control.primaryCta")}
               </Button>
             </Link>
-            <Link href="/execution-queue" className="inline-flex">
+            <Link href="/handling-list" className="inline-flex">
               <Button type="button" variant="outline">
                 <ShieldCheck className="size-4" />
                 {t("automation.control.queueCta")}
@@ -387,8 +387,8 @@ function AutomationTabs() {
   const { t } = useT();
   const tabs = [
     { href: "/automations", label: t("automation.tabs.overview"), icon: ListChecks, active: true },
-    { href: "/auto-post", label: t("automation.tabs.autoPost"), icon: FileText },
-    { href: "/execution-queue", label: t("automation.tabs.executionQueue"), icon: ShieldCheck },
+    { href: "/content-drafts", label: t("automation.tabs.autoPost"), icon: FileText },
+    { href: "/handling-list", label: t("automation.tabs.executionQueue"), icon: ShieldCheck },
   ];
   return (
     <div className="-mx-1 overflow-x-auto px-1 pb-1">

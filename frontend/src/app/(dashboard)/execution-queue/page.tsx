@@ -17,7 +17,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { automationService } from "@/services/automation.service";
 import { activityService, type ActivityItemApi } from "@/services/activity.service";
-import { autoPostService, type AutoPostDraftApi, type AutoPostRewriteMode, type TrendFeedbackRating, type TrendTopicApi } from "@/services/auto-post.service";
+import { contentDraftService, type ContentDraftApi, type ContentDraftRewriteMode, type TrendFeedbackRating, type TrendTopicApi } from "@/services/content-drafts.service";
 import { exposureRadarService } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { publishingService, type XPublisherStatusApi } from "@/services/publishing.service";
@@ -104,35 +104,35 @@ function sourceTone(type: string) {
 }
 
 function sourceLabelKey(type: string) {
-  if (type === "post") return "executionQueue.source.autoPost";
-  if (type === "comment") return "executionQueue.source.autoComment";
-  if (type === "reply") return "executionQueue.source.autoReply";
-  return "executionQueue.source.autoDm";
+  if (type === "post") return "handlingList.source.autoPost";
+  if (type === "comment") return "handlingList.source.autoComment";
+  if (type === "reply") return "handlingList.source.autoReply";
+  return "handlingList.source.autoDm";
 }
 
 function sourceLabelKeyForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.source_type === "exposure_radar") return "executionQueue.source.exposureRadar";
+  if (item.type === "comment" && item.source_type === "exposure_radar") return "handlingList.source.exposureRadar";
   return sourceLabelKey(item.type);
 }
 
 function deliveryLabelKey(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.delivery.quotePost";
-  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.delivery.manualComment";
-  if (item.type === "comment" && item.delivery_mode === "auto_comment") return "executionQueue.delivery.autoComment";
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.delivery.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "handlingList.delivery.manualComment";
+  if (item.type === "comment" && item.delivery_mode === "auto_comment") return "handlingList.delivery.autoComment";
   return "";
 }
 
 function sourceDescriptionKey(type: string) {
-  if (type === "post") return "executionQueue.sourceDesc.post";
-  if (type === "comment") return "executionQueue.sourceDesc.comment";
-  if (type === "reply") return "executionQueue.sourceDesc.reply";
-  return "executionQueue.sourceDesc.dm";
+  if (type === "post") return "handlingList.sourceDesc.post";
+  if (type === "comment") return "handlingList.sourceDesc.comment";
+  if (type === "reply") return "handlingList.sourceDesc.reply";
+  return "handlingList.sourceDesc.dm";
 }
 
 function sourceDescriptionForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.source_type === "exposure_radar") return "executionQueue.sourceDesc.exposureRadar";
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.sourceDesc.quotePost";
-  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "executionQueue.sourceDesc.manualComment";
+  if (item.type === "comment" && item.source_type === "exposure_radar") return "handlingList.sourceDesc.exposureRadar";
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.sourceDesc.quotePost";
+  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "handlingList.sourceDesc.manualComment";
   return sourceDescriptionKey(item.type);
 }
 
@@ -143,33 +143,33 @@ function canManualPublish(item: ReviewQueueItemApi) {
 }
 
 function targetLabelKey(type: string) {
-  if (type === "post") return "executionQueue.item.contentSource";
-  if (type === "comment") return "executionQueue.item.targetTweet";
-  if (type === "reply") return "executionQueue.item.replyTarget";
-  return "executionQueue.item.target";
+  if (type === "post") return "handlingList.item.contentSource";
+  if (type === "comment") return "handlingList.item.targetTweet";
+  if (type === "reply") return "handlingList.item.replyTarget";
+  return "handlingList.item.target";
 }
 
 function targetLabelForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "executionQueue.item.quoteTarget";
+  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.item.quoteTarget";
   return targetLabelKey(item.type);
 }
 
 function normalizeTargetSummary(type: string, value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
   const summary = (value || "").trim();
   if (!summary) return "—";
-  if (type === "post" && summary === "Content Library Item") return t("executionQueue.target.contentLibraryItem");
-  if (type === "post" && summary === "Auto Post") return t("executionQueue.target.autoPostPlanner");
+  if (type === "post" && summary === "Content Library Item") return t("handlingList.target.contentLibraryItem");
+  if (type === "post" && summary === "Auto Post") return t("handlingList.target.autoPostPlanner");
   return summary;
 }
 
 function publishStatusKey(status?: string) {
-  if (!status) return "executionQueue.publishState.notCreated";
-  if (status === "pending") return "executionQueue.publishState.pending";
-  if (status === "processing") return "executionQueue.publishState.processing";
-  if (status === "published") return "executionQueue.publishState.published";
-  if (status === "failed") return "executionQueue.publishState.failed";
-  if (status === "cancelled") return "executionQueue.publishState.cancelled";
-  return "executionQueue.publishState.unknown";
+  if (!status) return "handlingList.publishState.notCreated";
+  if (status === "pending") return "handlingList.publishState.pending";
+  if (status === "processing") return "handlingList.publishState.processing";
+  if (status === "published") return "handlingList.publishState.published";
+  if (status === "failed") return "handlingList.publishState.failed";
+  if (status === "cancelled") return "handlingList.publishState.cancelled";
+  return "handlingList.publishState.unknown";
 }
 
 function publishTone(status?: string) {
@@ -224,7 +224,7 @@ function normalizeFeedbackIssue(value: string | null): FeedbackIssueKey {
   return "";
 }
 
-function defaultPostRewriteMode(issue: FeedbackIssueKey): AutoPostRewriteMode {
+function defaultContentDraftRewriteMode(issue: FeedbackIssueKey): ContentDraftRewriteMode {
   switch (issue) {
     case "too_salesy":
       return "less_marketing";
@@ -284,29 +284,29 @@ function feedbackIssueMatch(item: ReviewQueueItemApi, issue: FeedbackIssueKey, t
   if (issue === "too_salesy") {
     const salesTerms = ["try", "start", "boost", "instantly", "best", "join", "visit", "sign up", "signup", "free trial", "cta", "click", "buy", "limited"];
     const hits = salesTerms.filter((term) => text.includes(term)).length;
-    if (hits > 0) score += add(Math.min(5, hits + 1), "executionQueue.feedbackFocus.reason.salesTerms");
-    if (/https?:\/\//i.test(content)) score += add(2, "executionQueue.feedbackFocus.reason.link");
-    if ((content.match(/!/g) || []).length >= 2) score += add(1, "executionQueue.feedbackFocus.reason.exclamation");
+    if (hits > 0) score += add(Math.min(5, hits + 1), "handlingList.feedbackFocus.reason.salesTerms");
+    if (/https?:\/\//i.test(content)) score += add(2, "handlingList.feedbackFocus.reason.link");
+    if ((content.match(/!/g) || []).length >= 2) score += add(1, "handlingList.feedbackFocus.reason.exclamation");
   } else if (issue === "missing_context" || issue === "weak_context") {
-    if (content.length > 0 && content.length < 190) score += add(3, "executionQueue.feedbackFocus.reason.short");
-    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(2, "executionQueue.feedbackFocus.reason.noContext");
+    if (content.length > 0 && content.length < 190) score += add(3, "handlingList.feedbackFocus.reason.short");
+    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(2, "handlingList.feedbackFocus.reason.noContext");
     const genericTerms = ["teams", "automation", "growth", "operations", "content", "community"];
     const genericHits = genericTerms.filter((term) => text.includes(term)).length;
-    if (genericHits >= 3 && !/octo|oaf|agent|web3|socialfi|x operations/.test(text)) score += add(2, "executionQueue.feedbackFocus.reason.generic");
+    if (genericHits >= 3 && !/octo|oaf|agent|web3|socialfi|x operations/.test(text)) score += add(2, "handlingList.feedbackFocus.reason.generic");
   } else if (issue === "wrong_tone") {
     const toneTerms = ["announcing", "excited", "revolutionary", "must", "don't miss", "game-changing", "ultimate"];
-    if (toneTerms.some((term) => text.includes(term))) score += add(3, "executionQueue.feedbackFocus.reason.announcementTone");
-    if ((content.match(/#/g) || []).length >= 4) score += add(1, "executionQueue.feedbackFocus.reason.tooManyHashtags");
+    if (toneTerms.some((term) => text.includes(term))) score += add(3, "handlingList.feedbackFocus.reason.announcementTone");
+    if ((content.match(/#/g) || []).length >= 4) score += add(1, "handlingList.feedbackFocus.reason.tooManyHashtags");
   } else if (issue === "fact_risk") {
     const riskTerms = ["guarantee", "guaranteed", "always", "never", "100%", "risk-free", "profit", "price prediction", "official partnership", "best"];
     const hits = riskTerms.filter((term) => text.includes(term)).length;
-    if (hits > 0) score += add(Math.min(5, hits + 1), "executionQueue.feedbackFocus.reason.riskyClaims");
-    if (item.risk_level === "high") score += add(2, "executionQueue.feedbackFocus.reason.highRisk");
+    if (hits > 0) score += add(Math.min(5, hits + 1), "handlingList.feedbackFocus.reason.riskyClaims");
+    if (item.risk_level === "high") score += add(2, "handlingList.feedbackFocus.reason.highRisk");
   } else if (issue === "irrelevant") {
-    if (item.type === "post" && item.selected_trends?.length) score += add(2, "executionQueue.feedbackFocus.reason.trendMismatch");
-    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(1, "executionQueue.feedbackFocus.reason.noContext");
+    if (item.type === "post" && item.selected_trends?.length) score += add(2, "handlingList.feedbackFocus.reason.trendMismatch");
+    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(1, "handlingList.feedbackFocus.reason.noContext");
   } else if (issue === "other") {
-    if (item.risk_level === "high" || item.status === "failed") score += add(2, "executionQueue.feedbackFocus.reason.needsReview");
+    if (item.risk_level === "high" || item.status === "failed") score += add(2, "handlingList.feedbackFocus.reason.needsReview");
   }
   return {
     score,
@@ -568,7 +568,7 @@ export default function ExecutionQueuePage() {
       setLoadState("ready");
     } catch (error) {
       if (loadSeqRef.current !== seq) return;
-      const fallback = loadTRef.current("executionQueue.errors.load");
+      const fallback = loadTRef.current("handlingList.errors.load");
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message || fallback
         : fallback;
@@ -587,11 +587,11 @@ export default function ExecutionQueuePage() {
 
   const statCards = useMemo(
     () => [
-      { key: "pendingReview", value: stats.pending_review, label: t("executionQueue.stats.pendingReview"), icon: Clock },
-      { key: "readyToPublish", value: stats.ready_to_publish, label: t("executionQueue.stats.readyToPublish"), icon: Send },
-      { key: "approved", value: stats.approved, label: t("executionQueue.stats.approved"), icon: CheckCircle2 },
-      { key: "rejected", value: stats.rejected, label: t("executionQueue.stats.rejected"), icon: XCircle },
-      { key: "failed", value: stats.failed, label: t("executionQueue.stats.failed"), icon: ShieldAlert },
+      { key: "pendingReview", value: stats.pending_review, label: t("handlingList.stats.pendingReview"), icon: Clock },
+      { key: "readyToPublish", value: stats.ready_to_publish, label: t("handlingList.stats.readyToPublish"), icon: Send },
+      { key: "approved", value: stats.approved, label: t("handlingList.stats.approved"), icon: CheckCircle2 },
+      { key: "rejected", value: stats.rejected, label: t("handlingList.stats.rejected"), icon: XCircle },
+      { key: "failed", value: stats.failed, label: t("handlingList.stats.failed"), icon: ShieldAlert },
     ],
     [stats, t]
   );
@@ -642,18 +642,18 @@ export default function ExecutionQueuePage() {
     for (const item of publishFilteredItems) {
       if (item.status === "failed") {
         const key = failureGroupForItem(item);
-        addItem(item, `failure-${key}`, "failure", t(`executionQueue.failureGroups.${key}.title`), t("executionQueue.smartBulk.category.failure"));
+        addItem(item, `failure-${key}`, "failure", t(`handlingList.failureGroups.${key}.title`), t("handlingList.smartBulk.category.failure"));
       }
       for (const issue of item.feedback_signal_summary?.issue_tags || []) {
-        addItem(item, `feedback-${issue}`, "feedback", feedbackIssueLabel(issue, t), t("executionQueue.smartBulk.category.feedback"));
+        addItem(item, `feedback-${issue}`, "feedback", feedbackIssueLabel(issue, t), t("handlingList.smartBulk.category.feedback"));
       }
       if (item.bot_id || item.bot_name) {
-        addItem(item, `bot-${item.bot_id || item.bot_name}`, "bot", item.bot_name || t("executionQueue.item.botFallback", { id: item.bot_id || 0 }), t("executionQueue.smartBulk.category.bot"));
+        addItem(item, `bot-${item.bot_id || item.bot_name}`, "bot", item.bot_name || t("handlingList.item.botFallback", { id: item.bot_id || 0 }), t("handlingList.smartBulk.category.bot"));
       }
       if (item.twitter_account_id || item.twitter_account_name) {
-        addItem(item, `account-${item.twitter_account_id || item.twitter_account_name}`, "account", item.twitter_account_name || `#${item.twitter_account_id}`, t("executionQueue.smartBulk.category.account"));
+        addItem(item, `account-${item.twitter_account_id || item.twitter_account_name}`, "account", item.twitter_account_name || `#${item.twitter_account_id}`, t("handlingList.smartBulk.category.account"));
       }
-      addItem(item, `type-${item.type}`, "type", t(sourceLabelKey(item.type)), t("executionQueue.smartBulk.category.type"));
+      addItem(item, `type-${item.type}`, "type", t(sourceLabelKey(item.type)), t("handlingList.smartBulk.category.type"));
     }
 
     return Array.from(groups.values())
@@ -675,10 +675,10 @@ export default function ExecutionQueuePage() {
     if ((publisherStatus?.accounts_missing_tweet_write_count || 0) > 0) {
       blockers.push({
         id: "missing_scope",
-        title: t("executionQueue.blockers.missingScope.title", { count: publisherStatus?.accounts_missing_tweet_write_count || 0 }),
-        description: t("executionQueue.blockers.missingScope.description"),
+        title: t("handlingList.blockers.missingScope.title", { count: publisherStatus?.accounts_missing_tweet_write_count || 0 }),
+        description: t("handlingList.blockers.missingScope.description"),
         href: "/accounts?filter=needs_reauth",
-        actionLabel: t("executionQueue.blockers.missingScope.action"),
+        actionLabel: t("handlingList.blockers.missingScope.action"),
         severity: "danger",
         countLabel: String(publisherStatus?.accounts_missing_tweet_write_count || 0),
       });
@@ -686,12 +686,12 @@ export default function ExecutionQueuePage() {
     if (disabledModuleTypes.length > 0) {
       blockers.push({
         id: "paused_modules",
-        title: t("executionQueue.blockers.pausedModules.title", { count: disabledModuleTypes.length }),
-        description: t("executionQueue.blockers.pausedModules.description", {
+        title: t("handlingList.blockers.pausedModules.title", { count: disabledModuleTypes.length }),
+        description: t("handlingList.blockers.pausedModules.description", {
           modules: disabledModuleTypes.map((type) => t(moduleNameKey(type))).join(" / "),
         }),
         href: "/automations#automation-modules",
-        actionLabel: t("executionQueue.blockers.pausedModules.action"),
+        actionLabel: t("handlingList.blockers.pausedModules.action"),
         severity: "danger",
         countLabel: String(disabledModuleTypes.length),
       });
@@ -699,10 +699,10 @@ export default function ExecutionQueuePage() {
     if (stats.failed > 0) {
       blockers.push({
         id: "failed",
-        title: t("executionQueue.blockers.failed.title", { count: stats.failed }),
-        description: t("executionQueue.blockers.failed.description"),
-        href: "/execution-queue?status=failed",
-        actionLabel: t("executionQueue.blockers.failed.action"),
+        title: t("handlingList.blockers.failed.title", { count: stats.failed }),
+        description: t("handlingList.blockers.failed.description"),
+        href: "/handling-list?status=failed",
+        actionLabel: t("handlingList.blockers.failed.action"),
         severity: "danger",
         countLabel: String(stats.failed),
       });
@@ -711,10 +711,10 @@ export default function ExecutionQueuePage() {
       const count = stats.pending_review + stats.ready_to_publish;
       blockers.push({
         id: "review",
-        title: t("executionQueue.blockers.review.title", { count }),
-        description: t("executionQueue.blockers.review.description"),
-        href: "/execution-queue?status=pending_review",
-        actionLabel: t("executionQueue.blockers.review.action"),
+        title: t("handlingList.blockers.review.title", { count }),
+        description: t("handlingList.blockers.review.description"),
+        href: "/handling-list?status=pending_review",
+        actionLabel: t("handlingList.blockers.review.action"),
         severity: "warning",
         countLabel: String(count),
       });
@@ -783,7 +783,7 @@ export default function ExecutionQueuePage() {
     setItems((current) => current.map((item) => (item.id === updated.id && item.type === updated.type ? { ...item, ...patch } : item)));
   };
 
-  const patchPostDraft = (item: ReviewQueueItemApi, updated: AutoPostDraftApi) => {
+  const patchContentDraft = (item: ReviewQueueItemApi, updated: ContentDraftApi) => {
     updateLocalItem(item, {
       content: updated.generated_content || item.content,
       status: updated.status as ReviewQueueItemApi["status"],
@@ -804,7 +804,7 @@ export default function ExecutionQueuePage() {
     if (!canEditQueueItem(item)) {
       setEditingKey(null);
       setEditingContent("");
-      pushToast(t("executionQueue.errors.save"));
+      pushToast(t("handlingList.errors.save"));
       return;
     }
     setBusyID(item.id);
@@ -822,15 +822,15 @@ export default function ExecutionQueuePage() {
           status: updated.status === "review" ? "pending_review" : updated.status === "sent" ? "published" : (updated.status as ReviewQueueItemApi["status"]),
         });
       } else {
-        const updated = await autoPostService.updateDraft(item.source_id, editingContent.trim());
-        patchPostDraft(item, updated);
+        const updated = await contentDraftService.updateDraft(item.source_id, editingContent.trim());
+        patchContentDraft(item, updated);
       }
       setEditingKey(null);
       setEditingContent("");
-      pushToast(t("executionQueue.toast.saved"));
+      pushToast(t("handlingList.toast.saved"));
       moveFocusAfterAction(item);
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.save") : t("executionQueue.errors.save"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("handlingList.errors.save") : t("handlingList.errors.save"));
     } finally {
       setBusyID(null);
     }
@@ -844,13 +844,13 @@ export default function ExecutionQueuePage() {
         ? await exposureRadarService.approveDraft(item.source_id)
         : item.type === "reply"
           ? await automationService.approveReplyDraft(item.source_id)
-          : await autoPostService.approveDraft(item.source_id);
+          : await contentDraftService.approveDraft(item.source_id);
       updateLocalItem(item, { status: updated.status === "review" ? "pending_review" : (updated.status as ReviewQueueItemApi["status"]) });
-      pushToast(t(item.type === "post" ? "executionQueue.toast.postPublishJobCreated" : "executionQueue.toast.approved"));
+      pushToast(t(item.type === "post" ? "handlingList.toast.postPublishJobCreated" : "handlingList.toast.approved"));
       moveFocusAfterAction(item);
       void loadQueue();
     } catch (error) {
-      pushToast(automationPausedToast(t, error, t("executionQueue.errors.approve")));
+      pushToast(automationPausedToast(t, error, t("handlingList.errors.approve")));
     } finally {
       setBusyID(null);
     }
@@ -887,23 +887,23 @@ export default function ExecutionQueuePage() {
 
   const reject = async (item: ReviewQueueItemApi, draft: RejectDraft = rejectDraft) => {
     if (item.type !== "comment" && item.type !== "reply" && item.type !== "post") return;
-    const reasonLabel = t(`executionQueue.rejectDialog.reason.${draft.reason}`);
+    const reasonLabel = t(`handlingList.rejectDialog.reason.${draft.reason}`);
     const reasonText = [reasonLabel, draft.note.trim()].filter(Boolean).join(" — ");
     setBusyID(item.id);
     try {
       const updated = item.type === "comment"
-        ? await exposureRadarService.rejectDraft(item.source_id, reasonText || t("executionQueue.rejectReason"))
+        ? await exposureRadarService.rejectDraft(item.source_id, reasonText || t("handlingList.rejectReason"))
         : item.type === "reply"
-          ? await automationService.rejectReplyDraft(item.source_id, reasonText || t("executionQueue.rejectReason"))
-          : await autoPostService.rejectDraft(item.source_id, reasonText || t("executionQueue.rejectReason"));
-      const feedbackSaved = await saveRejectFeedback(item, draft, reasonText || t("executionQueue.rejectReason"));
+          ? await automationService.rejectReplyDraft(item.source_id, reasonText || t("handlingList.rejectReason"))
+          : await contentDraftService.rejectDraft(item.source_id, reasonText || t("handlingList.rejectReason"));
+      const feedbackSaved = await saveRejectFeedback(item, draft, reasonText || t("handlingList.rejectReason"));
       updateLocalItem(item, { status: updated.status as ReviewQueueItemApi["status"] });
-      pushToast(feedbackSaved ? t("executionQueue.toast.rejectedLearned", { reason: reasonLabel }) : t("executionQueue.toast.rejected"));
+      pushToast(feedbackSaved ? t("handlingList.toast.rejectedLearned", { reason: reasonLabel }) : t("handlingList.toast.rejected"));
       setRejectingItem(null);
       moveFocusAfterAction(item);
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.errors.reject") : t("executionQueue.errors.reject"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("handlingList.errors.reject") : t("handlingList.errors.reject"));
     } finally {
       setBusyID(null);
     }
@@ -914,11 +914,11 @@ export default function ExecutionQueuePage() {
     setBusyID(item.id);
     try {
       await publishingService.retry(item.publish_job_id);
-      pushToast(t("executionQueue.toast.retryQueued"));
+      pushToast(t("handlingList.toast.retryQueued"));
       moveFocusAfterAction(item);
       void loadQueue();
     } catch (error) {
-      pushToast(automationPausedToast(t, error, t("executionQueue.errors.retry")));
+      pushToast(automationPausedToast(t, error, t("handlingList.errors.retry")));
     } finally {
       setBusyID(null);
     }
@@ -928,12 +928,12 @@ export default function ExecutionQueuePage() {
     if (item.type !== "post") return;
     setBusyID(item.id);
     try {
-      await autoPostService.preparePublish(item.source_id);
-      pushToast(t("executionQueue.toast.postPublishJobCreated"));
+      await contentDraftService.preparePublish(item.source_id);
+      pushToast(t("handlingList.toast.postPublishJobCreated"));
       moveFocusAfterAction(item);
       void loadQueue();
     } catch (error) {
-      pushToast(automationPausedToast(t, error, t("executionQueue.errors.preparePublish")));
+      pushToast(automationPausedToast(t, error, t("handlingList.errors.preparePublish")));
     } finally {
       setBusyID(null);
     }
@@ -942,7 +942,7 @@ export default function ExecutionQueuePage() {
   const saveQualitySignal = (item: ReviewQueueItemApi, signal: QueueQualitySignal) => {
     const key = `${item.type}-${item.id}`;
     setQualitySignals((current) => ({ ...current, [key]: signal }));
-    pushToast(t(`executionQueue.quality.toast.${signal}`));
+    pushToast(t(`handlingList.quality.toast.${signal}`));
   };
 
   const saveIssueMatchVerdict = async (item: ReviewQueueItemApi, verdict: FeedbackIssueVerdict) => {
@@ -960,7 +960,7 @@ export default function ExecutionQueuePage() {
         verdict,
         reasons: match.reasonKeys,
       });
-      pushToast(t(`executionQueue.feedbackFocus.toast.${verdict}`));
+      pushToast(t(`handlingList.feedbackFocus.toast.${verdict}`));
       void loadQueue();
     } catch (error) {
       setIssueMatchVerdicts((current) => {
@@ -972,29 +972,29 @@ export default function ExecutionQueuePage() {
         }
         return next;
       });
-      pushToast(apiErrorMessage(error) || t("executionQueue.feedbackFocus.toast.saveFailed"));
+      pushToast(apiErrorMessage(error) || t("handlingList.feedbackFocus.toast.saveFailed"));
     }
   };
 
   const rewritePostDraft = async (item: ReviewQueueItemApi) => {
     if (item.type !== "post") return;
     const key = `${item.type}-${item.id}`;
-    const rewriteMode = (rewriteModeByKey[key] as AutoPostRewriteMode) || defaultPostRewriteMode(urlFeedbackIssue);
+    const rewriteMode = (rewriteModeByKey[key] as ContentDraftRewriteMode) || defaultContentDraftRewriteMode(urlFeedbackIssue);
     const feedback = rewriteFeedbackByKey[key] || "";
     const disabledLearningIssues = disabledLearningIssuesByKey[key] || [];
     setBusyID(item.id);
     try {
-      const updated = await autoPostService.rewriteDraft(item.source_id, {
+      const updated = await contentDraftService.rewriteDraft(item.source_id, {
         rewrite_mode: rewriteMode,
         feedback,
         disabled_learning_issues: disabledLearningIssues,
       });
-      patchPostDraft(item, updated);
+      patchContentDraft(item, updated);
       setEditingKey(null);
       setEditingContent("");
-      pushToast(t("executionQueue.quality.toast.rewritten"));
+      pushToast(t("handlingList.quality.toast.rewritten"));
     } catch (error) {
-      pushToast(apiErrorCode(error) === "ai_generation_quota_exceeded" ? t("executionQueue.quality.errors.quota") : apiErrorMessage(error) || t("executionQueue.quality.errors.rewrite"));
+      pushToast(apiErrorCode(error) === "ai_generation_quota_exceeded" ? t("handlingList.quality.errors.quota") : apiErrorMessage(error) || t("handlingList.quality.errors.rewrite"));
     } finally {
       setBusyID(null);
     }
@@ -1039,9 +1039,9 @@ export default function ExecutionQueuePage() {
       }
       setEditingKey(null);
       setEditingContent("");
-      pushToast(t("executionQueue.socialRewrite.toast.rewritten"));
+      pushToast(t("handlingList.socialRewrite.toast.rewritten"));
     } catch (error) {
-      pushToast(apiErrorCode(error) === "ai_generation_quota_exceeded" ? t("executionQueue.quality.errors.quota") : apiErrorMessage(error) || t("executionQueue.socialRewrite.errors.rewrite"));
+      pushToast(apiErrorCode(error) === "ai_generation_quota_exceeded" ? t("handlingList.quality.errors.quota") : apiErrorMessage(error) || t("handlingList.socialRewrite.errors.rewrite"));
     } finally {
       setBusyID(null);
     }
@@ -1060,7 +1060,7 @@ export default function ExecutionQueuePage() {
     if (!botID) return;
     try {
       await oafBotService.saveLearningRulePreference(botID, normalized, nextStatus);
-      pushToast(t(nextStatus === "disabled" ? "executionQueue.feedbackSignals.learningRuleSavedDisabled" : "executionQueue.feedbackSignals.learningRuleSavedEnabled"));
+      pushToast(t(nextStatus === "disabled" ? "handlingList.feedbackSignals.learningRuleSavedDisabled" : "handlingList.feedbackSignals.learningRuleSavedEnabled"));
     } catch (error) {
       setDisabledLearningIssuesByKey((current) => {
         const currentIssues = current[itemKey] || [];
@@ -1069,27 +1069,27 @@ export default function ExecutionQueuePage() {
           [itemKey]: nextStatus === "disabled" ? currentIssues.filter((item) => item !== normalized) : [...new Set([...currentIssues, normalized])],
         };
       });
-      pushToast(apiErrorMessage(error) || t("executionQueue.feedbackSignals.learningRuleSaveFailed"));
+      pushToast(apiErrorMessage(error) || t("handlingList.feedbackSignals.learningRuleSaveFailed"));
     }
   };
 
   const realPublish = async (item: ReviewQueueItemApi) => {
     if (!item.publish_job_id) return;
-    const confirmKey = publisherStatus?.dry_run ? "executionQueue.confirm.dryRunPublish" : "executionQueue.confirm.realPublish";
+    const confirmKey = publisherStatus?.dry_run ? "handlingList.confirm.dryRunPublish" : "handlingList.confirm.realPublish";
     const confirmed = await confirm({
       description: t(confirmKey),
-      confirmLabel: t(publisherStatus?.dry_run ? "executionQueue.actions.dryRunPublish" : "executionQueue.actions.realPublish"),
+      confirmLabel: t(publisherStatus?.dry_run ? "handlingList.actions.dryRunPublish" : "handlingList.actions.realPublish"),
       tone: publisherStatus?.dry_run ? "default" : "destructive",
     });
     if (!confirmed) return;
     setBusyID(item.id);
     try {
       const updated = await publishingService.publishNow(item.publish_job_id);
-      pushToast(updated.publish_mode === "dry_run" ? t("executionQueue.toast.dryRunPublish") : t("executionQueue.toast.realPublish"));
+      pushToast(updated.publish_mode === "dry_run" ? t("handlingList.toast.dryRunPublish") : t("handlingList.toast.realPublish"));
       moveFocusAfterAction(item);
       void loadQueue();
     } catch (error) {
-      pushToast(automationPausedToast(t, error, t("executionQueue.errors.realPublish")));
+      pushToast(automationPausedToast(t, error, t("handlingList.errors.realPublish")));
     } finally {
       setBusyID(null);
     }
@@ -1133,7 +1133,7 @@ export default function ExecutionQueuePage() {
   const openBulkRejectDialog = () => {
     const candidates = bulkCandidatesForAction("reject");
     if (!candidates.length) {
-      pushToast(t("executionQueue.bulk.noEligible"));
+      pushToast(t("handlingList.bulk.noEligible"));
       return;
     }
     setBulkRejectDraft({ reason: "irrelevant", note: "" });
@@ -1148,16 +1148,16 @@ export default function ExecutionQueuePage() {
   const runBulkAction = async (action: BulkAction, options?: { candidates?: ReviewQueueItemApi[]; rejectDraft?: RejectDraft; skipConfirm?: boolean }) => {
     const candidates = bulkCandidatesForAction(action, options?.candidates || selectedItems);
     if (!candidates.length) {
-      pushToast(t("executionQueue.bulk.noEligible"));
+      pushToast(t("handlingList.bulk.noEligible"));
       return;
     }
-    const draft = options?.rejectDraft || { reason: "other" as RejectReasonKey, note: t("executionQueue.bulk.rejectReason") };
-    const reasonLabel = action === "reject" ? t(`executionQueue.rejectDialog.reason.${draft.reason}`) : "";
+    const draft = options?.rejectDraft || { reason: "other" as RejectReasonKey, note: t("handlingList.bulk.rejectReason") };
+    const reasonLabel = action === "reject" ? t(`handlingList.rejectDialog.reason.${draft.reason}`) : "";
     const reason = action === "reject" ? [reasonLabel, draft.note.trim()].filter(Boolean).join(" — ") : "";
     if (!options?.skipConfirm) {
       const confirmed = await confirm({
-        description: t(`executionQueue.bulk.confirm.${action}`, { count: candidates.length }),
-        confirmLabel: t(`executionQueue.bulk.action.${action}`),
+        description: t(`handlingList.bulk.confirm.${action}`, { count: candidates.length }),
+        confirmLabel: t(`handlingList.bulk.action.${action}`),
         tone: action === "reject" || action === "delete" ? "destructive" : "default",
       });
       if (!confirmed) return;
@@ -1184,10 +1184,10 @@ export default function ExecutionQueuePage() {
       setSelectedKeys(new Set(candidates.filter((item) => failedResultKeys.has(`${item.type}-${item.source_id}-${item.publish_job_id || 0}`)).map(queueItemKey)));
       if (action === "reject") closeBulkRejectDialog();
       setBulkResult(result);
-      pushToast(t(result.failed > 0 ? "executionQueue.bulk.toast.partial" : "executionQueue.bulk.toast.success", { succeeded: result.succeeded, failed: result.failed }));
+      pushToast(t(result.failed > 0 ? "handlingList.bulk.toast.partial" : "handlingList.bulk.toast.success", { succeeded: result.succeeded, failed: result.failed }));
       void loadQueue();
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("executionQueue.bulk.toast.partial", { succeeded: 0, failed: candidates.length }) : t("executionQueue.bulk.toast.partial", { succeeded: 0, failed: candidates.length }));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("handlingList.bulk.toast.partial", { succeeded: 0, failed: candidates.length }) : t("handlingList.bulk.toast.partial", { succeeded: 0, failed: candidates.length }));
     } finally {
       setBulkBusy(null);
     }
@@ -1196,13 +1196,13 @@ export default function ExecutionQueuePage() {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-sm text-[#1d9bf0]">{t("executionQueue.kicker")}</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">{t("executionQueue.title")}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("executionQueue.subtitle")}</p>
+        <p className="text-sm text-[#1d9bf0]">{t("handlingList.kicker")}</p>
+        <h1 className="mt-2 text-3xl font-semibold text-white">{t("handlingList.title")}</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("handlingList.subtitle")}</p>
         {publisherStatus ? (
           <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 text-xs">
             <span className="max-w-full rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b]">
-              {t("executionQueue.publisherMode.label")}
+              {t("handlingList.publisherMode.label")}
             </span>
             <span className={`max-w-full rounded-full border px-3 py-1 ${
               publisherStatus.real_publish_enabled && !publisherStatus.dry_run
@@ -1212,20 +1212,20 @@ export default function ExecutionQueuePage() {
                   : "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
             }`}>
               {publisherStatus.real_publish_enabled && !publisherStatus.dry_run
-                ? t("executionQueue.publisherMode.real")
+                ? t("handlingList.publisherMode.real")
                 : publisherStatus.dry_run
-                  ? t("executionQueue.publisherMode.dryRun")
-                  : t("executionQueue.publisherMode.simulated")}
+                  ? t("handlingList.publisherMode.dryRun")
+                  : t("handlingList.publisherMode.simulated")}
             </span>
             <span className="max-w-full break-words rounded-full border border-[#2f3336] bg-[#0f1419] px-3 py-1 text-[#71767b] [overflow-wrap:anywhere]">
-              {t("executionQueue.publisherMode.limits", {
+              {t("handlingList.publisherMode.limits", {
                 daily: publisherStatus.per_account_daily_limit,
                 cooldown: publisherStatus.per_account_min_interval_seconds,
               })}
             </span>
             {publisherStatus.accounts_missing_tweet_write_count > 0 ? (
               <span className="max-w-full break-words rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-[#f6d96b] [overflow-wrap:anywhere]">
-                {t("executionQueue.publisherMode.missingScope", { count: publisherStatus.accounts_missing_tweet_write_count })}
+                {t("handlingList.publisherMode.missingScope", { count: publisherStatus.accounts_missing_tweet_write_count })}
               </span>
             ) : null}
           </div>
@@ -1233,32 +1233,32 @@ export default function ExecutionQueuePage() {
       </div>
 
       <OperationalBlockersCard
-        title={t("executionQueue.blockers.title")}
-        description={t("executionQueue.blockers.description")}
+        title={t("handlingList.blockers.title")}
+        description={t("handlingList.blockers.description")}
         loading={loadState === "loading"}
         blockers={operationalBlockers}
-        emptyTitle={t("executionQueue.blockers.emptyTitle")}
-        emptyDescription={t("executionQueue.blockers.emptyDescription")}
+        emptyTitle={t("handlingList.blockers.emptyTitle")}
+        emptyDescription={t("handlingList.blockers.emptyDescription")}
       />
 
       <details className="group rounded-2xl border border-[#2f3336] bg-[#0f1419]">
         <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 marker:hidden md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">{t("executionQueue.diagnostics.title")}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("executionQueue.diagnostics.description")}</p>
+            <p className="text-sm font-semibold text-white">{t("handlingList.diagnostics.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("handlingList.diagnostics.description")}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
             <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-2.5 py-1 text-amber-100">
-              {t("executionQueue.diagnostics.pending", { count: stats.pending_review })}
+              {t("handlingList.diagnostics.pending", { count: stats.pending_review })}
             </span>
             <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 py-1 text-[#7ee0b5]">
-              {t("executionQueue.diagnostics.ready", { count: stats.ready_to_publish })}
+              {t("handlingList.diagnostics.ready", { count: stats.ready_to_publish })}
             </span>
             <span className="rounded-full border border-rose-300/25 bg-rose-500/10 px-2.5 py-1 text-rose-100">
-              {t("executionQueue.diagnostics.failed", { count: stats.failed })}
+              {t("handlingList.diagnostics.failed", { count: stats.failed })}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-[#2f3336] px-2.5 py-1 font-semibold text-[#8ecdf8]">
-              {t("executionQueue.diagnostics.expand")}
+              {t("handlingList.diagnostics.expand")}
               <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
             </span>
           </div>
@@ -1290,21 +1290,21 @@ export default function ExecutionQueuePage() {
             <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-rose-50">{t("executionQueue.failureGroups.title")}</p>
-                  <p className="mt-1 text-xs leading-5 text-rose-50/70">{t("executionQueue.failureGroups.description")}</p>
+                  <p className="text-sm font-semibold text-rose-50">{t("handlingList.failureGroups.title")}</p>
+                  <p className="mt-1 text-xs leading-5 text-rose-50/70">{t("handlingList.failureGroups.description")}</p>
                 </div>
-                <Link href="/execution-queue?status=failed" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-200/25 bg-black/20 px-3 text-sm font-semibold text-rose-50 transition hover:bg-rose-300/10">
-                  {t("executionQueue.failureGroups.viewFailed")}
+                <Link href="/handling-list?status=failed" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-rose-200/25 bg-black/20 px-3 text-sm font-semibold text-rose-50 transition hover:bg-rose-300/10">
+                  {t("handlingList.failureGroups.viewFailed")}
                   <ArrowRight className="size-4" />
                 </Link>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 {failureGroups.slice(0, 3).map((group) => (
-                  <Link key={group.key} href="/execution-queue?status=failed" className="rounded-2xl border border-rose-200/20 bg-black/30 p-4 transition hover:border-rose-200/40">
+                  <Link key={group.key} href="/handling-list?status=failed" className="rounded-2xl border border-rose-200/20 bg-black/30 p-4 transition hover:border-rose-200/40">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-rose-50">{t(`executionQueue.failureGroups.${group.key}.title`)}</p>
-                        <p className="mt-1 text-xs leading-5 text-rose-50/65">{t(`executionQueue.failureGroups.${group.key}.description`)}</p>
+                        <p className="text-sm font-semibold text-rose-50">{t(`handlingList.failureGroups.${group.key}.title`)}</p>
+                        <p className="mt-1 text-xs leading-5 text-rose-50/65">{t(`handlingList.failureGroups.${group.key}.description`)}</p>
                       </div>
                       <span className="shrink-0 rounded-full border border-rose-200/25 bg-black/30 px-2 py-0.5 text-xs font-semibold text-rose-50">{group.count}</span>
                     </div>
@@ -1331,25 +1331,25 @@ export default function ExecutionQueuePage() {
                     onChange={toggleSelectVisible}
                     className="size-4 rounded border-[#2f3336] bg-black"
                   />
-                  <span>{t("executionQueue.bulk.selectVisible", { count: visibleSelectableItems.length })}</span>
-                  <span className="text-xs font-normal text-[#71767b]">{t("executionQueue.bulk.selected", { count: selectedItems.length })}</span>
+                  <span>{t("handlingList.bulk.selectVisible", { count: visibleSelectableItems.length })}</span>
+                  <span className="text-xs font-normal text-[#71767b]">{t("handlingList.bulk.selected", { count: selectedItems.length })}</span>
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" disabled={bulkBusy !== null || selectedApproveCount === 0} onClick={() => void runBulkAction("approve")}>
                     <CheckCircle2 className="size-4" />
-                    {t("executionQueue.bulk.action.approveWithCount", { count: selectedApproveCount })}
+                    {t("handlingList.bulk.action.approveWithCount", { count: selectedApproveCount })}
                   </Button>
                   <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRetryCount === 0} onClick={() => void runBulkAction("retry")}>
                     <RefreshCw className="size-4" />
-                    {t("executionQueue.bulk.action.retryWithCount", { count: selectedRetryCount })}
+                    {t("handlingList.bulk.action.retryWithCount", { count: selectedRetryCount })}
                   </Button>
                   <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedRejectCount === 0} onClick={openBulkRejectDialog}>
                     <XCircle className="size-4" />
-                    {t("executionQueue.bulk.action.rejectWithCount", { count: selectedRejectCount })}
+                    {t("handlingList.bulk.action.rejectWithCount", { count: selectedRejectCount })}
                   </Button>
                   <Button size="sm" variant="outline" disabled={bulkBusy !== null || selectedDeleteCount === 0} onClick={() => void runBulkAction("delete")}>
                     <Trash2 className="size-4" />
-                    {t("executionQueue.bulk.action.deleteWithCount", { count: selectedDeleteCount })}
+                    {t("handlingList.bulk.action.deleteWithCount", { count: selectedDeleteCount })}
                   </Button>
                 </div>
               </div>
@@ -1364,10 +1364,10 @@ export default function ExecutionQueuePage() {
 
       <Card className="bg-[#0f1419]">
         <div className="grid gap-3 md:grid-cols-4">
-          <FilterSelect label={t("executionQueue.filters.type")} value={typeFilter} onChange={(value) => setTypeFilter(value as ReviewQueueType)} options={typeOptions} labelPrefix="executionQueue.type" />
-          <FilterSelect label={t("executionQueue.filters.status")} value={statusFilter} onChange={(value) => setStatusFilter(value as ReviewQueueStatus)} options={statusOptions} labelPrefix="executionQueue.status" />
-          <FilterSelect label={t("executionQueue.filters.executionMode")} value={modeFilter} onChange={(value) => setModeFilter(value as ReviewQueueExecutionMode)} options={modeOptions} labelPrefix="executionQueue.executionMode" />
-          <FilterSelect label={t("executionQueue.filters.publishOutcome")} value={publishOutcomeFilter} onChange={(value) => setPublishOutcomeFilter(value as PublishOutcomeFilter)} options={publishOutcomeOptions} labelPrefix="executionQueue.publishOutcome" />
+          <FilterSelect label={t("handlingList.filters.type")} value={typeFilter} onChange={(value) => setTypeFilter(value as ReviewQueueType)} options={typeOptions} labelPrefix="handlingList.type" />
+          <FilterSelect label={t("handlingList.filters.status")} value={statusFilter} onChange={(value) => setStatusFilter(value as ReviewQueueStatus)} options={statusOptions} labelPrefix="handlingList.status" />
+          <FilterSelect label={t("handlingList.filters.executionMode")} value={modeFilter} onChange={(value) => setModeFilter(value as ReviewQueueExecutionMode)} options={modeOptions} labelPrefix="handlingList.executionMode" />
+          <FilterSelect label={t("handlingList.filters.publishOutcome")} value={publishOutcomeFilter} onChange={(value) => setPublishOutcomeFilter(value as PublishOutcomeFilter)} options={publishOutcomeOptions} labelPrefix="handlingList.publishOutcome" />
         </div>
       </Card>
 
@@ -1375,24 +1375,24 @@ export default function ExecutionQueuePage() {
         <Card className="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.feedbackFocus.title", { issue: t(`executionQueue.rejectDialog.reason.${urlFeedbackIssue}`) })}</p>
+              <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.feedbackFocus.title", { issue: t(`handlingList.rejectDialog.reason.${urlFeedbackIssue}`) })}</p>
               <p className="mt-1 text-sm leading-6 text-[#8b98a5]">
-                {t("executionQueue.feedbackFocus.description", {
-                  postMode: t(`executionQueue.quality.mode.${defaultPostRewriteMode(urlFeedbackIssue)}`),
-                  socialMode: t(`executionQueue.socialRewrite.mode.${defaultSocialRewriteMode(urlFeedbackIssue)}`),
+                {t("handlingList.feedbackFocus.description", {
+                  postMode: t(`handlingList.quality.mode.${defaultContentDraftRewriteMode(urlFeedbackIssue)}`),
+                  socialMode: t(`handlingList.socialRewrite.mode.${defaultSocialRewriteMode(urlFeedbackIssue)}`),
                 })}
               </p>
               <p className="mt-1 text-xs leading-5 text-[#8ecdf8]">
-                {feedbackIssueMatchCount > 0 ? t("executionQueue.feedbackFocus.matchCount", { count: feedbackIssueMatchCount }) : t("executionQueue.feedbackFocus.noStrongMatch")}
+                {feedbackIssueMatchCount > 0 ? t("handlingList.feedbackFocus.matchCount", { count: feedbackIssueMatchCount }) : t("handlingList.feedbackFocus.noStrongMatch")}
               </p>
               {activeIssueVerdictStat && activeIssueVerdictStat.total > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span className="rounded-full border border-[#1d9bf0]/30 bg-black/20 px-2.5 py-1 text-[#d7ebff]">
-                    {t("executionQueue.feedbackFocus.learning.accuracy", { rate: percent(activeIssueVerdictStat.accuracy_rate), total: activeIssueVerdictStat.total })}
+                    {t("handlingList.feedbackFocus.learning.accuracy", { rate: percent(activeIssueVerdictStat.accuracy_rate), total: activeIssueVerdictStat.total })}
                   </span>
                   {activeIssueVerdictStat.reasons.slice(0, 2).map((reason) => (
                     <span key={reason.reason} className={`rounded-full border px-2.5 py-1 ${reason.score_adjustment >= 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"}`}>
-                      {t("executionQueue.feedbackFocus.learning.reason", {
+                      {t("handlingList.feedbackFocus.learning.reason", {
                         reason: t(reason.reason),
                         rate: percent(reason.accuracy_rate),
                       })}
@@ -1401,8 +1401,8 @@ export default function ExecutionQueuePage() {
                 </div>
               ) : null}
             </div>
-            <Link href="/execution-queue?status=pending_review" className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/30 px-3 text-sm font-semibold text-[#8ecdf8] transition hover:bg-[#1d9bf0]/10">
-              {t("executionQueue.feedbackFocus.clear")}
+            <Link href="/handling-list?status=pending_review" className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/30 px-3 text-sm font-semibold text-[#8ecdf8] transition hover:bg-[#1d9bf0]/10">
+              {t("handlingList.feedbackFocus.clear")}
             </Link>
           </div>
         </Card>
@@ -1410,9 +1410,9 @@ export default function ExecutionQueuePage() {
 
       {disabledModuleTypes.length > 0 ? (
         <Card className="border-amber-300/25 bg-amber-500/10 p-4">
-          <p className="text-sm font-semibold text-amber-50">{t("executionQueue.pausedNotice.title")}</p>
+          <p className="text-sm font-semibold text-amber-50">{t("handlingList.pausedNotice.title")}</p>
           <p className="mt-1 text-sm leading-6 text-amber-50/75">
-            {t("executionQueue.pausedNotice.description", {
+            {t("handlingList.pausedNotice.description", {
               modules: disabledModuleTypes.map((type) => t(moduleNameKey(type))).join(" / "),
             })}
           </p>
@@ -1423,7 +1423,7 @@ export default function ExecutionQueuePage() {
                 href={`/automations?module=${type}#automation-modules`}
                 className="inline-flex h-8 items-center justify-center gap-2 rounded-full border border-amber-300/25 bg-black/20 px-3 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/10"
               >
-                {t("executionQueue.pausedNotice.fixModule", { module: t(moduleNameKey(type)) })}
+                {t("handlingList.pausedNotice.fixModule", { module: t(moduleNameKey(type)) })}
                 <ArrowRight className="size-3.5" />
               </Link>
             ))}
@@ -1454,14 +1454,14 @@ export default function ExecutionQueuePage() {
 
       <Card className="overflow-hidden bg-[#0f1419] p-0">
         <div className="border-b border-[#2f3336] p-5 md:p-6">
-          <CardHeader title={t("executionQueue.list.title")} description={t("executionQueue.list.description")} />
+          <CardHeader title={t("handlingList.list.title")} description={t("handlingList.list.description")} />
         </div>
         {loadState === "loading" ? (
-          <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("executionQueue.loading")}</div>
+          <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("handlingList.loading")}</div>
         ) : null}
         {loadState === "error" ? (
           <div className="m-5 rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">
-            <p>{t("executionQueue.errors.load")}</p>
+            <p>{t("handlingList.errors.load")}</p>
             <Button className="mt-4" size="sm" variant="outline" onClick={() => void loadQueue({ forceToast: true })}>
               {t("common.retry")}
             </Button>
@@ -1469,14 +1469,14 @@ export default function ExecutionQueuePage() {
         ) : null}
         {loadState === "ready" && items.length === 0 ? (
           <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-12 text-center">
-            <p className="text-sm font-medium text-white">{t("executionQueue.empty.title")}</p>
-            <p className="mt-2 text-sm text-[#71767b]">{t("executionQueue.empty.description")}</p>
+            <p className="text-sm font-medium text-white">{t("handlingList.empty.title")}</p>
+            <p className="mt-2 text-sm text-[#71767b]">{t("handlingList.empty.description")}</p>
           </div>
         ) : null}
         {loadState === "ready" && items.length > 0 && publishFilteredItems.length === 0 ? (
           <div className="m-5 rounded-2xl border border-[#2f3336] bg-black px-4 py-12 text-center">
-            <p className="text-sm font-medium text-white">{t("executionQueue.publishOutcome.empty.title")}</p>
-            <p className="mt-2 text-sm text-[#71767b]">{t("executionQueue.publishOutcome.empty.description")}</p>
+            <p className="text-sm font-medium text-white">{t("handlingList.publishOutcome.empty.title")}</p>
+            <p className="mt-2 text-sm text-[#71767b]">{t("handlingList.publishOutcome.empty.description")}</p>
           </div>
         ) : null}
         {loadState === "ready" && publishFilteredItems.length > 0 ? (
@@ -1525,7 +1525,7 @@ export default function ExecutionQueuePage() {
                               onChange={() => toggleSelectedItem(item)}
                               className="size-3.5 rounded border-[#2f3336] bg-black"
                             />
-                            {t("executionQueue.bulk.selectOne")}
+                            {t("handlingList.bulk.selectOne")}
                           </label>
                         ) : null}
                         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${sourceTone(item.type)}`}>
@@ -1537,18 +1537,18 @@ export default function ExecutionQueuePage() {
                             {t(deliveryLabelKey(item))}
                           </span>
                         ) : null}
-                        <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(item.status)}`}>{t(`executionQueue.status.${item.status}`)}</span>
+                        <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(item.status)}`}>{t(`handlingList.status.${item.status}`)}</span>
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2.5 py-1 text-xs text-[#71767b]">
-                          {t(`executionQueue.executionMode.${item.execution_mode}`)}
+                          {t(`handlingList.executionMode.${item.execution_mode}`)}
                         </span>
                         {item.risk_level === "high" ? (
                           <span className="rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-2.5 py-1 text-xs text-[#f6d96b]">
-                            {t("executionQueue.riskFallback")}
+                            {t("handlingList.riskFallback")}
                           </span>
                         ) : null}
                         {issueMatch.score > 0 ? (
                           <span className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-2 py-1 text-xs text-[#8ecdf8]">
-                            <span className="px-0.5">{t("executionQueue.feedbackFocus.matchBadge", { reasons: issueMatch.reasons.join(" / ") })}</span>
+                            <span className="px-0.5">{t("handlingList.feedbackFocus.matchBadge", { reasons: issueMatch.reasons.join(" / ") })}</span>
                             <button
                               type="button"
                               onClick={() => void saveIssueMatchVerdict(item, "accurate")}
@@ -1558,7 +1558,7 @@ export default function ExecutionQueuePage() {
                                   : "border-[#2f3336] bg-black/30 text-[#8b98a5] hover:border-[#00ba7c]/35 hover:text-[#7ee0b5]"
                               }`}
                             >
-                              {t("executionQueue.feedbackFocus.verdict.accurate")}
+                              {t("handlingList.feedbackFocus.verdict.accurate")}
                             </button>
                             <button
                               type="button"
@@ -1569,7 +1569,7 @@ export default function ExecutionQueuePage() {
                                   : "border-[#2f3336] bg-black/30 text-[#8b98a5] hover:border-[#f4212e]/30 hover:text-[#ff8a91]"
                               }`}
                             >
-                              {t("executionQueue.feedbackFocus.verdict.irrelevant")}
+                              {t("handlingList.feedbackFocus.verdict.irrelevant")}
                             </button>
                           </span>
                         ) : null}
@@ -1581,11 +1581,11 @@ export default function ExecutionQueuePage() {
                           <span className="break-words text-[#cfd9e2]">{displayTarget}</span>
                         </span>
                         <span>
-                          <span className="font-semibold text-[#8b98a5]">{t("executionQueue.item.bot")}:</span>{" "}
-                          <span className="text-[#cfd9e2]">{item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")}</span>
+                          <span className="font-semibold text-[#8b98a5]">{t("handlingList.item.bot")}:</span>{" "}
+                          <span className="text-[#cfd9e2]">{item.bot_name || (item.bot_id ? t("handlingList.item.botFallback", { id: item.bot_id }) : "—")}</span>
                         </span>
                         <span>
-                          <span className="font-semibold text-[#8b98a5]">{t("executionQueue.item.account")}:</span>{" "}
+                          <span className="font-semibold text-[#8b98a5]">{t("handlingList.item.account")}:</span>{" "}
                           <span className="text-[#cfd9e2]">{item.twitter_account_name || `#${item.twitter_account_id}`}</span>
                         </span>
                       </div>
@@ -1594,23 +1594,23 @@ export default function ExecutionQueuePage() {
                         <div className="mt-4 grid gap-3 lg:grid-cols-3">
                           <QueueInfoCard
                             icon={Sparkles}
-                            label={t("executionQueue.item.source")}
+                            label={t("handlingList.item.source")}
                             title={deliveryLabelKey(item) ? t(deliveryLabelKey(item)) : t(sourceLabelKeyForItem(item))}
                             description={t(sourceDescriptionForItem(item))}
                             tone={sourceTone(item.type)}
                           />
                           <QueueInfoCard
                             icon={ShieldAlert}
-                            label={t("executionQueue.item.executionPath")}
-                            title={t(`executionQueue.executionMode.${item.execution_mode}`)}
-                            description={t(`executionQueue.executionPath.${item.execution_mode}`)}
+                            label={t("handlingList.item.executionPath")}
+                            title={t(`handlingList.executionMode.${item.execution_mode}`)}
+                            description={t(`handlingList.executionPath.${item.execution_mode}`)}
                             tone={statusTone(item.status)}
                           />
                           <QueueInfoCard
                             icon={Send}
-                            label={t("executionQueue.item.publishState")}
+                            label={t("handlingList.item.publishState")}
                             title={publishStatusLabel}
-                            description={item.publish_job_id ? t("executionQueue.publishState.withJob", { id: item.publish_job_id }) : t("executionQueue.publishState.withoutJob")}
+                            description={item.publish_job_id ? t("handlingList.publishState.withJob", { id: item.publish_job_id }) : t("handlingList.publishState.withoutJob")}
                             tone={publishTone(item.publish_status)}
                           />
                         </div>
@@ -1646,7 +1646,7 @@ export default function ExecutionQueuePage() {
                                 }
                               >
                                 <ChevronDown className={`size-3.5 transition-transform ${contentExpanded ? "rotate-180" : ""}`} />
-                                {contentExpanded ? t("executionQueue.performance.collapse") : t("executionQueue.performance.expand")}
+                                {contentExpanded ? t("handlingList.performance.collapse") : t("handlingList.performance.expand")}
                               </Button>
                             ) : null}
                           </>
@@ -1669,7 +1669,7 @@ export default function ExecutionQueuePage() {
                           }
                         >
                           <ChevronDown className="size-3.5" />
-                          {t(manageable ? "executionQueue.performance.expandTools" : "executionQueue.performance.expandDetails")}
+                          {t(manageable ? "handlingList.performance.expandTools" : "handlingList.performance.expandDetails")}
                         </Button>
                       ) : null}
 
@@ -1677,7 +1677,7 @@ export default function ExecutionQueuePage() {
                         <QueueQualityLoop
                           item={item}
                           selectedSignal={qualitySignals[itemKey]}
-                          rewriteMode={(rewriteModeByKey[itemKey] as AutoPostRewriteMode) || defaultPostRewriteMode(urlFeedbackIssue)}
+                          rewriteMode={(rewriteModeByKey[itemKey] as ContentDraftRewriteMode) || defaultContentDraftRewriteMode(urlFeedbackIssue)}
                           rewriteFeedback={rewriteFeedbackByKey[itemKey] || ""}
                           disabledLearningIssues={disabledLearningIssuesByKey[itemKey] || []}
                           disabled={busyID === item.id || !canEdit}
@@ -1724,22 +1724,22 @@ export default function ExecutionQueuePage() {
 
                       {heavyPanelsOpen ? (
                         <div className="mt-3 grid gap-2 text-xs text-[#71767b] md:grid-cols-2">
-                          <MetaLine label={t("executionQueue.item.bot")} value={item.bot_name || (item.bot_id ? t("executionQueue.item.botFallback", { id: item.bot_id }) : "—")} />
-                          <MetaLine label={t("executionQueue.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
+                          <MetaLine label={t("handlingList.item.bot")} value={item.bot_name || (item.bot_id ? t("handlingList.item.botFallback", { id: item.bot_id }) : "—")} />
+                          <MetaLine label={t("handlingList.item.account")} value={item.twitter_account_name || `#${item.twitter_account_id}`} />
                           <MetaLine className="md:col-span-2" label={t(targetLabelForItem(item))} value={displayTarget} />
-                          <MetaLine label={t("executionQueue.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
+                          <MetaLine label={t("handlingList.item.createdAt")} value={formatDateTime(item.created_at, timeZone)} />
                           <MetaLine
-                            label={t("executionQueue.item.risk")}
-                            value={`${item.risk_level ? t(`executionQueue.riskLevel.${item.risk_level}`) : t("executionQueue.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
+                            label={t("handlingList.item.risk")}
+                            value={`${item.risk_level ? t(`handlingList.riskLevel.${item.risk_level}`) : t("handlingList.riskLevel.low")}${item.risk_reasons?.length ? ` · ${item.risk_reasons.join(" / ")}` : ""}`}
                           />
                           {item.publish_job_id ? (
                             <MetaLine
                               className="md:col-span-2"
-                              label={t("executionQueue.item.publishJob")}
+                              label={t("handlingList.item.publishJob")}
                               value={[
                                 `#${item.publish_job_id}`,
-                                item.publish_status ? t(`executionQueue.publishStatus.${item.publish_status}`) : "",
-                                item.publish_mode ? t(`executionQueue.publishMode.${item.publish_mode}`) : "",
+                                item.publish_status ? t(`handlingList.publishStatus.${item.publish_status}`) : "",
+                                item.publish_mode ? t(`handlingList.publishMode.${item.publish_mode}`) : "",
                                 item.publish_last_error || "",
                               ].filter(Boolean).join(" · ")}
                             />
@@ -1756,17 +1756,17 @@ export default function ExecutionQueuePage() {
                     <div className="grid shrink-0 gap-2 sm:flex sm:flex-wrap sm:justify-start xl:max-w-[300px] xl:justify-end">
                       {item.status === "ready_to_publish" ? (
                         <span className="inline-flex h-8 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs text-[#7ee0b5]">
-                          {item.publish_job_id ? t("executionQueue.actions.inPublishQueue") : t("executionQueue.actions.readyForPublishJob")}
+                          {item.publish_job_id ? t("handlingList.actions.inPublishQueue") : t("handlingList.actions.readyForPublishJob")}
                         </span>
                       ) : null}
                       {item.status === "processing" ? (
                         <span className="inline-flex h-8 items-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 text-xs text-[#8ecdf8]">
-                          {t("executionQueue.actions.processing")}
+                          {t("handlingList.actions.processing")}
                         </span>
                       ) : null}
                       {editing ? (
                         <>
-                          <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void saveEdit(item)}>{t("executionQueue.actions.save")}</Button>
+                          <Button size="sm" className="w-full sm:w-auto" disabled={busyID === item.id} onClick={() => void saveEdit(item)}>{t("handlingList.actions.save")}</Button>
                           <Button size="sm" className="w-full sm:w-auto" variant="outline" onClick={() => setEditingKey(null)}>{t("common.cancel")}</Button>
                         </>
                       ) : (
@@ -1780,13 +1780,13 @@ export default function ExecutionQueuePage() {
                               onClick={() => void approve(item)}
                             >
                               <CheckCircle2 className="size-4" />
-                              {t("executionQueue.actions.approve")}
+                              {t("handlingList.actions.approve")}
                             </Button>
                           ) : null}
                           {manageable && item.status !== "rejected" && item.status !== "published" ? (
                             <Button size="sm" className="w-full sm:w-auto" variant="outline" disabled={busyID === item.id} onClick={() => openRejectDialog(item)}>
                               <XCircle className="size-4" />
-                              {t("executionQueue.actions.reject")}
+                              {t("handlingList.actions.reject")}
                             </Button>
                           ) : null}
                           {canEdit ? (
@@ -1805,7 +1805,7 @@ export default function ExecutionQueuePage() {
                               }}
                             >
                               <Pencil className="size-4" />
-                              {t("executionQueue.actions.edit")}
+                              {t("handlingList.actions.edit")}
                             </Button>
                           ) : null}
                           {item.status === "failed" && item.publish_job_id ? (
@@ -1817,7 +1817,7 @@ export default function ExecutionQueuePage() {
                               onClick={() => void retryPublish(item)}
                             >
                               <Send className="size-4" />
-                              {t("executionQueue.actions.retryPublish")}
+                              {t("handlingList.actions.retryPublish")}
                             </Button>
                           ) : null}
                           {item.type === "post" && !item.publish_job_id && (item.status === "ready_to_publish" || item.status === "approved") ? (
@@ -1829,7 +1829,7 @@ export default function ExecutionQueuePage() {
                               onClick={() => void preparePostPublish(item)}
                             >
                               <Send className="size-4" />
-                              {t("executionQueue.actions.preparePublish")}
+                              {t("handlingList.actions.preparePublish")}
                             </Button>
                           ) : null}
                           {canManualPublish(item) ? (
@@ -1838,11 +1838,11 @@ export default function ExecutionQueuePage() {
                               variant="outline"
                               className="w-full sm:w-auto"
                               disabled={busyID === item.id || modulePaused || !publisherStatus?.manual_publish_enabled || (!publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run)}
-                              title={modulePaused ? modulePausedTip : !publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("executionQueue.actions.realPublishDisabledTip") : ""}
+                              title={modulePaused ? modulePausedTip : !publisherStatus?.real_publish_enabled && !publisherStatus?.dry_run ? t("handlingList.actions.realPublishDisabledTip") : ""}
                               onClick={() => void realPublish(item)}
                             >
                               <Send className="size-4" />
-                              {publisherStatus?.dry_run ? t("executionQueue.actions.dryRunPublish") : t("executionQueue.actions.realPublish")}
+                              {publisherStatus?.dry_run ? t("handlingList.actions.dryRunPublish") : t("handlingList.actions.realPublish")}
                             </Button>
                           ) : null}
                           {canDelete ? (
@@ -1854,7 +1854,7 @@ export default function ExecutionQueuePage() {
                               onClick={() => void runBulkAction("delete", { candidates: [item] })}
                             >
                               <Trash2 className="size-4" />
-                              {t("executionQueue.actions.delete")}
+                              {t("handlingList.actions.delete")}
                             </Button>
                           ) : null}
                         </>
@@ -1935,11 +1935,11 @@ function SmartBulkGroupPanel({
     <Card className="border-[#1d9bf0]/20 bg-[#06111d] p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.smartBulk.title")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("executionQueue.smartBulk.description")}</p>
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.smartBulk.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("handlingList.smartBulk.description")}</p>
         </div>
         <span className="w-fit rounded-full border border-[#1d9bf0]/30 bg-black/20 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
-          {t("executionQueue.smartBulk.groupCount", { count: groups.length })}
+          {t("handlingList.smartBulk.groupCount", { count: groups.length })}
         </span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -1966,22 +1966,22 @@ function SmartBulkGroupPanel({
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {group.approveCount > 0 ? (
                   <span className="rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7ee0b5]">
-                    {t("executionQueue.smartBulk.approveCount", { count: group.approveCount })}
+                    {t("handlingList.smartBulk.approveCount", { count: group.approveCount })}
                   </span>
                 ) : null}
                 {group.retryCount > 0 ? (
                   <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-[11px] font-semibold text-[#8ecdf8]">
-                    {t("executionQueue.smartBulk.retryCount", { count: group.retryCount })}
+                    {t("handlingList.smartBulk.retryCount", { count: group.retryCount })}
                   </span>
                 ) : null}
                 {group.rejectCount > 0 ? (
                   <span className="rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-2 py-0.5 text-[11px] font-semibold text-[#ff8a91]">
-                    {t("executionQueue.smartBulk.rejectCount", { count: group.rejectCount })}
+                    {t("handlingList.smartBulk.rejectCount", { count: group.rejectCount })}
                   </span>
                 ) : null}
               </div>
               <p className="mt-3 text-xs font-semibold text-[#8ecdf8]">
-                {selected ? t("executionQueue.smartBulk.selected") : t("executionQueue.smartBulk.select")}
+                {selected ? t("handlingList.smartBulk.selected") : t("handlingList.smartBulk.select")}
               </p>
             </button>
           );
@@ -1998,21 +1998,21 @@ function QueueProgressCard({ stats, pausedCount }: { stats: { pending_review: nu
   const total = pending + completed + stats.failed;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 100;
   const metrics = [
-    { key: "pending", value: pending, href: "/execution-queue?status=pending_review", tone: "text-amber-100" },
-    { key: "completed", value: completed, href: "/execution-queue?status=approved", tone: "text-emerald-100" },
-    { key: "failed", value: stats.failed, href: "/execution-queue?status=failed", tone: "text-rose-100" },
+    { key: "pending", value: pending, href: "/handling-list?status=pending_review", tone: "text-amber-100" },
+    { key: "completed", value: completed, href: "/handling-list?status=approved", tone: "text-emerald-100" },
+    { key: "failed", value: stats.failed, href: "/handling-list?status=failed", tone: "text-rose-100" },
     { key: "paused", value: pausedCount, href: "/automations#automation-modules", tone: "text-[#8ecdf8]" },
   ];
   return (
     <Card className="border-[#1d9bf0]/25 bg-[#06111d] p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.progress.title")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("executionQueue.progress.description")}</p>
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.progress.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("handlingList.progress.description")}</p>
         </div>
         <div className="min-w-56">
           <div className="flex items-center justify-between gap-3 text-xs text-[#71767b]">
-            <span>{t("executionQueue.progress.percent")}</span>
+            <span>{t("handlingList.progress.percent")}</span>
             <span className="font-semibold text-white">{progress}%</span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#2f3336]">
@@ -2023,7 +2023,7 @@ function QueueProgressCard({ stats, pausedCount }: { stats: { pending_review: nu
       <div className="mt-4 grid gap-2 md:grid-cols-4">
         {metrics.map((metric) => (
           <Link key={metric.key} href={metric.href} className="rounded-xl border border-[#2f3336] bg-black/70 p-3 transition hover:border-[#1d9bf0]/60">
-            <p className="text-xs text-[#71767b]">{t(`executionQueue.progress.metric.${metric.key}`)}</p>
+            <p className="text-xs text-[#71767b]">{t(`handlingList.progress.metric.${metric.key}`)}</p>
             <p className={`mt-1 text-xl font-semibold ${metric.tone}`}>{metric.value}</p>
           </Link>
         ))}
@@ -2054,13 +2054,13 @@ function PublishReadinessCard({
       key: "review",
       done: stats.pending_review === 0,
       value: stats.pending_review,
-      href: "/execution-queue?status=pending_review",
+      href: "/handling-list?status=pending_review",
     },
     {
       key: "ready",
       done: stats.ready_to_publish > 0,
       value: stats.ready_to_publish,
-      href: "/execution-queue?status=ready_to_publish",
+      href: "/handling-list?status=ready_to_publish",
     },
     {
       key: "permission",
@@ -2076,9 +2076,9 @@ function PublishReadinessCard({
     },
   ];
   const primaryHref = stats.pending_review > 0
-    ? "/execution-queue?status=pending_review"
+    ? "/handling-list?status=pending_review"
     : stats.ready_to_publish > 0
-      ? "/execution-queue?status=ready_to_publish"
+      ? "/handling-list?status=ready_to_publish"
       : missingScope > 0
         ? "/accounts?filter=needs_reauth"
         : "/exposure-radar";
@@ -2086,16 +2086,16 @@ function PublishReadinessCard({
     <Card className="border-[#00ba7c]/20 bg-[#04130f] p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#d5f8e8]">{t("executionQueue.publishReadiness.title")}</p>
+          <p className="text-sm font-semibold text-[#d5f8e8]">{t("handlingList.publishReadiness.title")}</p>
           <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
-            {t("executionQueue.publishReadiness.description", { mode: t(`executionQueue.publisherMode.${modeKey}`) })}
+            {t("handlingList.publishReadiness.description", { mode: t(`handlingList.publisherMode.${modeKey}`) })}
           </p>
           {pausedCount > 0 ? (
-            <p className="mt-2 text-xs leading-5 text-amber-100/80">{t("executionQueue.publishReadiness.pausedHint", { count: pausedCount })}</p>
+            <p className="mt-2 text-xs leading-5 text-amber-100/80">{t("handlingList.publishReadiness.pausedHint", { count: pausedCount })}</p>
           ) : null}
         </div>
         <Link href={primaryHref} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#00ba7c] px-3 text-sm font-semibold text-black hover:bg-[#12c98a]">
-          {t("executionQueue.publishReadiness.cta")}
+          {t("handlingList.publishReadiness.cta")}
           <ArrowRight className="size-4" />
         </Link>
       </div>
@@ -2103,11 +2103,11 @@ function PublishReadinessCard({
         {checks.map((check) => (
           <Link key={check.key} href={check.href} className={`rounded-xl border p-3 transition ${check.done ? "border-[#00ba7c]/20 bg-black/35 hover:border-[#00ba7c]/40" : "border-amber-300/20 bg-amber-500/10 hover:border-amber-200/35"}`}>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-[#e7e9ea]">{t(`executionQueue.publishReadiness.${check.key}.title`)}</p>
+              <p className="text-xs font-semibold text-[#e7e9ea]">{t(`handlingList.publishReadiness.${check.key}.title`)}</p>
               {check.done ? <CheckCircle2 className="size-4 text-[#7ee0b5]" /> : <ShieldAlert className="size-4 text-amber-100" />}
             </div>
             <p className="mt-2 text-xs leading-5 text-[#8b98a5]">
-              {t(`executionQueue.publishReadiness.${check.key}.description`, { value: check.value })}
+              {t(`handlingList.publishReadiness.${check.key}.description`, { value: check.value })}
             </p>
           </Link>
         ))}
@@ -2136,8 +2136,8 @@ function RejectReasonDialog({
     <Dialog
       open={Boolean(item)}
       onOpenChange={(open) => !open && onClose()}
-      title={t("executionQueue.rejectDialog.title")}
-      description={t("executionQueue.rejectDialog.description")}
+      title={t("handlingList.rejectDialog.title")}
+      description={t("handlingList.rejectDialog.description")}
       closeLabel={t("common.close")}
       className="max-w-lg"
     >
@@ -2149,27 +2149,27 @@ function RejectReasonDialog({
           </div>
         ) : null}
         <label className="block space-y-2">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.rejectDialog.reasonLabel")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.rejectDialog.reasonLabel")}</span>
           <select value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value as RejectReasonKey })} className="form-input h-10 py-0">
             {rejectReasons.map((reason) => (
               <option key={reason} value={reason}>
-                {t(`executionQueue.rejectDialog.reason.${reason}`)}
+                {t(`handlingList.rejectDialog.reason.${reason}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="block space-y-2">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.rejectDialog.noteLabel")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.rejectDialog.noteLabel")}</span>
           <textarea
             value={draft.note}
             onChange={(event) => onDraftChange({ ...draft, note: event.target.value })}
             rows={3}
             className="form-input min-h-24 resize-y text-sm leading-6"
-            placeholder={t("executionQueue.rejectDialog.notePlaceholder")}
+            placeholder={t("handlingList.rejectDialog.notePlaceholder")}
           />
         </label>
         <div className="rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-2 text-xs leading-5 text-[#8ecdf8]">
-          {t("executionQueue.rejectDialog.learningHint")}
+          {t("handlingList.rejectDialog.learningHint")}
         </div>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
@@ -2177,7 +2177,7 @@ function RejectReasonDialog({
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy}>
             <XCircle className="size-4" />
-            {t("executionQueue.rejectDialog.confirm")}
+            {t("handlingList.rejectDialog.confirm")}
           </Button>
         </div>
       </div>
@@ -2205,39 +2205,39 @@ function BulkRejectReasonDialog({
     <Dialog
       open={count > 0}
       onOpenChange={(open) => !open && onClose()}
-      title={t("executionQueue.bulkReject.title", { count })}
-      description={t("executionQueue.bulkReject.description")}
+      title={t("handlingList.bulkReject.title", { count })}
+      description={t("handlingList.bulkReject.description")}
       closeLabel={t("common.close")}
       className="max-w-lg"
     >
       <div className="space-y-4">
         <div className="rounded-xl border border-[#2f3336] bg-black/50 p-3">
-          <p className="text-xs text-[#71767b]">{t("executionQueue.bulkReject.selected")}</p>
+          <p className="text-xs text-[#71767b]">{t("handlingList.bulkReject.selected")}</p>
           <p className="mt-1 text-2xl font-semibold text-white">{count}</p>
         </div>
         <label className="block space-y-2">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.rejectDialog.reasonLabel")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.rejectDialog.reasonLabel")}</span>
           <select value={draft.reason} onChange={(event) => onDraftChange({ ...draft, reason: event.target.value as RejectReasonKey })} className="form-input h-10 py-0" disabled={busy}>
             {rejectReasons.map((reason) => (
               <option key={reason} value={reason}>
-                {t(`executionQueue.rejectDialog.reason.${reason}`)}
+                {t(`handlingList.rejectDialog.reason.${reason}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="block space-y-2">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.rejectDialog.noteLabel")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.rejectDialog.noteLabel")}</span>
           <textarea
             value={draft.note}
             onChange={(event) => onDraftChange({ ...draft, note: event.target.value })}
             rows={3}
             className="form-input min-h-24 resize-y text-sm leading-6"
-            placeholder={t("executionQueue.bulkReject.notePlaceholder")}
+            placeholder={t("handlingList.bulkReject.notePlaceholder")}
             disabled={busy}
           />
         </label>
         <div className="rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-2 text-xs leading-5 text-[#8ecdf8]">
-          {t("executionQueue.bulkReject.learningHint")}
+          {t("handlingList.bulkReject.learningHint")}
         </div>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
@@ -2245,7 +2245,7 @@ function BulkRejectReasonDialog({
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy}>
             <XCircle className="size-4" />
-            {t("executionQueue.bulkReject.confirm", { count })}
+            {t("handlingList.bulkReject.confirm", { count })}
           </Button>
         </div>
       </div>
@@ -2260,8 +2260,8 @@ function BulkResultDialog({ result, onClose }: { result: ReviewQueueBulkActionAp
     <Dialog
       open={Boolean(result)}
       onOpenChange={(open) => !open && onClose()}
-      title={result ? t("executionQueue.bulkResult.title", { action: t(`executionQueue.bulk.action.${result.action}`) }) : ""}
-      description={result ? t("executionQueue.bulkResult.description", { succeeded: result.succeeded, failed: result.failed, total: result.total }) : ""}
+      title={result ? t("handlingList.bulkResult.title", { action: t(`handlingList.bulk.action.${result.action}`) }) : ""}
+      description={result ? t("handlingList.bulkResult.description", { succeeded: result.succeeded, failed: result.failed, total: result.total }) : ""}
       closeLabel={t("common.close")}
       className="max-w-2xl"
     >
@@ -2269,34 +2269,34 @@ function BulkResultDialog({ result, onClose }: { result: ReviewQueueBulkActionAp
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-[#2f3336] bg-black/40 p-3">
-              <p className="text-xs text-[#71767b]">{t("executionQueue.bulkResult.total")}</p>
+              <p className="text-xs text-[#71767b]">{t("handlingList.bulkResult.total")}</p>
               <p className="mt-1 text-2xl font-semibold text-white">{result.total}</p>
             </div>
             <div className="rounded-xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 p-3">
-              <p className="text-xs text-[#7ee0b5]">{t("executionQueue.bulkResult.succeeded")}</p>
+              <p className="text-xs text-[#7ee0b5]">{t("handlingList.bulkResult.succeeded")}</p>
               <p className="mt-1 text-2xl font-semibold text-[#7ee0b5]">{result.succeeded}</p>
             </div>
             <div className="rounded-xl border border-[#f4212e]/25 bg-[#f4212e]/10 p-3">
-              <p className="text-xs text-[#ff8a91]">{t("executionQueue.bulkResult.failed")}</p>
+              <p className="text-xs text-[#ff8a91]">{t("handlingList.bulkResult.failed")}</p>
               <p className="mt-1 text-2xl font-semibold text-[#ff8a91]">{result.failed}</p>
             </div>
           </div>
 
           {result.audit_activity_id ? (
             <div className="rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-2 text-xs leading-5 text-[#8ecdf8]">
-              {t("executionQueue.bulkResult.audit", { id: result.audit_activity_id })}
+              {t("handlingList.bulkResult.audit", { id: result.audit_activity_id })}
             </div>
           ) : null}
 
           <div className="flex flex-wrap gap-2">
             {result.failed > 0 ? (
-              <Link href="/execution-queue?status=failed" className="inline-flex h-9 items-center justify-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-3 text-sm font-semibold text-[#ff8a91] hover:bg-[#f4212e]/15">
-                {t("executionQueue.bulkResult.viewFailed")}
+              <Link href="/handling-list?status=failed" className="inline-flex h-9 items-center justify-center rounded-full border border-[#f4212e]/25 bg-[#f4212e]/10 px-3 text-sm font-semibold text-[#ff8a91] hover:bg-[#f4212e]/15">
+                {t("handlingList.bulkResult.viewFailed")}
               </Link>
             ) : null}
             {result.audit_activity_id ? (
               <Link href="/activity?event_scope=system&range=7d" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                {t("executionQueue.bulkResult.viewAudit")}
+                {t("handlingList.bulkResult.viewAudit")}
               </Link>
             ) : null}
           </div>
@@ -2310,10 +2310,10 @@ function BulkResultDialog({ result, onClose }: { result: ReviewQueueBulkActionAp
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-[#e7e9ea]">
                     {t(sourceLabelKey(item.queue_type))} #{item.source_id}
-                    {item.publish_job_id ? <span className="ml-2 text-xs font-normal text-[#71767b]">{t("executionQueue.item.publishJob")} #{item.publish_job_id}</span> : null}
+                    {item.publish_job_id ? <span className="ml-2 text-xs font-normal text-[#71767b]">{t("handlingList.item.publishJob")} #{item.publish_job_id}</span> : null}
                   </p>
                   <p className={`mt-1 text-xs leading-5 ${item.success ? "text-[#7ee0b5]" : "text-[#ff8a91]"}`}>
-                    {item.success ? t("executionQueue.bulkResult.itemSuccess") : item.error || t("executionQueue.bulkResult.itemFailed")}
+                    {item.success ? t("handlingList.bulkResult.itemSuccess") : item.error || t("handlingList.bulkResult.itemFailed")}
                   </p>
                 </div>
               </div>
@@ -2322,7 +2322,7 @@ function BulkResultDialog({ result, onClose }: { result: ReviewQueueBulkActionAp
 
           {failedResults.length > 0 ? (
             <div className="rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 px-3 py-2 text-xs leading-5 text-[#ffb6bb]">
-              {t("executionQueue.bulkResult.failedHint")}
+              {t("handlingList.bulkResult.failedHint")}
             </div>
           ) : null}
         </div>
@@ -2336,20 +2336,20 @@ function RecentBulkActivityCard({ activity }: { activity: ActivityItemApi }) {
   const timeZone = usePreferredTimeZone();
   const bulk = activity.review_queue_bulk;
   const href = (bulk?.failed || 0) > 0
-    ? "/execution-queue?status=failed"
+    ? "/handling-list?status=failed"
     : bulk?.action === "approve"
-      ? "/execution-queue?status=ready_to_publish"
+      ? "/handling-list?status=ready_to_publish"
       : bulk?.action === "reject"
-        ? "/execution-queue?status=rejected"
-        : "/execution-queue";
+        ? "/handling-list?status=rejected"
+        : "/handling-list";
   return (
     <Card className="border-[#1d9bf0]/20 bg-[#07111c] p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-normal text-[#8ecdf8]">{t("executionQueue.recentBulk.title")}</p>
+          <p className="text-xs font-semibold uppercase tracking-normal text-[#8ecdf8]">{t("handlingList.recentBulk.title")}</p>
           <p className="mt-1 text-sm leading-6 text-[#d7ebff]">
-            {t("executionQueue.recentBulk.summary", {
-              action: t(`executionQueue.bulk.action.${bulk?.action || "approve"}`),
+            {t("handlingList.recentBulk.summary", {
+              action: t(`handlingList.bulk.action.${bulk?.action || "approve"}`),
               total: bulk?.total || 0,
               succeeded: bulk?.succeeded || 0,
               failed: bulk?.failed || 0,
@@ -2359,10 +2359,10 @@ function RecentBulkActivityCard({ activity }: { activity: ActivityItemApi }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/activity?event_scope=system&range=7d`} className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-white hover:bg-[#16181c]">
-            {t("executionQueue.recentBulk.openActivity")}
+            {t("handlingList.recentBulk.openActivity")}
           </Link>
           <Link href={href} className="inline-flex h-8 items-center justify-center rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
-            {t("executionQueue.recentBulk.openQueue")}
+            {t("handlingList.recentBulk.openQueue")}
           </Link>
         </div>
       </div>
@@ -2406,15 +2406,15 @@ function QueueFocusCard({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#d7ebff]">
-            {focusRequested ? t("executionQueue.focus.title") : t("executionQueue.focus.nextTitle")}
+            {focusRequested ? t("handlingList.focus.title") : t("handlingList.focus.nextTitle")}
           </p>
           <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
             {focusMissing
-              ? t("executionQueue.focus.missing")
+              ? t("handlingList.focus.missing")
               : item
-                ? t("executionQueue.focus.description", {
+                ? t("handlingList.focus.description", {
                     type: t(sourceLabelKeyForItem(item)),
-                    status: t(`executionQueue.status.${item.status}`),
+                    status: t(`handlingList.status.${item.status}`),
                   })
                 : ""}
           </p>
@@ -2425,24 +2425,24 @@ function QueueFocusCard({
         <div className="flex flex-wrap gap-2">
           <Link href="/exposure-radar" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
             <ArrowRight className="size-4 rotate-180" />
-            {t("executionQueue.focus.backToOpportunities")}
+            {t("handlingList.focus.backToOpportunities")}
           </Link>
           {item && canEdit ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => onEdit(item)}>
               <Pencil className="size-4" />
-              {t("executionQueue.actions.edit")}
+              {t("handlingList.actions.edit")}
             </Button>
           ) : null}
           {item && canReview ? (
             <Button size="sm" disabled={busy || modulePaused} onClick={() => onApprove(item)}>
               <CheckCircle2 className="size-4" />
-              {t("executionQueue.actions.approve")}
+              {t("handlingList.actions.approve")}
             </Button>
           ) : null}
           {item && canPrepare ? (
             <Button size="sm" disabled={busy || modulePaused} onClick={() => onPreparePublish(item)}>
               <Send className="size-4" />
-              {t("executionQueue.actions.preparePublish")}
+              {t("handlingList.actions.preparePublish")}
             </Button>
           ) : null}
           {item && canPublish ? (
@@ -2453,13 +2453,13 @@ function QueueFocusCard({
               onClick={() => onPublish(item)}
             >
               <Send className="size-4" />
-              {publisherStatus?.dry_run ? t("executionQueue.actions.dryRunPublish") : t("executionQueue.actions.realPublish")}
+              {publisherStatus?.dry_run ? t("handlingList.actions.dryRunPublish") : t("handlingList.actions.realPublish")}
             </Button>
           ) : null}
           {item && item.type !== "dm" && item.status !== "rejected" && item.status !== "published" ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => onReject(item)}>
               <XCircle className="size-4" />
-              {t("executionQueue.actions.reject")}
+              {t("handlingList.actions.reject")}
             </Button>
           ) : null}
         </div>
@@ -2524,41 +2524,41 @@ function SocialDraftRewritePanel({
     <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.socialRewrite.title")}</p>
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.socialRewrite.title")}</p>
           <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
-            {t(item.type === "comment" ? "executionQueue.socialRewrite.commentDescription" : "executionQueue.socialRewrite.replyDescription")}
+            {t(item.type === "comment" ? "handlingList.socialRewrite.commentDescription" : "handlingList.socialRewrite.replyDescription")}
           </p>
-          <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{t("executionQueue.socialRewrite.learningHint")}</p>
+          <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{t("handlingList.socialRewrite.learningHint")}</p>
         </div>
         <Button size="sm" disabled={disabled} onClick={onRewrite}>
           <Wand2 className="size-4" />
-          {t("executionQueue.socialRewrite.rewrite")}
+          {t("handlingList.socialRewrite.rewrite")}
         </Button>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr]">
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.socialRewrite.mode")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.socialRewrite.mode")}</span>
           <select value={rewriteMode} onChange={(event) => onRewriteModeChange(event.target.value as SocialRewriteMode)} className="form-input h-9 py-0 text-sm" disabled={disabled}>
             {rewriteModes.map((mode) => (
               <option key={mode} value={mode}>
-                {t(`executionQueue.socialRewrite.mode.${mode}`)}
+                {t(`handlingList.socialRewrite.mode.${mode}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.socialRewrite.feedback")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.socialRewrite.feedback")}</span>
           <input
             value={rewriteFeedback}
             onChange={(event) => onRewriteFeedbackChange(event.target.value)}
             className="form-input h-9 text-sm"
-            placeholder={t("executionQueue.socialRewrite.feedbackPlaceholder")}
+            placeholder={t("handlingList.socialRewrite.feedbackPlaceholder")}
             disabled={disabled}
           />
         </label>
       </div>
       <FeedbackSignalSummary summary={item.feedback_signal_summary} count={item.feedback_signal_count || 0} disabledLearningIssues={disabledLearningIssues} onToggleLearningIssue={onToggleLearningIssue} />
-      {disabled ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("executionQueue.socialRewrite.disabledHint")}</p> : null}
+      {disabled ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("handlingList.socialRewrite.disabledHint")}</p> : null}
     </div>
   );
 }
@@ -2578,12 +2578,12 @@ function QueueQualityLoop({
 }: {
   item: ReviewQueueItemApi;
   selectedSignal?: QueueQualitySignal;
-  rewriteMode: AutoPostRewriteMode;
+  rewriteMode: ContentDraftRewriteMode;
   rewriteFeedback: string;
   disabledLearningIssues: string[];
   disabled: boolean;
   onSignal: (signal: QueueQualitySignal) => void;
-  onRewriteModeChange: (mode: AutoPostRewriteMode) => void;
+  onRewriteModeChange: (mode: ContentDraftRewriteMode) => void;
   onRewriteFeedbackChange: (feedback: string) => void;
   onToggleLearningIssue: (issue: string) => void;
   onRewrite: () => void;
@@ -2594,21 +2594,21 @@ function QueueQualityLoop({
     { value: "disliked", icon: ThumbsDown },
     { value: "more_like_this", icon: Sparkles },
   ];
-  const rewriteModes: AutoPostRewriteMode[] = ["more_specific", "shorter", "founder_voice", "announcement", "interactive", "less_marketing"];
-  const sourceTitle = item.content_title || item.content_direction || (item.content_library_item_id ? t("executionQueue.target.contentLibraryItem") : t("executionQueue.target.autoPostPlanner"));
+  const rewriteModes: ContentDraftRewriteMode[] = ["more_specific", "shorter", "founder_voice", "announcement", "interactive", "less_marketing"];
+  const sourceTitle = item.content_title || item.content_direction || (item.content_library_item_id ? t("handlingList.target.contentLibraryItem") : t("handlingList.target.autoPostPlanner"));
   return (
     <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Wand2 className="size-4 text-[#8ecdf8]" />
-            <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.quality.title")}</p>
+            <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.quality.title")}</p>
           </div>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("executionQueue.quality.description")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("handlingList.quality.description")}</p>
           <p className="mt-2 break-words text-xs leading-5 text-[#71767b]">
-            {t("executionQueue.quality.sourcePrefix")} <span className="text-[#cfd9e2]">{sourceTitle}</span>
+            {t("handlingList.quality.sourcePrefix")} <span className="text-[#cfd9e2]">{sourceTitle}</span>
           </p>
-          <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{t("executionQueue.quality.learningHint")}</p>
+          <p className="mt-2 text-xs leading-5 text-[#8ecdf8]">{t("handlingList.quality.learningHint")}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-1.5">
           {signalOptions.map((option) => {
@@ -2626,7 +2626,7 @@ function QueueQualityLoop({
                 }`}
               >
                 <Icon className="size-3.5" />
-                {t(`executionQueue.quality.signal.${option.value}`)}
+                {t(`handlingList.quality.signal.${option.value}`)}
               </button>
             );
           })}
@@ -2634,32 +2634,32 @@ function QueueQualityLoop({
       </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(180px,240px)_1fr_auto] lg:items-end">
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.quality.rewriteMode")}</span>
-          <select value={rewriteMode} onChange={(event) => onRewriteModeChange(event.target.value as AutoPostRewriteMode)} className="form-input h-9 py-0 text-sm" disabled={disabled}>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.quality.rewriteMode")}</span>
+          <select value={rewriteMode} onChange={(event) => onRewriteModeChange(event.target.value as ContentDraftRewriteMode)} className="form-input h-9 py-0 text-sm" disabled={disabled}>
             {rewriteModes.map((mode) => (
               <option key={mode} value={mode}>
-                {t(`executionQueue.quality.mode.${mode}`)}
+                {t(`handlingList.quality.mode.${mode}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-[#71767b]">{t("executionQueue.quality.feedback")}</span>
+          <span className="text-xs font-medium text-[#71767b]">{t("handlingList.quality.feedback")}</span>
           <input
             value={rewriteFeedback}
             onChange={(event) => onRewriteFeedbackChange(event.target.value)}
             className="form-input h-9 text-sm"
-            placeholder={t("executionQueue.quality.feedbackPlaceholder")}
+            placeholder={t("handlingList.quality.feedbackPlaceholder")}
             disabled={disabled}
           />
         </label>
         <Button size="sm" className="h-9 w-full lg:w-auto" onClick={onRewrite} disabled={disabled}>
           <Wand2 className="size-4" />
-          {t("executionQueue.quality.rewrite")}
+          {t("handlingList.quality.rewrite")}
         </Button>
       </div>
       <FeedbackSignalSummary summary={item.feedback_signal_summary} count={item.feedback_signal_count || 0} disabledLearningIssues={disabledLearningIssues} onToggleLearningIssue={onToggleLearningIssue} />
-      {disabled ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("executionQueue.quality.disabledHint")}</p> : null}
+      {disabled ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("handlingList.quality.disabledHint")}</p> : null}
     </div>
   );
 }
@@ -2667,11 +2667,11 @@ function QueueQualityLoop({
 function QueueExposureSourceTrace({ trace }: { trace: NonNullable<ReviewQueueItemApi["exposure_source_trace"]> }) {
   const { t } = useT();
   const metrics = [
-    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
-    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
-    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
-    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
-    { label: t("autoPost.contentLibrary.sourceTrace.quality"), value: trace.quality },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.risk"), value: trace.risk },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.quality"), value: trace.quality },
   ].filter((metric) => metric.value);
   return (
     <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
@@ -2679,17 +2679,17 @@ function QueueExposureSourceTrace({ trace }: { trace: NonNullable<ReviewQueueIte
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
-              {t("autoPost.contentLibrary.sourceTrace.title")}
+              {t("contentDrafts.contentLibrary.sourceTrace.title")}
             </span>
             <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
-              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
+              {t(`contentDrafts.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
             </span>
           </div>
           <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signal_title}</p>
         </div>
         {trace.source_url ? (
           <a href={trace.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            {t("contentDrafts.contentLibrary.sourceTrace.openSource")}
             <ExternalLink className="size-3.5" />
           </a>
         ) : null}
@@ -2705,9 +2705,9 @@ function QueueExposureSourceTrace({ trace }: { trace: NonNullable<ReviewQueueIte
         </div>
       ) : null}
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        {trace.summary ? <TraceTextBlock label={t("autoPost.contentLibrary.sourceTrace.summary")} value={trace.summary} /> : null}
-        {trace.suggested_action ? <TraceTextBlock label={t("autoPost.contentLibrary.sourceTrace.action")} value={trace.suggested_action} /> : null}
-        {trace.best_use ? <TraceTextBlock className="lg:col-span-2" label={t("autoPost.contentLibrary.sourceTrace.bestUse")} value={trace.best_use} /> : null}
+        {trace.summary ? <TraceTextBlock label={t("contentDrafts.contentLibrary.sourceTrace.summary")} value={trace.summary} /> : null}
+        {trace.suggested_action ? <TraceTextBlock label={t("contentDrafts.contentLibrary.sourceTrace.action")} value={trace.suggested_action} /> : null}
+        {trace.best_use ? <TraceTextBlock className="lg:col-span-2" label={t("contentDrafts.contentLibrary.sourceTrace.bestUse")} value={trace.best_use} /> : null}
       </div>
     </div>
   );
@@ -2736,26 +2736,26 @@ function FeedbackSignalSummary({
   const { t } = useT();
   if (!summary || summary.count <= 0) {
     if (count <= 0) return null;
-    return <p className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/25 px-3 py-2 text-xs text-[#8ecdf8]">{t("executionQueue.feedbackSignals.countOnly", { count })}</p>;
+    return <p className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/25 px-3 py-2 text-xs text-[#8ecdf8]">{t("handlingList.feedbackSignals.countOnly", { count })}</p>;
   }
   const issueLabels = (summary.issue_tags || []).map((tag) => feedbackIssueLabel(tag, t)).filter(Boolean);
   const sceneLabels = (summary.scenes || []).map((scene) => feedbackSceneLabel(scene, t)).filter(Boolean);
   const learningRules = summary.applied_learning_rules || [];
   return (
     <div className="mt-3 rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
-      <p className="text-xs font-semibold text-[#8ecdf8]">{t("executionQueue.feedbackSignals.title", { count: summary.count })}</p>
+      <p className="text-xs font-semibold text-[#8ecdf8]">{t("handlingList.feedbackSignals.title", { count: summary.count })}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {issueLabels.length > 0 ? (
-          <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">{t("executionQueue.feedbackSignals.issues", { issues: issueLabels.join(", ") })}</span>
+          <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">{t("handlingList.feedbackSignals.issues", { issues: issueLabels.join(", ") })}</span>
         ) : null}
         {sceneLabels.length > 0 ? (
-          <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">{t("executionQueue.feedbackSignals.scenes", { scenes: sceneLabels.join(", ") })}</span>
+          <span className="rounded-full border border-[#1d9bf0]/30 bg-black/30 px-2.5 py-1 text-xs text-[#c9eefc]">{t("handlingList.feedbackSignals.scenes", { scenes: sceneLabels.join(", ") })}</span>
         ) : null}
       </div>
-      {summary.latest_comment ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#71767b]">{t("executionQueue.feedbackSignals.latest", { comment: summary.latest_comment })}</p> : null}
+      {summary.latest_comment ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#71767b]">{t("handlingList.feedbackSignals.latest", { comment: summary.latest_comment })}</p> : null}
       {learningRules.length > 0 ? (
         <div className="mt-3 space-y-2 border-t border-[#1d9bf0]/20 pt-3">
-          <p className="text-xs font-semibold text-[#c9eefc]">{t("executionQueue.feedbackSignals.learningRulesTitle")}</p>
+          <p className="text-xs font-semibold text-[#c9eefc]">{t("handlingList.feedbackSignals.learningRulesTitle")}</p>
           {learningRules.map((rule) => {
             const disabled = disabledLearningIssues?.includes(rule.issue) || rule.preference_status === "disabled";
             return (
@@ -2763,7 +2763,7 @@ function FeedbackSignalSummary({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-[#e7e9ea]">
-                      {feedbackIssueLabel(rule.issue, t)} <span className="text-[#8b98a5]">· {t("executionQueue.feedbackSignals.learningRuleMeta", { confidence: rule.confidence, count: rule.accurate_judgments })}</span>
+                      {feedbackIssueLabel(rule.issue, t)} <span className="text-[#8b98a5]">· {t("handlingList.feedbackSignals.learningRuleMeta", { confidence: rule.confidence, count: rule.accurate_judgments })}</span>
                     </p>
                     <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{rule.instruction}</p>
                   </div>
@@ -2775,15 +2775,15 @@ function FeedbackSignalSummary({
                         disabled ? "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#facc15]" : "border-[#00ba7c]/40 bg-[#00ba7c]/10 text-[#9ff2c9]"
                       }`}
                     >
-                      {disabled ? t("executionQueue.feedbackSignals.learningRuleDisabled") : t("executionQueue.feedbackSignals.learningRuleEnabled")}
+                      {disabled ? t("handlingList.feedbackSignals.learningRuleDisabled") : t("handlingList.feedbackSignals.learningRuleEnabled")}
                     </button>
                   ) : null}
                 </div>
-                {rule.evidence?.length ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("executionQueue.feedbackSignals.learningRuleEvidence", { evidence: rule.evidence.join(" / ") })}</p> : null}
+                {rule.evidence?.length ? <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("handlingList.feedbackSignals.learningRuleEvidence", { evidence: rule.evidence.join(" / ") })}</p> : null}
               </div>
             );
           })}
-          <p className="text-xs leading-5 text-[#71767b]">{t("executionQueue.feedbackSignals.learningRuleToggleHint")}</p>
+          <p className="text-xs leading-5 text-[#71767b]">{t("handlingList.feedbackSignals.learningRuleToggleHint")}</p>
         </div>
       ) : null}
     </div>
@@ -2793,7 +2793,7 @@ function FeedbackSignalSummary({
 function feedbackIssueLabel(tag: string, t: (key: string, params?: Record<string, string | number>) => string) {
   const normalized = tag.trim();
   const known = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "missing_context", "other"];
-  if (known.includes(normalized)) return t(`executionQueue.rejectDialog.reason.${normalized}`);
+  if (known.includes(normalized)) return t(`handlingList.rejectDialog.reason.${normalized}`);
   return normalized.replace(/_/g, " ");
 }
 
@@ -2813,7 +2813,7 @@ function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: Tr
     const key = `${trend.woeid}-${trend.normalized_name || trend.trend_name}-${rating}`;
     setPendingKey(key);
     try {
-      await autoPostService.submitTrendFeedback({
+      await contentDraftService.submitTrendFeedback({
         bot_id: botID || 0,
         x_account_id: xAccountID || 0,
         trend_name: trend.trend_name,
@@ -2824,9 +2824,9 @@ function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: Tr
         source_type: "execution_queue",
         source_id: sourceID || 0,
       });
-      pushToast(t("autoPost.trends.feedbackSaved"));
+      pushToast(t("contentDrafts.trends.feedbackSaved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackFailed") : t("autoPost.trends.feedbackFailed"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.trends.feedbackFailed") : t("contentDrafts.trends.feedbackFailed"));
     } finally {
       setPendingKey("");
     }
@@ -2835,7 +2835,7 @@ function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: Tr
     <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3">
       <div className="mb-2 flex items-center gap-2">
         <Sparkles className="size-4 text-[#1d9bf0]" />
-        <p className="text-sm font-semibold text-[#d7ebff]">{t("executionQueue.trends.title")}</p>
+        <p className="text-sm font-semibold text-[#d7ebff]">{t("handlingList.trends.title")}</p>
       </div>
       <div className="grid gap-2">
         {trends.slice(0, 3).map((trend) => (
@@ -2843,17 +2843,17 @@ function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: Tr
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-[#e7e9ea]">{trend.trend_name}</span>
               <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-[11px] text-[#71767b]">
-                {t(`autoPost.trends.category.${trend.category}`)}
+                {t(`contentDrafts.trends.category.${trend.category}`)}
               </span>
             </div>
             {trend.relevance_reason ? (
               <p className="mt-1 break-words leading-5 text-[#8b98a5]">
-                {t("autoPost.trends.reasonPrefix")} {trend.relevance_reason}
+                {t("contentDrafts.trends.reasonPrefix")} {trend.relevance_reason}
               </p>
             ) : null}
             {trend.matched_keywords?.length ? (
               <p className="mt-1 break-words leading-5 text-[#71767b]">
-                {t("autoPost.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
+                {t("contentDrafts.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
               </p>
             ) : null}
             <QueueTrendFeedbackButtons
@@ -2872,9 +2872,9 @@ function QueueTrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: Tre
   const { t } = useT();
   const baseKey = `${trend.woeid}-${trend.normalized_name || trend.trend_name}`;
   const options: Array<{ rating: TrendFeedbackRating; label: string }> = [
-    { rating: "relevant", label: t("autoPost.trends.feedback.relevant") },
-    { rating: "irrelevant", label: t("autoPost.trends.feedback.irrelevant") },
-    { rating: "too_forced", label: t("autoPost.trends.feedback.tooForced") },
+    { rating: "relevant", label: t("contentDrafts.trends.feedback.relevant") },
+    { rating: "irrelevant", label: t("contentDrafts.trends.feedback.irrelevant") },
+    { rating: "too_forced", label: t("contentDrafts.trends.feedback.tooForced") },
   ];
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2888,7 +2888,7 @@ function QueueTrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: Tre
             disabled={Boolean(pendingKey)}
             className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-medium text-[#8b98a5] transition hover:border-[#1d9bf0]/50 hover:text-[#d7ebff] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? t("autoPost.trends.feedback.saving") : option.label}
+            {loading ? t("contentDrafts.trends.feedback.saving") : option.label}
           </button>
         );
       })}

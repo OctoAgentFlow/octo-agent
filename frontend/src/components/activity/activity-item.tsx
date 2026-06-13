@@ -68,11 +68,11 @@ function relativeTime(iso: string, t: (key: string, params?: Record<string, stri
 }
 
 function reviewQueueBulkHref(record: ActivityRecord) {
-  if (record.previewKey !== "activity.preview.reviewQueueBulkAction") return "/execution-queue";
-  if ((record.reviewQueueBulk?.failed || 0) > 0) return "/execution-queue?status=failed";
-  if (record.reviewQueueBulk?.action === "approve") return "/execution-queue?status=ready_to_publish";
-  if (record.reviewQueueBulk?.action === "reject") return "/execution-queue?status=rejected";
-  return "/execution-queue";
+  if (record.previewKey !== "activity.preview.reviewQueueBulkAction") return "/handling-list";
+  if ((record.reviewQueueBulk?.failed || 0) > 0) return "/handling-list?status=failed";
+  if (record.reviewQueueBulk?.action === "approve") return "/handling-list?status=ready_to_publish";
+  if (record.reviewQueueBulk?.action === "reject") return "/handling-list?status=rejected";
+  return "/handling-list";
 }
 
 function compactActivityError(message: string) {
@@ -211,7 +211,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
           ) : null}
           {isReviewQueueBulk ? (
             <div className="grid gap-3 md:grid-cols-4">
-              <DetailField label={t("activity.reviewQueueBulk.action")} value={t(`executionQueue.bulk.action.${record.reviewQueueBulk?.action || "approve"}`)} />
+              <DetailField label={t("activity.reviewQueueBulk.action")} value={t(`handlingList.bulk.action.${record.reviewQueueBulk?.action || "approve"}`)} />
               <DetailField label={t("activity.reviewQueueBulk.total")} value={String(record.reviewQueueBulk?.total || 0)} />
               <DetailField label={t("activity.reviewQueueBulk.succeeded")} value={String(record.reviewQueueBulk?.succeeded || 0)} />
               <DetailField label={t("activity.reviewQueueBulk.failed")} value={String(record.reviewQueueBulk?.failed || 0)} />

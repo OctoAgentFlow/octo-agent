@@ -6,34 +6,34 @@ import { useT } from "@/i18n/use-t";
 
 import { SectionShell } from "./section-shell";
 
-const autoPostSteps = [
-  { icon: FileText, titleKey: "marketing.autoPost.steps.queue.title", descKey: "marketing.autoPost.steps.queue.desc" },
-  { icon: ListChecks, titleKey: "marketing.autoPost.steps.schedule.title", descKey: "marketing.autoPost.steps.schedule.desc" },
-  { icon: ShieldCheck, titleKey: "marketing.autoPost.steps.guard.title", descKey: "marketing.autoPost.steps.guard.desc" },
-  { icon: Send, titleKey: "marketing.autoPost.steps.publish.title", descKey: "marketing.autoPost.steps.publish.desc" },
+const contentDraftSteps = [
+  { icon: FileText, titleKey: "marketing.contentDrafts.steps.queue.title", descKey: "marketing.contentDrafts.steps.queue.desc" },
+  { icon: ListChecks, titleKey: "marketing.contentDrafts.steps.schedule.title", descKey: "marketing.contentDrafts.steps.schedule.desc" },
+  { icon: ShieldCheck, titleKey: "marketing.contentDrafts.steps.guard.title", descKey: "marketing.contentDrafts.steps.guard.desc" },
+  { icon: Send, titleKey: "marketing.contentDrafts.steps.publish.title", descKey: "marketing.contentDrafts.steps.publish.desc" },
 ];
 
 const sampleQueue = [
-  { timeKey: "marketing.autoPost.queue.item1.time", textKey: "marketing.autoPost.queue.item1.text", statusKey: "marketing.autoPost.queue.item1.status" },
-  { timeKey: "marketing.autoPost.queue.item2.time", textKey: "marketing.autoPost.queue.item2.text", statusKey: "marketing.autoPost.queue.item2.status" },
-  { timeKey: "marketing.autoPost.queue.item3.time", textKey: "marketing.autoPost.queue.item3.text", statusKey: "marketing.autoPost.queue.item3.status" },
+  { timeKey: "marketing.contentDrafts.queue.item1.time", textKey: "marketing.contentDrafts.queue.item1.text", statusKey: "marketing.contentDrafts.queue.item1.status" },
+  { timeKey: "marketing.contentDrafts.queue.item2.time", textKey: "marketing.contentDrafts.queue.item2.text", statusKey: "marketing.contentDrafts.queue.item2.status" },
+  { timeKey: "marketing.contentDrafts.queue.item3.time", textKey: "marketing.contentDrafts.queue.item3.text", statusKey: "marketing.contentDrafts.queue.item3.status" },
 ];
 
 const trendSignals = [
-  "marketing.autoPost.trends.signal.persona",
-  "marketing.autoPost.trends.signal.explain",
-  "marketing.autoPost.trends.signal.feedback",
+  "marketing.contentDrafts.trends.signal.persona",
+  "marketing.contentDrafts.trends.signal.explain",
+  "marketing.contentDrafts.trends.signal.feedback",
 ];
 
-export function AutoPostSection() {
+export function ContentDraftsSection() {
   const { t } = useT();
 
   return (
     <SectionShell
       id="auto-post"
-      badge={t("marketing.autoPost.badge")}
-      title={t("marketing.autoPost.title")}
-      description={t("marketing.autoPost.description")}
+      badge={t("marketing.contentDrafts.badge")}
+      title={t("marketing.contentDrafts.title")}
+      description={t("marketing.contentDrafts.description")}
       className="pt-10"
     >
       <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
@@ -43,8 +43,8 @@ export function AutoPostSection() {
               <Send className="size-5" />
             </span>
             <div className="min-w-0">
-              <p className="text-base font-semibold text-white">{t("marketing.autoPost.flowTitle")}</p>
-              <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.autoPost.flowDesc")}</p>
+              <p className="text-base font-semibold text-white">{t("marketing.contentDrafts.flowTitle")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.contentDrafts.flowDesc")}</p>
             </div>
           </div>
           <div className="mb-4 rounded-xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4 md:mb-5">
@@ -53,8 +53,8 @@ export function AutoPostSection() {
                 <Radar className="size-4" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">{t("marketing.autoPost.trends.title")}</p>
-                <p className="mt-1 text-sm leading-relaxed text-white/62">{t("marketing.autoPost.trends.description")}</p>
+                <p className="text-sm font-semibold text-white">{t("marketing.contentDrafts.trends.title")}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/62">{t("marketing.contentDrafts.trends.description")}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {trendSignals.map((signal) => (
                     <span key={signal} className="rounded-full border border-cyan-200/15 bg-black/20 px-3 py-1 text-xs text-cyan-50/85">
@@ -66,7 +66,7 @@ export function AutoPostSection() {
             </div>
           </div>
           <div className="space-y-2.5 md:space-y-3">
-            {autoPostSteps.map((step, index) => (
+            {contentDraftSteps.map((step, index) => (
               <div key={step.titleKey} className="grid grid-cols-[34px_1fr] gap-3 rounded-xl border border-white/10 bg-black/12 p-3">
                 <span className="grid size-8 place-items-center rounded-md bg-white/[0.06] text-cyan-200 sm:size-9">
                   <step.icon className="size-4" />
@@ -87,12 +87,12 @@ export function AutoPostSection() {
           <div className="border-b border-white/10 px-4 py-4 md:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-base font-semibold text-white">{t("marketing.autoPost.queueTitle")}</p>
-                <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.autoPost.queueDesc")}</p>
+                <p className="text-base font-semibold text-white">{t("marketing.contentDrafts.queueTitle")}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/55">{t("marketing.contentDrafts.queueDesc")}</p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
                 <CheckCircle2 className="size-3.5" />
-                {t("marketing.autoPost.queueHealthy")}
+                {t("marketing.contentDrafts.queueHealthy")}
               </span>
             </div>
           </div>
@@ -112,16 +112,16 @@ export function AutoPostSection() {
           </div>
           <div className="grid grid-cols-3 gap-2 border-t border-white/10 p-4 sm:gap-3 md:p-5">
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.today")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.todayValue")}</p>
+              <p className="text-xs text-white/45">{t("marketing.contentDrafts.metrics.today")}</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.contentDrafts.metrics.todayValue")}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.success")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.successValue")}</p>
+              <p className="text-xs text-white/45">{t("marketing.contentDrafts.metrics.success")}</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.contentDrafts.metrics.successValue")}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <p className="text-xs text-white/45">{t("marketing.autoPost.metrics.next")}</p>
-              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.autoPost.metrics.nextValue")}</p>
+              <p className="text-xs text-white/45">{t("marketing.contentDrafts.metrics.next")}</p>
+              <p className="mt-1 text-xl font-semibold text-white">{t("marketing.contentDrafts.metrics.nextValue")}</p>
             </div>
           </div>
         </div>

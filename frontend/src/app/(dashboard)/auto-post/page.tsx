@@ -35,18 +35,18 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/request";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem, type XSubscriptionTier } from "@/services/account.service";
 import {
-  autoPostService,
-  type AutoPostDraftApi,
-  type AutoPostExecutionMode,
-  type AutoPostGenerationRunApi,
-  type AutoPostLengthMode,
+  contentDraftService,
+  type ContentDraftApi,
+  type ContentDraftHandlingMode,
+  type ContentDraftGenerationRunApi,
+  type ContentDraftLengthMode,
   type ExposureSourceTraceApi,
-  type AutoPostPlanApi,
+  type ContentDraftPlanApi,
   type TrendFeedbackApi,
   type TrendFeedbackListData,
   type TrendFeedbackRating,
   type TrendTopicApi,
-} from "@/services/auto-post.service";
+} from "@/services/content-drafts.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import {
   contentLibraryService,
@@ -60,7 +60,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type WorkbenchPanel = "generate" | "planner" | "content" | "history";
-type RunStatusFilter = "all" | AutoPostGenerationRunApi["status"];
+type RunStatusFilter = "all" | ContentDraftGenerationRunApi["status"];
 type RunAccountScope = "selected" | "all";
 type RunRangeFilter = "all" | "24h" | "7d" | "30d";
 type ContentExposureFilter = "all" | "exposure" | "radar" | "brief";
@@ -79,18 +79,18 @@ type ExposureStrategyRecommendation = {
 
 type PlannerForm = {
   enabled: boolean;
-  executionMode: AutoPostExecutionMode;
+  executionMode: ContentDraftHandlingMode;
   minIntervalMinutes: number;
   postingWindows: string;
   timezone: string;
-  contentLengthMode: AutoPostLengthMode;
+  contentLengthMode: ContentDraftLengthMode;
   excludedTrendNames: string[];
 };
 
 const timezones = ["UTC", "Asia/Shanghai", "America/New_York", "Europe/London"];
-const executionModes: AutoPostExecutionMode[] = ["manual", "review", "autopilot"];
+const executionModes: ContentDraftHandlingMode[] = ["manual", "review", "autopilot"];
 const xSubscriptionTiers: XSubscriptionTier[] = ["unknown", "free", "premium", "premium_plus"];
-const autoPostLengthModes: AutoPostLengthMode[] = ["standard", "long"];
+const contentDraftLengthModes: ContentDraftLengthMode[] = ["standard", "long"];
 const contentItemTypes: ContentLibraryItemType[] = [
   "idea",
   "feature_highlight",
@@ -107,10 +107,10 @@ const contentItemTypes: ContentLibraryItemType[] = [
   "thread_seed",
 ];
 const workbenchPanels: Array<{ id: WorkbenchPanel; labelKey: string; descriptionKey: string }> = [
-  { id: "generate", labelKey: "autoPost.tabs.generate", descriptionKey: "autoPost.tabs.generateDesc" },
-  { id: "planner", labelKey: "autoPost.tabs.planner", descriptionKey: "autoPost.tabs.plannerDesc" },
-  { id: "content", labelKey: "autoPost.tabs.content", descriptionKey: "autoPost.tabs.contentDesc" },
-  { id: "history", labelKey: "autoPost.tabs.history", descriptionKey: "autoPost.tabs.historyDesc" },
+  { id: "generate", labelKey: "contentDrafts.tabs.generate", descriptionKey: "contentDrafts.tabs.generateDesc" },
+  { id: "planner", labelKey: "contentDrafts.tabs.planner", descriptionKey: "contentDrafts.tabs.plannerDesc" },
+  { id: "content", labelKey: "contentDrafts.tabs.content", descriptionKey: "contentDrafts.tabs.contentDesc" },
+  { id: "history", labelKey: "contentDrafts.tabs.history", descriptionKey: "contentDrafts.tabs.historyDesc" },
 ];
 const runStatusFilters: RunStatusFilter[] = ["all", "completed", "skipped", "failed"];
 const runAccountScopes: RunAccountScope[] = ["selected", "all"];
@@ -388,7 +388,7 @@ function uniqueStrings(values: string[]) {
   });
 }
 
-export default function AutoPostPage() {
+export default function ContentDraftsPage() {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
   const router = useRouter();
@@ -399,9 +399,9 @@ export default function AutoPostPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
-  const [plans, setPlans] = useState<AutoPostPlanApi[]>([]);
-  const [drafts, setDrafts] = useState<AutoPostDraftApi[]>([]);
-  const [runs, setRuns] = useState<AutoPostGenerationRunApi[]>([]);
+  const [plans, setPlans] = useState<ContentDraftPlanApi[]>([]);
+  const [drafts, setDrafts] = useState<ContentDraftApi[]>([]);
+  const [runs, setRuns] = useState<ContentDraftGenerationRunApi[]>([]);
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
   const [selectedAccountID, setSelectedAccountID] = useState(() => readAccountID(searchParams.get("account")));
@@ -434,7 +434,7 @@ export default function AutoPostPage() {
   const [runPage, setRunPage] = useState(() => readRunPage(searchParams.get("run_page")));
   const [runsLoading, setRunsLoading] = useState(false);
   const [runPagination, setRunPagination] = useState({ page: 1, pageSize: 12, total: 0 });
-  const [latestRun, setLatestRun] = useState<AutoPostGenerationRunApi | null>(null);
+  const [latestRun, setLatestRun] = useState<ContentDraftGenerationRunApi | null>(null);
   const [moduleEnabled, setModuleEnabled] = useState<boolean | null>(null);
   const [quotaUpgradeVisible, setQuotaUpgradeVisible] = useState(false);
   const workbenchPanelRef = useRef<HTMLDivElement | null>(null);
@@ -445,8 +445,8 @@ export default function AutoPostPage() {
       const [accountData, botData, planData, draftData, libraryData, subscriptionData] = await Promise.all([
         accountService.list(),
         oafBotService.list(),
-        autoPostService.plans(),
-        autoPostService.drafts(),
+        contentDraftService.plans(),
+        contentDraftService.drafts(),
         contentLibraryService.list({ limit: 100 }),
         billingService.subscription(),
       ]);
@@ -464,7 +464,7 @@ export default function AutoPostPage() {
       setForm(currentPlan ? formFromPlan(currentPlan) : defaultForm());
       setLoadState("ready");
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.load") : t("autoPost.errors.load"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.errors.load") : t("contentDrafts.errors.load"));
       setLoadState("error");
     }
   }, [pushToast, searchParams, selectedAccountID, t]);
@@ -532,79 +532,79 @@ export default function AutoPostPage() {
     if (!selectedAccountID) {
       blockers.push({
         id: "account_missing",
-        title: t("autoPost.blockers.accountMissing.title"),
-        description: t("autoPost.blockers.accountMissing.description"),
+        title: t("contentDrafts.blockers.accountMissing.title"),
+        description: t("contentDrafts.blockers.accountMissing.description"),
         href: "/accounts",
-        actionLabel: t("autoPost.blockers.accountMissing.action"),
+        actionLabel: t("contentDrafts.blockers.accountMissing.action"),
         severity: "danger",
       });
     } else if (accountNeedsReauth) {
       blockers.push({
         id: "account_reauth",
-        title: t("autoPost.blockers.accountReauth.title"),
-        description: t("autoPost.blockers.accountReauth.description"),
+        title: t("contentDrafts.blockers.accountReauth.title"),
+        description: t("contentDrafts.blockers.accountReauth.description"),
         href: "/accounts?filter=needs_reauth",
-        actionLabel: t("autoPost.blockers.accountReauth.action"),
+        actionLabel: t("contentDrafts.blockers.accountReauth.action"),
         severity: "danger",
       });
     }
     if (modulePaused) {
       blockers.push({
         id: "module_paused",
-        title: t("autoPost.blockers.modulePaused.title"),
-        description: t("autoPost.blockers.modulePaused.description"),
+        title: t("contentDrafts.blockers.modulePaused.title"),
+        description: t("contentDrafts.blockers.modulePaused.description"),
         href: "/automations?module=post#automation-modules",
-        actionLabel: t("autoPost.blockers.modulePaused.action"),
+        actionLabel: t("contentDrafts.blockers.modulePaused.action"),
         severity: "danger",
       });
     }
     if (!selectedBot) {
       blockers.push({
         id: "bot_missing",
-        title: t("autoPost.blockers.botMissing.title"),
-        description: t("autoPost.blockers.botMissing.description"),
+        title: t("contentDrafts.blockers.botMissing.title"),
+        description: t("contentDrafts.blockers.botMissing.description"),
         href: "/oaf-bots",
-        actionLabel: t("autoPost.blockers.botMissing.action"),
+        actionLabel: t("contentDrafts.blockers.botMissing.action"),
         severity: "warning",
       });
     }
     if (activeContentCount === 0) {
       blockers.push({
         id: "content_missing",
-        title: t("autoPost.blockers.contentMissing.title"),
-        description: t("autoPost.blockers.contentMissing.description"),
-        href: selectedAccountID ? `/auto-post?account=${selectedAccountID}&panel=content` : "/auto-post?panel=content",
-        actionLabel: t("autoPost.blockers.contentMissing.action"),
+        title: t("contentDrafts.blockers.contentMissing.title"),
+        description: t("contentDrafts.blockers.contentMissing.description"),
+        href: selectedAccountID ? `/content-drafts?account=${selectedAccountID}&panel=content` : "/content-drafts?panel=content",
+        actionLabel: t("contentDrafts.blockers.contentMissing.action"),
         severity: "warning",
       });
     }
     if (!selectedPlan?.enabled) {
       blockers.push({
         id: "planner_disabled",
-        title: t("autoPost.blockers.plannerDisabled.title"),
-        description: t("autoPost.blockers.plannerDisabled.description"),
-        href: selectedAccountID ? `/auto-post?account=${selectedAccountID}&panel=planner` : "/auto-post?panel=planner",
-        actionLabel: t("autoPost.blockers.plannerDisabled.action"),
+        title: t("contentDrafts.blockers.plannerDisabled.title"),
+        description: t("contentDrafts.blockers.plannerDisabled.description"),
+        href: selectedAccountID ? `/content-drafts?account=${selectedAccountID}&panel=planner` : "/content-drafts?panel=planner",
+        actionLabel: t("contentDrafts.blockers.plannerDisabled.action"),
         severity: "warning",
       });
     }
     if (aiLimit > 0 && aiRemaining <= 0) {
       blockers.push({
         id: "quota",
-        title: t("autoPost.blockers.quota.title"),
-        description: t("autoPost.blockers.quota.description"),
+        title: t("contentDrafts.blockers.quota.title"),
+        description: t("contentDrafts.blockers.quota.description"),
         href: "/billing",
-        actionLabel: t("autoPost.blockers.quota.action"),
+        actionLabel: t("contentDrafts.blockers.quota.action"),
         severity: "danger",
       });
     }
     if (queuedDraftCount > 0) {
       blockers.push({
         id: "queue",
-        title: t("autoPost.blockers.queue.title", { count: queuedDraftCount }),
-        description: t("autoPost.blockers.queue.description"),
-        href: "/execution-queue?type=post",
-        actionLabel: t("autoPost.blockers.queue.action"),
+        title: t("contentDrafts.blockers.queue.title", { count: queuedDraftCount }),
+        description: t("contentDrafts.blockers.queue.description"),
+        href: "/handling-list?type=post",
+        actionLabel: t("contentDrafts.blockers.queue.action"),
         severity: "info",
         countLabel: String(queuedDraftCount),
       });
@@ -650,7 +650,7 @@ export default function AutoPostPage() {
     }
     setRunsLoading(true);
     try {
-      const data = await autoPostService.runs({
+      const data = await contentDraftService.runs({
         status: runStatusFilter,
         xAccountID: runAccountScope === "selected" ? selectedAccountID : undefined,
         range: runRangeFilter,
@@ -666,7 +666,7 @@ export default function AutoPostPage() {
     } catch (error) {
       setRuns([]);
       setRunPagination({ page: 1, pageSize: 12, total: 0 });
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.runs.loadFailed") : t("autoPost.runs.loadFailed"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.runs.loadFailed") : t("contentDrafts.runs.loadFailed"));
     } finally {
       setRunsLoading(false);
     }
@@ -682,7 +682,7 @@ export default function AutoPostPage() {
       return;
     }
     try {
-      const data = await autoPostService.runs({ xAccountID: selectedAccountID, page: 1, pageSize: 1 });
+      const data = await contentDraftService.runs({ xAccountID: selectedAccountID, page: 1, pageSize: 1 });
       setLatestRun(data.items[0] ?? null);
     } catch {
       setLatestRun(null);
@@ -735,8 +735,8 @@ export default function AutoPostPage() {
 
   const skipReasonLabel = useCallback(
     (reason?: string) => {
-      if (!reason) return t("autoPost.runs.skipReason.unknown");
-      const key = `autoPost.runs.skipReason.${reason}`;
+      if (!reason) return t("contentDrafts.runs.skipReason.unknown");
+      const key = `contentDrafts.runs.skipReason.${reason}`;
       const translated = t(key);
       return translated === key ? reason : translated;
     },
@@ -753,11 +753,11 @@ export default function AutoPostPage() {
 
   const savePlan = async () => {
     if (!selectedAccountID) {
-      pushToast(t("autoPost.errors.needAccount"));
+      pushToast(t("contentDrafts.errors.needAccount"));
       return;
     }
     if (selectedContentItem && selectedContentItem.status !== "active") {
-      pushToast(t("autoPost.contentLibrary.errors.inactiveSelected"));
+      pushToast(t("contentDrafts.contentLibrary.errors.inactiveSelected"));
       return;
     }
     setSaving(true);
@@ -772,16 +772,16 @@ export default function AutoPostPage() {
         content_length_mode: selectedAccountIsPremium ? form.contentLengthMode : "standard",
         excluded_trend_names: form.excludedTrendNames,
       };
-      const saved = selectedPlan ? await autoPostService.updatePlan(selectedPlan.id, payload) : await autoPostService.createPlan(payload);
+      const saved = selectedPlan ? await contentDraftService.updatePlan(selectedPlan.id, payload) : await contentDraftService.createPlan(payload);
       setPlans((current) => {
         const without = current.filter((item) => item.id !== saved.id && item.x_account_id !== saved.x_account_id);
         return [saved, ...without];
       });
       setForm(formFromPlan(saved));
       setQuotaUpgradeVisible(false);
-      pushToast(t("autoPost.toast.saved"));
+      pushToast(t("contentDrafts.toast.saved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.save") : t("autoPost.errors.save"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.errors.save") : t("contentDrafts.errors.save"));
     } finally {
       setSaving(false);
     }
@@ -796,7 +796,7 @@ export default function AutoPostPage() {
     }
     setLoadingSelectedTrends(true);
     try {
-      const data = await autoPostService.selectedTrends({ planID, botID, limit: 3, excludedTrendNames: form.excludedTrendNames });
+      const data = await contentDraftService.selectedTrends({ planID, botID, limit: 3, excludedTrendNames: form.excludedTrendNames });
       setSelectedTrends(data.items);
     } catch {
       setSelectedTrends([]);
@@ -817,7 +817,7 @@ export default function AutoPostPage() {
     }
     setTrendFeedbackLoading(true);
     try {
-      const data = await autoPostService.trendFeedback({ botID, onlyNegative: true, limit: 20 });
+      const data = await contentDraftService.trendFeedback({ botID, onlyNegative: true, limit: 20 });
       setTrendFeedbackData(data);
     } catch {
       setTrendFeedbackData(null);
@@ -834,11 +834,11 @@ export default function AutoPostPage() {
     async (item: TrendFeedbackApi) => {
       setClearingTrendFeedbackID(item.id);
       try {
-        await autoPostService.deleteTrendFeedback(item.id);
-        pushToast(t("autoPost.trends.feedbackCleared"));
+        await contentDraftService.deleteTrendFeedback(item.id);
+        pushToast(t("contentDrafts.trends.feedbackCleared"));
         await Promise.all([refreshTrendFeedback(), refreshSelectedTrends()]);
       } catch (error) {
-        pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackClearFailed") : t("autoPost.trends.feedbackClearFailed"));
+        pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.trends.feedbackClearFailed") : t("contentDrafts.trends.feedbackClearFailed"));
       } finally {
         setClearingTrendFeedbackID(0);
       }
@@ -861,9 +861,9 @@ export default function AutoPostPage() {
       if (tier !== "premium" && tier !== "premium_plus") {
         setForm((current) => ({ ...current, contentLengthMode: "standard" }));
       }
-      pushToast(t("autoPost.account.tierSaved"));
+      pushToast(t("contentDrafts.account.tierSaved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.account.tierSaveFailed") : t("autoPost.account.tierSaveFailed"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.account.tierSaveFailed") : t("contentDrafts.account.tierSaveFailed"));
     } finally {
       setSavingAccountTier(false);
     }
@@ -885,9 +885,9 @@ export default function AutoPostPage() {
         ...current,
         contentLengthMode: saved.x_subscription_tier === "premium" || saved.x_subscription_tier === "premium_plus" ? current.contentLengthMode : "standard",
       }));
-      pushToast(t("autoPost.account.tierSynced"));
+      pushToast(t("contentDrafts.account.tierSynced"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.account.tierSyncFailed") : t("autoPost.account.tierSyncFailed"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.account.tierSyncFailed") : t("contentDrafts.account.tierSyncFailed"));
     } finally {
       setSyncingAccountTier(false);
     }
@@ -923,11 +923,11 @@ export default function AutoPostPage() {
 
   const saveLibraryItem = async () => {
     if (!selectedAccountID) {
-      pushToast(t("autoPost.errors.needAccount"));
+      pushToast(t("contentDrafts.errors.needAccount"));
       return;
     }
     if (!libraryForm.title.trim() || !libraryForm.body.trim()) {
-      pushToast(t("autoPost.contentLibrary.errors.required"));
+      pushToast(t("contentDrafts.contentLibrary.errors.required"));
       return;
     }
     setSavingLibrary(true);
@@ -951,9 +951,9 @@ export default function AutoPostPage() {
       setContentItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setSelectedContentItemID(saved.id);
       resetLibraryForm();
-      pushToast(t(wasEditing ? "autoPost.contentLibrary.toast.updated" : "autoPost.contentLibrary.toast.created"));
+      pushToast(t(wasEditing ? "contentDrafts.contentLibrary.toast.updated" : "contentDrafts.contentLibrary.toast.created"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.save") : t("autoPost.contentLibrary.errors.save"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.contentLibrary.errors.save") : t("contentDrafts.contentLibrary.errors.save"));
     } finally {
       setSavingLibrary(false);
     }
@@ -975,16 +975,16 @@ export default function AutoPostPage() {
         status,
       });
       setContentItems((current) => current.map((row) => (row.id === saved.id ? saved : row)));
-      pushToast(t("autoPost.contentLibrary.toast.updated"));
+      pushToast(t("contentDrafts.contentLibrary.toast.updated"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.save") : t("autoPost.contentLibrary.errors.save"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.contentLibrary.errors.save") : t("contentDrafts.contentLibrary.errors.save"));
     }
   };
 
   const deleteLibraryItem = async (item: ContentLibraryItemApi) => {
     const confirmed = await confirm({
-      description: t("autoPost.contentLibrary.confirmDelete"),
-      confirmLabel: t("executionQueue.actions.delete"),
+      description: t("contentDrafts.contentLibrary.confirmDelete"),
+      confirmLabel: t("handlingList.actions.delete"),
       tone: "destructive",
     });
     if (!confirmed) return;
@@ -992,20 +992,20 @@ export default function AutoPostPage() {
       await contentLibraryService.delete(item.id);
       setContentItems((current) => current.filter((row) => row.id !== item.id));
       if (selectedContentItemID === item.id) setSelectedContentItemID(0);
-      pushToast(t("autoPost.contentLibrary.toast.deleted"));
+      pushToast(t("contentDrafts.contentLibrary.toast.deleted"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.contentLibrary.errors.delete") : t("autoPost.contentLibrary.errors.delete"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.contentLibrary.errors.delete") : t("contentDrafts.contentLibrary.errors.delete"));
     }
   };
 
-  const ensureAutoPostPlan = async () => {
+  const ensureContentDraftPlan = async () => {
     const plan = selectedPlan;
     if (!selectedAccountID) {
-      pushToast(t("autoPost.errors.needAccount"));
+      pushToast(t("contentDrafts.errors.needAccount"));
       return null;
     }
     if (plan) return plan;
-    const saved = await autoPostService.createPlan({
+    const saved = await contentDraftService.createPlan({
       x_account_id: selectedAccountID,
       enabled: form.enabled,
       execution_mode: form.executionMode,
@@ -1023,24 +1023,24 @@ export default function AutoPostPage() {
     const code = axios.isAxiosError(error) ? error.response?.data?.error_code : "";
     if (code === "ai_generation_quota_exceeded") {
       setQuotaUpgradeVisible(true);
-      pushToast(t("autoPost.errors.aiQuotaExceeded"));
+      pushToast(t("contentDrafts.errors.aiQuotaExceeded"));
     } else if (code === "auto_post_monthly_limit_exceeded" || code === "auto_post_daily_limit_exceeded") {
       setQuotaUpgradeVisible(true);
-      pushToast(t("autoPost.errors.dailyLimitExceeded"));
+      pushToast(t("contentDrafts.errors.dailyLimitExceeded"));
     } else if (code === "auto_post_duplicate_content") {
-      pushToast(t("autoPost.errors.duplicateContent"));
+      pushToast(t("contentDrafts.errors.duplicateContent"));
     } else {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.errors.generate") : t("autoPost.errors.generate"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.errors.generate") : t("contentDrafts.errors.generate"));
     }
   };
 
-  const createAutoPostDraft = async (options: { direction: string; contentItemID?: number; successToast?: string }) => {
-    const plan = await ensureAutoPostPlan();
+  const createContentDraft = async (options: { direction: string; contentItemID?: number; successToast?: string }) => {
+    const plan = await ensureContentDraftPlan();
     if (!plan) return null;
-    const draft = await autoPostService.generateDraft(plan.id, options.direction.trim(), options.contentItemID, form.excludedTrendNames);
+    const draft = await contentDraftService.generateDraft(plan.id, options.direction.trim(), options.contentItemID, form.excludedTrendNames);
     setDrafts((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
     setQuotaUpgradeVisible(false);
-    pushToast(options.successToast || t("autoPost.toast.generated"));
+    pushToast(options.successToast || t("contentDrafts.toast.generated"));
     setActivePanel("history");
     void load();
     return draft;
@@ -1048,12 +1048,12 @@ export default function AutoPostPage() {
 
   const generateDraft = async () => {
     if (!selectedAccountID) {
-      pushToast(t("autoPost.errors.needAccount"));
+      pushToast(t("contentDrafts.errors.needAccount"));
       return;
     }
     setGenerating(true);
     try {
-      await createAutoPostDraft({ direction: contentDirection, contentItemID: selectedContentItem?.id });
+      await createContentDraft({ direction: contentDirection, contentItemID: selectedContentItem?.id });
       setContentDirection("");
     } catch (error) {
       handleGenerateError(error);
@@ -1067,22 +1067,22 @@ export default function AutoPostPage() {
     setContentDirection(exposureStrategyRecommendation.direction);
     const primary = exposureStrategyRecommendation.items[0];
     if (primary) setSelectedContentItemID(primary.id);
-    pushToast(t("autoPost.generate.strategy.toastApplied"));
+    pushToast(t("contentDrafts.generate.strategy.toastApplied"));
   }, [exposureStrategyRecommendation, pushToast, t]);
 
   const generateExposureStrategyDraft = async () => {
     if (!exposureStrategyRecommendation) return;
     if (!selectedAccountID) {
-      pushToast(t("autoPost.errors.needAccount"));
+      pushToast(t("contentDrafts.errors.needAccount"));
       return;
     }
     const primary = exposureStrategyRecommendation.items[0];
     setGeneratingExposureStrategy(true);
     try {
-      await createAutoPostDraft({
+      await createContentDraft({
         direction: exposureStrategyRecommendation.direction,
         contentItemID: primary?.id,
-        successToast: t("autoPost.generate.strategy.toastQueued"),
+        successToast: t("contentDrafts.generate.strategy.toastQueued"),
       });
       setContentDirection(exposureStrategyRecommendation.direction);
       if (primary) setSelectedContentItemID(primary.id);
@@ -1095,23 +1095,23 @@ export default function AutoPostPage() {
 
   const runPlannerNow = async () => {
     if (!selectedPlan) {
-      pushToast(t("autoPost.runNow.needPlanner"));
+      pushToast(t("contentDrafts.runNow.needPlanner"));
       return;
     }
     const confirmed = await confirm({
-      description: t("autoPost.runNow.confirm"),
-      confirmLabel: t("autoPost.runNow.button"),
+      description: t("contentDrafts.runNow.confirm"),
+      confirmLabel: t("contentDrafts.runNow.button"),
     });
     if (!confirmed) return;
     setRunningPlanner(true);
     try {
-      const run = await autoPostService.runNow(selectedPlan.id);
+      const run = await contentDraftService.runNow(selectedPlan.id);
       if (run.status === "completed") {
-        pushToast(t("autoPost.runNow.toast.completed"));
+        pushToast(t("contentDrafts.runNow.toast.completed"));
       } else if (run.status === "skipped") {
-        pushToast(t("autoPost.runNow.toast.skipped", { reason: skipReasonLabel(run.skip_reason) }));
+        pushToast(t("contentDrafts.runNow.toast.skipped", { reason: skipReasonLabel(run.skip_reason) }));
       } else {
-        pushToast(t("autoPost.runNow.toast.failed"));
+        pushToast(t("contentDrafts.runNow.toast.failed"));
       }
       setActivePanel("history");
       setRunPage(1);
@@ -1119,7 +1119,7 @@ export default function AutoPostPage() {
       void fetchLatestRun();
       void load();
     } catch (error) {
-      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("autoPost.runNow.errors.failed"));
+      pushToast(apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || t("contentDrafts.runNow.errors.failed"));
     } finally {
       setRunningPlanner(false);
     }
@@ -1129,13 +1129,13 @@ export default function AutoPostPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-sm font-medium text-[#1d9bf0]">{t("autoPost.kicker")}</p>
-          <h1 className="mt-2 text-3xl font-bold text-[#e7e9ea]">{t("autoPost.title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("autoPost.subtitle")}</p>
+          <p className="text-sm font-medium text-[#1d9bf0]">{t("contentDrafts.kicker")}</p>
+          <h1 className="mt-2 text-3xl font-bold text-[#e7e9ea]">{t("contentDrafts.title")}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#71767b]">{t("contentDrafts.subtitle")}</p>
         </div>
-        <Link href="/execution-queue?type=post" className="inline-flex">
+        <Link href="/handling-list?type=post" className="inline-flex">
           <Button variant="outline">
-            {t("autoPost.actions.openQueue")}
+            {t("contentDrafts.actions.openQueue")}
             <ArrowRight className="size-4" />
           </Button>
         </Link>
@@ -1150,7 +1150,7 @@ export default function AutoPostPage() {
 
       {loadState === "error" ? (
         <Card className="space-y-3 bg-[#0f1419]">
-          <CardHeader title={t("automation.error.title")} description={t("autoPost.errors.load")} />
+          <CardHeader title={t("automation.error.title")} description={t("contentDrafts.errors.load")} />
           <Button type="button" variant="outline" onClick={() => void load()}>
             {t("common.retry")}
           </Button>
@@ -1164,13 +1164,13 @@ export default function AutoPostPage() {
       {loadState === "ready" ? (
         <>
           <OperationalBlockersCard
-            title={t("autoPost.blockers.title")}
-            description={t("autoPost.blockers.description")}
+            title={t("contentDrafts.blockers.title")}
+            description={t("contentDrafts.blockers.description")}
             blockers={operationalBlockers}
-            emptyTitle={t("autoPost.blockers.emptyTitle")}
-            emptyDescription={t("autoPost.blockers.emptyDescription")}
+            emptyTitle={t("contentDrafts.blockers.emptyTitle")}
+            emptyDescription={t("contentDrafts.blockers.emptyDescription")}
           />
-          <AutoPostControlSummary
+          <ContentDraftControlSummary
             selectedAccount={selectedAccount}
             selectedBot={selectedBot}
             selectedPlan={selectedPlan}
@@ -1179,15 +1179,15 @@ export default function AutoPostPage() {
             publishReadyCount={publishReadyCount}
             latestRun={latestRun}
             aiRemaining={aiRemaining}
-            nextRunLabel={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("autoPost.common.emptyValue")}
+            nextRunLabel={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("contentDrafts.common.emptyValue")}
             onOpenPanel={openPanel}
           />
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr_0.9fr]">
             <Card>
-              <CardHeader title={t("autoPost.account.title")} description={t("autoPost.account.description")} />
+              <CardHeader title={t("contentDrafts.account.title")} description={t("contentDrafts.account.description")} />
               {accounts.length > 0 ? (
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.label")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.account.label")}</span>
                   <select
                     value={selectedAccountID}
                     onChange={(event) => onAccountChange(Number(event.target.value))}
@@ -1202,16 +1202,16 @@ export default function AutoPostPage() {
                 </label>
               ) : (
                 <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-amber-100">
-                  {t("autoPost.account.empty")}
+                  {t("contentDrafts.account.empty")}
                 </div>
               )}
               {selectedAccount ? (
                 <div className="mt-4 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-[#71767b]">{t("autoPost.account.tierLabel")}</span>
+                    <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.account.tierLabel")}</span>
                     <Button type="button" size="sm" variant="outline" onClick={() => void syncAccountTier()} disabled={syncingAccountTier}>
                       {syncingAccountTier ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                      {t("autoPost.account.syncTier")}
+                      {t("contentDrafts.account.syncTier")}
                     </Button>
                   </div>
                   <select
@@ -1222,12 +1222,12 @@ export default function AutoPostPage() {
                   >
                     {xSubscriptionTiers.map((tier) => (
                       <option key={tier} value={tier}>
-                        {t(`autoPost.xTier.${tier}`)}
+                        {t(`contentDrafts.xTier.${tier}`)}
                       </option>
                     ))}
                   </select>
                   <span className="block text-xs leading-5 text-[#71767b]">
-                    {t("autoPost.account.tierHelper")} {t(`autoPost.account.tierSource.${selectedAccount.x_subscription_source || "manual"}`)}
+                    {t("contentDrafts.account.tierHelper")} {t(`contentDrafts.account.tierSource.${selectedAccount.x_subscription_source || "manual"}`)}
                   </span>
                 </div>
               ) : null}
@@ -1237,9 +1237,9 @@ export default function AutoPostPage() {
                     <Bot className="size-5 text-[#1d9bf0]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-[#e7e9ea]">{selectedBot ? selectedBot.name : t("autoPost.bot.defaultTitle")}</p>
+                    <p className="text-sm font-bold text-[#e7e9ea]">{selectedBot ? selectedBot.name : t("contentDrafts.bot.defaultTitle")}</p>
                     <p className="mt-1 text-sm leading-6 text-[#71767b]">
-                      {selectedBot ? t("autoPost.bot.boundHint", { tone: selectedBot.voice_tone || t("autoPost.bot.noTone") }) : t("autoPost.bot.unboundHint")}
+                      {selectedBot ? t("contentDrafts.bot.boundHint", { tone: selectedBot.voice_tone || t("contentDrafts.bot.noTone") }) : t("contentDrafts.bot.unboundHint")}
                     </p>
                   </div>
                 </div>
@@ -1247,15 +1247,15 @@ export default function AutoPostPage() {
             </Card>
 
             <Card>
-              <CardHeader title={t("autoPost.ai.title")} description={t("autoPost.ai.description")} />
+              <CardHeader title={t("contentDrafts.ai.title")} description={t("contentDrafts.ai.description")} />
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <p className="text-2xl font-bold text-[#e7e9ea]">{aiRemaining.toLocaleString()}</p>
-                  <p className="mt-1 text-xs text-[#71767b]">{t("autoPost.ai.remaining")}</p>
+                  <p className="mt-1 text-xs text-[#71767b]">{t("contentDrafts.ai.remaining")}</p>
                 </div>
                 <div className="text-right text-xs text-[#71767b]">
-                  <p>{t("autoPost.ai.used", { used: aiUsed.toLocaleString(), limit: aiLimit.toLocaleString() })}</p>
-                  <p>{t("autoPost.ai.percent", { percent: aiPercent })}</p>
+                  <p>{t("contentDrafts.ai.used", { used: aiUsed.toLocaleString(), limit: aiLimit.toLocaleString() })}</p>
+                  <p>{t("contentDrafts.ai.percent", { percent: aiPercent })}</p>
                 </div>
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#2f3336]">
@@ -1265,8 +1265,8 @@ export default function AutoPostPage() {
 
             <Card>
               <CardHeader
-                title={t("autoPost.status.title")}
-                description={t("autoPost.status.description")}
+                title={t("contentDrafts.status.title")}
+                description={t("contentDrafts.status.description")}
                 right={
                   <Button
                     size="sm"
@@ -1276,7 +1276,7 @@ export default function AutoPostPage() {
                     title={modulePausedActionTip}
                   >
                     {runningPlanner ? <Loader2 className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
-                    {t("autoPost.runNow.button")}
+                    {t("contentDrafts.runNow.button")}
                   </Button>
                 }
               />
@@ -1286,24 +1286,24 @@ export default function AutoPostPage() {
                     {modulePausedActionTip}
                   </p>
                 ) : null}
-                <StatusRow label={t("autoPost.status.plan")} value={selectedPlan ? t("autoPost.status.configured") : t("autoPost.status.notConfigured")} />
-                <StatusRow label={t("autoPost.status.enabled")} value={selectedPlan?.enabled ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue")} />
-                <StatusRow label={t("autoPost.status.mode")} value={t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
-                <StatusRow label={t("autoPost.status.lastRun")} value={selectedPlan?.last_run_at ? formatDateTime(selectedPlan.last_run_at, timeZone) : t("autoPost.common.emptyValue")} />
-                <StatusRow label={t("autoPost.status.nextRun")} value={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("autoPost.common.emptyValue")} />
-                <StatusRow label={t("autoPost.status.activeContent")} value={t("autoPost.status.activeContentValue", { count: activeContentCount })} />
+                <StatusRow label={t("contentDrafts.status.plan")} value={selectedPlan ? t("contentDrafts.status.configured") : t("contentDrafts.status.notConfigured")} />
+                <StatusRow label={t("contentDrafts.status.enabled")} value={selectedPlan?.enabled ? t("contentDrafts.status.enabledValue") : t("contentDrafts.status.pausedValue")} />
+                <StatusRow label={t("contentDrafts.status.mode")} value={t(`contentDrafts.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)} />
+                <StatusRow label={t("contentDrafts.status.lastRun")} value={selectedPlan?.last_run_at ? formatDateTime(selectedPlan.last_run_at, timeZone) : t("contentDrafts.common.emptyValue")} />
+                <StatusRow label={t("contentDrafts.status.nextRun")} value={selectedPlan?.next_run_at ? formatDateTime(selectedPlan.next_run_at, timeZone) : t("contentDrafts.common.emptyValue")} />
+                <StatusRow label={t("contentDrafts.status.activeContent")} value={t("contentDrafts.status.activeContentValue", { count: activeContentCount })} />
                 <StatusRow
-                  label={t("autoPost.status.lastRunResult")}
-                  value={latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.common.emptyValue")}
+                  label={t("contentDrafts.status.lastRunResult")}
+                  value={latestRun ? t(`contentDrafts.runs.status.${latestRun.status}`) : t("contentDrafts.common.emptyValue")}
                 />
-                <StatusRow label={t("autoPost.status.minInterval")} value={t("autoPost.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
-                <StatusRow label={t("autoPost.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
-                <StatusRow label={t("autoPost.status.lengthMode")} value={t(`autoPost.lengthMode.${selectedPlan?.content_length_mode || form.contentLengthMode}`)} />
+                <StatusRow label={t("contentDrafts.status.minInterval")} value={t("contentDrafts.status.minIntervalValue", { minutes: selectedPlan?.min_interval_minutes || form.minIntervalMinutes })} />
+                <StatusRow label={t("contentDrafts.status.timezone")} value={selectedPlan?.timezone || form.timezone || "UTC"} />
+                <StatusRow label={t("contentDrafts.status.lengthMode")} value={t(`contentDrafts.lengthMode.${selectedPlan?.content_length_mode || form.contentLengthMode}`)} />
               </div>
             </Card>
           </div>
 
-          <AutoPostSetupGuide
+          <ContentDraftSetupGuide
             hasAccount={Boolean(selectedAccountID)}
             hasActiveContent={activeContentCount > 0}
             plannerEnabled={Boolean(selectedPlan?.enabled || form.enabled)}
@@ -1311,9 +1311,9 @@ export default function AutoPostPage() {
             onOpenPanel={openPanel}
           />
 
-          <AutoPostTodayDraftsBridge />
+          <ContentDraftTodayDraftsBridge />
 
-          <AutoPostPipelineSummary
+          <ContentDraftPipelineSummary
             activeContentCount={activeContentCount}
             selectedContentItem={selectedContentItem}
             selectedPlan={selectedPlan}
@@ -1328,30 +1328,30 @@ export default function AutoPostPage() {
           <div ref={workbenchPanelRef} className="scroll-mt-4 space-y-5">
             {activePanel === "planner" ? (
               <Card>
-                <CardHeader title={t("autoPost.planner.title")} description={t("autoPost.planner.description")} />
+                <CardHeader title={t("contentDrafts.planner.title")} description={t("contentDrafts.planner.description")} />
                 <div className="space-y-4">
                 {form.enabled && activeContentCount === 0 ? (
                   <div className="flex flex-col gap-3 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm leading-6 text-amber-50/85 sm:flex-row sm:items-center sm:justify-between">
-                    <span>{t("autoPost.scheduler.noActiveContentHint")}</span>
+                    <span>{t("contentDrafts.scheduler.noActiveContentHint")}</span>
                     <Button type="button" size="sm" variant="outline" onClick={() => openPanel("content")}>
-                      {t("autoPost.setup.actions.addContent")}
+                      {t("contentDrafts.setup.actions.addContent")}
                     </Button>
                   </div>
                 ) : null}
                 {form.enabled && selectedPlan && !selectedPlan.next_run_at ? (
                   <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm leading-6 text-blue-50/85">
-                    {t("autoPost.scheduler.noNextRunHint")}
+                    {t("contentDrafts.scheduler.noNextRunHint")}
                   </div>
                 ) : null}
                 {aiRemaining <= 0 ? (
                   <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 p-3 text-sm leading-6 text-rose-50/85">
-                    {t("autoPost.scheduler.aiQuotaHint")}
+                    {t("contentDrafts.scheduler.aiQuotaHint")}
                   </div>
                 ) : null}
                 <label className="flex flex-col gap-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4 sm:flex-row sm:items-center sm:justify-between">
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.enabled")}</span>
-                    <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("autoPost.fields.enabledHelper")}</span>
+                    <span className="block text-sm font-semibold text-[#e7e9ea]">{t("contentDrafts.fields.enabled")}</span>
+                    <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t("contentDrafts.fields.enabledHelper")}</span>
                   </span>
                   <input
                     type="checkbox"
@@ -1362,7 +1362,7 @@ export default function AutoPostPage() {
                 </label>
 
                 <div className="grid gap-3">
-                  <p className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.executionMode")}</p>
+                  <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.fields.executionMode")}</p>
                   <div className="grid gap-2 md:grid-cols-3">
                     {executionModes.map((mode) => (
                       <button
@@ -1375,8 +1375,8 @@ export default function AutoPostPage() {
                             : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
                         }`}
                       >
-                        <span className="block text-sm font-semibold">{t(`autoPost.executionMode.${mode}`)}</span>
-                        <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoPost.executionMode.${mode}Helper`)}</span>
+                        <span className="block text-sm font-semibold">{t(`contentDrafts.executionMode.${mode}`)}</span>
+                        <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`contentDrafts.executionMode.${mode}Helper`)}</span>
                       </button>
                     ))}
                   </div>
@@ -1385,10 +1385,10 @@ export default function AutoPostPage() {
                 <div className="grid gap-4">
                   <TextInput
                     type="number"
-                    label={t("autoPost.fields.minInterval")}
+                    label={t("contentDrafts.fields.minInterval")}
                     value={String(form.minIntervalMinutes)}
                     onChange={(value) => setForm((current) => ({ ...current, minIntervalMinutes: Number(value) }))}
-                    helper={t("autoPost.fields.minIntervalHelper")}
+                    helper={t("contentDrafts.fields.minIntervalHelper")}
                   />
                 </div>
 
@@ -1401,7 +1401,7 @@ export default function AutoPostPage() {
                 />
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.timezone")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.fields.timezone")}</span>
                   <select
                     value={form.timezone}
                     onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}
@@ -1409,7 +1409,7 @@ export default function AutoPostPage() {
                   >
                     {timezones.map((timezone) => (
                       <option key={timezone} value={timezone}>
-                        {t(`autoPost.timezone.${timezone.replaceAll("/", "_")}`)}
+                        {t(`contentDrafts.timezone.${timezone.replaceAll("/", "_")}`)}
                       </option>
                     ))}
                   </select>
@@ -1417,13 +1417,13 @@ export default function AutoPostPage() {
 
                 <div className="grid gap-3">
                   <div>
-                    <p className="text-xs font-medium text-[#71767b]">{t("autoPost.fields.lengthMode")}</p>
+                    <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.fields.lengthMode")}</p>
                     <p className="mt-1 text-xs leading-5 text-[#71767b]">
-                      {selectedAccountIsPremium ? t("autoPost.fields.lengthModeHelperPremium") : t("autoPost.fields.lengthModeHelperStandard")}
+                      {selectedAccountIsPremium ? t("contentDrafts.fields.lengthModeHelperPremium") : t("contentDrafts.fields.lengthModeHelperStandard")}
                     </p>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
-                    {autoPostLengthModes.map((mode) => {
+                    {contentDraftLengthModes.map((mode) => {
                       const disabled = mode === "long" && !selectedAccountIsPremium;
                       return (
                         <button
@@ -1437,8 +1437,8 @@ export default function AutoPostPage() {
                               : "border-[#2f3336] bg-black text-[#71767b] hover:bg-[#16181c] hover:text-[#e7e9ea]"
                           }`}
                         >
-                          <span className="block text-sm font-semibold">{t(`autoPost.lengthMode.${mode}`)}</span>
-                          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`autoPost.lengthMode.${mode}Helper`)}</span>
+                          <span className="block text-sm font-semibold">{t(`contentDrafts.lengthMode.${mode}`)}</span>
+                          <span className="mt-1 block text-xs leading-5 text-[#71767b]">{t(`contentDrafts.lengthMode.${mode}Helper`)}</span>
                         </button>
                       );
                     })}
@@ -1448,8 +1448,8 @@ export default function AutoPostPage() {
                 <details className="rounded-2xl border border-[#2f3336] bg-[#0f1419]">
                   <summary className="flex cursor-pointer list-none flex-col gap-2 p-4 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.trends.title")}</p>
-                      <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.trends.description")}</p>
+                      <p className="text-sm font-semibold text-[#e7e9ea]">{t("contentDrafts.trends.title")}</p>
+                      <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("contentDrafts.trends.description")}</p>
                     </div>
                     <Button
                       type="button"
@@ -1463,7 +1463,7 @@ export default function AutoPostPage() {
                       disabled={loadingSelectedTrends}
                     >
                       {loadingSelectedTrends ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                      {t("autoPost.trends.refresh")}
+                      {t("contentDrafts.trends.refresh")}
                     </Button>
                   </summary>
                   <div className="grid gap-4 border-t border-[#2f3336] p-4">
@@ -1471,61 +1471,61 @@ export default function AutoPostPage() {
                   <div className="rounded-xl border border-[#2f3336] bg-black p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.inheritedTitle")}</p>
+                        <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.trends.inheritedTitle")}</p>
                         <p className="mt-1 text-sm font-semibold text-[#e7e9ea]">
-                          {selectedBot ? t("autoPost.trends.inheritedFromBot", { bot: selectedBot.name }) : t("autoPost.trends.noBotInherited")}
+                          {selectedBot ? t("contentDrafts.trends.inheritedFromBot", { bot: selectedBot.name }) : t("contentDrafts.trends.noBotInherited")}
                         </p>
-                        <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.trends.inheritedDescription")}</p>
+                        <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("contentDrafts.trends.inheritedDescription")}</p>
                       </div>
                       <Link href="/oaf-bots" className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-white hover:bg-[#16181c]">
-                        {t("autoPost.trends.editBotPreferences")}
+                        {t("contentDrafts.trends.editBotPreferences")}
                       </Link>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-3">
                       <TrendPreferenceSummary
-                        label={t("autoPost.trends.regions")}
+                        label={t("contentDrafts.trends.regions")}
                         value={formatTrendRegions(selectedBot?.trend_regions || [], t)}
                       />
                       <TrendPreferenceSummary
-                        label={t("autoPost.trends.categories")}
+                        label={t("contentDrafts.trends.categories")}
                         value={formatTrendCategories(selectedBot?.trend_categories || [], t)}
                       />
                       <TrendPreferenceSummary
-                        label={t("autoPost.trends.sensitivePolicy")}
-                        value={selectedBot ? t(`autoPost.trends.policy.${selectedBot.sensitive_trend_policy || "avoid"}`) : t("autoPost.trends.policy.avoid")}
+                        label={t("contentDrafts.trends.sensitivePolicy")}
+                        value={selectedBot ? t(`contentDrafts.trends.policy.${selectedBot.sensitive_trend_policy || "avoid"}`) : t("contentDrafts.trends.policy.avoid")}
                       />
                     </div>
                     <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs leading-5 text-[#71767b]">
-                      {selectedBot?.allow_general_trends ? t("autoPost.trends.generalAllowed") : t("autoPost.trends.generalLimited")}
+                      {selectedBot?.allow_general_trends ? t("contentDrafts.trends.generalAllowed") : t("contentDrafts.trends.generalLimited")}
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-[#2f3336] bg-black p-3">
-                    <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.selectedTitle")}</p>
+                    <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.trends.selectedTitle")}</p>
                     {loadingSelectedTrends ? (
-                      <p className="mt-2 text-sm text-[#71767b]">{t("autoPost.trends.loading")}</p>
+                      <p className="mt-2 text-sm text-[#71767b]">{t("contentDrafts.trends.loading")}</p>
                     ) : selectedTrends.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {selectedTrends.map((trend) => (
                           <span key={trend.id} className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 py-1 text-xs text-[#d7ebff]">
                             {trend.trend_name}
-                            <span className="ml-2 text-[#71767b]">{t(`autoPost.trends.category.${trend.category}`)}</span>
+                            <span className="ml-2 text-[#71767b]">{t(`contentDrafts.trends.category.${trend.category}`)}</span>
                             <button
                               type="button"
                               onClick={() => excludeTrend(trend)}
                               className="rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] font-semibold text-[#8ecdf8] hover:border-[#1d9bf0]/60 hover:text-white"
                             >
-                              {t("autoPost.trends.exclude")}
+                              {t("contentDrafts.trends.exclude")}
                             </button>
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-[#71767b]">{t("autoPost.trends.selectedEmpty")}</p>
+                      <p className="mt-2 text-sm text-[#71767b]">{t("contentDrafts.trends.selectedEmpty")}</p>
                     )}
                     {form.excludedTrendNames.length ? (
                       <div className="mt-3 border-t border-[#2f3336] pt-3">
-                        <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.excludedTitle")}</p>
+                        <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.trends.excludedTitle")}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {form.excludedTrendNames.map((name) => (
                             <span key={name} className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
@@ -1535,7 +1535,7 @@ export default function AutoPostPage() {
                                 onClick={() => restoreExcludedTrend(name)}
                                 className="rounded-full border border-amber-300/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-300/10"
                               >
-                                {t("autoPost.trends.restore")}
+                                {t("contentDrafts.trends.restore")}
                               </button>
                             </span>
                           ))}
@@ -1556,7 +1556,7 @@ export default function AutoPostPage() {
 
                 <Button type="button" onClick={() => void savePlan()} disabled={saving || !selectedAccountID}>
                   {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                  {t("autoPost.actions.savePlanner")}
+                  {t("contentDrafts.actions.savePlanner")}
                 </Button>
               </div>
               </Card>
@@ -1565,21 +1565,21 @@ export default function AutoPostPage() {
             {activePanel === "content" ? (
               <Card>
                 <CardHeader
-                  title={t("autoPost.contentLibrary.title")}
-                  description={t("autoPost.contentLibrary.description")}
+                  title={t("contentDrafts.contentLibrary.title")}
+                  description={t("contentDrafts.contentLibrary.description")}
                   right={
                     <Button size="sm" variant="outline" onClick={libraryOpen ? resetLibraryForm : startCreateLibraryItem}>
-                      {libraryOpen ? t("autoPost.contentLibrary.closeForm") : t("autoPost.contentLibrary.add")}
+                      {libraryOpen ? t("contentDrafts.contentLibrary.closeForm") : t("contentDrafts.contentLibrary.add")}
                     </Button>
                   }
                 />
                 <div className="mb-4 grid gap-3 md:grid-cols-4">
-                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.active")} value={activeContentCount} />
-                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.total")} value={availableContentItems.length} />
-                  <LibraryMetric label={t("autoPost.contentLibrary.metrics.exposure")} value={exposureContentCount} />
+                  <LibraryMetric label={t("contentDrafts.contentLibrary.metrics.active")} value={activeContentCount} />
+                  <LibraryMetric label={t("contentDrafts.contentLibrary.metrics.total")} value={availableContentItems.length} />
+                  <LibraryMetric label={t("contentDrafts.contentLibrary.metrics.exposure")} value={exposureContentCount} />
                   <LibraryMetric
-                    label={t("autoPost.contentLibrary.metrics.selected")}
-                    value={selectedContentItem ? t("autoPost.contentLibrary.metrics.selectedYes") : t("autoPost.contentLibrary.metrics.selectedNo")}
+                    label={t("contentDrafts.contentLibrary.metrics.selected")}
+                    value={selectedContentItem ? t("contentDrafts.contentLibrary.metrics.selectedYes") : t("contentDrafts.contentLibrary.metrics.selectedNo")}
                   />
                 </div>
 
@@ -1587,16 +1587,16 @@ export default function AutoPostPage() {
                   <div className="mb-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.title")}</span>
+                        <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.contentLibrary.fields.title")}</span>
                         <input
                           value={libraryForm.title}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, title: event.target.value }))}
-                          placeholder={t("autoPost.contentLibrary.fields.titlePlaceholder")}
+                          placeholder={t("contentDrafts.contentLibrary.fields.titlePlaceholder")}
                           className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.itemType")}</span>
+                        <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.contentLibrary.fields.itemType")}</span>
                         <select
                           value={libraryForm.itemType}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, itemType: event.target.value as ContentLibraryItemType }))}
@@ -1604,70 +1604,70 @@ export default function AutoPostPage() {
                         >
                           {contentItemTypes.map((type) => (
                             <option key={type} value={type}>
-                              {t(`autoPost.contentLibrary.itemType.${type}`)}
+                              {t(`contentDrafts.contentLibrary.itemType.${type}`)}
                             </option>
                           ))}
                         </select>
                       </label>
                     </div>
                     <label className="mt-3 block space-y-2">
-                      <span className="text-xs font-medium text-[#71767b]">{t("autoPost.contentLibrary.fields.body")}</span>
+                      <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.contentLibrary.fields.body")}</span>
                       <textarea
                         value={libraryForm.body}
                         onChange={(event) => setLibraryForm((current) => ({ ...current, body: event.target.value }))}
                         rows={4}
-                        placeholder={t("autoPost.contentLibrary.fields.bodyPlaceholder")}
+                        placeholder={t("contentDrafts.contentLibrary.fields.bodyPlaceholder")}
                         className="w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                       />
                     </label>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.topics")}</span>
+                        <span className="text-xs font-medium text-white/60">{t("contentDrafts.contentLibrary.fields.topics")}</span>
                         <input
                           value={libraryForm.topics}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, topics: event.target.value }))}
-                          placeholder={t("autoPost.contentLibrary.fields.topicsPlaceholder")}
+                          placeholder={t("contentDrafts.contentLibrary.fields.topicsPlaceholder")}
                           className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.sourceUrl")}</span>
+                        <span className="text-xs font-medium text-white/60">{t("contentDrafts.contentLibrary.fields.sourceUrl")}</span>
                         <input
                           value={libraryForm.sourceURL}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, sourceURL: event.target.value }))}
-                          placeholder={t("autoPost.contentLibrary.fields.sourceUrlPlaceholder")}
+                          placeholder={t("contentDrafts.contentLibrary.fields.sourceUrlPlaceholder")}
                           className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.growthGoal")}</span>
+                        <span className="text-xs font-medium text-white/60">{t("contentDrafts.contentLibrary.fields.growthGoal")}</span>
                         <input
                           value={libraryForm.growthGoal}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, growthGoal: event.target.value }))}
-                          placeholder={t("autoPost.contentLibrary.fields.growthGoalPlaceholder")}
+                          placeholder={t("contentDrafts.contentLibrary.fields.growthGoalPlaceholder")}
                           className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-medium text-white/60">{t("autoPost.contentLibrary.fields.ctaPreference")}</span>
+                        <span className="text-xs font-medium text-white/60">{t("contentDrafts.contentLibrary.fields.ctaPreference")}</span>
                         <input
                           value={libraryForm.ctaPreference}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, ctaPreference: event.target.value }))}
-                          placeholder={t("autoPost.contentLibrary.fields.ctaPreferencePlaceholder")}
+                          placeholder={t("contentDrafts.contentLibrary.fields.ctaPreferencePlaceholder")}
                           className="h-10 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                         />
                       </label>
                     </div>
                     <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <label className="flex items-center gap-2 text-xs text-[#71767b]">
-                        {t("autoPost.contentLibrary.fields.status")}
+                        {t("contentDrafts.contentLibrary.fields.status")}
                         <select
                           value={libraryForm.status}
                           onChange={(event) => setLibraryForm((current) => ({ ...current, status: event.target.value as ContentLibraryStatus }))}
                           className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                         >
-                          <option value="active">{t("autoPost.contentLibrary.status.active")}</option>
-                          <option value="paused">{t("autoPost.contentLibrary.status.paused")}</option>
+                          <option value="active">{t("contentDrafts.contentLibrary.status.active")}</option>
+                          <option value="paused">{t("contentDrafts.contentLibrary.status.paused")}</option>
                         </select>
                       </label>
                       <div className="grid gap-2 sm:flex">
@@ -1676,7 +1676,7 @@ export default function AutoPostPage() {
                         </Button>
                         <Button type="button" className="w-full sm:w-auto" onClick={() => void saveLibraryItem()} disabled={savingLibrary}>
                           {savingLibrary ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                          {editingLibraryID ? t("autoPost.contentLibrary.saveEdit") : t("autoPost.contentLibrary.saveNew")}
+                          {editingLibraryID ? t("contentDrafts.contentLibrary.saveEdit") : t("contentDrafts.contentLibrary.saveNew")}
                         </Button>
                       </div>
                     </div>
@@ -1685,9 +1685,9 @@ export default function AutoPostPage() {
 
                 {availableContentItems.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
-                    <p>{t("autoPost.contentLibrary.empty")}</p>
+                    <p>{t("contentDrafts.contentLibrary.empty")}</p>
                     <Button type="button" className="mt-4" size="sm" onClick={startCreateLibraryItem}>
-                      {t("autoPost.contentLibrary.addFirst")}
+                      {t("contentDrafts.contentLibrary.addFirst")}
                     </Button>
                   </div>
                 ) : (
@@ -1712,17 +1712,17 @@ export default function AutoPostPage() {
                       }`}
                     >
                       <span className="flex items-center justify-between gap-3">
-                        <span>{t("autoPost.contentLibrary.noSelection")}</span>
+                        <span>{t("contentDrafts.contentLibrary.noSelection")}</span>
                         {selectedContentItemID === 0 ? (
                           <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">
-                            {t("autoPost.contentLibrary.selectedForGenerate")}
+                            {t("contentDrafts.contentLibrary.selectedForGenerate")}
                           </span>
                         ) : null}
                       </span>
                     </button>
                     {filteredContentItems.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm leading-6 text-[#71767b]">
-                        {t("autoPost.contentLibrary.filters.empty")}
+                        {t("contentDrafts.contentLibrary.filters.empty")}
                       </div>
                     ) : null}
                     {filteredContentItems.map((item) => (
@@ -1737,14 +1737,14 @@ export default function AutoPostPage() {
                             <span className="min-w-0 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{item.title}</span>
                             {selectedContentItemID === item.id ? (
                               <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2 py-0.5 text-xs text-[#8ecdf8]">
-                                {t("autoPost.contentLibrary.selectedForGenerate")}
+                                {t("contentDrafts.contentLibrary.selectedForGenerate")}
                               </span>
                             ) : null}
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2 py-0.5 text-xs text-[#71767b]">
-                              {t(`autoPost.contentLibrary.itemType.${item.item_type}`)}
+                              {t(`contentDrafts.contentLibrary.itemType.${item.item_type}`)}
                             </span>
                             <span className={`rounded-full border px-2 py-0.5 text-xs ${item.status === "active" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : "border-amber-300/20 bg-amber-500/10 text-amber-100"}`}>
-                              {t(`autoPost.contentLibrary.status.${item.status}`)}
+                              {t(`contentDrafts.contentLibrary.status.${item.status}`)}
                             </span>
                           </div>
                           <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#e7e9ea]/70">{item.body}</p>
@@ -1752,8 +1752,8 @@ export default function AutoPostPage() {
                             {item.topics.slice(0, 4).map((topic) => (
                               <span key={topic} className="rounded-full bg-[#0f1419] px-2 py-0.5">{topic}</span>
                             ))}
-                            <span>{t("autoPost.contentLibrary.usageCount", { count: item.usage_count })}</span>
-                            {item.last_used_at ? <span>{t("autoPost.contentLibrary.lastUsed", { time: formatDateTime(item.last_used_at, timeZone) })}</span> : null}
+                            <span>{t("contentDrafts.contentLibrary.usageCount", { count: item.usage_count })}</span>
+                            {item.last_used_at ? <span>{t("contentDrafts.contentLibrary.lastUsed", { time: formatDateTime(item.last_used_at, timeZone) })}</span> : null}
                           </div>
                         </button>
                         {selectedContentItemID === item.id ? <ContentSourceTracePanel item={item} /> : null}
@@ -1769,19 +1769,19 @@ export default function AutoPostPage() {
                             disabled={item.status !== "active"}
                           >
                             <Wand2 className="size-4" />
-                            {t("autoPost.contentLibrary.useForGenerate")}
+                            {t("contentDrafts.contentLibrary.useForGenerate")}
                           </Button>
                           <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => editLibraryItem(item)}>
                             <Pencil className="size-4" />
-                            {t("autoPost.contentLibrary.edit")}
+                            {t("contentDrafts.contentLibrary.edit")}
                           </Button>
                           <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => void updateLibraryStatus(item, item.status === "active" ? "paused" : "active")}>
                             <Power className="size-4" />
-                            {item.status === "active" ? t("autoPost.contentLibrary.pause") : t("autoPost.contentLibrary.activate")}
+                            {item.status === "active" ? t("contentDrafts.contentLibrary.pause") : t("contentDrafts.contentLibrary.activate")}
                           </Button>
                           <Button size="sm" className="w-full sm:w-auto" variant="outline" type="button" onClick={() => void deleteLibraryItem(item)}>
                             <Trash2 className="size-4" />
-                            {t("autoPost.contentLibrary.delete")}
+                            {t("contentDrafts.contentLibrary.delete")}
                           </Button>
                         </div>
                       </div>
@@ -1793,38 +1793,38 @@ export default function AutoPostPage() {
 
             {activePanel === "generate" ? (
               <Card>
-                <CardHeader title={t("autoPost.generate.title")} description={t("autoPost.generate.description")} />
+                <CardHeader title={t("contentDrafts.generate.title")} description={t("contentDrafts.generate.description")} />
                 <div className="mb-4 grid gap-3 lg:grid-cols-3">
                   <WorkbenchSignal
                     icon={Database}
-                    label={t("autoPost.generate.signal.source")}
-                    title={selectedContentItem ? selectedContentItem.title : t("autoPost.generate.signal.manualDirection")}
-                    description={selectedContentItem ? t("autoPost.generate.signal.sourceSelected") : t("autoPost.generate.signal.sourceFallback")}
+                    label={t("contentDrafts.generate.signal.source")}
+                    title={selectedContentItem ? selectedContentItem.title : t("contentDrafts.generate.signal.manualDirection")}
+                    description={selectedContentItem ? t("contentDrafts.generate.signal.sourceSelected") : t("contentDrafts.generate.signal.sourceFallback")}
                     tone="blue"
                   />
                   <WorkbenchSignal
                     icon={Bot}
-                    label={t("autoPost.generate.signal.persona")}
-                    title={selectedBot ? selectedBot.name : t("autoPost.bot.defaultTitle")}
-                    description={selectedBot ? t("autoPost.generate.signal.oafBotSource") : t("autoPost.bot.unboundHint")}
+                    label={t("contentDrafts.generate.signal.persona")}
+                    title={selectedBot ? selectedBot.name : t("contentDrafts.bot.defaultTitle")}
+                    description={selectedBot ? t("contentDrafts.generate.signal.oafBotSource") : t("contentDrafts.bot.unboundHint")}
                     tone="green"
                   />
                   <WorkbenchSignal
                     icon={ListChecks}
-                    label={t("autoPost.generate.signal.destination")}
-                    title={t("autoPost.generate.signal.executionQueue")}
-                    description={t("autoPost.generate.signal.destinationDesc", { mode: t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`) })}
+                    label={t("contentDrafts.generate.signal.destination")}
+                    title={t("contentDrafts.generate.signal.executionQueue")}
+                    description={t("contentDrafts.generate.signal.destinationDesc", { mode: t(`contentDrafts.executionMode.${selectedPlan?.execution_mode || form.executionMode}`) })}
                     tone="violet"
                   />
                 </div>
                 <label className="mb-4 block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.contentItemLabel")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.generate.contentItemLabel")}</span>
                   <select
                     value={selectedContentItemID}
                     onChange={(event) => setSelectedContentItemID(Number(event.target.value))}
                     className="h-11 w-full rounded-2xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
                   >
-                    <option value={0}>{t("autoPost.generate.noContentItem")}</option>
+                    <option value={0}>{t("contentDrafts.generate.noContentItem")}</option>
                     {availableContentItems
                       .filter((item) => item.status === "active")
                       .map((item) => (
@@ -1838,13 +1838,13 @@ export default function AutoPostPage() {
                   <div className="mb-4 rounded-2xl border border-[#2f3336] bg-black p-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs text-[#8ecdf8]">
-                        {t("autoPost.generate.selectedMaterial")}
+                        {t("contentDrafts.generate.selectedMaterial")}
                       </span>
                       <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
-                        {t(`autoPost.contentLibrary.itemType.${selectedContentItem.item_type}`)}
+                        {t(`contentDrafts.contentLibrary.itemType.${selectedContentItem.item_type}`)}
                       </span>
                       <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-100">
-                        {t("autoPost.contentLibrary.usageCount", { count: selectedContentItem.usage_count })}
+                        {t("contentDrafts.contentLibrary.usageCount", { count: selectedContentItem.usage_count })}
                       </span>
                     </div>
                     <p className="mt-3 line-clamp-3 break-words text-sm leading-6 text-[#e7e9ea]/78 [overflow-wrap:anywhere]">{selectedContentItem.body}</p>
@@ -1859,23 +1859,23 @@ export default function AutoPostPage() {
                   generateDisabled={!selectedAccountID || aiRemaining <= 0 || generating}
                 />
                 <label className="block space-y-2">
-                  <span className="text-xs font-medium text-[#71767b]">{t("autoPost.generate.directionLabel")}</span>
+                  <span className="text-xs font-medium text-[#71767b]">{t("contentDrafts.generate.directionLabel")}</span>
                   <textarea
                     value={contentDirection}
                     onChange={(event) => setContentDirection(event.target.value)}
                     rows={4}
-                    placeholder={t("autoPost.generate.directionPlaceholder")}
+                    placeholder={t("contentDrafts.generate.directionPlaceholder")}
                     className="w-full resize-y rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
                   />
                 </label>
                 <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-3 text-sm leading-6 text-[#e7e9ea]/78">
-                  {selectedBot ? t("autoPost.generate.botHint", { bot: selectedBot.name }) : t("autoPost.generate.defaultHint")}
+                  {selectedBot ? t("contentDrafts.generate.botHint", { bot: selectedBot.name }) : t("contentDrafts.generate.defaultHint")}
                 </div>
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                  <p className="text-xs text-[#71767b]">{t("autoPost.generate.quotaHint")}</p>
+                  <p className="text-xs text-[#71767b]">{t("contentDrafts.generate.quotaHint")}</p>
                   <Button type="button" className="w-full sm:w-auto" onClick={() => void generateDraft()} disabled={generating || !selectedAccountID || aiRemaining <= 0}>
                     {generating ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
-                    {t("autoPost.actions.generateNow")}
+                    {t("contentDrafts.actions.generateNow")}
                   </Button>
                 </div>
               </Card>
@@ -1885,27 +1885,27 @@ export default function AutoPostPage() {
               <div className="grid gap-5 xl:grid-cols-2">
                 <Card>
                 <CardHeader
-                  title={t("autoPost.drafts.title")}
-                  description={t("autoPost.drafts.description")}
+                  title={t("contentDrafts.drafts.title")}
+                  description={t("contentDrafts.drafts.description")}
                   right={<Sparkles className="size-4 text-blue-100/70" />}
                 />
                 {accountDrafts.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
-                    {t("autoPost.drafts.empty")}
+                    {t("contentDrafts.drafts.empty")}
                   </div>
                 ) : (
                   <div className="-mx-5 divide-y divide-[#2f3336] md:-mx-6">
                     {accountDrafts.map((draft) => (
                       <div key={draft.id} className="px-5 py-4 transition-colors hover:bg-[#080808] md:px-6">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(draft.status)}`}>{t(`executionQueue.status.${draft.status}`)}</span>
+                          <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone(draft.status)}`}>{t(`handlingList.status.${draft.status}`)}</span>
                           {draft.content_title ? (
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
                               {draft.content_title}
                             </span>
                           ) : null}
                           <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
-                            {t(`autoPost.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
+                            {t(`contentDrafts.executionMode.${selectedPlan?.execution_mode || form.executionMode}`)}
                           </span>
                           <span className="text-xs text-[#71767b]">{formatDateTime(draft.created_at, timeZone)}</span>
                         </div>
@@ -1914,15 +1914,15 @@ export default function AutoPostPage() {
                         {draft.selected_trends?.length ? (
                           <TrendSourceChips
                             trends={draft.selected_trends}
-                            label={t("autoPost.trends.usedInDraft")}
+                            label={t("contentDrafts.trends.usedInDraft")}
                             feedback={{ sourceType: "auto_post_draft", sourceID: draft.id, botID: draft.bot_id, xAccountID: draft.x_account_id }}
                           />
                         ) : null}
                         {draft.failure_reason ? <p className="mt-2 text-xs text-amber-100">{draft.failure_reason}</p> : null}
                         <div className="mt-3 grid gap-2 text-xs text-[#71767b] sm:grid-cols-3">
-                          <DraftRouteStep label={t("autoPost.pipeline.material")} value={draft.content_title || t("autoPost.runs.noContentItem")} />
-                          <DraftRouteStep label={t("autoPost.pipeline.queue")} value={t(`executionQueue.status.${draft.status}`)} />
-                          <DraftRouteStep label={t("autoPost.pipeline.publish")} value={draft.status === "published" ? t("autoPost.pipeline.published") : t("autoPost.pipeline.waiting")} />
+                          <DraftRouteStep label={t("contentDrafts.pipeline.material")} value={draft.content_title || t("contentDrafts.runs.noContentItem")} />
+                          <DraftRouteStep label={t("contentDrafts.pipeline.queue")} value={t(`handlingList.status.${draft.status}`)} />
+                          <DraftRouteStep label={t("contentDrafts.pipeline.publish")} value={draft.status === "published" ? t("contentDrafts.pipeline.published") : t("contentDrafts.pipeline.waiting")} />
                         </div>
                       </div>
                     ))}
@@ -1932,8 +1932,8 @@ export default function AutoPostPage() {
 
                 <Card>
                 <CardHeader
-                  title={t("autoPost.runs.title")}
-                  description={t("autoPost.runs.description")}
+                  title={t("contentDrafts.runs.title")}
+                  description={t("contentDrafts.runs.description")}
                   right={
                     <div className="grid gap-2 sm:flex">
                       <select
@@ -1943,11 +1943,11 @@ export default function AutoPostPage() {
                           setRunPage(1);
                         }}
                         className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
-                        aria-label={t("autoPost.runs.scopeLabel")}
+                        aria-label={t("contentDrafts.runs.scopeLabel")}
                       >
                         {runAccountScopes.map((scope) => (
                           <option key={scope} value={scope}>
-                            {t(`autoPost.runs.scope.${scope}`)}
+                            {t(`contentDrafts.runs.scope.${scope}`)}
                           </option>
                         ))}
                       </select>
@@ -1961,7 +1961,7 @@ export default function AutoPostPage() {
                       >
                         {runStatusFilters.map((status) => (
                           <option key={status} value={status}>
-                            {t(`autoPost.runs.filter.${status}`)}
+                            {t(`contentDrafts.runs.filter.${status}`)}
                           </option>
                         ))}
                       </select>
@@ -1972,11 +1972,11 @@ export default function AutoPostPage() {
                           setRunPage(1);
                         }}
                         className="h-9 rounded-full border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]"
-                        aria-label={t("autoPost.runs.rangeLabel")}
+                        aria-label={t("contentDrafts.runs.rangeLabel")}
                       >
                         {runRangeFilters.map((range) => (
                           <option key={range} value={range}>
-                            {t(`autoPost.runs.range.${range}`)}
+                            {t(`contentDrafts.runs.range.${range}`)}
                           </option>
                         ))}
                       </select>
@@ -1986,11 +1986,11 @@ export default function AutoPostPage() {
                 {runsLoading ? (
                   <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
                     <Loader2 className="size-4 animate-spin" />
-                    {t("autoPost.runs.loading")}
+                    {t("contentDrafts.runs.loading")}
                   </div>
                 ) : accountRuns.length === 0 ? (
                   <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
-                    {runStatusFilter === "all" ? t("autoPost.runs.empty") : t("autoPost.runs.emptyFiltered")}
+                    {runStatusFilter === "all" ? t("contentDrafts.runs.empty") : t("contentDrafts.runs.emptyFiltered")}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1998,11 +1998,11 @@ export default function AutoPostPage() {
                       <div key={run.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${runTone(run.status)}`}>
-                            {t(`autoPost.runs.status.${run.status}`)}
+                            {t(`contentDrafts.runs.status.${run.status}`)}
                           </span>
                           {runAccountScope === "all" ? (
                             <span className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs text-[#71767b]">
-                              {run.account_handle ? `@${run.account_handle}` : t("autoPost.runs.accountFallback", { id: run.x_account_id })}
+                              {run.account_handle ? `@${run.account_handle}` : t("contentDrafts.runs.accountFallback", { id: run.x_account_id })}
                             </span>
                           ) : null}
                           {run.content_title ? (
@@ -2021,19 +2021,19 @@ export default function AutoPostPage() {
                         {run.selected_trends?.length ? (
                           <TrendSourceChips
                             trends={run.selected_trends}
-                            label={t("autoPost.trends.usedInRun")}
+                            label={t("contentDrafts.trends.usedInRun")}
                             feedback={{ sourceType: "auto_post_run", sourceID: run.id, botID: run.bot_id, xAccountID: run.x_account_id }}
                           />
                         ) : null}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#71767b]">
                           <span>
                             {run.content_library_item_title || run.content_title
-                              ? t("autoPost.runs.contentItem", { title: run.content_library_item_title || run.content_title || "" })
-                              : t("autoPost.runs.noContentItem")}
+                              ? t("contentDrafts.runs.contentItem", { title: run.content_library_item_title || run.content_title || "" })
+                              : t("contentDrafts.runs.noContentItem")}
                           </span>
                           {run.generated_draft_id ? (
-                            <Link href="/execution-queue?type=post" className="font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-                              {t("autoPost.runs.openQueue")}
+                            <Link href="/handling-list?type=post" className="font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                              {t("contentDrafts.runs.openQueue")}
                             </Link>
                           ) : null}
                         </div>
@@ -2042,7 +2042,7 @@ export default function AutoPostPage() {
                     {runTotalPages > 1 ? (
                       <div className="flex flex-col gap-2 rounded-2xl border border-[#2f3336] bg-black p-3 text-sm text-[#71767b] sm:flex-row sm:items-center sm:justify-between">
                         <span>
-                          {t("autoPost.runs.pagination", {
+                          {t("contentDrafts.runs.pagination", {
                             page: runPagination.page,
                             total: runTotalPages,
                             count: runPagination.total,
@@ -2070,7 +2070,7 @@ export default function AutoPostPage() {
   );
 }
 
-function AutoPostControlSummary({
+function ContentDraftControlSummary({
   selectedAccount,
   selectedBot,
   selectedPlan,
@@ -2084,11 +2084,11 @@ function AutoPostControlSummary({
 }: {
   selectedAccount: AccountListItem | null;
   selectedBot: OAFBot | null;
-  selectedPlan: AutoPostPlanApi | null;
+  selectedPlan: ContentDraftPlanApi | null;
   activeContentCount: number;
   queuedDraftCount: number;
   publishReadyCount: number;
-  latestRun: AutoPostGenerationRunApi | null;
+  latestRun: ContentDraftGenerationRunApi | null;
   aiRemaining: number;
   nextRunLabel: string;
   onOpenPanel: (panel: WorkbenchPanel) => void;
@@ -2099,40 +2099,40 @@ function AutoPostControlSummary({
   const needsContent = activeContentCount === 0;
   const needsPlanner = !plannerReady;
   const primaryAction = needsContent
-    ? { label: t("autoPost.control.addContent"), panel: "content" as WorkbenchPanel }
+    ? { label: t("contentDrafts.control.addContent"), panel: "content" as WorkbenchPanel }
     : needsPlanner
-      ? { label: t("autoPost.control.configurePlanner"), panel: "planner" as WorkbenchPanel }
-      : { label: t("autoPost.control.generateDraft"), panel: "generate" as WorkbenchPanel };
+      ? { label: t("contentDrafts.control.configurePlanner"), panel: "planner" as WorkbenchPanel }
+      : { label: t("contentDrafts.control.generateDraft"), panel: "generate" as WorkbenchPanel };
   const metrics = [
     {
-      label: t("autoPost.control.account"),
-      value: selectedAccount ? `@${selectedAccount.username || selectedAccount.display_name}` : t("autoPost.common.emptyValue"),
-      helper: accountReady ? t("autoPost.control.accountReady") : t("autoPost.control.accountBlocked"),
+      label: t("contentDrafts.control.account"),
+      value: selectedAccount ? `@${selectedAccount.username || selectedAccount.display_name}` : t("contentDrafts.common.emptyValue"),
+      helper: accountReady ? t("contentDrafts.control.accountReady") : t("contentDrafts.control.accountBlocked"),
     },
     {
-      label: t("autoPost.control.bot"),
-      value: selectedBot?.name || t("autoPost.bot.defaultTitle"),
-      helper: selectedBot ? t("autoPost.control.botReady") : t("autoPost.control.botMissing"),
+      label: t("contentDrafts.control.bot"),
+      value: selectedBot?.name || t("contentDrafts.bot.defaultTitle"),
+      helper: selectedBot ? t("contentDrafts.control.botReady") : t("contentDrafts.control.botMissing"),
     },
     {
-      label: t("autoPost.control.content"),
-      value: t("autoPost.control.contentValue", { count: activeContentCount }),
-      helper: activeContentCount > 0 ? t("autoPost.control.contentReady") : t("autoPost.control.contentMissing"),
+      label: t("contentDrafts.control.content"),
+      value: t("contentDrafts.control.contentValue", { count: activeContentCount }),
+      helper: activeContentCount > 0 ? t("contentDrafts.control.contentReady") : t("contentDrafts.control.contentMissing"),
     },
     {
-      label: t("autoPost.control.queue"),
-      value: t("autoPost.control.queueValue", { review: queuedDraftCount, publish: publishReadyCount }),
-      helper: t("autoPost.control.queueHelper"),
+      label: t("contentDrafts.control.queue"),
+      value: t("contentDrafts.control.queueValue", { review: queuedDraftCount, publish: publishReadyCount }),
+      helper: t("contentDrafts.control.queueHelper"),
     },
     {
-      label: t("autoPost.control.planner"),
-      value: plannerReady ? t("autoPost.status.enabledValue") : t("autoPost.status.pausedValue"),
-      helper: t("autoPost.control.nextRun", { time: nextRunLabel }),
+      label: t("contentDrafts.control.planner"),
+      value: plannerReady ? t("contentDrafts.status.enabledValue") : t("contentDrafts.status.pausedValue"),
+      helper: t("contentDrafts.control.nextRun", { time: nextRunLabel }),
     },
     {
-      label: t("autoPost.control.latestRun"),
-      value: latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.common.emptyValue"),
-      helper: t("autoPost.control.aiRemaining", { count: aiRemaining }),
+      label: t("contentDrafts.control.latestRun"),
+      value: latestRun ? t(`contentDrafts.runs.status.${latestRun.status}`) : t("contentDrafts.common.emptyValue"),
+      helper: t("contentDrafts.control.aiRemaining", { count: aiRemaining }),
     },
   ];
 
@@ -2140,15 +2140,15 @@ function AutoPostControlSummary({
     <Card className="border-[#1d9bf0]/20 bg-[#06111d]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#d7ebff]">{t("autoPost.control.title")}</p>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#8b98a5]">{t("autoPost.control.description")}</p>
+          <p className="text-sm font-semibold text-[#d7ebff]">{t("contentDrafts.control.title")}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#8b98a5]">{t("contentDrafts.control.description")}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button type="button" size="sm" onClick={() => onOpenPanel(primaryAction.panel)}>
             {primaryAction.label}
           </Button>
-          <Link href="/execution-queue?type=post" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("autoPost.actions.openQueue")}
+          <Link href="/handling-list?type=post" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("contentDrafts.actions.openQueue")}
           </Link>
         </div>
       </div>
@@ -2165,7 +2165,7 @@ function AutoPostControlSummary({
   );
 }
 
-function AutoPostTodayDraftsBridge() {
+function ContentDraftTodayDraftsBridge() {
   const { t } = useT();
   return (
     <Card className="border-[#7856ff]/25 bg-[#7856ff]/10">
@@ -2173,18 +2173,18 @@ function AutoPostTodayDraftsBridge() {
         <div className="min-w-0">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#7856ff]/30 bg-black px-3 py-1 text-xs font-semibold text-[#b8a7ff]">
             <Sparkles className="size-3.5" />
-            {t("autoPost.todayDrafts.kicker")}
+            {t("contentDrafts.todayDrafts.kicker")}
           </div>
-          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("autoPost.todayDrafts.title")}</p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#b8a7ff]/80">{t("autoPost.todayDrafts.description")}</p>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("contentDrafts.todayDrafts.title")}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#b8a7ff]/80">{t("contentDrafts.todayDrafts.description")}</p>
         </div>
         <div className="grid gap-2 sm:flex sm:shrink-0">
           <Link href="/daily-x-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
             <Wand2 className="size-4" />
-            {t("autoPost.todayDrafts.open")}
+            {t("contentDrafts.todayDrafts.open")}
           </Link>
-          <Link href="/execution-queue?type=post" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("autoPost.actions.openQueue")}
+          <Link href="/handling-list?type=post" className="inline-flex h-9 items-center justify-center rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("contentDrafts.actions.openQueue")}
           </Link>
         </div>
       </div>
@@ -2192,7 +2192,7 @@ function AutoPostTodayDraftsBridge() {
   );
 }
 
-function AutoPostSetupGuide({
+function ContentDraftSetupGuide({
   hasAccount,
   hasActiveContent,
   plannerEnabled,
@@ -2209,27 +2209,27 @@ function AutoPostSetupGuide({
   const checks = [
     {
       done: hasAccount,
-      title: t("autoPost.setup.account.title"),
-      description: t("autoPost.setup.account.description"),
+      title: t("contentDrafts.setup.account.title"),
+      description: t("contentDrafts.setup.account.description"),
       action: null,
     },
     {
       done: hasActiveContent,
-      title: t("autoPost.setup.content.title"),
-      description: t("autoPost.setup.content.description"),
-      action: { label: t("autoPost.setup.actions.addContent"), panel: "content" as WorkbenchPanel },
+      title: t("contentDrafts.setup.content.title"),
+      description: t("contentDrafts.setup.content.description"),
+      action: { label: t("contentDrafts.setup.actions.addContent"), panel: "content" as WorkbenchPanel },
     },
     {
       done: plannerEnabled,
-      title: t("autoPost.setup.planner.title"),
-      description: t("autoPost.setup.planner.description"),
-      action: { label: t("autoPost.setup.actions.openPlanner"), panel: "planner" as WorkbenchPanel },
+      title: t("contentDrafts.setup.planner.title"),
+      description: t("contentDrafts.setup.planner.description"),
+      action: { label: t("contentDrafts.setup.actions.openPlanner"), panel: "planner" as WorkbenchPanel },
     },
     {
       done: autopilotEnabled,
-      title: t("autoPost.setup.autopilot.title"),
-      description: t("autoPost.setup.autopilot.description"),
-      action: { label: t("autoPost.setup.actions.setAutopilot"), panel: "planner" as WorkbenchPanel },
+      title: t("contentDrafts.setup.autopilot.title"),
+      description: t("contentDrafts.setup.autopilot.description"),
+      action: { label: t("contentDrafts.setup.actions.setAutopilot"), panel: "planner" as WorkbenchPanel },
     },
   ];
   const missing = checks.filter((item) => !item.done);
@@ -2240,10 +2240,10 @@ function AutoPostSetupGuide({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#e7e9ea]">
-            {missing.length === 0 ? t("autoPost.setup.readyTitle") : t("autoPost.setup.title")}
+            {missing.length === 0 ? t("contentDrafts.setup.readyTitle") : t("contentDrafts.setup.title")}
           </p>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[#71767b]">
-            {missing.length === 0 ? t("autoPost.setup.readyDescription") : t("autoPost.setup.description")}
+            {missing.length === 0 ? t("contentDrafts.setup.readyDescription") : t("contentDrafts.setup.description")}
           </p>
         </div>
         {primaryAction ? (
@@ -2276,7 +2276,7 @@ function AutoPostSetupGuide({
   );
 }
 
-function AutoPostPipelineSummary({
+function ContentDraftPipelineSummary({
   activeContentCount,
   selectedContentItem,
   selectedPlan,
@@ -2287,10 +2287,10 @@ function AutoPostPipelineSummary({
 }: {
   activeContentCount: number;
   selectedContentItem: ContentLibraryItemApi | null;
-  selectedPlan: AutoPostPlanApi | null;
+  selectedPlan: ContentDraftPlanApi | null;
   queuedDraftCount: number;
   publishReadyCount: number;
-  latestRun?: AutoPostGenerationRunApi | null;
+  latestRun?: ContentDraftGenerationRunApi | null;
   onOpenPanel: (panel: WorkbenchPanel) => void;
 }) {
   const { t } = useT();
@@ -2298,36 +2298,36 @@ function AutoPostPipelineSummary({
     {
       id: "material" as const,
       icon: Database,
-      title: t("autoPost.pipeline.material"),
-      value: selectedContentItem ? selectedContentItem.title : t("autoPost.pipeline.materialValue", { count: activeContentCount }),
-      description: t("autoPost.pipeline.materialDesc"),
+      title: t("contentDrafts.pipeline.material"),
+      value: selectedContentItem ? selectedContentItem.title : t("contentDrafts.pipeline.materialValue", { count: activeContentCount }),
+      description: t("contentDrafts.pipeline.materialDesc"),
       panel: "content" as WorkbenchPanel,
       tone: "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]",
     },
     {
       id: "generate" as const,
       icon: Wand2,
-      title: t("autoPost.pipeline.generate"),
-      value: latestRun ? t(`autoPost.runs.status.${latestRun.status}`) : t("autoPost.pipeline.generateValue"),
-      description: t("autoPost.pipeline.generateDesc"),
+      title: t("contentDrafts.pipeline.generate"),
+      value: latestRun ? t(`contentDrafts.runs.status.${latestRun.status}`) : t("contentDrafts.pipeline.generateValue"),
+      description: t("contentDrafts.pipeline.generateDesc"),
       panel: "generate" as WorkbenchPanel,
       tone: "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]",
     },
     {
       id: "queue" as const,
       icon: ListChecks,
-      title: t("autoPost.pipeline.queue"),
-      value: t("autoPost.pipeline.queueValue", { count: queuedDraftCount }),
-      description: t("autoPost.pipeline.queueDesc"),
+      title: t("contentDrafts.pipeline.queue"),
+      value: t("contentDrafts.pipeline.queueValue", { count: queuedDraftCount }),
+      description: t("contentDrafts.pipeline.queueDesc"),
       panel: "history" as WorkbenchPanel,
       tone: "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]",
     },
     {
       id: "publish" as const,
       icon: Send,
-      title: t("autoPost.pipeline.publish"),
-      value: selectedPlan ? t("autoPost.pipeline.publishValue", { count: publishReadyCount }) : t("autoPost.status.notConfigured"),
-      description: t("autoPost.pipeline.publishDesc"),
+      title: t("contentDrafts.pipeline.publish"),
+      value: selectedPlan ? t("contentDrafts.pipeline.publishValue", { count: publishReadyCount }) : t("contentDrafts.status.notConfigured"),
+      description: t("contentDrafts.pipeline.publishDesc"),
       panel: "planner" as WorkbenchPanel,
       tone: "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]",
     },
@@ -2337,11 +2337,11 @@ function AutoPostPipelineSummary({
     <Card className="bg-[#0f1419]">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.pipeline.title")}</p>
-          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("autoPost.pipeline.description")}</p>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("contentDrafts.pipeline.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("contentDrafts.pipeline.description")}</p>
         </div>
-        <Link href="/execution-queue?type=post" className="text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-          {t("autoPost.actions.openQueue")}
+        <Link href="/handling-list?type=post" className="text-sm font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+          {t("contentDrafts.actions.openQueue")}
         </Link>
       </div>
       <div className="grid gap-3 lg:grid-cols-4">
@@ -2436,8 +2436,8 @@ function ContentLibraryExposureFilters({
     <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.contentLibrary.filters.title")}</p>
-          <p className="mt-1 text-xs text-[#71767b]">{t("autoPost.contentLibrary.filters.result", { count: resultCount, total: totalCount })}</p>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("contentDrafts.contentLibrary.filters.title")}</p>
+          <p className="mt-1 text-xs text-[#71767b]">{t("contentDrafts.contentLibrary.filters.result", { count: resultCount, total: totalCount })}</p>
         </div>
         <Button
           type="button"
@@ -2451,36 +2451,36 @@ function ContentLibraryExposureFilters({
             onSortModeChange("default");
           }}
         >
-          {t("autoPost.contentLibrary.filters.reset")}
+          {t("contentDrafts.contentLibrary.filters.reset")}
         </Button>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <ContentLibraryFilterSelect
-          label={t("autoPost.contentLibrary.filters.source")}
+          label={t("contentDrafts.contentLibrary.filters.source")}
           value={exposureFilter}
           options={contentExposureFilters}
-          labelFor={(value) => t(`autoPost.contentLibrary.filters.source.${value}`)}
+          labelFor={(value) => t(`contentDrafts.contentLibrary.filters.source.${value}`)}
           onChange={(value) => onExposureFilterChange(value as ContentExposureFilter)}
         />
         <ContentLibraryFilterSelect
-          label={t("autoPost.contentLibrary.filters.region")}
+          label={t("contentDrafts.contentLibrary.filters.region")}
           value={regionFilter}
           options={contentRegionFilters}
-          labelFor={(value) => t(`autoPost.contentLibrary.filters.region.${value}`)}
+          labelFor={(value) => t(`contentDrafts.contentLibrary.filters.region.${value}`)}
           onChange={(value) => onRegionFilterChange(value as ContentRegionFilter)}
         />
         <ContentLibraryFilterSelect
-          label={t("autoPost.contentLibrary.filters.velocity")}
+          label={t("contentDrafts.contentLibrary.filters.velocity")}
           value={velocityFilter}
           options={contentVelocityFilters}
-          labelFor={(value) => t(`autoPost.contentLibrary.filters.velocity.${value}`)}
+          labelFor={(value) => t(`contentDrafts.contentLibrary.filters.velocity.${value}`)}
           onChange={(value) => onVelocityFilterChange(value as ContentVelocityFilter)}
         />
         <ContentLibraryFilterSelect
-          label={t("autoPost.contentLibrary.filters.sort")}
+          label={t("contentDrafts.contentLibrary.filters.sort")}
           value={sortMode}
           options={contentSortModes}
-          labelFor={(value) => t(`autoPost.contentLibrary.filters.sort.${value}`)}
+          labelFor={(value) => t(`contentDrafts.contentLibrary.filters.sort.${value}`)}
           onChange={(value) => onSortModeChange(value as ContentSortMode)}
         />
       </div>
@@ -2536,8 +2536,8 @@ function ExposureStrategyPanel({
   if (!recommendation) {
     return (
       <div className="mb-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-5 text-sm leading-6 text-[#71767b]">
-        <p className="font-semibold text-[#e7e9ea]">{t("autoPost.generate.strategy.title")}</p>
-        <p className="mt-1">{t("autoPost.generate.strategy.empty")}</p>
+        <p className="font-semibold text-[#e7e9ea]">{t("contentDrafts.generate.strategy.title")}</p>
+        <p className="mt-1">{t("contentDrafts.generate.strategy.empty")}</p>
       </div>
     );
   }
@@ -2548,30 +2548,30 @@ function ExposureStrategyPanel({
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00ba7c]/30 bg-black px-2.5 py-1 text-xs font-semibold text-[#7ee0b5]">
               <Sparkles className="size-3.5" />
-              {t("autoPost.generate.strategy.title")}
+              {t("contentDrafts.generate.strategy.title")}
             </span>
             <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
-              {t("autoPost.generate.strategy.score", { score: recommendation.averageScore })}
+              {t("contentDrafts.generate.strategy.score", { score: recommendation.averageScore })}
             </span>
           </div>
           <h3 className="mt-3 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{recommendation.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-[#c9d1d9]">{recommendation.summary || t("autoPost.generate.strategy.summaryFallback")}</p>
+          <p className="mt-2 text-sm leading-6 text-[#c9d1d9]">{recommendation.summary || t("contentDrafts.generate.strategy.summaryFallback")}</p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto lg:flex-col">
           <Button type="button" className="w-full" onClick={onGenerate} disabled={generateDisabled || generating}>
             {generating ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />}
-            {t("autoPost.generate.strategy.queueDraft")}
+            {t("contentDrafts.generate.strategy.queueDraft")}
           </Button>
           <Button type="button" className="w-full" variant="outline" onClick={onApply} disabled={generating}>
             <Wand2 className="size-4" />
-            {t("autoPost.generate.strategy.apply")}
+            {t("contentDrafts.generate.strategy.apply")}
           </Button>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {recommendation.regions.map((region) => (
           <span key={region} className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
-            {t("autoPost.generate.strategy.region", { region })}
+            {t("contentDrafts.generate.strategy.region", { region })}
           </span>
         ))}
         {recommendation.topics.map((topic) => (
@@ -2585,17 +2585,17 @@ function ExposureStrategyPanel({
           const trace = parseContentSourceTrace(item);
           return (
             <div key={item.id} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.generate.strategy.memoryRank", { rank: index + 1 })}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.generate.strategy.memoryRank", { rank: index + 1 })}</p>
               <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{trace?.signalTitle || item.title}</p>
               <p className="mt-1 text-xs text-[#71767b]">
-                {t("autoPost.generate.strategy.memoryMeta", { score: trace?.score || "-", velocity: trace?.velocity || "-" })}
+                {t("contentDrafts.generate.strategy.memoryMeta", { score: trace?.score || "-", velocity: trace?.velocity || "-" })}
               </p>
             </div>
           );
         })}
       </div>
       <div className="mt-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-        <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.generate.strategy.directionPreview")}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.generate.strategy.directionPreview")}</p>
         <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[#c9d1d9]">{recommendation.direction}</p>
       </div>
     </div>
@@ -2622,11 +2622,11 @@ function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibra
   const trace = parseContentSourceTrace(item);
   if (!trace) return null;
   const metrics = [
-    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
-    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
-    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
-    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
-    { label: t("autoPost.contentLibrary.sourceTrace.quality"), value: trace.quality },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.risk"), value: trace.risk },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.quality"), value: trace.quality },
   ].filter((metric) => metric.value);
 
   return (
@@ -2635,17 +2635,17 @@ function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibra
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
-              {t("autoPost.contentLibrary.sourceTrace.title")}
+              {t("contentDrafts.contentLibrary.sourceTrace.title")}
             </span>
             <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
-              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind}`)}
+              {t(`contentDrafts.contentLibrary.sourceTrace.kind.${trace.kind}`)}
             </span>
           </div>
           <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signalTitle || item.title}</p>
         </div>
         {trace.sourceURL ? (
           <a href={trace.sourceURL} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            {t("contentDrafts.contentLibrary.sourceTrace.openSource")}
             <ExternalLink className="size-3.5" />
           </a>
         ) : null}
@@ -2662,26 +2662,26 @@ function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibra
       ) : null}
       {trace.summary ? (
         <div className="mt-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.summary")}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.contentLibrary.sourceTrace.summary")}</p>
           <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.summary}</p>
         </div>
       ) : null}
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
         {trace.whyItMatters ? (
           <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.why")}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.contentLibrary.sourceTrace.why")}</p>
             <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.whyItMatters}</p>
           </div>
         ) : null}
         {trace.suggestedAction ? (
           <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.action")}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.contentLibrary.sourceTrace.action")}</p>
             <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.suggestedAction}</p>
           </div>
         ) : null}
         {trace.bestUse ? (
           <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2 lg:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("autoPost.contentLibrary.sourceTrace.bestUse")}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{t("contentDrafts.contentLibrary.sourceTrace.bestUse")}</p>
             <p className="mt-1 text-sm leading-6 text-[#c9d1d9]">{trace.bestUse}</p>
           </div>
         ) : null}
@@ -2693,10 +2693,10 @@ function ContentSourceTracePanel({ item, compact = false }: { item: ContentLibra
 function ExposureSourceTraceBadgePanel({ trace }: { trace: ExposureSourceTraceApi }) {
   const { t } = useT();
   const metrics = [
-    { label: t("autoPost.contentLibrary.sourceTrace.region"), value: trace.region },
-    { label: t("autoPost.contentLibrary.sourceTrace.score"), value: trace.score },
-    { label: t("autoPost.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
-    { label: t("autoPost.contentLibrary.sourceTrace.risk"), value: trace.risk },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.region"), value: trace.region },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.score"), value: trace.score },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.velocity"), value: trace.velocity },
+    { label: t("contentDrafts.contentLibrary.sourceTrace.risk"), value: trace.risk },
   ].filter((metric) => metric.value);
   return (
     <div className="mt-3 rounded-2xl border border-[#1d9bf0]/25 bg-[#06111d] p-3">
@@ -2704,17 +2704,17 @@ function ExposureSourceTraceBadgePanel({ trace }: { trace: ExposureSourceTraceAp
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">
-              {t("autoPost.contentLibrary.sourceTrace.title")}
+              {t("contentDrafts.contentLibrary.sourceTrace.title")}
             </span>
             <span className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-xs text-[#8b98a5]">
-              {t(`autoPost.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
+              {t(`contentDrafts.contentLibrary.sourceTrace.kind.${trace.kind === "brief" ? "brief" : "radar"}`)}
             </span>
           </div>
           <p className="mt-2 break-words text-sm font-semibold text-[#e7e9ea] [overflow-wrap:anywhere]">{trace.signal_title}</p>
         </div>
         {trace.source_url ? (
           <a href={trace.source_url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2f3336] bg-black px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("autoPost.contentLibrary.sourceTrace.openSource")}
+            {t("contentDrafts.contentLibrary.sourceTrace.openSource")}
             <ExternalLink className="size-3.5" />
           </a>
         ) : null}
@@ -2731,7 +2731,7 @@ function ExposureSourceTraceBadgePanel({ trace }: { trace: ExposureSourceTraceAp
       ) : null}
       {trace.suggested_action ? (
         <p className="mt-2 text-xs leading-5 text-[#8b98a5]">
-          <span className="font-semibold text-[#cfd9e2]">{t("autoPost.contentLibrary.sourceTrace.action")}:</span> {trace.suggested_action}
+          <span className="font-semibold text-[#cfd9e2]">{t("contentDrafts.contentLibrary.sourceTrace.action")}:</span> {trace.suggested_action}
         </p>
       ) : null}
     </div>
@@ -2776,12 +2776,12 @@ function PostingWindowPicker({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Clock3 className="size-4 text-[#1d9bf0]" />
-            <p className="text-sm font-semibold text-[#e7e9ea]">{t("autoPost.fields.postingWindows")}</p>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("contentDrafts.fields.postingWindows")}</p>
           </div>
-          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.fields.postingWindowsHelper")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("contentDrafts.fields.postingWindowsHelper")}</p>
         </div>
         <button type="button" onClick={onClear} className="text-xs font-semibold text-[#1d9bf0] hover:underline">
-          {t("autoPost.fields.postingWindowsClear")}
+          {t("contentDrafts.fields.postingWindowsClear")}
         </button>
       </div>
 
@@ -2793,7 +2793,7 @@ function PostingWindowPicker({
             onClick={() => onApplyPreset(preset.hours)}
             className="rounded-full border border-[#2f3336] bg-black px-3 py-1.5 text-xs font-semibold text-[#e7e9ea] transition hover:border-[#1d9bf0]/55 hover:bg-[#1d9bf0]/10"
           >
-            {t(`autoPost.postingWindowPreset.${preset.key}`)}
+            {t(`contentDrafts.postingWindowPreset.${preset.key}`)}
           </button>
         ))}
       </div>
@@ -2820,14 +2820,14 @@ function PostingWindowPicker({
       </div>
 
       <div className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
-        <p className="text-[11px] uppercase tracking-wide text-[#71767b]">{t("autoPost.fields.postingWindowsSelected")}</p>
-        <p className="mt-1 break-words text-sm text-[#e7e9ea]">{value || t("autoPost.fields.postingWindowsNoLimit")}</p>
+        <p className="text-[11px] uppercase tracking-wide text-[#71767b]">{t("contentDrafts.fields.postingWindowsSelected")}</p>
+        <p className="mt-1 break-words text-sm text-[#e7e9ea]">{value || t("contentDrafts.fields.postingWindowsNoLimit")}</p>
       </div>
     </div>
   );
 }
 
-function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
+function formFromPlan(plan: ContentDraftPlanApi): PlannerForm {
   return {
     enabled: plan.enabled,
     executionMode: plan.execution_mode,
@@ -2841,12 +2841,12 @@ function formFromPlan(plan: AutoPostPlanApi): PlannerForm {
 
 function formatTrendRegions(regions: string[], t: (key: string, params?: Record<string, string | number>) => string) {
   const values = regions.length ? regions : ["1", "23424977"];
-  return values.map((value) => t(`autoPost.trends.region.${value}`)).join(", ");
+  return values.map((value) => t(`contentDrafts.trends.region.${value}`)).join(", ");
 }
 
 function formatTrendCategories(categories: string[], t: (key: string, params?: Record<string, string | number>) => string) {
-  if (!categories.length) return t("autoPost.trends.allCategories");
-  return categories.map((value) => t(`autoPost.trends.category.${value}`)).join(", ");
+  if (!categories.length) return t("contentDrafts.trends.allCategories");
+  return categories.map((value) => t(`contentDrafts.trends.category.${value}`)).join(", ");
 }
 
 function TrendPreferenceSummary({ label, value }: { label: string; value: string }) {
@@ -2879,21 +2879,21 @@ function TrendFeedbackPanel({
     <div className="rounded-xl border border-[#2f3336] bg-black p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-medium text-[#71767b]">{t("autoPost.trends.feedbackPanel.title")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("autoPost.trends.feedbackPanel.description")}</p>
+          <p className="text-xs font-medium text-[#71767b]">{t("contentDrafts.trends.feedbackPanel.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("contentDrafts.trends.feedbackPanel.description")}</p>
         </div>
         <Button type="button" size="sm" variant="outline" className="h-8" disabled={loading} onClick={() => void onRefresh()}>
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          {t("autoPost.trends.feedbackPanel.refresh")}
+          {t("contentDrafts.trends.feedbackPanel.refresh")}
         </Button>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <TrendFeedbackMetric label={t("autoPost.trends.feedbackPanel.total")} value={summary?.total || 0} />
-        <TrendFeedbackMetric label={t("autoPost.trends.feedback.irrelevant")} value={summary?.irrelevant || 0} />
-        <TrendFeedbackMetric label={t("autoPost.trends.feedback.tooForced")} value={summary?.too_forced || 0} />
+        <TrendFeedbackMetric label={t("contentDrafts.trends.feedbackPanel.total")} value={summary?.total || 0} />
+        <TrendFeedbackMetric label={t("contentDrafts.trends.feedback.irrelevant")} value={summary?.irrelevant || 0} />
+        <TrendFeedbackMetric label={t("contentDrafts.trends.feedback.tooForced")} value={summary?.too_forced || 0} />
       </div>
       {loading ? (
-        <p className="mt-3 text-sm text-[#71767b]">{t("autoPost.trends.feedbackPanel.loading")}</p>
+        <p className="mt-3 text-sm text-[#71767b]">{t("contentDrafts.trends.feedbackPanel.loading")}</p>
       ) : items.length ? (
         <div className="mt-3 grid gap-2">
           {items.slice(0, 8).map((item) => (
@@ -2902,11 +2902,11 @@ function TrendFeedbackPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-[#e7e9ea]">{item.trend_name}</span>
                   <span className="rounded-full border border-amber-300/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-100">
-                    {t(`autoPost.trends.feedback.${item.rating === "too_forced" ? "tooForced" : "irrelevant"}`)}
+                    {t(`contentDrafts.trends.feedback.${item.rating === "too_forced" ? "tooForced" : "irrelevant"}`)}
                   </span>
                   {item.category ? (
                     <span className="rounded-full border border-[#2f3336] bg-black px-2 py-0.5 text-[11px] text-[#71767b]">
-                      {t(`autoPost.trends.category.${item.category}`)}
+                      {t(`contentDrafts.trends.category.${item.category}`)}
                     </span>
                   ) : null}
                 </div>
@@ -2918,14 +2918,14 @@ function TrendFeedbackPanel({
                 onClick={() => void onClear(item)}
                 className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] hover:border-[#1d9bf0]/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {clearingID === item.id ? t("autoPost.trends.feedbackPanel.clearing") : t("autoPost.trends.feedbackPanel.clear")}
+                {clearingID === item.id ? t("contentDrafts.trends.feedbackPanel.clearing") : t("contentDrafts.trends.feedbackPanel.clear")}
               </button>
             </div>
           ))}
         </div>
       ) : (
         <p className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-sm text-[#71767b]">
-          {t("autoPost.trends.feedbackPanel.empty")}
+          {t("contentDrafts.trends.feedbackPanel.empty")}
         </p>
       )}
     </div>
@@ -2957,7 +2957,7 @@ function TrendSourceChips({ trends, label, feedback }: { trends: TrendTopicApi[]
     const key = `${trend.woeid}-${trend.normalized_name || trend.trend_name}-${rating}`;
     setPendingKey(key);
     try {
-      await autoPostService.submitTrendFeedback({
+      await contentDraftService.submitTrendFeedback({
         bot_id: feedback?.botID || 0,
         x_account_id: feedback?.xAccountID || 0,
         trend_name: trend.trend_name,
@@ -2968,9 +2968,9 @@ function TrendSourceChips({ trends, label, feedback }: { trends: TrendTopicApi[]
         source_type: feedback?.sourceType || "auto_post",
         source_id: feedback?.sourceID || 0,
       });
-      pushToast(t("autoPost.trends.feedbackSaved"));
+      pushToast(t("contentDrafts.trends.feedbackSaved"));
     } catch (error) {
-      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("autoPost.trends.feedbackFailed") : t("autoPost.trends.feedbackFailed"));
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("contentDrafts.trends.feedbackFailed") : t("contentDrafts.trends.feedbackFailed"));
     } finally {
       setPendingKey("");
     }
@@ -2983,16 +2983,16 @@ function TrendSourceChips({ trends, label, feedback }: { trends: TrendTopicApi[]
           <div key={`${trend.woeid}-${trend.normalized_name || trend.trend_name}`} className="min-w-0 rounded-xl border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 px-3 py-2 text-xs text-[#d7ebff]">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{trend.trend_name}</span>
-              <span className="text-[#71767b]">{t(`autoPost.trends.category.${trend.category}`)}</span>
+              <span className="text-[#71767b]">{t(`contentDrafts.trends.category.${trend.category}`)}</span>
             </div>
             {trend.relevance_reason ? (
               <p className="mt-1 break-words leading-5 text-[#8b98a5]">
-                {t("autoPost.trends.reasonPrefix")} {trend.relevance_reason}
+                {t("contentDrafts.trends.reasonPrefix")} {trend.relevance_reason}
               </p>
             ) : null}
             {trend.matched_keywords?.length ? (
               <p className="mt-1 break-words leading-5 text-[#71767b]">
-                {t("autoPost.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
+                {t("contentDrafts.trends.keywordsPrefix")} {trend.matched_keywords.join(", ")}
               </p>
             ) : null}
             {feedback ? (
@@ -3013,9 +3013,9 @@ function TrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: TrendTop
   const { t } = useT();
   const baseKey = `${trend.woeid}-${trend.normalized_name || trend.trend_name}`;
   const options: Array<{ rating: TrendFeedbackRating; label: string }> = [
-    { rating: "relevant", label: t("autoPost.trends.feedback.relevant") },
-    { rating: "irrelevant", label: t("autoPost.trends.feedback.irrelevant") },
-    { rating: "too_forced", label: t("autoPost.trends.feedback.tooForced") },
+    { rating: "relevant", label: t("contentDrafts.trends.feedback.relevant") },
+    { rating: "irrelevant", label: t("contentDrafts.trends.feedback.irrelevant") },
+    { rating: "too_forced", label: t("contentDrafts.trends.feedback.tooForced") },
   ];
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -3029,7 +3029,7 @@ function TrendFeedbackButtons({ trend, pendingKey, onSubmit }: { trend: TrendTop
             disabled={Boolean(pendingKey)}
             className="rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-medium text-[#8b98a5] transition hover:border-[#1d9bf0]/50 hover:text-[#d7ebff] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? t("autoPost.trends.feedback.saving") : option.label}
+            {loading ? t("contentDrafts.trends.feedback.saving") : option.label}
           </button>
         );
       })}

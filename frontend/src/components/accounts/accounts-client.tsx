@@ -18,7 +18,7 @@ import { broadcastDashboardRefresh } from "@/lib/dashboard-refresh";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
-import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
+import { contentDraftService, type ContentDraftPlanApi } from "@/services/content-drafts.service";
 import { billingService, type BillingSubscriptionApi } from "@/services/billing.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
@@ -78,7 +78,7 @@ export function AccountsClient() {
   const [accounts, setAccounts] = useState<ConnectedXAccount[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
-  const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [contentDraftPlans, setContentDraftPlans] = useState<ContentDraftPlanApi[]>([]);
   const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
   const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscriptionApi | null>(null);
@@ -131,15 +131,15 @@ export function AccountsClient() {
     try {
       const [automationData, planData, queueData] = await Promise.all([
         automationService.list(),
-        autoPostService.plans(),
+        contentDraftService.plans(),
         reviewQueueService.list({ pageSize: 100 }),
       ]);
       setAutomationModules(automationData.modules);
-      setAutoPostPlans(planData.items);
+      setContentDraftPlans(planData.items);
       setQueueItems(queueData.items);
     } catch {
       setAutomationModules([]);
-      setAutoPostPlans([]);
+      setContentDraftPlans([]);
       setQueueItems([]);
     }
   }, []);
@@ -309,7 +309,7 @@ export function AccountsClient() {
         id: "queue",
         title: t("accounts.blockers.queue.title", { count: queueAttentionCount }),
         description: t("accounts.blockers.queue.description"),
-        href: "/execution-queue",
+        href: "/handling-list",
         actionLabel: t("accounts.blockers.queue.action"),
         severity: "info",
         countLabel: String(queueAttentionCount),
@@ -411,7 +411,7 @@ export function AccountsClient() {
             accounts={visibleAccounts}
             bots={bots}
             automationModules={automationModules}
-            autoPostPlans={autoPostPlans}
+            contentDraftPlans={contentDraftPlans}
             queueItems={queueItems}
             onReconnect={onReconnect}
             onDisconnect={onDisconnect}

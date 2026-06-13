@@ -163,7 +163,7 @@ Expected:
 Open:
 
 ```text
-/execution-queue?type=comment&status=pending_review
+/handling-list?type=comment&status=pending_review
 ```
 
 Expected:

@@ -42,7 +42,7 @@ import { broadcastDataSynced } from "@/lib/app-page-refresh";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
-import { autoPostService, type AutoPostPlanApi } from "@/services/auto-post.service";
+import { contentDraftService, type ContentDraftPlanApi } from "@/services/content-drafts.service";
 import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { reviewQueueService, type ReviewQueueFeedbackIssueVerdictStatApi, type ReviewQueueItemApi } from "@/services/review-queue.service";
@@ -80,7 +80,7 @@ type QueueSummary = {
   failed: number;
   published: number;
 };
-type AutoPostReadinessStep = {
+type ContentDraftReadinessStep = {
   key: "account" | "content" | "planner" | "autopilot";
   ready: boolean;
   href: string;
@@ -112,8 +112,8 @@ type BotMatrixRow = {
   completion: number;
   activeContentCount: number;
   queueSummary: QueueSummary;
-  plan?: AutoPostPlanApi;
-  autoPostReady: boolean;
+  plan?: ContentDraftPlanApi;
+  contentDraftReady: boolean;
   monthlyUsage: number;
   negativeFeedback: number;
   inspectionFlags: string[];
@@ -598,7 +598,7 @@ export default function OAFBotsPage() {
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [automationModules, setAutomationModules] = useState<AutomationModuleApi[]>([]);
-  const [autoPostPlans, setAutoPostPlans] = useState<AutoPostPlanApi[]>([]);
+  const [contentDraftPlans, setContentDraftPlans] = useState<ContentDraftPlanApi[]>([]);
   const [contentItems, setContentItems] = useState<ContentLibraryItemApi[]>([]);
   const [queueItems, setQueueItems] = useState<ReviewQueueItemApi[]>([]);
   const [relationshipLoading, setRelationshipLoading] = useState(true);
@@ -680,10 +680,10 @@ export default function OAFBotsPage() {
     return map;
   }, [bots, selectedID]);
 
-  const selectedPostPlan = useMemo(() => {
+  const selectedContentDraftPlan = useMemo(() => {
     if (!selectedBot) return undefined;
-    return autoPostPlans.find((plan) => plan.bot_id === selectedBot.id || plan.x_account_id === selectedBot.twitter_account_id);
-  }, [autoPostPlans, selectedBot]);
+    return contentDraftPlans.find((plan) => plan.bot_id === selectedBot.id || plan.x_account_id === selectedBot.twitter_account_id);
+  }, [contentDraftPlans, selectedBot]);
   const selectedCompatibleContentItems = useMemo(() => {
     if (!selectedBot) return [];
     return contentItems.filter((item) => contentItemMatchesBot(item, selectedBot));
@@ -692,15 +692,15 @@ export default function OAFBotsPage() {
     () => selectedCompatibleContentItems.filter((item) => item.status === "active"),
     [selectedCompatibleContentItems],
   );
-  const selectedAutoPostReadiness = useMemo<AutoPostReadinessStep[]>(() => {
+  const selectedContentDraftReadiness = useMemo<ContentDraftReadinessStep[]>(() => {
     const accountID = selectedBot?.twitter_account_id || 0;
     return [
       { key: "account", ready: Boolean(selectedAccount), href: "/accounts" },
-      { key: "content", ready: selectedActiveContentItems.length > 0, href: accountID ? `/auto-post?panel=content&account=${accountID}` : "/auto-post?panel=content" },
-      { key: "planner", ready: Boolean(selectedPostPlan?.enabled), href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
-      { key: "autopilot", ready: selectedPostPlan?.execution_mode === "autopilot", href: accountID ? `/auto-post?panel=planner&account=${accountID}` : "/auto-post?panel=planner" },
+      { key: "content", ready: selectedActiveContentItems.length > 0, href: accountID ? `/content-drafts?panel=content&account=${accountID}` : "/content-drafts?panel=content" },
+      { key: "planner", ready: Boolean(selectedContentDraftPlan?.enabled), href: accountID ? `/content-drafts?panel=planner&account=${accountID}` : "/content-drafts?panel=planner" },
+      { key: "autopilot", ready: selectedContentDraftPlan?.execution_mode === "autopilot", href: accountID ? `/content-drafts?panel=planner&account=${accountID}` : "/content-drafts?panel=planner" },
     ];
-  }, [selectedAccount, selectedActiveContentItems.length, selectedBot, selectedPostPlan]);
+  }, [selectedAccount, selectedActiveContentItems.length, selectedBot, selectedContentDraftPlan]);
 
   const selectedQueueItems = useMemo(() => {
     if (!selectedID) return [];
@@ -712,20 +712,20 @@ export default function OAFBotsPage() {
   const selectedAutomationStates = useMemo<BotAutomationState[]>(() => {
     return automationTypes.map((type) => {
       const automationModule = automationModules.find((item) => item.type === type);
-      const mode = type === "post" ? selectedPostPlan?.execution_mode || automationModule?.config.execution_mode || "review" : automationModule?.config.execution_mode || "review";
+      const mode = type === "post" ? selectedContentDraftPlan?.execution_mode || automationModule?.config.execution_mode || "review" : automationModule?.config.execution_mode || "review";
       return {
         type,
-        enabled: type === "post" ? Boolean(selectedPostPlan?.enabled) : Boolean(automationModule?.config.enabled),
-        configured: type === "post" ? Boolean(selectedPostPlan) : Boolean(automationModule),
+        enabled: type === "post" ? Boolean(selectedContentDraftPlan?.enabled) : Boolean(automationModule?.config.enabled),
+        configured: type === "post" ? Boolean(selectedContentDraftPlan) : Boolean(automationModule),
         mode,
         href: automationHref(type),
       };
     });
-  }, [automationModules, selectedPostPlan]);
+  }, [automationModules, selectedContentDraftPlan]);
   const matrixRows = useMemo<BotMatrixRow[]>(() => {
     return bots.map((bot) => {
       const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : undefined;
-      const plan = autoPostPlans.find((item) => item.bot_id === bot.id || item.x_account_id === bot.twitter_account_id);
+      const plan = contentDraftPlans.find((item) => item.bot_id === bot.id || item.x_account_id === bot.twitter_account_id);
       const compatibleContent = contentItems.filter((item) => contentItemMatchesBot(item, bot));
       const activeContentCount = compatibleContent.filter((item) => item.status === "active").length;
       const botQueueItems = queueItems.filter((item) => item.bot_id === bot.id);
@@ -746,18 +746,18 @@ export default function OAFBotsPage() {
         activeContentCount,
         queueSummary,
         plan,
-        autoPostReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
+        contentDraftReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
         monthlyUsage,
         negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
         inspectionFlags: matrixInspectionFlagsByBot[bot.id] || fallbackFlags,
       };
     });
-  }, [accountByID, autoPostPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixInspectionFlagsByBot, matrixUsageByBot, queueItems]);
+  }, [accountByID, contentDraftPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixInspectionFlagsByBot, matrixUsageByBot, queueItems]);
   const matrixSummary = useMemo(() => {
     return matrixRows.reduce(
       (summary, row) => {
         summary.bound += row.account ? 1 : 0;
-        summary.ready += row.autoPostReady ? 1 : 0;
+        summary.ready += row.contentDraftReady ? 1 : 0;
         summary.review += row.queueSummary.pendingReview;
         summary.usage += row.monthlyUsage;
         summary.negativeFeedback += row.negativeFeedback;
@@ -768,12 +768,12 @@ export default function OAFBotsPage() {
   }, [matrixRows]);
   const matrixInspectionItems = useMemo<MatrixInspectionItem[]>(() => {
     const unbound = matrixInspectionSummary?.unbound_count ?? matrixRows.filter((row) => !row.account).length;
-    const autoPostNotReady = matrixInspectionSummary?.auto_post_not_ready_count ?? matrixRows.filter((row) => !row.autoPostReady).length;
+    const contentDraftNotReady = matrixInspectionSummary?.auto_post_not_ready_count ?? matrixRows.filter((row) => !row.contentDraftReady).length;
     const negativeFeedback = matrixInspectionSummary?.negative_feedback_count ?? matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
     const reviewBacklog = matrixInspectionSummary?.review_backlog_count ?? matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
     return [
       { key: "unbound", count: unbound, tone: unbound > 0 ? "warning" : "neutral" },
-      { key: "auto_post_not_ready", count: autoPostNotReady, tone: autoPostNotReady > 0 ? "warning" : "neutral" },
+      { key: "auto_post_not_ready", count: contentDraftNotReady, tone: contentDraftNotReady > 0 ? "warning" : "neutral" },
       { key: "negative_feedback", count: negativeFeedback, tone: negativeFeedback > 0 ? "danger" : "neutral" },
       { key: "review_backlog", count: reviewBacklog, tone: reviewBacklog > 0 ? "danger" : "neutral" },
     ];
@@ -1000,15 +1000,15 @@ export default function OAFBotsPage() {
     [t],
   );
   const trendRegionOptions = useMemo<ChipOption[]>(
-    () => trendRegionValues.map((value) => ({ value, label: t(`autoPost.trends.region.${value}`) })),
+    () => trendRegionValues.map((value) => ({ value, label: t(`contentDrafts.trends.region.${value}`) })),
     [t],
   );
   const trendCategoryOptions = useMemo<ChipOption[]>(
-    () => trendCategoryValues.map((value) => ({ value, label: t(`autoPost.trends.category.${value}`) })),
+    () => trendCategoryValues.map((value) => ({ value, label: t(`contentDrafts.trends.category.${value}`) })),
     [t],
   );
   const sensitiveTrendPolicyOptions = useMemo<SelectOption[]>(
-    () => sensitiveTrendPolicyValues.map((value) => ({ value, label: t(`autoPost.trends.policy.${value}`) })),
+    () => sensitiveTrendPolicyValues.map((value) => ({ value, label: t(`contentDrafts.trends.policy.${value}`) })),
     [t],
   );
 
@@ -1041,17 +1041,17 @@ export default function OAFBotsPage() {
     try {
       const [automationData, planData, queueData, contentData] = await Promise.all([
         automationService.list(),
-        autoPostService.plans(),
+        contentDraftService.plans(),
         reviewQueueService.list({ pageSize: 100 }),
         contentLibraryService.list({ limit: 100 }),
       ]);
       setAutomationModules(automationData.modules);
-      setAutoPostPlans(planData.items);
+      setContentDraftPlans(planData.items);
       setQueueItems(queueData.items);
       setContentItems(contentData.items);
     } catch {
       setAutomationModules([]);
-      setAutoPostPlans([]);
+      setContentDraftPlans([]);
       setQueueItems([]);
       setContentItems([]);
     } finally {
@@ -2469,10 +2469,10 @@ export default function OAFBotsPage() {
               account={selectedAccount}
               completion={personaCompleteness}
               automationStates={selectedAutomationStates}
-              autoPostPlan={selectedPostPlan}
+              contentDraftPlan={selectedContentDraftPlan}
               activeContentCount={selectedActiveContentItems.length}
               totalContentCount={selectedCompatibleContentItems.length}
-              autoPostReadiness={selectedAutoPostReadiness}
+              contentDraftReadiness={selectedContentDraftReadiness}
               queueItems={selectedQueueItems}
               queueSummary={selectedQueueSummary}
               loading={relationshipLoading}
@@ -2817,7 +2817,7 @@ function contentItemMatchesBot(item: ContentLibraryItemApi, bot: OAFBot) {
 }
 
 function automationHref(type: BotAutomationType) {
-  if (type === "post") return "/auto-post";
+  if (type === "post") return "/content-drafts";
   if (type === "comment") return "/exposure-radar";
   return "/review-queue";
 }
@@ -3120,7 +3120,7 @@ function OAFBotFocusPanel({
                 {t("oafBots.focus.dailyQueueCta")}
               </Button>
             </Link>
-            <Link href="/execution-queue" className="inline-flex">
+            <Link href="/handling-list" className="inline-flex">
               <Button type="button" variant="outline">
                 <Workflow className="size-4" />
                 {t("oafBots.focus.queueCta")}
@@ -3312,7 +3312,7 @@ function BotMatrixPanel({
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.bot")}</th>
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.account")}</th>
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.persona")}</th>
-                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.autoPost")}</th>
+                  <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.contentDraft")}</th>
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.queue")}</th>
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.signals")}</th>
                   <th className="px-4 py-3 font-medium">{t("oafBots.matrix.columns.action")}</th>
@@ -3344,7 +3344,7 @@ function BotMatrixPanel({
                         <p className="mt-1 max-w-48 truncate text-xs text-[#71767b]">{row.bot.topics.slice(0, 3).join(" / ") || t("oafBots.matrix.noTopics")}</p>
                       </td>
                       <td className="px-4 py-3 align-top">
-                        <BotStatusPill tone={row.autoPostReady ? "success" : "warning"} label={row.autoPostReady ? t("oafBots.matrix.ready") : t("oafBots.matrix.needsSetup")} />
+                        <BotStatusPill tone={row.contentDraftReady ? "success" : "warning"} label={row.contentDraftReady ? t("oafBots.matrix.ready") : t("oafBots.matrix.needsSetup")} />
                         <p className="mt-1 text-xs text-[#71767b]">{t("oafBots.matrix.contentCount", { count: row.activeContentCount })}</p>
                       </td>
                       <td className="px-4 py-3 align-top">
@@ -3389,10 +3389,10 @@ function BotRelationshipCard({
   account,
   completion,
   automationStates,
-  autoPostPlan,
+  contentDraftPlan,
   activeContentCount,
   totalContentCount,
-  autoPostReadiness,
+  contentDraftReadiness,
   queueItems,
   queueSummary,
   loading,
@@ -3402,17 +3402,17 @@ function BotRelationshipCard({
   account?: AccountListItem;
   completion: number;
   automationStates: BotAutomationState[];
-  autoPostPlan?: AutoPostPlanApi;
+  contentDraftPlan?: ContentDraftPlanApi;
   activeContentCount: number;
   totalContentCount: number;
-  autoPostReadiness: AutoPostReadinessStep[];
+  contentDraftReadiness: ContentDraftReadinessStep[];
   queueItems: ReviewQueueItemApi[];
   queueSummary: QueueSummary;
   loading: boolean;
 }) {
   const recentItems = queueItems.slice(0, 3);
   const enabledAutomationCount = automationStates.filter((item) => item.enabled).length;
-  const autoPostReady = autoPostReadiness.length > 0 && autoPostReadiness.every((item) => item.ready);
+  const contentDraftReady = contentDraftReadiness.length > 0 && contentDraftReadiness.every((item) => item.ready);
   const dailyQueueReady = Boolean(bot);
   const hasQueueActivity = queueSummary.pendingReview > 0 || queueSummary.readyToPublish > 0;
 
@@ -3486,32 +3486,32 @@ function BotRelationshipCard({
               <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.coreReadinessDescription")}</p>
             </div>
             <div className="grid gap-2">
-              <AutoPostReadinessTile
+              <ContentDraftReadinessTile
                 title={t("oafBots.relationship.readiness.persona")}
                 description={completion >= 60 ? t("oafBots.relationship.readiness.personaValue", { percent: completion }) : t("oafBots.relationship.readiness.personaMissing", { percent: completion })}
                 ready={completion >= 60}
                 href="#oaf-bot-editor"
                 action={completion >= 60 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
               />
-              <AutoPostReadinessTile
+              <ContentDraftReadinessTile
                 title={t("oafBots.relationship.readiness.content")}
                 description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
                 ready={activeContentCount > 0}
-                href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                href={account ? `/content-drafts?panel=content&account=${account.id}` : "/content-drafts?panel=content"}
                 action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
               />
-              <AutoPostReadinessTile
+              <ContentDraftReadinessTile
                 title={t("oafBots.relationship.readiness.dailyQueue")}
                 description={dailyQueueReady ? t("oafBots.relationship.readiness.dailyQueueReady") : t("oafBots.relationship.readiness.dailyQueueMissing")}
                 ready={dailyQueueReady}
                 href={`/daily-x-queue?bot_id=${bot.id}`}
                 action={t("oafBots.relationship.openDailyQueue")}
               />
-              <AutoPostReadinessTile
+              <ContentDraftReadinessTile
                 title={t("oafBots.relationship.readiness.queue")}
                 description={t("oafBots.relationship.readiness.queueValue", { review: queueSummary.pendingReview, ready: queueSummary.readyToPublish })}
                 ready={hasQueueActivity}
-                href="/execution-queue"
+                href="/handling-list"
                 action={t("oafBots.relationship.openQueue")}
               />
             </div>
@@ -3540,7 +3540,7 @@ function BotRelationshipCard({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.advancedAutomationSummary")}</p>
                   <p className="mt-1 text-xs leading-5 text-[#71767b]">
-                    {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                    {contentDraftReady ? t("oafBots.relationship.contentDraftReadyDescription") : t("oafBots.relationship.contentDraftNeedsSetupDescription")}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs text-[#71767b]">
@@ -3549,48 +3549,48 @@ function BotRelationshipCard({
               </div>
             </summary>
             <div className="mt-4 space-y-3">
-              <div className={`rounded-2xl border p-4 ${autoPostReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
+              <div className={`rounded-2xl border p-4 ${contentDraftReady ? "border-emerald-300/20 bg-emerald-400/10" : "border-amber-300/20 bg-amber-400/10"}`}>
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#e7e9ea]">
-                      {autoPostReady ? t("oafBots.relationship.autoPostReadyTitle") : t("oafBots.relationship.autoPostNeedsSetupTitle")}
+                      {contentDraftReady ? t("oafBots.relationship.contentDraftReadyTitle") : t("oafBots.relationship.contentDraftNeedsSetupTitle")}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-[#71767b]">
-                      {autoPostReady ? t("oafBots.relationship.autoPostReadyDescription") : t("oafBots.relationship.autoPostNeedsSetupDescription")}
+                      {contentDraftReady ? t("oafBots.relationship.contentDraftReadyDescription") : t("oafBots.relationship.contentDraftNeedsSetupDescription")}
                     </p>
                   </div>
-                  <Link href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
-                    {t("oafBots.relationship.openAutoPost")}
+                  <Link href={account ? `/content-drafts?panel=content&account=${account.id}` : "/content-drafts"} className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+                    {t("oafBots.relationship.openContentDrafts")}
                   </Link>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <AutoPostReadinessTile
+                  <ContentDraftReadinessTile
                     title={t("oafBots.relationship.readiness.account")}
                     description={account ? `@${account.username}` : t("oafBots.relationship.readiness.accountMissing")}
                     ready={Boolean(account)}
                     href="/accounts"
                     action={account ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
                   />
-                  <AutoPostReadinessTile
+                  <ContentDraftReadinessTile
                     title={t("oafBots.relationship.readiness.content")}
                     description={t("oafBots.relationship.readiness.contentValue", { active: activeContentCount, total: totalContentCount })}
                     ready={activeContentCount > 0}
-                    href={account ? `/auto-post?panel=content&account=${account.id}` : "/auto-post?panel=content"}
+                    href={account ? `/content-drafts?panel=content&account=${account.id}` : "/content-drafts?panel=content"}
                     action={activeContentCount > 0 ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
                   />
-                  <AutoPostReadinessTile
+                  <ContentDraftReadinessTile
                     title={t("oafBots.relationship.readiness.planner")}
-                    description={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
-                    ready={Boolean(autoPostPlan?.enabled)}
-                    href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
-                    action={autoPostPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                    description={contentDraftPlan?.enabled ? t("oafBots.relationship.readiness.plannerEnabled") : t("oafBots.relationship.readiness.plannerMissing")}
+                    ready={Boolean(contentDraftPlan?.enabled)}
+                    href={account ? `/content-drafts?panel=planner&account=${account.id}` : "/content-drafts?panel=planner"}
+                    action={contentDraftPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
                   />
-                  <AutoPostReadinessTile
+                  <ContentDraftReadinessTile
                     title={t("oafBots.relationship.readiness.autopilot")}
-                    description={t(`executionQueue.executionMode.${autoPostPlan?.execution_mode || "review"}`)}
-                    ready={autoPostPlan?.execution_mode === "autopilot"}
-                    href={account ? `/auto-post?panel=planner&account=${account.id}` : "/auto-post?panel=planner"}
-                    action={autoPostPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                    description={t(`handlingList.executionMode.${contentDraftPlan?.execution_mode || "review"}`)}
+                    ready={contentDraftPlan?.execution_mode === "autopilot"}
+                    href={account ? `/content-drafts?panel=planner&account=${account.id}` : "/content-drafts?panel=planner"}
+                    action={contentDraftPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
                   />
                 </div>
               </div>
@@ -3622,7 +3622,7 @@ function BotRelationshipCard({
                 <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.relationship.queueTitle")}</p>
                 <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("oafBots.relationship.queueDescription")}</p>
               </div>
-              <Link href="/execution-queue" className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
+              <Link href="/handling-list" className="shrink-0 text-xs font-semibold text-[#1d9bf0] hover:text-[#8ecdf8]">
                 {t("oafBots.relationship.openQueue")}
               </Link>
             </div>
@@ -3712,7 +3712,7 @@ function RelationshipMetric({
   );
 }
 
-function AutoPostReadinessTile({
+function ContentDraftReadinessTile({
   title,
   description,
   ready,
@@ -3756,7 +3756,7 @@ function BotAutomationTile({ item, t }: { item: BotAutomationState; t: (key: str
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[#e7e9ea]">{t(`accounts.automation.type.${item.type}`)}</p>
-          <p className="mt-1 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`executionQueue.executionMode.${item.mode}`) })}</p>
+          <p className="mt-1 truncate text-xs text-[#71767b]">{t("accounts.automation.mode", { mode: t(`handlingList.executionMode.${item.mode}`) })}</p>
         </div>
         <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[11px]">{t(statusKey)}</span>
       </div>
@@ -3776,10 +3776,10 @@ function QueueMiniMetric({ label, value, tone = "default" }: { label: string; va
 function QueuePreviewLine({ item, t }: { item: ReviewQueueItemApi; t: (key: string, params?: Record<string, string | number>) => string }) {
   const timeZone = usePreferredTimeZone();
   return (
-    <Link href={`/execution-queue?type=${item.type}`} className="block rounded-xl border border-[#2f3336] bg-black p-3 transition-colors hover:border-[#1d9bf0]/45">
+    <Link href={`/handling-list?type=${item.type}`} className="block rounded-xl border border-[#2f3336] bg-black p-3 transition-colors hover:border-[#1d9bf0]/45">
       <div className="flex items-center justify-between gap-3">
         <p className="min-w-0 truncate text-sm font-semibold text-[#e7e9ea]">{t(`accounts.automation.type.${item.type}`)}</p>
-        <span className="shrink-0 rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] text-[#71767b]">{t(`executionQueue.status.${item.status}`)}</span>
+        <span className="shrink-0 rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] text-[#71767b]">{t(`handlingList.status.${item.status}`)}</span>
       </div>
       <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#71767b]">{item.target_summary || item.content}</p>
       <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#71767b]">
@@ -4691,7 +4691,7 @@ function LearningRulesCenter({
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {rule.reasons.slice(0, 3).map((reason) => (
                       <span key={reason.reason} className="rounded-full border border-[#2f3336] px-2 py-0.5 text-[11px] text-[#8b98a5]">
-                        {reason.reason.startsWith("executionQueue.") ? t(reason.reason) : reason.reason}
+                        {handlingListReasonLabel(reason.reason, t)}
                       </span>
                     ))}
                   </div>
@@ -4709,7 +4709,7 @@ function LearningRulesCenter({
         <Link href="/dashboard" className="inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
           {t("oafBots.learningCenter.openDashboard")}
         </Link>
-        <Link href="/execution-queue?status=pending_review" className="inline-flex h-8 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#1d9bf0]/15">
+        <Link href="/handling-list?status=pending_review" className="inline-flex h-8 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#1d9bf0]/15">
           {t("oafBots.learningCenter.openQueue")}
         </Link>
       </div>
@@ -4721,6 +4721,11 @@ function learningIssueLabel(issue: string, issueOptions: ChipOption[], t: (key: 
   const mapped = getFeedbackIssueLabel(issue, issueOptions);
   if (mapped !== issue && mapped !== issue.replace(/_/g, " ")) return mapped;
   return t(`dashboard.feedbackLearning.issue.${issue}`);
+}
+
+function handlingListReasonLabel(reason: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  const key = reason.startsWith("executionQueue.") ? reason.replace("executionQueue.", "handlingList.") : reason;
+  return key.startsWith("handlingList.") ? t(key) : reason;
 }
 
 function SamplePanel({

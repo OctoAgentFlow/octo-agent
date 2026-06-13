@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
-import { autoPostService, type TrendTopicApi } from "@/services/auto-post.service";
+import { contentDraftService, type TrendTopicApi } from "@/services/content-drafts.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -43,7 +43,7 @@ export default function TrendsPage() {
     setLoadingTopics(true);
     setError("");
     try {
-      const data = await autoPostService.trendTopics({
+      const data = await contentDraftService.trendTopics({
         limit: 100,
         region,
         category,
@@ -80,7 +80,7 @@ export default function TrendsPage() {
     }
     setLoadingMatch(true);
     try {
-      const data = await autoPostService.selectedTrends({ botID: selectedBotID, limit: 5 });
+      const data = await contentDraftService.selectedTrends({ botID: selectedBotID, limit: 5 });
       setMatchedTopics(data.items || []);
     } catch (loadError) {
       pushToast(axios.isAxiosError(loadError) ? loadError.response?.data?.message || t("trends.toast.matchFailed") : t("trends.toast.matchFailed"));
@@ -314,9 +314,9 @@ function latestTrendTime(items: TrendTopicApi[]) {
 }
 
 function trendCategoryLabel(category: string, t: (key: string) => string) {
-  const key = `autoPost.trends.category.${category || "other"}`;
+  const key = `contentDrafts.trends.category.${category || "other"}`;
   const label = t(key);
-  return label === key ? category || t("autoPost.trends.category.other") : label;
+  return label === key ? category || t("contentDrafts.trends.category.other") : label;
 }
 
 function riskLabel(risk: string, t: (key: string) => string) {

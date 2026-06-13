@@ -14,7 +14,7 @@ type UserOnboardingCardProps = {
   postCreated?: boolean;
   activityObserved?: boolean;
   oafBotCreated?: boolean;
-  autoPostConfigured?: boolean;
+  contentDraftConfigured?: boolean;
   executionQueueChecked?: boolean;
   onConnectAccount?: () => void;
   onConfigureAutomation?: () => void;
@@ -35,16 +35,16 @@ export function UserOnboardingCard({
   postCreated = false,
   activityObserved = false,
   oafBotCreated,
-  autoPostConfigured,
+  contentDraftConfigured,
   executionQueueChecked,
 }: UserOnboardingCardProps) {
   const { t } = useT();
   const hasOAFBot = oafBotCreated ?? postCreated;
-  const hasAutoPostConfigured = autoPostConfigured ?? postCreated;
+  const hasContentDraftConfigured = contentDraftConfigured ?? postCreated;
   const hasCheckedQueue = executionQueueChecked ?? activityObserved;
   const steps: Step[] = [
     {
-      done: accountConnected && hasOAFBot && hasAutoPostConfigured && automationEnabled && hasCheckedQueue,
+      done: accountConnected && hasOAFBot && hasContentDraftConfigured && automationEnabled && hasCheckedQueue,
       titleKey: "onboarding.step.dailyXQueue.title",
       descriptionKey: "onboarding.step.dailyXQueue.description",
       ctaKey: "onboarding.step.dailyXQueue.cta",

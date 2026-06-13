@@ -27,7 +27,7 @@ const navItems = [
   { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.exposureRadar", href: "/exposure-radar", icon: Radar },
   { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
-  { labelKey: "sidebar.nav.executionQueue", href: "/execution-queue", icon: ListChecks },
+  { labelKey: "sidebar.nav.executionQueue", href: "/handling-list", icon: ListChecks },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },

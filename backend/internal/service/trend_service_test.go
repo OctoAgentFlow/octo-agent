@@ -219,6 +219,38 @@ func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
 	}
 }
 
+func TestExposureRadarDiagnosticsExplainsNoTrueHot(t *testing.T) {
+	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	svc := &TrendService{cfg: config.XTrendsConfig{
+		Enabled:                true,
+		BearerToken:            "token",
+		ExposureRefreshMinutes: 15,
+		ExposureTopicLimit:     16,
+		ExposureSearchResults:  50,
+		ExposureMinHeat:        10,
+	}}
+	resp := &dto.ExposureRadarResponse{
+		Region:       "en",
+		DataQuality:  "tweet_level",
+		SourceType:   "owned_collector",
+		SourceStatus: "fresh",
+		Items: []dto.ExposureRadarItem{
+			{ID: "en-tweet-a", DataQuality: "tweet_level", DataConfidence: exposureConfidenceFirstSample, OpportunityTier: exposureSamplingTier, Score: 72},
+			{ID: "en-tweet-b", DataQuality: "tweet_level", DataConfidence: exposureConfidenceEngagement, OpportunityTier: exposureRisingSignalTier, Score: 81},
+		},
+	}
+	out := svc.withExposureRadarDiagnostics(resp, dto.ExposureRadarQuery{Region: "en", Hours: 4, MaxFans: 10000, Limit: 50}, now)
+	if out.Diagnostics.Status != "warming" {
+		t.Fatalf("diagnostic status = %s, want warming", out.Diagnostics.Status)
+	}
+	if out.Diagnostics.TweetLevelCount != 2 || out.Diagnostics.RisingOpportunityCount != 1 || out.Diagnostics.HotOpportunityCount != 0 {
+		t.Fatalf("unexpected diagnostic counts: %#v", out.Diagnostics)
+	}
+	if !diagnosticHasIssue(out.Diagnostics.Issues, "no_true_hot") {
+		t.Fatalf("expected no_true_hot issue, got %#v", out.Diagnostics.Issues)
+	}
+}
+
 func TestSelectExposureTweetCandidatesPrioritizesRealImpressions(t *testing.T) {
 	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
 	tweets := []twitter.TweetSearchItem{
@@ -237,6 +269,15 @@ func TestSelectExposureTweetCandidatesPrioritizesRealImpressions(t *testing.T) {
 	if selected[1].ID != "engagement" {
 		t.Fatalf("engagement candidate should beat low-heat recency, got %s", selected[1].ID)
 	}
+}
+
+func diagnosticHasIssue(rows []dto.ExposureRadarDiagnosticIssue, code string) bool {
+	for _, row := range rows {
+		if row.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSelectExposureTweetCandidatesDedupesBeforeLimit(t *testing.T) {

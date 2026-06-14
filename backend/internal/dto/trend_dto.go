@@ -125,8 +125,49 @@ type ExposureRadarResponse struct {
 	FreshnessSeconds int64                         `json:"freshness_seconds,omitempty"`
 	Filters          ExposureRadarQuery            `json:"filters"`
 	LearningControls ExposureRadarLearningControls `json:"learning_controls"`
+	Diagnostics      ExposureRadarDiagnostics      `json:"diagnostics"`
 	Items            []ExposureRadarItem           `json:"items"`
 	SourceNotice     string                        `json:"source_notice"`
+}
+
+type ExposureRadarDiagnostics struct {
+	Status                 string                         `json:"status"`
+	Region                 string                         `json:"region"`
+	SourceType             string                         `json:"source_type"`
+	SourceStatus           string                         `json:"source_status"`
+	XTrendsEnabled         bool                           `json:"x_trends_enabled"`
+	BearerTokenConfigured  bool                           `json:"bearer_token_configured"`
+	RefreshIntervalMinutes int                            `json:"refresh_interval_minutes"`
+	TopicLimit             int                            `json:"topic_limit"`
+	SearchResults          int                            `json:"search_results"`
+	ConfiguredMaxFans      int64                          `json:"configured_max_fans"`
+	ConfiguredMinHeat      int                            `json:"configured_min_heat"`
+	WindowHours            int                            `json:"window_hours"`
+	RequestedLimit         int                            `json:"requested_limit"`
+	ReturnedCount          int                            `json:"returned_count"`
+	OwnedSignalCount       int64                          `json:"owned_signal_count"`
+	OwnedInWindowCount     int64                          `json:"owned_in_window_count"`
+	OwnedUnderFanLimit     int64                          `json:"owned_under_fan_limit"`
+	OwnedOverFanLimit      int64                          `json:"owned_over_fan_limit"`
+	LatestOwnedSignalAt    string                         `json:"latest_owned_signal_at,omitempty"`
+	FreshnessSeconds       int64                          `json:"freshness_seconds,omitempty"`
+	TweetLevelCount        int                            `json:"tweet_level_count"`
+	TopicLevelCount        int                            `json:"topic_level_count"`
+	HotOpportunityCount    int                            `json:"hot_opportunity_count"`
+	RisingOpportunityCount int                            `json:"rising_opportunity_count"`
+	NeedsSamplingCount     int                            `json:"needs_sampling_count"`
+	TopicLeadCount         int                            `json:"topic_lead_count"`
+	RealImpressionCount    int                            `json:"real_impression_count"`
+	FirstSampleCount       int                            `json:"first_sample_count"`
+	HighScoreCount         int                            `json:"high_score_count"`
+	Issues                 []ExposureRadarDiagnosticIssue `json:"issues"`
+	Suggestions            []string                       `json:"suggestions"`
+}
+
+type ExposureRadarDiagnosticIssue struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
 }
 
 type ExposureRadarLearningControls struct {

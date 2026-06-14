@@ -99,14 +99,17 @@ func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto
 	switch region {
 	case "zh", "cn", "chinese":
 		resp, err := s.exposureRadarChinese(ctx, query, now)
-		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
+		resp = s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)))
+		return s.withExposureRadarDiagnostics(resp, query, now), err
 	case "en", "english":
 		resp, err := s.exposureRadarEnglish(query, now)
-		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
+		resp = s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)))
+		return s.withExposureRadarDiagnostics(resp, query, now), err
 	default:
 		query.Region = "zh"
 		resp, err := s.exposureRadarChinese(ctx, query, now)
-		return s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now))), err
+		resp = s.annotateExposureRadarMemoryState(userID, query, s.annotateExposureRadarReviewState(userID, s.applyExposureRadarPerformanceRanking(userID, query, resp, now)))
+		return s.withExposureRadarDiagnostics(resp, query, now), err
 	}
 }
 
@@ -863,6 +866,214 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 		return resp.Items[i].ID < resp.Items[j].ID
 	})
 	return resp
+}
+
+func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarResponse, query dto.ExposureRadarQuery, now time.Time) *dto.ExposureRadarResponse {
+	if resp == nil {
+		return resp
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	region := normalizeExposureRegion(resp.Region)
+	if region == "" {
+		region = normalizeExposureRegion(query.Region)
+	}
+	if region == "" {
+		region = "zh"
+	}
+	windowHours := query.Hours
+	if windowHours <= 0 {
+		windowHours = 4
+	}
+	maxFans := query.MaxFans
+	if maxFans <= 0 {
+		maxFans = 10000
+	}
+	activeAfter := now.Add(-time.Duration(windowHours) * time.Hour)
+	diag := dto.ExposureRadarDiagnostics{
+		Status:                 "healthy",
+		Region:                 region,
+		SourceType:             resp.SourceType,
+		SourceStatus:           resp.SourceStatus,
+		XTrendsEnabled:         s != nil && s.cfg.Enabled,
+		BearerTokenConfigured:  s != nil && strings.TrimSpace(s.cfg.BearerToken) != "",
+		RefreshIntervalMinutes: int(s.exposureRefreshInterval().Minutes()),
+		TopicLimit:             s.englishExposureTopicLimit(),
+		SearchResults:          s.englishExposureSearchResults(),
+		ConfiguredMaxFans:      maxFans,
+		ConfiguredMinHeat:      int(s.englishExposureMinHeat()),
+		WindowHours:            windowHours,
+		RequestedLimit:         query.Limit,
+		ReturnedCount:          len(resp.Items),
+		FreshnessSeconds:       resp.FreshnessSeconds,
+		Issues:                 []dto.ExposureRadarDiagnosticIssue{},
+		Suggestions:            []string{},
+	}
+	if diag.RequestedLimit <= 0 {
+		diag.RequestedLimit = 50
+	}
+	for _, item := range resp.Items {
+		switch strings.TrimSpace(item.DataQuality) {
+		case "tweet_level":
+			diag.TweetLevelCount++
+		case "topic_level":
+			diag.TopicLevelCount++
+		}
+		switch normalizeExposureOpportunityTierForDiagnostics(item.OpportunityTier) {
+		case exposureHotOpportunityTier:
+			diag.HotOpportunityCount++
+		case exposureRisingSignalTier:
+			diag.RisingOpportunityCount++
+		case exposureSamplingTier:
+			diag.NeedsSamplingCount++
+		case exposureTopicLeadTier:
+			diag.TopicLeadCount++
+		}
+		switch strings.TrimSpace(item.DataConfidence) {
+		case exposureConfidenceRealImpressions:
+			diag.RealImpressionCount++
+		case exposureConfidenceFirstSample:
+			diag.FirstSampleCount++
+		}
+		if item.Score >= 75 {
+			diag.HighScoreCount++
+		}
+	}
+	if s != nil && s.exposure != nil {
+		stats, err := s.exposure.DiagnosticStats(region, activeAfter, maxFans)
+		if err != nil {
+			zap.L().Warn("exposure radar diagnostic stats failed", zap.String("region", region), zap.Error(err))
+			diag.Issues = append(diag.Issues, exposureDiagnosticIssue("diagnostic_query_failed", "warning", "Could not load stored collector diagnostics. The opportunity list still reflects the current query."))
+		} else {
+			diag.OwnedSignalCount = stats.TotalCount
+			diag.OwnedInWindowCount = stats.InWindowCount
+			diag.OwnedUnderFanLimit = stats.UnderFanLimitCount
+			diag.OwnedOverFanLimit = stats.OverFanLimitCount
+			if !stats.LatestSeenAt.IsZero() {
+				diag.LatestOwnedSignalAt = stats.LatestSeenAt.UTC().Format(time.RFC3339)
+				if diag.FreshnessSeconds == 0 {
+					diag.FreshnessSeconds = int64(now.Sub(stats.LatestSeenAt.UTC()).Seconds())
+				}
+			}
+		}
+	}
+	diag.Status = exposureRadarDiagnosticStatus(diag)
+	diag.Issues = append(diag.Issues, exposureRadarDiagnosticIssues(diag)...)
+	diag.Suggestions = exposureRadarDiagnosticSuggestions(diag)
+	resp.Diagnostics = diag
+	return resp
+}
+
+func exposureRadarDiagnosticStatus(diag dto.ExposureRadarDiagnostics) string {
+	if !diag.XTrendsEnabled || !diag.BearerTokenConfigured {
+		return "blocked"
+	}
+	if diag.SourceType == "tl1_fallback" || diag.SourceType == "x_trends_cache" || diag.SourceStatus == "fallback" || diag.SourceStatus == "cache" {
+		return "fallback"
+	}
+	if diag.SourceStatus == "stale" {
+		return "stale"
+	}
+	if diag.ReturnedCount == 0 || (diag.OwnedSignalCount > 0 && diag.OwnedInWindowCount == 0) {
+		return "empty"
+	}
+	if diag.HotOpportunityCount == 0 && diag.RisingOpportunityCount == 0 {
+		return "limited"
+	}
+	if diag.HotOpportunityCount == 0 {
+		return "warming"
+	}
+	return "healthy"
+}
+
+func exposureRadarDiagnosticIssues(diag dto.ExposureRadarDiagnostics) []dto.ExposureRadarDiagnosticIssue {
+	issues := []dto.ExposureRadarDiagnosticIssue{}
+	if !diag.XTrendsEnabled {
+		issues = append(issues, exposureDiagnosticIssue("x_trends_disabled", "critical", "X trends and recent-search collection are disabled, so owned Exposure Radar signals cannot refresh."))
+	}
+	if !diag.BearerTokenConfigured {
+		issues = append(issues, exposureDiagnosticIssue("bearer_token_missing", "critical", "The X bearer token is missing, so owned tweet collection cannot call Recent Search."))
+	}
+	if diag.SourceType == "tl1_fallback" {
+		issues = append(issues, exposureDiagnosticIssue("external_fallback", "warning", "Chinese Radar is using external fallback data because owned Chinese tweet signals are unavailable for the current filters."))
+	}
+	if diag.SourceType == "x_trends_cache" {
+		issues = append(issues, exposureDiagnosticIssue("topic_cache_only", "warning", "Radar is showing topic-level X Trends cache instead of tweet-level opportunities."))
+	}
+	if diag.SourceStatus == "stale" {
+		issues = append(issues, exposureDiagnosticIssue("collector_stale", "warning", "The latest owned collector snapshot is older than the expected refresh window."))
+	}
+	if diag.OwnedSignalCount == 0 && diag.BearerTokenConfigured && diag.XTrendsEnabled {
+		issues = append(issues, exposureDiagnosticIssue("no_owned_signals", "warning", "No owned tweet-level signals have been stored for this region yet."))
+	}
+	if diag.OwnedSignalCount > 0 && diag.OwnedInWindowCount == 0 {
+		issues = append(issues, exposureDiagnosticIssue("window_too_short", "info", "Owned signals exist, but none are inside the selected time window."))
+	}
+	if diag.OwnedOverFanLimit > 0 && diag.OwnedUnderFanLimit == 0 {
+		issues = append(issues, exposureDiagnosticIssue("fan_filter_strict", "info", "Stored signals exist, but the author follower filter removes them from this view."))
+	}
+	if diag.ReturnedCount > 0 && diag.TweetLevelCount > 0 && diag.HotOpportunityCount == 0 {
+		issues = append(issues, exposureDiagnosticIssue("no_true_hot", "info", "Tweet-level signals are available, but none meet the true-hot threshold of real impressions plus momentum."))
+	}
+	if diag.TweetLevelCount > 0 && diag.FirstSampleCount == diag.TweetLevelCount {
+		issues = append(issues, exposureDiagnosticIssue("first_sample_only", "info", "All tweet-level signals are first snapshots, so velocity needs another collector pass before hot/rising labels become reliable."))
+	}
+	if diag.ReturnedCount == 0 && diag.OwnedSignalCount > 0 {
+		issues = append(issues, exposureDiagnosticIssue("filters_empty", "info", "Owned signals exist, but the current window, follower, or limit filters return no visible cards."))
+	}
+	return issues
+}
+
+func exposureRadarDiagnosticSuggestions(diag dto.ExposureRadarDiagnostics) []string {
+	suggestions := []string{}
+	hasIssue := func(code string) bool {
+		for _, issue := range diag.Issues {
+			if issue.Code == code {
+				return true
+			}
+		}
+		return false
+	}
+	if hasIssue("x_trends_disabled") || hasIssue("bearer_token_missing") {
+		suggestions = append(suggestions, "Check prod x_trends configuration and X_BEARER_TOKEN before judging Radar quality.")
+	}
+	if hasIssue("no_owned_signals") || hasIssue("collector_stale") || hasIssue("first_sample_only") {
+		suggestions = append(suggestions, "Run the admin manual Exposure refresh once, then refresh this page after the collector finishes.")
+	}
+	if hasIssue("window_too_short") {
+		suggestions = append(suggestions, "Increase the window from 1-2h to 4-8h to inspect whether collection is working.")
+	}
+	if hasIssue("fan_filter_strict") {
+		suggestions = append(suggestions, "Raise the author follower filter temporarily to verify whether useful signals are being excluded.")
+	}
+	if hasIssue("topic_cache_only") || hasIssue("external_fallback") {
+		suggestions = append(suggestions, "Treat these cards as research leads until owned tweet-level signals become fresh.")
+	}
+	if hasIssue("no_true_hot") {
+		suggestions = append(suggestions, "Use Rising opportunities first; true-hot requires at least 3K real impressions plus momentum.")
+	}
+	if len(suggestions) == 0 {
+		suggestions = append(suggestions, "Collector health looks usable. Work from Priority opportunities first, then inspect Rising and Needs sampling cards.")
+	}
+	return compactExposureRadarStringList(suggestions)
+}
+
+func exposureDiagnosticIssue(code, severity, message string) dto.ExposureRadarDiagnosticIssue {
+	return dto.ExposureRadarDiagnosticIssue{Code: code, Severity: severity, Message: message}
+}
+
+func normalizeExposureOpportunityTierForDiagnostics(value string) string {
+	switch strings.TrimSpace(value) {
+	case exposureHotOpportunityTier:
+		return exposureHotOpportunityTier
+	case exposureRisingSignalTier, "rising_signal":
+		return exposureRisingSignalTier
+	case exposureTopicLeadTier:
+		return exposureTopicLeadTier
+	default:
+		return exposureSamplingTier
+	}
 }
 
 func exposureRadarTweetID(item dto.ExposureRadarItem) string {

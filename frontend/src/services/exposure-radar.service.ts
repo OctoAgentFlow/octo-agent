@@ -80,8 +80,49 @@ export type ExposureRadarData = {
     limit: number;
   };
   learning_controls?: ExposureRadarLearningControlsApi;
+  diagnostics?: ExposureRadarDiagnosticsApi;
   items: ExposureRadarItemApi[];
   source_notice: string;
+};
+
+export type ExposureRadarDiagnosticsApi = {
+  status: "healthy" | "warming" | "limited" | "empty" | "fallback" | "stale" | "blocked" | string;
+  region: ExposureRadarRegion | string;
+  source_type: string;
+  source_status: string;
+  x_trends_enabled: boolean;
+  bearer_token_configured: boolean;
+  refresh_interval_minutes: number;
+  topic_limit: number;
+  search_results: number;
+  configured_max_fans: number;
+  configured_min_heat: number;
+  window_hours: number;
+  requested_limit: number;
+  returned_count: number;
+  owned_signal_count: number;
+  owned_in_window_count: number;
+  owned_under_fan_limit: number;
+  owned_over_fan_limit: number;
+  latest_owned_signal_at?: string;
+  freshness_seconds?: number;
+  tweet_level_count: number;
+  topic_level_count: number;
+  hot_opportunity_count: number;
+  rising_opportunity_count: number;
+  needs_sampling_count: number;
+  topic_lead_count: number;
+  real_impression_count: number;
+  first_sample_count: number;
+  high_score_count: number;
+  issues: ExposureRadarDiagnosticIssueApi[];
+  suggestions: string[];
+};
+
+export type ExposureRadarDiagnosticIssueApi = {
+  code: string;
+  severity: "critical" | "warning" | "info" | string;
+  message: string;
 };
 
 export type ExposureRadarLearningControlsApi = {

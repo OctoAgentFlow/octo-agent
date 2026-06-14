@@ -15,36 +15,36 @@ import (
 )
 
 type ReviewQueueService struct {
-	commentTaskRepo *repository.AutoCommentTaskRepository
-	replyDraftRepo  *repository.AutoReplyDraftRepository
-	postDraftRepo   *repository.AutoPostDraftRepository
-	publishJobRepo  *repository.PublishJobRepository
-	botRepo         *repository.OAFBotRepository
-	accountRepo     *repository.TwitterAccountRepository
-	contentRepo     *repository.ContentLibraryRepository
-	verdictRepo     *repository.ReviewQueueFeedbackIssueVerdictRepository
-	activityRepo    *repository.ActivityRepository
-	commentService  *AutoCommentService
-	replyService    *AutoReplyService
-	postService     *AutoPostService
-	publishing      *PublishingService
+	commentTaskRepo     *repository.AutoCommentTaskRepository
+	replyDraftRepo      *repository.AutoReplyDraftRepository
+	contentDraftRepo    *repository.ContentDraftRepository
+	publishJobRepo      *repository.PublishJobRepository
+	botRepo             *repository.OAFBotRepository
+	accountRepo         *repository.TwitterAccountRepository
+	contentRepo         *repository.ContentLibraryRepository
+	verdictRepo         *repository.ReviewQueueFeedbackIssueVerdictRepository
+	activityRepo        *repository.ActivityRepository
+	commentService      *AutoCommentService
+	replyService        *AutoReplyService
+	contentDraftService *ContentDraftService
+	publishing          *PublishingService
 }
 
-func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, postDraftRepo *repository.AutoPostDraftRepository, publishJobRepo *repository.PublishJobRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, activityRepo *repository.ActivityRepository, commentService *AutoCommentService, replyService *AutoReplyService, postService *AutoPostService, publishing *PublishingService) *ReviewQueueService {
+func NewReviewQueueService(commentTaskRepo *repository.AutoCommentTaskRepository, replyDraftRepo *repository.AutoReplyDraftRepository, contentDraftRepo *repository.ContentDraftRepository, publishJobRepo *repository.PublishJobRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, activityRepo *repository.ActivityRepository, commentService *AutoCommentService, replyService *AutoReplyService, contentDraftService *ContentDraftService, publishing *PublishingService) *ReviewQueueService {
 	return &ReviewQueueService{
-		commentTaskRepo: commentTaskRepo,
-		replyDraftRepo:  replyDraftRepo,
-		postDraftRepo:   postDraftRepo,
-		publishJobRepo:  publishJobRepo,
-		botRepo:         botRepo,
-		accountRepo:     accountRepo,
-		contentRepo:     contentRepo,
-		verdictRepo:     verdictRepo,
-		activityRepo:    activityRepo,
-		commentService:  commentService,
-		replyService:    replyService,
-		postService:     postService,
-		publishing:      publishing,
+		commentTaskRepo:     commentTaskRepo,
+		replyDraftRepo:      replyDraftRepo,
+		contentDraftRepo:    contentDraftRepo,
+		publishJobRepo:      publishJobRepo,
+		botRepo:             botRepo,
+		accountRepo:         accountRepo,
+		contentRepo:         contentRepo,
+		verdictRepo:         verdictRepo,
+		activityRepo:        activityRepo,
+		commentService:      commentService,
+		replyService:        replyService,
+		contentDraftService: contentDraftService,
+		publishing:          publishing,
 	}
 }
 
@@ -70,8 +70,8 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		return nil, err
 	}
 	postDrafts := []model.AutoPostDraft{}
-	if s.postDraftRepo != nil {
-		postDrafts, err = s.postDraftRepo.ListByUser(userID, 500)
+	if s.contentDraftRepo != nil {
+		postDrafts, err = s.contentDraftRepo.ListByUser(userID, 500)
 		if err != nil {
 			return nil, err
 		}
@@ -314,10 +314,10 @@ func (s *ReviewQueueService) runBulkActionItem(ctx context.Context, userID uint,
 			_, err := s.replyService.ApproveDraft(userID, item.SourceID)
 			return err
 		case "post":
-			if s.postService == nil {
+			if s.contentDraftService == nil {
 				return errors.New("auto post service is not configured")
 			}
-			_, err := s.postService.ApproveDraft(userID, item.SourceID)
+			_, err := s.contentDraftService.ApproveDraft(userID, item.SourceID)
 			return err
 		default:
 			return fmt.Errorf("%s cannot be approved in bulk", item.QueueType)
@@ -337,10 +337,10 @@ func (s *ReviewQueueService) runBulkActionItem(ctx context.Context, userID uint,
 			_, err := s.replyService.RejectDraft(userID, item.SourceID, rejectReason)
 			return err
 		case "post":
-			if s.postService == nil {
+			if s.contentDraftService == nil {
 				return errors.New("auto post service is not configured")
 			}
-			_, err := s.postService.RejectDraft(userID, item.SourceID, rejectReason)
+			_, err := s.contentDraftService.RejectDraft(userID, item.SourceID, rejectReason)
 			return err
 		default:
 			return fmt.Errorf("%s cannot be rejected in bulk", item.QueueType)
@@ -400,10 +400,10 @@ func (s *ReviewQueueService) deleteQueueItem(userID uint, item dto.ReviewQueueBu
 		}
 		return s.replyDraftRepo.DeleteByUserAndID(userID, item.SourceID)
 	case "post":
-		if s.postDraftRepo == nil {
+		if s.contentDraftRepo == nil {
 			return errors.New("auto post repository is not configured")
 		}
-		draft, err := s.postDraftRepo.GetByUserAndID(userID, item.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(userID, item.SourceID)
 		if err != nil {
 			return err
 		}
@@ -419,7 +419,7 @@ func (s *ReviewQueueService) deleteQueueItem(userID uint, item dto.ReviewQueueBu
 		if err := s.deleteReviewQueuePublishJobs(userID, repository.PublishSourcePost, item.SourceID); err != nil {
 			return err
 		}
-		return s.postDraftRepo.DeleteByUserAndID(userID, item.SourceID)
+		return s.contentDraftRepo.DeleteByUserAndID(userID, item.SourceID)
 	default:
 		return fmt.Errorf("%s cannot be deleted from the execution queue", item.QueueType)
 	}
@@ -634,10 +634,10 @@ func (s *ReviewQueueService) resolveReviewQueueBotID(userID uint, queueType stri
 	}
 	switch queueType {
 	case "post":
-		if s.postDraftRepo == nil {
+		if s.contentDraftRepo == nil {
 			return fallbackBotID, nil
 		}
-		draft, err := s.postDraftRepo.GetByUserAndID(userID, sourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(userID, sourceID)
 		if err != nil {
 			return 0, err
 		}
@@ -662,10 +662,10 @@ func (s *ReviewQueueService) resolveReviewQueueBotID(userID uint, queueType stri
 func (s *ReviewQueueService) reviewQueueVerdictSourceContext(userID uint, row model.ReviewQueueFeedbackIssueVerdict) (string, string, string) {
 	switch row.QueueType {
 	case "post":
-		if s.postDraftRepo == nil {
+		if s.contentDraftRepo == nil {
 			return "", "", ""
 		}
-		draft, err := s.postDraftRepo.GetByUserAndID(userID, row.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(userID, row.SourceID)
 		if err != nil {
 			return "", "", ""
 		}

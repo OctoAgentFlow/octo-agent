@@ -124,25 +124,25 @@ func (e *PublishingError) Error() string {
 }
 
 type PublishingService struct {
-	jobRepo        *repository.PublishJobRepository
-	commentRepo    *repository.AutoCommentTaskRepository
-	replyRepo      *repository.AutoReplyDraftRepository
-	postRepo       *repository.AutoPostDraftRepository
-	accountRepo    *repository.TwitterAccountRepository
-	automationRepo *repository.AutomationRepository
-	userRepo       *repository.UserRepository
-	activity       *repository.ActivityRepository
-	cfg            config.XPublisherConfig
-	oauth          config.XOAuthConfig
-	httpClient     *http.Client
-	publisher      XPublisher
+	jobRepo          *repository.PublishJobRepository
+	commentRepo      *repository.AutoCommentTaskRepository
+	replyRepo        *repository.AutoReplyDraftRepository
+	contentDraftRepo *repository.ContentDraftRepository
+	accountRepo      *repository.TwitterAccountRepository
+	automationRepo   *repository.AutomationRepository
+	userRepo         *repository.UserRepository
+	activity         *repository.ActivityRepository
+	cfg              config.XPublisherConfig
+	oauth            config.XOAuthConfig
+	httpClient       *http.Client
+	publisher        XPublisher
 }
 
 func NewPublishingService(
 	jobRepo *repository.PublishJobRepository,
 	commentRepo *repository.AutoCommentTaskRepository,
 	replyRepo *repository.AutoReplyDraftRepository,
-	postRepo *repository.AutoPostDraftRepository,
+	contentDraftRepo *repository.ContentDraftRepository,
 	accountRepo *repository.TwitterAccountRepository,
 	automationRepo *repository.AutomationRepository,
 	userRepo *repository.UserRepository,
@@ -155,18 +155,18 @@ func NewPublishingService(
 		publisher = RealXPublisher{}
 	}
 	return &PublishingService{
-		jobRepo:        jobRepo,
-		commentRepo:    commentRepo,
-		replyRepo:      replyRepo,
-		postRepo:       postRepo,
-		accountRepo:    accountRepo,
-		automationRepo: automationRepo,
-		userRepo:       userRepo,
-		activity:       activity,
-		cfg:            normalizeXPublisherConfig(cfg),
-		oauth:          oauth,
-		httpClient:     &http.Client{Timeout: 20 * time.Second},
-		publisher:      publisher,
+		jobRepo:          jobRepo,
+		commentRepo:      commentRepo,
+		replyRepo:        replyRepo,
+		contentDraftRepo: contentDraftRepo,
+		accountRepo:      accountRepo,
+		automationRepo:   automationRepo,
+		userRepo:         userRepo,
+		activity:         activity,
+		cfg:              normalizeXPublisherConfig(cfg),
+		oauth:            oauth,
+		httpClient:       &http.Client{Timeout: 20 * time.Second},
+		publisher:        publisher,
 	}
 }
 
@@ -675,7 +675,7 @@ func (s *PublishingService) validateJob(job *model.PublishJob, now time.Time) er
 			return fmt.Errorf("reply source status is %s", draft.Status)
 		}
 	case repository.PublishSourcePost:
-		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
 		}
@@ -768,7 +768,7 @@ func (s *PublishingService) ensureSourceReadyForManualPublish(job *model.Publish
 			return fmt.Errorf("reply source status is %s", draft.Status)
 		}
 	case repository.PublishSourcePost:
-		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
 		}
@@ -1082,7 +1082,7 @@ func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.
 		draft.FailureReason = ""
 		return s.replyRepo.Save(draft)
 	case repository.PublishSourcePost:
-		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
 		}
@@ -1091,7 +1091,7 @@ func (s *PublishingService) markSourcePublished(job *model.PublishJob, now time.
 		draft.PublishedAt = &now
 		draft.FailureCategory = ""
 		draft.FailureReason = ""
-		return s.postRepo.Save(draft)
+		return s.contentDraftRepo.Save(draft)
 	default:
 		return nil
 	}
@@ -1125,7 +1125,7 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		draft.FailureReason = truncateErrMsg(reason)
 		return s.replyRepo.Save(draft)
 	case repository.PublishSourcePost:
-		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
 		}
@@ -1133,7 +1133,7 @@ func (s *PublishingService) markSourceFailed(job *model.PublishJob, category, re
 		draft.CapabilityStatus = "publish_failed"
 		draft.FailureCategory = category
 		draft.FailureReason = truncateErrMsg(reason)
-		return s.postRepo.Save(draft)
+		return s.contentDraftRepo.Save(draft)
 	default:
 		return nil
 	}
@@ -1163,7 +1163,7 @@ func (s *PublishingService) resetSourceForRetry(job *model.PublishJob) error {
 		draft.FailureReason = ""
 		return s.replyRepo.Save(draft)
 	case repository.PublishSourcePost:
-		draft, err := s.postRepo.GetByUserAndID(job.UserID, job.SourceID)
+		draft, err := s.contentDraftRepo.GetByUserAndID(job.UserID, job.SourceID)
 		if err != nil {
 			return err
 		}
@@ -1171,7 +1171,7 @@ func (s *PublishingService) resetSourceForRetry(job *model.PublishJob) error {
 		draft.CapabilityStatus = "autopilot_prepared"
 		draft.FailureCategory = ""
 		draft.FailureReason = ""
-		return s.postRepo.Save(draft)
+		return s.contentDraftRepo.Save(draft)
 	default:
 		return fmt.Errorf("unsupported publish source type %s", job.SourceType)
 	}

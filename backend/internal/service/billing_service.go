@@ -34,7 +34,7 @@ type BillingService struct {
 	accountRepo         *repository.TwitterAccountRepository
 	oafBotRepo          *repository.OAFBotRepository
 	usageRepo           *repository.AIGenerationUsageRepository
-	autoPostDraftRepo   *repository.AutoPostDraftRepository
+	contentDraftRepo    *repository.ContentDraftRepository
 	autoReplyDraftRepo  *repository.AutoReplyDraftRepository
 	autoCommentTaskRepo *repository.AutoCommentTaskRepository
 	activityRepo        *repository.ActivityRepository
@@ -131,8 +131,8 @@ type billingQuoteCalc struct {
 	pointDiscountCents int64
 }
 
-func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, autoPostDraftRepo *repository.AutoPostDraftRepository, autoReplyDraftRepo *repository.AutoReplyDraftRepository, autoCommentTaskRepo *repository.AutoCommentTaskRepository, activityRepo *repository.ActivityRepository, cfg *config.Config) *BillingService {
-	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, autoPostDraftRepo: autoPostDraftRepo, autoReplyDraftRepo: autoReplyDraftRepo, autoCommentTaskRepo: autoCommentTaskRepo, activityRepo: activityRepo, cfg: cfg}
+func NewBillingService(userRepo *repository.UserRepository, orderRepo *repository.BillingOrderRepository, pointRepo *repository.PointRepository, referralService *ReferralService, accountRepo *repository.TwitterAccountRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, contentDraftRepo *repository.ContentDraftRepository, autoReplyDraftRepo *repository.AutoReplyDraftRepository, autoCommentTaskRepo *repository.AutoCommentTaskRepository, activityRepo *repository.ActivityRepository, cfg *config.Config) *BillingService {
+	return &BillingService{userRepo: userRepo, orderRepo: orderRepo, pointRepo: pointRepo, referralService: referralService, accountRepo: accountRepo, oafBotRepo: oafBotRepo, usageRepo: usageRepo, contentDraftRepo: contentDraftRepo, autoReplyDraftRepo: autoReplyDraftRepo, autoCommentTaskRepo: autoCommentTaskRepo, activityRepo: activityRepo, cfg: cfg}
 }
 
 func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData, error) {
@@ -602,8 +602,8 @@ func (s *BillingService) subscriptionUsage(userID uint) dto.PlanUsageData {
 	now := time.Now().UTC()
 	monthStart := startOfUTCMonth(now)
 	usage.AIGenerationsMonth = currentAIGenerationUsage(s.usageRepo, userID, now)
-	if s.autoPostDraftRepo != nil {
-		if n, err := s.autoPostDraftRepo.CountCreatedBetween(userID, monthStart, now); err == nil {
+	if s.contentDraftRepo != nil {
+		if n, err := s.contentDraftRepo.CountCreatedBetween(userID, monthStart, now); err == nil {
 			usage.AutoPostsMonth = n
 		}
 	}

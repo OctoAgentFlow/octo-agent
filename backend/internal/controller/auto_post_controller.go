@@ -46,7 +46,7 @@ func (ctl *ContentDraftController) CreatePlan(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	var req dto.AutoPostPlanRequest
+	var req dto.ContentDraftPlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -93,7 +93,7 @@ func (ctl *ContentDraftController) UpdatePlan(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid plan id")
 		return
 	}
-	var req dto.AutoPostPlanRequest
+	var req dto.ContentDraftPlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -126,7 +126,7 @@ func (ctl *ContentDraftController) ListRuns(c *gin.Context) {
 		response.Fail(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	var query dto.AutoPostGenerationRunQuery
+	var query dto.ContentDraftGenerationRunQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -150,7 +150,7 @@ func (ctl *ContentDraftController) GenerateDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid plan id")
 		return
 	}
-	var req dto.AutoPostGenerateRequest
+	var req dto.ContentDraftGenerateRequest
 	_ = c.ShouldBindJSON(&req)
 	data, err := ctl.contentDraftService.GenerateDraft(c.Request.Context(), userID, planID, req)
 	if err != nil {
@@ -209,7 +209,7 @@ func (ctl *ContentDraftController) UpdateDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	var req dto.AutoPostDraftUpdateRequest
+	var req dto.ContentDraftUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -233,7 +233,7 @@ func (ctl *ContentDraftController) RewriteDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	var req dto.AutoPostDraftRewriteRequest
+	var req dto.ContentDraftRewriteRequest
 	_ = c.ShouldBindJSON(&req)
 	data, err := ctl.contentDraftService.RewriteDraft(c.Request.Context(), userID, draftID, req)
 	if err != nil {
@@ -302,7 +302,7 @@ func (ctl *ContentDraftController) RejectDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	var req dto.AutoPostDraftRejectRequest
+	var req dto.ContentDraftRejectRequest
 	_ = c.ShouldBindJSON(&req)
 	data, err := ctl.contentDraftService.RejectDraft(userID, draftID, req.Reason)
 	if err != nil {

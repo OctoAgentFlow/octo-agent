@@ -19,14 +19,14 @@ const (
 )
 
 type AutomationService struct {
-	repo            *repository.AutomationRepository
-	userRepo        *repository.UserRepository
-	activityRepo    *repository.ActivityRepository
-	postRepo        *repository.PostRepository
-	autoPostRepo    *repository.AutoPostPlanRepository
-	commentTaskRepo *repository.AutoCommentTaskRepository
-	replyDraftRepo  *repository.AutoReplyDraftRepository
-	postDraftRepo   *repository.AutoPostDraftRepository
+	repo                 *repository.AutomationRepository
+	userRepo             *repository.UserRepository
+	activityRepo         *repository.ActivityRepository
+	postRepo             *repository.PostRepository
+	contentDraftPlanRepo *repository.ContentDraftPlanRepository
+	commentTaskRepo      *repository.AutoCommentTaskRepository
+	replyDraftRepo       *repository.AutoReplyDraftRepository
+	contentDraftRepo     *repository.ContentDraftRepository
 }
 
 func NewAutomationService(
@@ -34,20 +34,20 @@ func NewAutomationService(
 	userRepo *repository.UserRepository,
 	activityRepo *repository.ActivityRepository,
 	postRepo *repository.PostRepository,
-	autoPostRepo *repository.AutoPostPlanRepository,
+	contentDraftPlanRepo *repository.ContentDraftPlanRepository,
 	commentTaskRepo *repository.AutoCommentTaskRepository,
 	replyDraftRepo *repository.AutoReplyDraftRepository,
-	postDraftRepo *repository.AutoPostDraftRepository,
+	contentDraftRepo *repository.ContentDraftRepository,
 ) *AutomationService {
 	return &AutomationService{
-		repo:            repo,
-		userRepo:        userRepo,
-		activityRepo:    activityRepo,
-		postRepo:        postRepo,
-		autoPostRepo:    autoPostRepo,
-		commentTaskRepo: commentTaskRepo,
-		replyDraftRepo:  replyDraftRepo,
-		postDraftRepo:   postDraftRepo,
+		repo:                 repo,
+		userRepo:             userRepo,
+		activityRepo:         activityRepo,
+		postRepo:             postRepo,
+		contentDraftPlanRepo: contentDraftPlanRepo,
+		commentTaskRepo:      commentTaskRepo,
+		replyDraftRepo:       replyDraftRepo,
+		contentDraftRepo:     contentDraftRepo,
 	}
 }
 
@@ -338,8 +338,8 @@ func (s *AutomationService) currentExecutionQueueNeedsReview(userID uint) (int64
 			}
 		}
 	}
-	if s.postDraftRepo != nil {
-		drafts, err := s.postDraftRepo.ListByUser(userID, 500)
+	if s.contentDraftRepo != nil {
+		drafts, err := s.contentDraftRepo.ListByUser(userID, 500)
 		if err != nil {
 			return 0, err
 		}
@@ -365,13 +365,13 @@ func isReviewQueueNeedsReviewStatus(status string) bool {
 }
 
 func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, enabled bool, intervalMinutes int) error {
-	if typ != repository.AutomationTypePost || s.autoPostRepo == nil {
+	if typ != repository.AutomationTypePost || s.contentDraftPlanRepo == nil {
 		return nil
 	}
 	if !enabled {
-		return s.autoPostRepo.PauseAllByUser(userID)
+		return s.contentDraftPlanRepo.PauseAllByUser(userID)
 	}
-	plans, err := s.autoPostRepo.ListByUser(userID)
+	plans, err := s.contentDraftPlanRepo.ListByUser(userID)
 	if err != nil {
 		return err
 	}
@@ -393,14 +393,14 @@ func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, 
 		}
 		plans[i].ProcessingAt = nil
 	}
-	return s.autoPostRepo.SaveAll(plans)
+	return s.contentDraftPlanRepo.SaveAll(plans)
 }
 
 func (s *AutomationService) applyAutoPostPlannerState(userID uint, item *dto.AutomationModuleData) error {
-	if s.autoPostRepo == nil || item == nil {
+	if s.contentDraftPlanRepo == nil || item == nil {
 		return nil
 	}
-	plans, err := s.autoPostRepo.ListByUser(userID)
+	plans, err := s.contentDraftPlanRepo.ListByUser(userID)
 	if err != nil {
 		return err
 	}

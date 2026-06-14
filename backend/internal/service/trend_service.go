@@ -24,14 +24,14 @@ var (
 )
 
 type TrendService struct {
-	repo        *repository.TrendTopicRepository
-	exposure    *repository.ExposureTweetSignalRepository
-	feedback    *repository.TrendFeedbackRepository
-	botRepo     *repository.OAFBotRepository
-	planRepo    *repository.AutoPostPlanRepository
-	contentRepo *repository.ContentLibraryRepository
-	commentRepo *repository.AutoCommentTaskRepository
-	cfg         config.XTrendsConfig
+	repo                 *repository.TrendTopicRepository
+	exposure             *repository.ExposureTweetSignalRepository
+	feedback             *repository.TrendFeedbackRepository
+	botRepo              *repository.OAFBotRepository
+	contentDraftPlanRepo *repository.ContentDraftPlanRepository
+	contentRepo          *repository.ContentLibraryRepository
+	commentRepo          *repository.AutoCommentTaskRepository
+	cfg                  config.XTrendsConfig
 }
 
 type trendSyncResult struct {
@@ -41,8 +41,8 @@ type trendSyncResult struct {
 	SkippedReason string
 }
 
-func NewTrendService(repo *repository.TrendTopicRepository, exposure *repository.ExposureTweetSignalRepository, feedback *repository.TrendFeedbackRepository, botRepo *repository.OAFBotRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, cfg config.XTrendsConfig) *TrendService {
-	return &TrendService{repo: repo, exposure: exposure, feedback: feedback, botRepo: botRepo, planRepo: planRepo, contentRepo: contentRepo, cfg: cfg}
+func NewTrendService(repo *repository.TrendTopicRepository, exposure *repository.ExposureTweetSignalRepository, feedback *repository.TrendFeedbackRepository, botRepo *repository.OAFBotRepository, contentDraftPlanRepo *repository.ContentDraftPlanRepository, contentRepo *repository.ContentLibraryRepository, cfg config.XTrendsConfig) *TrendService {
+	return &TrendService{repo: repo, exposure: exposure, feedback: feedback, botRepo: botRepo, contentDraftPlanRepo: contentDraftPlanRepo, contentRepo: contentRepo, cfg: cfg}
 }
 
 func (s *TrendService) WithAutoCommentTaskRepository(repo *repository.AutoCommentTaskRepository) *TrendService {
@@ -336,8 +336,8 @@ func (s *TrendService) trendPreference(userID uint, query dto.TrendSelectionQuer
 		bot = row
 		pref = preferenceFromBot(row)
 	}
-	if query.PlanID > 0 && s.planRepo != nil {
-		row, err := s.planRepo.GetByUserAndID(userID, query.PlanID)
+	if query.PlanID > 0 && s.contentDraftPlanRepo != nil {
+		row, err := s.contentDraftPlanRepo.GetByUserAndID(userID, query.PlanID)
 		if err != nil {
 			return pref, bot, nil, err
 		}

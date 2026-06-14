@@ -15,14 +15,14 @@ import (
 )
 
 type DashboardService struct {
-	userRepo     *repository.UserRepository
-	walletRepo   *repository.WalletRepository
-	accountRepo  *repository.TwitterAccountRepository
-	activityRepo *repository.ActivityRepository
-	commentRepo  *repository.AutoCommentTaskRepository
-	replyRepo    *repository.AutoReplyDraftRepository
-	postRepo     *repository.AutoPostDraftRepository
-	publishRepo  *repository.PublishJobRepository
+	userRepo         *repository.UserRepository
+	walletRepo       *repository.WalletRepository
+	accountRepo      *repository.TwitterAccountRepository
+	activityRepo     *repository.ActivityRepository
+	commentRepo      *repository.AutoCommentTaskRepository
+	replyRepo        *repository.AutoReplyDraftRepository
+	contentDraftRepo *repository.ContentDraftRepository
+	publishRepo      *repository.PublishJobRepository
 }
 
 func NewDashboardService(
@@ -32,18 +32,18 @@ func NewDashboardService(
 	activityRepo *repository.ActivityRepository,
 	commentRepo *repository.AutoCommentTaskRepository,
 	replyRepo *repository.AutoReplyDraftRepository,
-	postRepo *repository.AutoPostDraftRepository,
+	contentDraftRepo *repository.ContentDraftRepository,
 	publishRepo *repository.PublishJobRepository,
 ) *DashboardService {
 	return &DashboardService{
-		userRepo:     userRepo,
-		walletRepo:   walletRepo,
-		accountRepo:  accountRepo,
-		activityRepo: activityRepo,
-		commentRepo:  commentRepo,
-		replyRepo:    replyRepo,
-		postRepo:     postRepo,
-		publishRepo:  publishRepo,
+		userRepo:         userRepo,
+		walletRepo:       walletRepo,
+		accountRepo:      accountRepo,
+		activityRepo:     activityRepo,
+		commentRepo:      commentRepo,
+		replyRepo:        replyRepo,
+		contentDraftRepo: contentDraftRepo,
+		publishRepo:      publishRepo,
 	}
 }
 
@@ -126,7 +126,7 @@ func (s *DashboardService) Workbench(userID uint) (*dto.DashboardWorkbenchRespon
 	if err != nil {
 		return nil, err
 	}
-	postDrafts, err := s.postRepo.ListByUser(userID, 500)
+	postDrafts, err := s.contentDraftRepo.ListByUser(userID, 500)
 	if err != nil {
 		return nil, err
 	}

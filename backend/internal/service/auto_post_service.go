@@ -32,9 +32,9 @@ type autoPostPlannerRunOptions struct {
 type AutoPostService struct {
 	accountRepo    *repository.TwitterAccountRepository
 	automationRepo *repository.AutomationRepository
-	planRepo       *repository.AutoPostPlanRepository
-	draftRepo      *repository.AutoPostDraftRepository
-	runRepo        *repository.AutoPostGenerationRunRepository
+	planRepo       *repository.ContentDraftPlanRepository
+	draftRepo      *repository.ContentDraftRepository
+	runRepo        *repository.ContentDraftGenerationRunRepository
 	contentRepo    *repository.ContentLibraryRepository
 	activityRepo   *repository.ActivityRepository
 	userRepo       *repository.UserRepository
@@ -53,7 +53,7 @@ type AutoPostService struct {
 // fields remain on their legacy names for compatibility.
 type ContentDraftService = AutoPostService
 
-func NewContentDraftService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.AutoPostPlanRepository, draftRepo *repository.AutoPostDraftRepository, runRepo *repository.AutoPostGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *ContentDraftService {
+func NewContentDraftService(accountRepo *repository.TwitterAccountRepository, automationRepo *repository.AutomationRepository, planRepo *repository.ContentDraftPlanRepository, draftRepo *repository.ContentDraftRepository, runRepo *repository.ContentDraftGenerationRunRepository, contentRepo *repository.ContentLibraryRepository, activityRepo *repository.ActivityRepository, userRepo *repository.UserRepository, oafBotRepo *repository.OAFBotRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService, publishing *PublishingService, trends *TrendService) *ContentDraftService {
 	return NewAutoPostService(accountRepo, automationRepo, planRepo, draftRepo, runRepo, contentRepo, activityRepo, userRepo, oafBotRepo, usageRepo, feedbackRepo, verdictRepo, prefRepo, ai, publishing, trends)
 }
 
@@ -99,7 +99,7 @@ func (s *AutoPostService) GetPlan(userID, id uint) (*dto.AutoPostPlanItem, error
 	return &item, nil
 }
 
-func (s *AutoPostService) CreatePlan(userID uint, req dto.AutoPostPlanRequest) (*dto.AutoPostPlanItem, error) {
+func (s *AutoPostService) CreatePlan(userID uint, req dto.ContentDraftPlanRequest) (*dto.AutoPostPlanItem, error) {
 	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, req.XAccountID)
 	if err != nil {
 		return nil, fmt.Errorf("x account not found")
@@ -129,7 +129,7 @@ func (s *AutoPostService) CreatePlan(userID uint, req dto.AutoPostPlanRequest) (
 	return &item, nil
 }
 
-func (s *AutoPostService) UpdatePlan(userID, id uint, req dto.AutoPostPlanRequest) (*dto.AutoPostPlanItem, error) {
+func (s *AutoPostService) UpdatePlan(userID, id uint, req dto.ContentDraftPlanRequest) (*dto.AutoPostPlanItem, error) {
 	plan, err := s.planRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (s *AutoPostService) ListDrafts(userID uint) (*dto.AutoPostDraftsResponse, 
 	return &dto.AutoPostDraftsResponse{Items: items}, nil
 }
 
-func (s *AutoPostService) ListRuns(userID uint, query dto.AutoPostGenerationRunQuery) (*dto.AutoPostGenerationRunsResponse, error) {
+func (s *AutoPostService) ListRuns(userID uint, query dto.ContentDraftGenerationRunQuery) (*dto.AutoPostGenerationRunsResponse, error) {
 	page := query.Page
 	if page <= 0 {
 		page = 1
@@ -191,7 +191,7 @@ func (s *AutoPostService) ListRuns(userID uint, query dto.AutoPostGenerationRunQ
 
 	status := normalizeAutoPostRunStatusForQuery(query.Status)
 	createdFrom, createdTo := autoPostRunTimeRange(query)
-	rows, total, err := s.runRepo.List(repository.AutoPostGenerationRunListQuery{
+	rows, total, err := s.runRepo.List(repository.ContentDraftGenerationRunListQuery{
 		UserID:      userID,
 		Status:      status,
 		XAccountID:  query.XAccountID,
@@ -243,7 +243,7 @@ func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (
 	return &item, nil
 }
 
-func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint, req dto.AutoPostGenerateRequest) (*dto.AutoPostDraftItem, error) {
+func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint, req dto.ContentDraftGenerateRequest) (*dto.AutoPostDraftItem, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -473,7 +473,7 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 		}
 		return recordFailure("content_source_load_failed", err)
 	}
-	draft, err := s.GenerateDraft(ctx, plan.UserID, plan.ID, dto.AutoPostGenerateRequest{ContentLibraryItemID: contentItem.ID})
+	draft, err := s.GenerateDraft(ctx, plan.UserID, plan.ID, dto.ContentDraftGenerateRequest{ContentLibraryItemID: contentItem.ID})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAIGenerationQuotaExceeded):
@@ -537,7 +537,7 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 	return &item, nil
 }
 
-func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req dto.AutoPostDraftRewriteRequest) (*dto.AutoPostDraftItem, error) {
+func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req dto.ContentDraftRewriteRequest) (*dto.AutoPostDraftItem, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1112,7 +1112,7 @@ func (s *AutoPostService) contentItem(userID, contentID uint) *model.ContentLibr
 	return item
 }
 
-func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.AutoPostPlanRequest, botID uint, accountTier string) {
+func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.ContentDraftPlanRequest, botID uint, accountTier string) {
 	plan.BotID = botID
 	plan.Enabled = req.Enabled
 	plan.ExecutionMode = effectiveExecutionMode(req.ExecutionMode)
@@ -1258,7 +1258,7 @@ func normalizeAutoPostRunStatusForQuery(value string) string {
 	}
 }
 
-func autoPostRunTimeRange(query dto.AutoPostGenerationRunQuery) (time.Time, time.Time) {
+func autoPostRunTimeRange(query dto.ContentDraftGenerationRunQuery) (time.Time, time.Time) {
 	if from := parseAutoPostRunQueryTime(query.DateFrom); !from.IsZero() {
 		return from, parseAutoPostRunQueryTime(query.DateTo)
 	}

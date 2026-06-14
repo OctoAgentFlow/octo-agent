@@ -39,37 +39,37 @@ type dailyXQueueTextGenerator func(context.Context, GenerateAutoPostInput) (AIGe
 type dailyXQueueRewriteGenerator func(context.Context, GenerateAutoPostInput, string, string, string) (AIGeneratedText, error)
 
 type DailyXQueueService struct {
-	contextRepo  *repository.DailyXQueueContextRepository
-	botRepo      *repository.OAFBotRepository
-	accountRepo  *repository.TwitterAccountRepository
-	contentRepo  *repository.ContentLibraryRepository
-	draftRepo    *repository.AutoPostDraftRepository
-	usageRepo    *repository.AIGenerationUsageRepository
-	feedbackRepo *repository.OAFBotGenerationFeedbackRepository
-	activityRepo *repository.ActivityRepository
-	verdictRepo  *repository.ReviewQueueFeedbackIssueVerdictRepository
-	prefRepo     *repository.OAFBotLearningRulePreferenceRepository
-	oafBot       *OAFBotService
-	ai           *AIService
+	contextRepo      *repository.DailyXQueueContextRepository
+	botRepo          *repository.OAFBotRepository
+	accountRepo      *repository.TwitterAccountRepository
+	contentRepo      *repository.ContentLibraryRepository
+	contentDraftRepo *repository.ContentDraftRepository
+	usageRepo        *repository.AIGenerationUsageRepository
+	feedbackRepo     *repository.OAFBotGenerationFeedbackRepository
+	activityRepo     *repository.ActivityRepository
+	verdictRepo      *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo         *repository.OAFBotLearningRulePreferenceRepository
+	oafBot           *OAFBotService
+	ai               *AIService
 
 	generateText dailyXQueueTextGenerator
 	rewriteText  dailyXQueueRewriteGenerator
 }
 
-func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, draftRepo *repository.AutoPostDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
+func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, contentDraftRepo *repository.ContentDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
 	return &DailyXQueueService{
-		contextRepo:  contextRepo,
-		botRepo:      botRepo,
-		accountRepo:  accountRepo,
-		contentRepo:  contentRepo,
-		draftRepo:    draftRepo,
-		usageRepo:    usageRepo,
-		feedbackRepo: feedbackRepo,
-		activityRepo: activityRepo,
-		verdictRepo:  verdictRepo,
-		prefRepo:     prefRepo,
-		oafBot:       oafBot,
-		ai:           ai,
+		contextRepo:      contextRepo,
+		botRepo:          botRepo,
+		accountRepo:      accountRepo,
+		contentRepo:      contentRepo,
+		contentDraftRepo: contentDraftRepo,
+		usageRepo:        usageRepo,
+		feedbackRepo:     feedbackRepo,
+		activityRepo:     activityRepo,
+		verdictRepo:      verdictRepo,
+		prefRepo:         prefRepo,
+		oafBot:           oafBot,
+		ai:               ai,
 	}
 }
 
@@ -292,7 +292,7 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 			ApprovalRequired: true,
 			GeneratedAt:      &now,
 		}
-		if err := s.draftRepo.Create(draft); err != nil {
+		if err := s.contentDraftRepo.Create(draft); err != nil {
 			return nil, err
 		}
 		if err := recordAIGenerationUsage(s.usageRepo, userID, bot.ID, repository.AIGenerationSceneAutoPost, now, generated.Usage); err != nil {
@@ -326,7 +326,7 @@ func (s *DailyXQueueService) UpdateDraft(userID, id uint, content string) (*dto.
 		draft.ApprovedAt = nil
 		draft.ApprovalRequired = true
 	}
-	if err := s.draftRepo.Save(draft); err != nil {
+	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
 	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"edited_example", "voice_example"}, "OAF Bot memory: user edited this Daily X Queue draft. Treat the edited version as a voice/style example, not a trusted factual source.", original, draft.GeneratedContent)
@@ -343,7 +343,7 @@ func (s *DailyXQueueService) ApproveDraft(userID, id uint) (*dto.DailyXQueueActi
 	draft.Status = "approved"
 	draft.ApprovedAt = &now
 	draft.ApprovalRequired = false
-	if err := s.draftRepo.Save(draft); err != nil {
+	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
 	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"approved_example"}, "OAF Bot memory: user approved this Daily X Queue draft. Use it as an acceptable style/example only; do not treat generated claims as trusted source material.", draft.ContentDirection, draft.GeneratedContent)
@@ -364,7 +364,7 @@ func (s *DailyXQueueService) RejectDraft(userID, id uint, reason string) (*dto.D
 	draft.Status = "rejected"
 	draft.RejectedAt = &now
 	draft.FailureReason = normalized
-	if err := s.draftRepo.Save(draft); err != nil {
+	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
 	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized, "negative_pattern"}, dailyRejectFeedbackComment(normalized), draft.ContentDirection, draft.GeneratedContent)
@@ -408,7 +408,7 @@ func (s *DailyXQueueService) RewriteDraft(ctx context.Context, userID, id uint, 
 		draft.ApprovedAt = nil
 		draft.ApprovalRequired = true
 	}
-	if err := s.draftRepo.Save(draft); err != nil {
+	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
 	_ = recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, generated.Usage)
@@ -486,7 +486,7 @@ func (s *DailyXQueueService) upsertDailyBot(userID uint, handle string, req dto.
 }
 
 func (s *DailyXQueueService) dailyDraft(userID, id uint) (*model.AutoPostDraft, error) {
-	draft, err := s.draftRepo.GetByUserAndID(userID, id)
+	draft, err := s.contentDraftRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func (s *DailyXQueueService) dailyDraft(userID, id uint) (*model.AutoPostDraft, 
 }
 
 func (s *DailyXQueueService) dailyDrafts(userID, botID uint) ([]dto.DailyXQueueDraftItem, error) {
-	rows, err := s.draftRepo.ListByUser(userID, 30)
+	rows, err := s.contentDraftRepo.ListByUser(userID, 30)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +560,7 @@ func (s *DailyXQueueService) recentDailyDraftTexts(userID, botID uint, limit int
 	if limit <= 0 {
 		limit = 6
 	}
-	rows, err := s.draftRepo.ListByUser(userID, 30)
+	rows, err := s.contentDraftRepo.ListByUser(userID, 30)
 	if err != nil {
 		return nil
 	}

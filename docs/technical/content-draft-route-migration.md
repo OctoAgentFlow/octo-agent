@@ -26,7 +26,7 @@
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
 | P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
-| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases, billing semantic aliases, P3.3-a inventory, and P3.3-b DTO/repository aliases done |
+| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases, billing semantic aliases, P3.3-a inventory, P3.3-b aliases, and first low-risk call-site migration done |
 
 ## Compatibility Notes
 
@@ -120,3 +120,11 @@ This batch is intentionally documentation and test hardening only. It does not r
 - Kept all GORM models and tables unchanged; new repository names still target the legacy `auto_post_*` tables through the same implementation.
 - Kept historical activity preview keys and AI usage scene strings unchanged.
 - Added alias tests so future migrations can safely move call sites to the new names without accidentally changing public contracts.
+
+## P3.3-c First Low-Risk Call-Site Migration
+
+- Switched router initialization to `NewContentDraftPlanRepository`, `NewContentDraftRepository`, and `NewContentDraftGenerationRunRepository`.
+- Renamed router variables from `autoPost*Repo` to `contentDraft*Repo` and passed those aliases through service constructors.
+- Updated low-risk service fields and constructor parameters to use `ContentDraft*` repository aliases in Dashboard, Automation, Billing, OAF Bot, Trend, Daily X Queue, Review Queue, Publishing, and Content Draft services.
+- Updated Content Draft controller request bindings and Content Draft service helper signatures to use `ContentDraft*` DTO aliases while preserving all JSON fields and response shapes.
+- Kept legacy `NewAutoPostService`, AutoPost model names, database table names, AI usage scene strings, activity preview keys, and public legacy API route untouched.

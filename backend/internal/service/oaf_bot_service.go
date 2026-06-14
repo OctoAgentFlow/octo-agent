@@ -26,23 +26,23 @@ const (
 )
 
 type OAFBotService struct {
-	botRepo         *repository.OAFBotRepository
-	accountRepo     *repository.TwitterAccountRepository
-	userRepo        *repository.UserRepository
-	usageRepo       *repository.AIGenerationUsageRepository
-	feedbackRepo    *repository.OAFBotGenerationFeedbackRepository
-	planRepo        *repository.AutoPostPlanRepository
-	contentRepo     *repository.ContentLibraryRepository
-	postDraftRepo   *repository.AutoPostDraftRepository
-	replyDraftRepo  *repository.AutoReplyDraftRepository
-	commentTaskRepo *repository.AutoCommentTaskRepository
-	verdictRepo     *repository.ReviewQueueFeedbackIssueVerdictRepository
-	prefRepo        *repository.OAFBotLearningRulePreferenceRepository
-	ai              *AIService
+	botRepo              *repository.OAFBotRepository
+	accountRepo          *repository.TwitterAccountRepository
+	userRepo             *repository.UserRepository
+	usageRepo            *repository.AIGenerationUsageRepository
+	feedbackRepo         *repository.OAFBotGenerationFeedbackRepository
+	contentDraftPlanRepo *repository.ContentDraftPlanRepository
+	contentRepo          *repository.ContentLibraryRepository
+	contentDraftRepo     *repository.ContentDraftRepository
+	replyDraftRepo       *repository.AutoReplyDraftRepository
+	commentTaskRepo      *repository.AutoCommentTaskRepository
+	verdictRepo          *repository.ReviewQueueFeedbackIssueVerdictRepository
+	prefRepo             *repository.OAFBotLearningRulePreferenceRepository
+	ai                   *AIService
 }
 
-func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, planRepo *repository.AutoPostPlanRepository, contentRepo *repository.ContentLibraryRepository, postDraftRepo *repository.AutoPostDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService) *OAFBotService {
-	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, planRepo: planRepo, contentRepo: contentRepo, postDraftRepo: postDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, verdictRepo: verdictRepo, prefRepo: prefRepo, ai: ai}
+func NewOAFBotService(botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, userRepo *repository.UserRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, contentDraftPlanRepo *repository.ContentDraftPlanRepository, contentRepo *repository.ContentLibraryRepository, contentDraftRepo *repository.ContentDraftRepository, replyDraftRepo *repository.AutoReplyDraftRepository, commentTaskRepo *repository.AutoCommentTaskRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, ai *AIService) *OAFBotService {
+	return &OAFBotService{botRepo: botRepo, accountRepo: accountRepo, userRepo: userRepo, usageRepo: usageRepo, feedbackRepo: feedbackRepo, contentDraftPlanRepo: contentDraftPlanRepo, contentRepo: contentRepo, contentDraftRepo: contentDraftRepo, replyDraftRepo: replyDraftRepo, commentTaskRepo: commentTaskRepo, verdictRepo: verdictRepo, prefRepo: prefRepo, ai: ai}
 }
 
 func (s *OAFBotService) List(userID uint) (*dto.OAFBotListResponse, error) {
@@ -578,10 +578,10 @@ func (s *OAFBotService) matrixInspectionByBot(userID uint, bots []model.OAFBot, 
 func (s *OAFBotService) matrixPlansByBot(userID uint) (map[uint]model.AutoPostPlan, map[uint]model.AutoPostPlan, error) {
 	planByBot := map[uint]model.AutoPostPlan{}
 	planByAccount := map[uint]model.AutoPostPlan{}
-	if s.planRepo == nil {
+	if s.contentDraftPlanRepo == nil {
 		return planByBot, planByAccount, nil
 	}
-	plans, err := s.planRepo.ListByUser(userID)
+	plans, err := s.contentDraftPlanRepo.ListByUser(userID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -620,8 +620,8 @@ func (s *OAFBotService) pendingReviewCountsByBot(userID uint, botIDs []uint) (ma
 	if len(botIDs) == 0 {
 		return out, nil
 	}
-	if s.postDraftRepo != nil {
-		counts, err := s.postDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
+	if s.contentDraftRepo != nil {
+		counts, err := s.contentDraftRepo.CountStatusByUserBots(userID, botIDs, "pending_review")
 		if err != nil {
 			return out, err
 		}

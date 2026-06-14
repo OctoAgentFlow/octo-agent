@@ -989,6 +989,8 @@ export const dict: I18nDict = {
   "exposureRadar.card.quotes": "引用",
   "exposureRadar.card.bookmarks": "收藏",
   "exposureRadar.card.impressions": "浏览",
+  "exposureRadar.card.velocitySampling": "采样中",
+  "exposureRadar.card.velocityTrend": "速度趋势",
   "exposureRadar.velocityState.new": "新出现",
   "exposureRadar.velocityState.burst": "爆发",
   "exposureRadar.velocityState.rising": "上升",

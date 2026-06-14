@@ -1020,6 +1020,8 @@ export const dict: I18nDict = {
   "exposureRadar.card.quotes": "Quotes",
   "exposureRadar.card.bookmarks": "Bookmarks",
   "exposureRadar.card.impressions": "Views",
+  "exposureRadar.card.velocitySampling": "Sampling",
+  "exposureRadar.card.velocityTrend": "Velocity trend",
   "exposureRadar.velocityState.new": "New",
   "exposureRadar.velocityState.burst": "Burst",
   "exposureRadar.velocityState.rising": "Rising",

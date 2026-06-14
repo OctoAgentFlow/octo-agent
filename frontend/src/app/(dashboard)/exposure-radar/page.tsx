@@ -608,9 +608,9 @@ function DailyActionPlanPanel({
                       <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
                         {item.score} {t("exposureRadar.card.score")}
                       </span>
-                      {item.views_per_min ? (
+                      {typeof item.views_per_min === "number" ? (
                         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
-                          {Math.round(item.views_per_min)}/min
+                          {formatVelocityLabel(item.views_per_min, t("exposureRadar.card.velocitySampling"))}
                         </span>
                       ) : null}
                     </div>
@@ -1096,7 +1096,7 @@ function RadarCard({
       </div>
       <p className="mt-3 line-clamp-4 text-sm leading-6 text-[#c9d1d9]">{item.content}</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <MiniStat icon={<Gauge className="size-3.5" />} label={t("exposureRadar.card.velocity")} value={item.views_per_min ? `${Math.round(item.views_per_min)}/min` : "-"} />
+        <MiniStat icon={<Gauge className="size-3.5" />} label={t("exposureRadar.card.velocity")} value={formatVelocityLabel(item.views_per_min, t("exposureRadar.card.velocitySampling"))} />
         <MiniStat icon={<Users className="size-3.5" />} label={t("exposureRadar.card.followers")} value={item.followers_count ? formatCompact(item.followers_count) : "-"} />
         <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.card.heat")} value={item.heat_count ? formatCompact(item.heat_count) : "-"} />
       </div>
@@ -1377,22 +1377,41 @@ function MetricPill({ icon, label, value }: { icon: ReactNode; label: string; va
 }
 
 function VelocitySparkline({ values }: { values: number[] }) {
-  const normalized = values.filter((value) => Number.isFinite(value)).slice(-8);
-  if (normalized.length < 2) return null;
-  const max = Math.max(...normalized, 1);
+  const { t } = useT();
+  const normalized = values.filter((value) => Number.isFinite(value) && value >= 0).slice(-12);
+  if (normalized.length < 4) return null;
+  const min = Math.min(...normalized);
+  const max = Math.max(...normalized);
+  if (max <= 0 || max - min < 1) return null;
+  const width = 160;
+  const height = 34;
+  const points = normalized.map((value, index) => {
+    const x = normalized.length === 1 ? 0 : (index / (normalized.length - 1)) * width;
+    const y = height - ((value - min) / (max - min)) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
   return (
     <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
-      <div className="flex h-8 items-end gap-1">
-        {normalized.map((value, index) => (
-          <span
-            key={`${value}:${index}`}
-            className="flex-1 rounded-t bg-[#1d9bf0]/70"
-            style={{ height: `${Math.max(12, Math.round((value / max) * 100))}%` }}
-          />
-        ))}
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-[#71767b]">
+        <span>{t("exposureRadar.card.velocityTrend")}</span>
+        <span>{formatCompact(Math.round(max))}</span>
       </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-9 w-full overflow-visible" role="img" aria-label={t("exposureRadar.card.velocityTrend")}>
+        <polyline points={points} fill="none" stroke="#1d9bf0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      </svg>
     </div>
   );
+}
+
+function formatVelocityLabel(value: number | undefined, samplingLabel: string) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return samplingLabel;
+  }
+  const rounded = Math.round(value);
+  if (rounded < 1) {
+    return samplingLabel;
+  }
+  return `${rounded}/min`;
 }
 
 function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {

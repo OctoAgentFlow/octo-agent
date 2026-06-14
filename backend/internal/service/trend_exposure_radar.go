@@ -70,6 +70,10 @@ const (
 	exposureRisingMinViews     = int64(100)
 	exposureRisingMinVelocity  = 5.0
 
+	exposureQualityActNow  = "act_now"
+	exposureQualityWatch   = "watch"
+	exposureQualityExpired = "expired"
+
 	exposureConfidenceRealImpressions = "real_impressions"
 	exposureConfidenceEngagement      = "engagement_estimate"
 	exposureConfidenceTopic           = "topic_level"
@@ -654,6 +658,8 @@ func (s *TrendService) exposureRadarEnglish(query dto.ExposureRadarQuery, now ti
 			RiskLevel:        risk,
 			OpportunityTier:  exposureTopicLeadTier,
 			TierReason:       "topic-level trend lead; no tweet-level velocity is available yet",
+			QualityStage:     exposureQualityWatch,
+			QualityReason:    "Topic-level signal; watch live search before deciding whether a specific post is worth a manual reply.",
 			OpportunityType:  "monitor",
 			RecommendedUse:   "Open live search, find low-follower breakout posts, then route suitable replies into review.",
 			Reason:           "English radar is currently topic-level. It identifies where to look; tweet-level velocity should be confirmed before action.",
@@ -762,11 +768,11 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
 	}
 	if resp == nil || userID == 0 || s == nil || len(resp.Items) == 0 {
-		return resp
+		return sortExposureRadarItemsByQuality(resp)
 	}
 	if !s.exposureLearningRankingEnabled() {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "disabled")
-		return resp
+		return sortExposureRadarItemsByQuality(resp)
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -782,7 +788,7 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 	mode := s.exposureLearningMode()
 	if mode == "scoped" && query.BotID == 0 && query.XAccountID == 0 {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
-		return resp
+		return sortExposureRadarItemsByQuality(resp)
 	}
 	if mode == "workspace" {
 		scope.BotID = 0
@@ -821,7 +827,7 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 	}
 	if len(perf) == 0 && len(outcomes) == 0 {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
-		return resp
+		return sortExposureRadarItemsByQuality(resp)
 	}
 	resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, rankingScope)
 	for i := range resp.Items {
@@ -860,7 +866,19 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 			resp.Items[i].RankingReason = reason
 		}
 	}
+	return sortExposureRadarItemsByQuality(resp)
+}
+
+func sortExposureRadarItemsByQuality(resp *dto.ExposureRadarResponse) *dto.ExposureRadarResponse {
+	if resp == nil || len(resp.Items) == 0 {
+		return resp
+	}
 	sort.SliceStable(resp.Items, func(i, j int) bool {
+		leftStage := exposureQualityStageRank(resp.Items[i].QualityStage)
+		rightStage := exposureQualityStageRank(resp.Items[j].QualityStage)
+		if leftStage != rightStage {
+			return leftStage > rightStage
+		}
 		if resp.Items[i].Score != resp.Items[j].Score {
 			return resp.Items[i].Score > resp.Items[j].Score
 		}
@@ -1515,6 +1533,8 @@ func (s *TrendService) tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarI
 	velocityState := tl1VelocityState(row.Status)
 	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.CurrentStats.ViewCount, true)
 	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentStats.ViewCount, row.CurrentStats.ViewCount, row.ViewsPerMin, velocityState, true, s.exposureHotThresholds())
+	cooling := strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped")
+	qualityStage, qualityReason := exposureQualityStage("tweet_level", tier, velocityState, risk, row.ViewsPerMin, score, cooling, time.Time{}, time.Now().UTC(), s.exposureHotThresholds())
 	url := ""
 	if row.TweetID != "" {
 		handle := strings.TrimPrefix(strings.TrimSpace(row.AuthorHandle), "@")
@@ -1552,7 +1572,9 @@ func (s *TrendService) tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarI
 		VelocityState:    velocityState,
 		OpportunityTier:  tier,
 		TierReason:       tierReason,
-		Cooling:          strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped"),
+		QualityStage:     qualityStage,
+		QualityReason:    qualityReason,
+		Cooling:          cooling,
 		VelocityHistory:  row.History,
 		Score:            score,
 		RiskLevel:        risk,
@@ -1607,6 +1629,11 @@ func (s *TrendService) exposureTweetSignalToRadarItem(row *model.ExposureTweetSi
 	hasPriorSample := row.PreviousCount > 0 || row.ViewsPerMinute > 0
 	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.ImpressionCount, hasPriorSample)
 	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentCount, row.ImpressionCount, row.ViewsPerMinute, velocityState, hasPriorSample, s.exposureHotThresholds())
+	qualityNow := row.LastSeenAt.UTC()
+	if qualityNow.IsZero() {
+		qualityNow = time.Now().UTC()
+	}
+	qualityStage, qualityReason := exposureQualityStage("tweet_level", tier, velocityState, radarFirstNonEmpty(row.RiskLevel, "low"), row.ViewsPerMinute, score, velocityState == "cooling", row.PublishedAt.UTC(), qualityNow, s.exposureHotThresholds())
 	return dto.ExposureRadarItem{
 		ID:               region + "-tweet-" + row.TweetID,
 		Region:           region,
@@ -1638,6 +1665,8 @@ func (s *TrendService) exposureTweetSignalToRadarItem(row *model.ExposureTweetSi
 		VelocityState:    velocityState,
 		OpportunityTier:  tier,
 		TierReason:       tierReason,
+		QualityStage:     qualityStage,
+		QualityReason:    qualityReason,
 		Cooling:          velocityState == "cooling",
 		VelocityHistory:  exposureVelocityHistory(row),
 		Score:            score,
@@ -1759,6 +1788,8 @@ func exposureRadarBriefItem(rank int, item dto.ExposureRadarItem) dto.ExposureRa
 		BestUse:          exposureBriefBestUse(item),
 		Score:            item.Score,
 		VelocityState:    velocity,
+		QualityStage:     item.QualityStage,
+		QualityReason:    item.QualityReason,
 		RiskLevel:        radarFirstNonEmpty(item.RiskLevel, "low"),
 		SourceURL:        item.URL,
 		Guardrails:       item.Guardrails,
@@ -1808,6 +1839,12 @@ func exposureBriefSuggestedAction(item dto.ExposureRadarItem, velocity string) s
 	if item.DataQuality != "tweet_level" {
 		return "Use this as a topic lead, then inspect live posts before writing a manual comment."
 	}
+	if normalizeExposureQualityStage(item.QualityStage) == exposureQualityExpired {
+		return "Treat this as past the best window; open the thread only if context still looks active."
+	}
+	if normalizeExposureQualityStage(item.QualityStage) == exposureQualityActNow {
+		return "Handle this first: inspect the live thread, generate or write a reply, copy it, and publish manually on X."
+	}
 	if velocity == "cooling" {
 		return "Open the thread first; only write a comment if the conversation is still active and persona-fit is clear."
 	}
@@ -1835,7 +1872,11 @@ func exposureRadarBriefSummary(region string, items []dto.ExposureRadarBriefItem
 	}
 	burst := 0
 	cooling := 0
+	actNow := 0
 	for _, item := range items {
+		if normalizeExposureQualityStage(item.QualityStage) == exposureQualityActNow {
+			actNow++
+		}
 		switch item.VelocityState {
 		case "burst", "rising", "new":
 			burst++
@@ -1847,7 +1888,7 @@ func exposureRadarBriefSummary(region string, items []dto.ExposureRadarBriefItem
 	if normalizeExposureRegion(region) == "zh" {
 		label = "Chinese"
 	}
-	return fmt.Sprintf("%s radar found %d comment opportunities in this window: %d still rising and %d cooling.", label, len(items), burst, cooling)
+	return fmt.Sprintf("%s radar found %d comment opportunities in this window: %d should be handled first, %d still rising, and %d cooling.", label, len(items), actNow, burst, cooling)
 }
 
 func tl1VelocityState(status string) string {
@@ -1985,6 +2026,79 @@ func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int6
 		return exposureSamplingTier, "first snapshot or missing velocity; wait for another sample before calling it hot"
 	}
 	return exposureSamplingTier, fmt.Sprintf("below %s real impressions; keep sampling before treating it as a hot post", compactCount(thresholds.HotMinViews))
+}
+
+func exposureQualityStage(dataQuality string, tier string, velocityState string, riskLevel string, viewsPerMinute float64, score int, cooling bool, publishedAt time.Time, now time.Time, thresholds exposureHotThresholds) (string, string) {
+	thresholds = normalizeExposureHotThresholds(thresholds)
+	tier = normalizeExposureOpportunityTierForDiagnostics(tier)
+	velocityState = strings.TrimSpace(velocityState)
+	riskLevel = strings.TrimSpace(riskLevel)
+	if riskLevel == "" {
+		riskLevel = "low"
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if strings.TrimSpace(dataQuality) != "tweet_level" || tier == exposureTopicLeadTier {
+		return exposureQualityWatch, "Topic-level lead; inspect live search before deciding whether a specific post is worth a manual reply."
+	}
+	if cooling || velocityState == "cooling" || exposureQualityWindowExpired(publishedAt, now, viewsPerMinute, thresholds) {
+		return exposureQualityExpired, "Conversation momentum appears to be cooling or outside the timely reply window."
+	}
+	if riskLevel == "high" || riskLevel == "medium" {
+		return exposureQualityWatch, "Potentially useful, but context and brand fit should be checked before any manual reply."
+	}
+	if tier == exposureHotOpportunityTier {
+		if velocityState == "burst" || velocityState == "rising" || viewsPerMinute >= thresholds.HotMinVelocity || score >= 75 {
+			return exposureQualityActNow, "Hot post still has enough momentum for a timely manual reply."
+		}
+		return exposureQualityWatch, "Real views are strong, but reply momentum is not urgent yet."
+	}
+	if tier == exposureRisingSignalTier {
+		if velocityState == "burst" || viewsPerMinute >= thresholds.HotMinVelocity || score >= 85 {
+			return exposureQualityActNow, "Rising signal has enough velocity to inspect before the window closes."
+		}
+		return exposureQualityWatch, "Rising signal is promising, but it can wait behind stronger active opportunities."
+	}
+	return exposureQualityWatch, "Needs another sample or stronger metrics before treating it as an urgent opportunity."
+}
+
+func exposureQualityWindowExpired(publishedAt time.Time, now time.Time, viewsPerMinute float64, thresholds exposureHotThresholds) bool {
+	if publishedAt.IsZero() || now.IsZero() || now.Before(publishedAt) {
+		return false
+	}
+	age := now.Sub(publishedAt)
+	if age >= 12*time.Hour {
+		return viewsPerMinute < thresholds.HotMinVelocity
+	}
+	if age >= 8*time.Hour {
+		return viewsPerMinute < exposureRisingMinVelocity
+	}
+	return false
+}
+
+func normalizeExposureQualityStage(value string) string {
+	switch strings.TrimSpace(value) {
+	case exposureQualityActNow:
+		return exposureQualityActNow
+	case exposureQualityExpired:
+		return exposureQualityExpired
+	default:
+		return exposureQualityWatch
+	}
+}
+
+func exposureQualityStageRank(stage string) int {
+	switch normalizeExposureQualityStage(stage) {
+	case exposureQualityActNow:
+		return 3
+	case exposureQualityWatch:
+		return 2
+	case exposureQualityExpired:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func exposureStrongHot(impressionCount int64, viewsPerMinute float64, thresholds exposureHotThresholds) bool {

@@ -19,12 +19,12 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "priority" | "all" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
+type RadarViewFilter = "priority" | "all" | "act_now" | "watch" | "expired" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 type DailyActionType = "publish_reply" | "generate_reply" | "save_memory" | "inspect" | "review_fit";
-type DailyActionReason = "generated" | "velocity" | "low_fans" | "learned" | "risk" | "topic" | "score";
+type DailyActionReason = "generated" | "quality" | "expired" | "velocity" | "low_fans" | "learned" | "risk" | "topic" | "score";
 type DailyActionPlanItem = {
   item: ExposureRadarItemApi;
   action: DailyActionType;
@@ -47,7 +47,7 @@ type ManualActionState = {
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["priority", "all", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
+const radarViewFilters: RadarViewFilter[] = ["priority", "all", "act_now", "watch", "expired", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
 const manualOutcomeOptions: ManualOutcome[] = ["effective", "neutral", "ineffective", "not_suitable"];
 const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "negative"; issueTags: string[] }> = {
   effective: { rating: "positive", issueTags: ["effective", "good"] },
@@ -210,7 +210,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs, manualActionStates)).length;
       return acc;
-    }, { priority: 0, all: 0, hot: 0, rising: 0, sampling: 0, topic: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
+    }, { priority: 0, all: 0, act_now: 0, watch: 0, expired: 0, hot: 0, rising: 0, sampling: 0, topic: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
   }, [items, manualActionStates, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
@@ -1128,12 +1128,15 @@ function RadarCard({
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
   const dataConfidence = normalizeDataConfidence(item.data_confidence, item.data_quality);
-  const cardToneClass = item.cooling || velocityState === "cooling"
+  const cardToneClass = qualityStage === "expired" || item.cooling || velocityState === "cooling"
     ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85"
-    : opportunityTier === "needs_sampling" || opportunityTier === "topic_lead"
-      ? "border-[#2f3336] bg-[#070a0d] opacity-80"
-      : "border-[#2f3336] bg-black";
+    : qualityStage === "act_now"
+      ? "border-[#00ba7c]/35 bg-black shadow-[0_0_0_1px_rgba(0,186,124,0.18)]"
+      : opportunityTier === "needs_sampling" || opportunityTier === "topic_lead"
+        ? "border-[#2f3336] bg-[#070a0d] opacity-80"
+        : "border-[#2f3336] bg-black";
   const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
   const handledDone = isManualActionHandled(item, manualState);
   const [publishedURL, setPublishedURL] = useState(manualState?.publishedUrl || item.comment_url || "");
@@ -1171,6 +1174,10 @@ function RadarCard({
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${opportunityTierClass(opportunityTier)}`} title={item.tier_reason || undefined}>
           <Flame className="size-3.5" />
           {t(`exposureRadar.tier.${opportunityTier}`)}
+        </span>
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${qualityStageClass(qualityStage)}`} title={item.quality_reason || undefined}>
+          <Zap className="size-3.5" />
+          {t(`exposureRadar.qualityStage.${qualityStage}`)}
         </span>
         {rankChange ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${rankChange.kind === "up" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : rankChange.kind === "down" ? "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]" : "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]"}`}>
@@ -1537,6 +1544,7 @@ function formatVelocityLabel(value: number | undefined, samplingLabel: string) {
 
 function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
   const title = compactTitle(item.topic_name || item.title || "Exposure Radar signal");
   const bodyLines = [
     `Signal: ${item.title}`,
@@ -1546,6 +1554,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     item.reason ? `Why it matters: ${item.reason}` : "",
     item.recommended_use ? `Suggested operator action: ${item.recommended_use}` : "",
     item.ranking_reason ? `Ranking note: ${item.ranking_reason}` : "",
+    item.quality_reason ? `Quality stage: ${qualityStage}; ${item.quality_reason}` : `Quality stage: ${qualityStage}.`,
     `Radar metadata: region=${item.region}; quality=${item.data_quality}; score=${item.score}; velocity=${velocityState}; risk=${item.risk_level || "unknown"}.`,
   ].filter(Boolean);
   return {
@@ -1555,7 +1564,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     item_type: "data_insight",
     body: bodyLines.join("\n"),
     source_url: item.url || undefined,
-    topics: uniqueList(["exposure-radar", item.region, item.topic_name, velocityState, item.opportunity_type, item.data_quality]),
+    topics: uniqueList(["exposure-radar", item.region, item.topic_name, velocityState, qualityStage, item.opportunity_type, item.data_quality]),
     growth_goal: "Use as OAF Bot memory for context-aware X replies and posts.",
     cta_preference: "Use only when relevant. Keep replies review-first and do not force product promotion.",
     priority: clampPriority(item.score),
@@ -1584,7 +1593,11 @@ function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates:
 function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>) {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const tier = normalizeOpportunityTier(item.opportunity_tier);
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
   let priority = item.score || 0;
+  if (qualityStage === "act_now") priority += 18;
+  if (qualityStage === "watch") priority += 3;
+  if (qualityStage === "expired") priority -= 35;
   if (item.generated_comment || item.review_task_id) priority += 22;
   if (item.data_quality === "tweet_level") priority += 10;
   if (tier === "hot_opportunity") priority += 10;
@@ -1605,6 +1618,7 @@ function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionStat
 }
 
 function dailyActionType(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>): DailyActionType {
+  if (normalizeQualityStage(item.quality_stage, item) === "expired" && !item.generated_comment && !item.review_task_id) return "inspect";
   if (item.generated_comment || item.review_task_id) return "publish_reply";
   if (item.risk_level === "medium" || item.risk_level === "high") return "review_fit";
   if (item.data_quality === "tweet_level") return "generate_reply";
@@ -1614,8 +1628,11 @@ function dailyActionType(item: ExposureRadarItemApi, state: ManualActionState | 
 
 function dailyActionReason(item: ExposureRadarItemApi, state?: ManualActionState): DailyActionReason {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
   if (item.generated_comment || item.review_task_id) return "generated";
+  if (qualityStage === "expired") return "expired";
   if (item.risk_level === "medium" || item.risk_level === "high") return "risk";
+  if (qualityStage === "act_now") return "quality";
   if ((item.ranking_delta || 0) > 0) return "learned";
   if (normalizeOpportunityTier(item.opportunity_tier) === "needs_sampling") return "score";
   if (velocityState === "burst" || velocityState === "rising" || velocityState === "new") return "velocity";
@@ -1657,9 +1674,16 @@ function actionPlanIcon(action: DailyActionType) {
 
 function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>, manualActionStates: Record<string, ManualActionState>) {
   const tier = normalizeOpportunityTier(item.opportunity_tier);
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
   switch (filter) {
     case "priority":
-      return tier === "hot_opportunity" || tier === "rising_opportunity";
+      return qualityStage === "act_now" || ((tier === "hot_opportunity" || tier === "rising_opportunity") && qualityStage !== "expired");
+    case "act_now":
+      return qualityStage === "act_now";
+    case "watch":
+      return qualityStage === "watch";
+    case "expired":
+      return qualityStage === "expired";
     case "tweet":
       return item.data_quality === "tweet_level";
     case "hot":
@@ -1730,6 +1754,28 @@ function normalizeOpportunityTier(value?: string) {
   if (value === "topic_lead") return "topic_lead";
   if (value === "needs_sampling" || value === "early_signal") return "needs_sampling";
   return "needs_sampling";
+}
+
+function normalizeQualityStage(value?: string, item?: ExposureRadarItemApi) {
+  if (value === "act_now" || value === "watch" || value === "expired") return value;
+  const tier = normalizeOpportunityTier(item?.opportunity_tier);
+  const velocityState = normalizeVelocityState(item?.velocity_state, item?.status);
+  if (item?.cooling || velocityState === "cooling") return "expired";
+  if (item?.risk_level === "medium" || item?.risk_level === "high") return "watch";
+  if (tier === "hot_opportunity" && (velocityState === "burst" || velocityState === "rising" || (item?.score || 0) >= 75)) return "act_now";
+  if (tier === "rising_opportunity" && (velocityState === "burst" || (item?.views_per_min || 0) >= 8 || (item?.score || 0) >= 85)) return "act_now";
+  return "watch";
+}
+
+function qualityStageClass(stage: string) {
+  switch (normalizeQualityStage(stage)) {
+    case "act_now":
+      return "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "expired":
+      return "border-[#64748b]/35 bg-[#64748b]/10 text-[#94a3b8]";
+    default:
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  }
 }
 
 function normalizeDataConfidence(value?: string, dataQuality?: string) {

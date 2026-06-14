@@ -40,6 +40,8 @@ export type ExposureRadarItemApi = {
   velocity_state?: "new" | "burst" | "rising" | "steady" | "cooling" | "unknown" | string;
   opportunity_tier?: "hot_opportunity" | "rising_opportunity" | "rising_signal" | "needs_sampling" | "topic_lead" | "early_signal" | string;
   tier_reason?: string;
+  quality_stage?: "act_now" | "watch" | "expired" | string;
+  quality_reason?: string;
   cooling?: boolean;
   velocity_history?: number[];
   score: number;
@@ -282,6 +284,8 @@ export type ExposureRadarBriefItemApi = {
   best_use: string;
   score: number;
   velocity_state?: string;
+  quality_stage?: string;
+  quality_reason?: string;
   risk_level: string;
   source_url?: string;
   guardrails?: string[];

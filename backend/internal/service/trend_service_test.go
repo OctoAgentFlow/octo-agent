@@ -235,6 +235,32 @@ func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
 	}
 }
 
+func TestExposureQualityStageClassifiesActionability(t *testing.T) {
+	thresholds := defaultExposureHotThresholds()
+	now := time.Date(2026, 6, 15, 1, 30, 0, 0, time.UTC)
+	publishedAt := now.Add(-45 * time.Minute)
+
+	stage, reason := exposureQualityStage("tweet_level", exposureHotOpportunityTier, "rising", "low", 12, 82, false, publishedAt, now, thresholds)
+	if stage != exposureQualityActNow {
+		t.Fatalf("hot rising signal stage = %s reason=%s, want %s", stage, reason, exposureQualityActNow)
+	}
+
+	stage, reason = exposureQualityStage("tweet_level", exposureHotOpportunityTier, "rising", "medium", 12, 82, false, publishedAt, now, thresholds)
+	if stage != exposureQualityWatch {
+		t.Fatalf("medium-risk signal stage = %s reason=%s, want %s", stage, reason, exposureQualityWatch)
+	}
+
+	stage, reason = exposureQualityStage("tweet_level", exposureHotOpportunityTier, "cooling", "low", 1, 78, true, now.Add(-10*time.Hour), now, thresholds)
+	if stage != exposureQualityExpired {
+		t.Fatalf("cooling signal stage = %s reason=%s, want %s", stage, reason, exposureQualityExpired)
+	}
+
+	stage, reason = exposureQualityStage("topic_level", exposureTopicLeadTier, "", "low", 0, 70, false, time.Time{}, now, thresholds)
+	if stage != exposureQualityWatch {
+		t.Fatalf("topic lead stage = %s reason=%s, want %s", stage, reason, exposureQualityWatch)
+	}
+}
+
 func TestExposureHotThresholdsNormalizeConfig(t *testing.T) {
 	svc := &TrendService{cfg: config.XTrendsConfig{
 		ExposureHotMinViews:    1800,

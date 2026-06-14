@@ -93,6 +93,8 @@ type ExposureRadarItem struct {
 	VelocityState    string   `json:"velocity_state,omitempty"`
 	OpportunityTier  string   `json:"opportunity_tier,omitempty"`
 	TierReason       string   `json:"tier_reason,omitempty"`
+	QualityStage     string   `json:"quality_stage,omitempty"`
+	QualityReason    string   `json:"quality_reason,omitempty"`
 	Cooling          bool     `json:"cooling,omitempty"`
 	VelocityHistory  []int64  `json:"velocity_history,omitempty"`
 	Score            int      `json:"score"`
@@ -222,6 +224,8 @@ type ExposureRadarBriefItem struct {
 	BestUse          string   `json:"best_use"`
 	Score            int      `json:"score"`
 	VelocityState    string   `json:"velocity_state,omitempty"`
+	QualityStage     string   `json:"quality_stage,omitempty"`
+	QualityReason    string   `json:"quality_reason,omitempty"`
 	RiskLevel        string   `json:"risk_level"`
 	SourceURL        string   `json:"source_url,omitempty"`
 	Guardrails       []string `json:"guardrails,omitempty"`

@@ -189,3 +189,32 @@ func TestExposureRadarOutcomeStatsPrefersTopicMatch(t *testing.T) {
 		t.Fatalf("topic match should not double count dimension matches: %#v", stat)
 	}
 }
+
+func TestExposureOpportunityTierRequiresRealImpressionsForHot(t *testing.T) {
+	tier, reason := exposureOpportunityTier("tweet_level", 5200, 0, 80, "burst", true)
+	if tier != exposureRisingSignalTier {
+		t.Fatalf("engagement-estimated heat should not be a hot opportunity: tier=%s reason=%s", tier, reason)
+	}
+
+	tier, reason = exposureOpportunityTier("tweet_level", 5200, 5200, 80, "burst", true)
+	if tier != exposureHotOpportunityTier {
+		t.Fatalf("real impressions with momentum should be hot: tier=%s reason=%s", tier, reason)
+	}
+}
+
+func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
+	tier, _ := exposureOpportunityTier("topic_level", 50000, 0, 0, "", false)
+	if tier != exposureTopicLeadTier {
+		t.Fatalf("topic-level signal tier = %s, want %s", tier, exposureTopicLeadTier)
+	}
+
+	tier, _ = exposureOpportunityTier("tweet_level", 12, 0, 0, "new", false)
+	if tier != exposureSamplingTier {
+		t.Fatalf("first tweet sample tier = %s, want %s", tier, exposureSamplingTier)
+	}
+
+	confidence, _ := exposureDataConfidence("tweet_level", 0, false)
+	if confidence != exposureConfidenceFirstSample {
+		t.Fatalf("first sample confidence = %s, want %s", confidence, exposureConfidenceFirstSample)
+	}
+}

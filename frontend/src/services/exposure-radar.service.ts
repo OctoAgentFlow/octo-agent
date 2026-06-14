@@ -13,6 +13,8 @@ export type ExposureRadarItemApi = {
   region: ExposureRadarRegion;
   data_source: string;
   data_quality: "tweet_level" | "topic_level" | string;
+  data_confidence?: "real_impressions" | "engagement_estimate" | "topic_level" | "first_sample" | string;
+  data_confidence_reason?: string;
   title: string;
   author_handle?: string;
   author_name?: string;
@@ -36,7 +38,7 @@ export type ExposureRadarItemApi = {
   hot_count?: number;
   age_label?: string;
   velocity_state?: "new" | "burst" | "rising" | "steady" | "cooling" | "unknown" | string;
-  opportunity_tier?: "hot_opportunity" | "rising_signal" | "early_signal" | string;
+  opportunity_tier?: "hot_opportunity" | "rising_opportunity" | "rising_signal" | "needs_sampling" | "topic_lead" | "early_signal" | string;
   tier_reason?: string;
   cooling?: boolean;
   velocity_history?: number[];

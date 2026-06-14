@@ -66,6 +66,8 @@ type ExposureRadarItem struct {
 	Region           string   `json:"region"`
 	DataSource       string   `json:"data_source"`
 	DataQuality      string   `json:"data_quality"`
+	DataConfidence   string   `json:"data_confidence,omitempty"`
+	ConfidenceReason string   `json:"data_confidence_reason,omitempty"`
 	Title            string   `json:"title"`
 	AuthorHandle     string   `json:"author_handle,omitempty"`
 	AuthorName       string   `json:"author_name,omitempty"`

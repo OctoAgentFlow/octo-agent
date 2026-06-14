@@ -64,12 +64,18 @@ type exposureRadarOutcomePerformance struct {
 
 const (
 	exposureHotOpportunityTier = "hot_opportunity"
-	exposureRisingSignalTier   = "rising_signal"
-	exposureEarlySignalTier    = "early_signal"
+	exposureRisingSignalTier   = "rising_opportunity"
+	exposureSamplingTier       = "needs_sampling"
+	exposureTopicLeadTier      = "topic_lead"
 	exposureHotMinViews        = int64(3000)
 	exposureHotMinVelocity     = 30.0
 	exposureRisingMinViews     = int64(100)
 	exposureRisingMinVelocity  = 5.0
+
+	exposureConfidenceRealImpressions = "real_impressions"
+	exposureConfidenceEngagement      = "engagement_estimate"
+	exposureConfidenceTopic           = "topic_level"
+	exposureConfidenceFirstSample     = "first_sample"
 )
 
 func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto.ExposureRadarQuery, now time.Time) (*dto.ExposureRadarResponse, error) {
@@ -621,24 +627,28 @@ func (s *TrendService) exposureRadarEnglish(query dto.ExposureRadarQuery, now ti
 		}
 		name := strings.TrimSpace(row.TrendName)
 		items = append(items, dto.ExposureRadarItem{
-			ID:              fmt.Sprintf("en-trend-%d", row.ID),
-			Region:          "en",
-			DataSource:      "X Trends cache",
-			DataQuality:     "topic_level",
-			Title:           name,
-			Content:         "Topic-level signal from X Trends. Use it to decide what to monitor, then inspect live posts before replying.",
-			URL:             "https://x.com/search?q=" + url.QueryEscape(name) + "&src=typed_query&f=live",
-			Status:          "rising",
-			SignalLabel:     "Topic trend",
-			TopicName:       name,
-			HeatCount:       row.TweetCount,
-			Score:           score,
-			RiskLevel:       risk,
-			OpportunityType: "monitor",
-			RecommendedUse:  "Open live search, find low-follower breakout posts, then route suitable replies into review.",
-			Reason:          "English radar is currently topic-level. It identifies where to look; tweet-level velocity should be confirmed before action.",
-			Guardrails:      exposureGuardrails(risk),
-			UpdatedAt:       row.FetchedAt.UTC().Format(time.RFC3339),
+			ID:               fmt.Sprintf("en-trend-%d", row.ID),
+			Region:           "en",
+			DataSource:       "X Trends cache",
+			DataQuality:      "topic_level",
+			DataConfidence:   exposureConfidenceTopic,
+			ConfidenceReason: "This is a topic-level X Trends signal, not a specific post. Open live search before writing.",
+			Title:            name,
+			Content:          "Topic-level signal from X Trends. Use it to decide what to monitor, then inspect live posts before replying.",
+			URL:              "https://x.com/search?q=" + url.QueryEscape(name) + "&src=typed_query&f=live",
+			Status:           "rising",
+			SignalLabel:      "Topic trend",
+			TopicName:        name,
+			HeatCount:        row.TweetCount,
+			Score:            score,
+			RiskLevel:        risk,
+			OpportunityTier:  exposureTopicLeadTier,
+			TierReason:       "topic-level trend lead; no tweet-level velocity is available yet",
+			OpportunityType:  "monitor",
+			RecommendedUse:   "Open live search, find low-follower breakout posts, then route suitable replies into review.",
+			Reason:           "English radar is currently topic-level. It identifies where to look; tweet-level velocity should be confirmed before action.",
+			Guardrails:       exposureGuardrails(risk),
+			UpdatedAt:        row.FetchedAt.UTC().Format(time.RFC3339),
 		})
 	}
 	updatedAt := now.Format(time.RFC3339)
@@ -1090,7 +1100,9 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	if containsSensitiveRadarText(row.Content) {
 		risk = "medium"
 	}
-	tier, tierReason := exposureOpportunityTier(row.CurrentStats.ViewCount, row.ViewsPerMin, tl1VelocityState(row.Status))
+	velocityState := tl1VelocityState(row.Status)
+	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.CurrentStats.ViewCount, true)
+	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentStats.ViewCount, row.CurrentStats.ViewCount, row.ViewsPerMin, velocityState, true)
 	url := ""
 	if row.TweetID != "" {
 		handle := strings.TrimPrefix(strings.TrimSpace(row.AuthorHandle), "@")
@@ -1101,40 +1113,42 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 		}
 	}
 	return dto.ExposureRadarItem{
-		ID:              "zh-tweet-" + row.TweetID,
-		Region:          "zh",
-		DataSource:      "External public trend feed",
-		DataQuality:     "tweet_level",
-		Title:           radarFirstNonEmpty(row.DisplayName, row.AuthorHandle),
-		AuthorHandle:    row.AuthorHandle,
-		AuthorName:      row.DisplayName,
-		TweetID:         row.TweetID,
-		Content:         row.Content,
-		URL:             url,
-		Status:          status,
-		SignalLabel:     radarFirstNonEmpty(row.Emoji+" "+row.Heat, status),
-		TopicName:       "",
-		ViewsPerMin:     row.ViewsPerMin,
-		HeatCount:       row.CurrentStats.ViewCount,
-		FollowersCount:  row.FollowersCount,
-		LikeCount:       row.CurrentStats.LikeCount,
-		ReplyCount:      row.CurrentStats.ReplyCount,
-		RetweetCount:    row.CurrentStats.RetweetCount,
-		ImpressionCount: row.CurrentStats.ViewCount,
-		HotCount:        row.HotCount,
-		AgeLabel:        row.TweetAge,
-		VelocityState:   tl1VelocityState(row.Status),
-		OpportunityTier: tier,
-		TierReason:      tierReason,
-		Cooling:         strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped"),
-		VelocityHistory: row.History,
-		Score:           score,
-		RiskLevel:       risk,
-		OpportunityType: "reply",
-		RecommendedUse:  "Inspect the live thread, write a context-aware reply, and avoid forced promotion.",
-		Reason:          "Low-follower or early-window posts with rising views can carry useful reply exposure when the reply is timely and relevant.",
-		Guardrails:      exposureGuardrails(risk),
-		UpdatedAt:       radarFirstNonEmpty(row.LastCheckTime, ""),
+		ID:               "zh-tweet-" + row.TweetID,
+		Region:           "zh",
+		DataSource:       "External public trend feed",
+		DataQuality:      "tweet_level",
+		DataConfidence:   dataConfidence,
+		ConfidenceReason: confidenceReason,
+		Title:            radarFirstNonEmpty(row.DisplayName, row.AuthorHandle),
+		AuthorHandle:     row.AuthorHandle,
+		AuthorName:       row.DisplayName,
+		TweetID:          row.TweetID,
+		Content:          row.Content,
+		URL:              url,
+		Status:           status,
+		SignalLabel:      radarFirstNonEmpty(row.Emoji+" "+row.Heat, status),
+		TopicName:        "",
+		ViewsPerMin:      row.ViewsPerMin,
+		HeatCount:        row.CurrentStats.ViewCount,
+		FollowersCount:   row.FollowersCount,
+		LikeCount:        row.CurrentStats.LikeCount,
+		ReplyCount:       row.CurrentStats.ReplyCount,
+		RetweetCount:     row.CurrentStats.RetweetCount,
+		ImpressionCount:  row.CurrentStats.ViewCount,
+		HotCount:         row.HotCount,
+		AgeLabel:         row.TweetAge,
+		VelocityState:    velocityState,
+		OpportunityTier:  tier,
+		TierReason:       tierReason,
+		Cooling:          strings.EqualFold(row.Status, "cooling") || strings.EqualFold(row.Status, "stopped"),
+		VelocityHistory:  row.History,
+		Score:            score,
+		RiskLevel:        risk,
+		OpportunityType:  "reply",
+		RecommendedUse:   "Inspect the live thread, write a context-aware reply, and avoid forced promotion.",
+		Reason:           "Low-follower or early-window posts with rising views can carry useful reply exposure when the reply is timely and relevant.",
+		Guardrails:       exposureGuardrails(risk),
+		UpdatedAt:        radarFirstNonEmpty(row.LastCheckTime, ""),
 	}
 }
 
@@ -1178,45 +1192,49 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 		status = "observed"
 	}
 	velocityState := exposureVelocityState(row)
-	tier, tierReason := exposureOpportunityTier(row.CurrentCount, row.ViewsPerMinute, velocityState)
+	hasPriorSample := row.PreviousCount > 0 || row.ViewsPerMinute > 0
+	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.ImpressionCount, hasPriorSample)
+	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentCount, row.ImpressionCount, row.ViewsPerMinute, velocityState, hasPriorSample)
 	return dto.ExposureRadarItem{
-		ID:              region + "-tweet-" + row.TweetID,
-		Region:          region,
-		DataSource:      dataSource,
-		DataQuality:     "tweet_level",
-		Title:           radarFirstNonEmpty(row.AuthorName, row.AuthorHandle, row.TopicName),
-		AuthorHandle:    row.AuthorHandle,
-		AuthorName:      row.AuthorName,
-		AuthorID:        row.AuthorID,
-		TweetID:         row.TweetID,
-		Content:         row.Content,
-		URL:             url,
-		Status:          status,
-		SignalLabel:     signalLabel,
-		TopicName:       row.TopicName,
-		PublishedAt:     row.PublishedAt.UTC().Format(time.RFC3339),
-		ViewsPerMin:     row.ViewsPerMinute,
-		HeatCount:       row.CurrentCount,
-		FollowersCount:  row.FollowersCount,
-		LikeCount:       row.LikeCount,
-		ReplyCount:      row.ReplyCount,
-		RetweetCount:    row.RetweetCount,
-		QuoteCount:      row.QuoteCount,
-		BookmarkCount:   row.BookmarkCount,
-		ImpressionCount: row.ImpressionCount,
-		AgeLabel:        ageLabel(row.PublishedAt, time.Now().UTC()),
-		VelocityState:   velocityState,
-		OpportunityTier: tier,
-		TierReason:      tierReason,
-		Cooling:         velocityState == "cooling",
-		VelocityHistory: exposureVelocityHistory(row),
-		Score:           score,
-		RiskLevel:       radarFirstNonEmpty(row.RiskLevel, "low"),
-		OpportunityType: "reply",
-		RecommendedUse:  "Inspect the live thread, check persona fit, then write or generate a contextual reply for review.",
-		Reason:          reason,
-		Guardrails:      exposureGuardrails(row.RiskLevel),
-		UpdatedAt:       row.LastSeenAt.UTC().Format(time.RFC3339),
+		ID:               region + "-tweet-" + row.TweetID,
+		Region:           region,
+		DataSource:       dataSource,
+		DataQuality:      "tweet_level",
+		DataConfidence:   dataConfidence,
+		ConfidenceReason: confidenceReason,
+		Title:            radarFirstNonEmpty(row.AuthorName, row.AuthorHandle, row.TopicName),
+		AuthorHandle:     row.AuthorHandle,
+		AuthorName:       row.AuthorName,
+		AuthorID:         row.AuthorID,
+		TweetID:          row.TweetID,
+		Content:          row.Content,
+		URL:              url,
+		Status:           status,
+		SignalLabel:      signalLabel,
+		TopicName:        row.TopicName,
+		PublishedAt:      row.PublishedAt.UTC().Format(time.RFC3339),
+		ViewsPerMin:      row.ViewsPerMinute,
+		HeatCount:        row.CurrentCount,
+		FollowersCount:   row.FollowersCount,
+		LikeCount:        row.LikeCount,
+		ReplyCount:       row.ReplyCount,
+		RetweetCount:     row.RetweetCount,
+		QuoteCount:       row.QuoteCount,
+		BookmarkCount:    row.BookmarkCount,
+		ImpressionCount:  row.ImpressionCount,
+		AgeLabel:         ageLabel(row.PublishedAt, time.Now().UTC()),
+		VelocityState:    velocityState,
+		OpportunityTier:  tier,
+		TierReason:       tierReason,
+		Cooling:          velocityState == "cooling",
+		VelocityHistory:  exposureVelocityHistory(row),
+		Score:            score,
+		RiskLevel:        radarFirstNonEmpty(row.RiskLevel, "low"),
+		OpportunityType:  "reply",
+		RecommendedUse:   "Inspect the live thread, check persona fit, then write or generate a contextual reply for review.",
+		Reason:           reason,
+		Guardrails:       exposureGuardrails(row.RiskLevel),
+		UpdatedAt:        row.LastSeenAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -1458,17 +1476,37 @@ func englishTweetHeat(tweet twitter.TweetSearchItem) int64 {
 	return tweet.LikeCount + tweet.ReplyCount*3 + tweet.RetweetCount*4 + tweet.QuoteCount*4
 }
 
-func exposureOpportunityTier(views int64, viewsPerMinute float64, velocityState string) (string, string) {
-	if views >= exposureHotMinViews && (viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst" || velocityState == "rising") {
-		return exposureHotOpportunityTier, fmt.Sprintf("views >= %s and momentum is active", compactCount(views))
+func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int64, viewsPerMinute float64, velocityState string, hasPriorSample bool) (string, string) {
+	if strings.TrimSpace(dataQuality) != "tweet_level" {
+		return exposureTopicLeadTier, "topic-level signal; inspect live posts before treating it as a reply opportunity"
 	}
-	if views >= exposureHotMinViews {
-		return exposureRisingSignalTier, fmt.Sprintf("views reached %s, but hot momentum is not confirmed yet", compactCount(views))
+	hasMomentum := viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst" || velocityState == "rising"
+	if impressionCount >= exposureHotMinViews && hasMomentum {
+		return exposureHotOpportunityTier, fmt.Sprintf("real impressions >= %s and momentum is active", compactCount(impressionCount))
 	}
-	if views >= exposureRisingMinViews || viewsPerMinute >= exposureRisingMinVelocity || velocityState == "burst" || velocityState == "rising" {
-		return exposureRisingSignalTier, fmt.Sprintf("views >= %s or momentum is emerging", compactCount(exposureRisingMinViews))
+	if impressionCount >= exposureHotMinViews {
+		return exposureRisingSignalTier, fmt.Sprintf("real impressions reached %s, but hot momentum is not confirmed yet", compactCount(impressionCount))
 	}
-	return exposureEarlySignalTier, fmt.Sprintf("below %s views; keep watching before treating it as a hot opportunity", compactCount(exposureHotMinViews))
+	if heatCount >= exposureRisingMinViews || viewsPerMinute >= exposureRisingMinVelocity || velocityState == "burst" || velocityState == "rising" {
+		return exposureRisingSignalTier, fmt.Sprintf("heat >= %s or momentum is emerging", compactCount(exposureRisingMinViews))
+	}
+	if !hasPriorSample || velocityState == "new" || velocityState == "unknown" {
+		return exposureSamplingTier, "first snapshot or missing velocity; wait for another sample before calling it hot"
+	}
+	return exposureSamplingTier, fmt.Sprintf("below %s real impressions; keep sampling before treating it as a hot post", compactCount(exposureHotMinViews))
+}
+
+func exposureDataConfidence(dataQuality string, impressionCount int64, hasPriorSample bool) (string, string) {
+	if strings.TrimSpace(dataQuality) != "tweet_level" {
+		return exposureConfidenceTopic, "Only topic-level trend data is available; no specific post metrics were sampled."
+	}
+	if !hasPriorSample {
+		return exposureConfidenceFirstSample, "This is the first snapshot, so velocity still needs another sample."
+	}
+	if impressionCount > 0 {
+		return exposureConfidenceRealImpressions, "Uses reported impression/view metrics from the sampled post."
+	}
+	return exposureConfidenceEngagement, "X did not provide impressions for this sample; heat is estimated from public engagement."
 }
 
 func (s *TrendService) englishExposureTopicLimit() int {

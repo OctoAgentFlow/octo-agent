@@ -19,7 +19,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
+type RadarViewFilter = "all" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
@@ -47,7 +47,7 @@ type ManualActionState = {
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
+const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
 const manualOutcomeOptions: ManualOutcome[] = ["effective", "neutral", "ineffective", "not_suitable"];
 const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "negative"; issueTags: string[] }> = {
   effective: { rating: "positive", issueTags: ["effective", "good"] },
@@ -210,7 +210,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs, manualActionStates)).length;
       return acc;
-    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
+    }, { all: 0, hot: 0, rising: 0, sampling: 0, topic: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
   }, [items, manualActionStates, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
@@ -1017,6 +1017,7 @@ function RadarCard({
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
+  const dataConfidence = normalizeDataConfidence(item.data_confidence, item.data_quality);
   const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
   const handledDone = isManualActionHandled(item, manualState);
   const [publishedURL, setPublishedURL] = useState(manualState?.publishedUrl || item.comment_url || "");
@@ -1065,6 +1066,10 @@ function RadarCard({
         </span>
         <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
           {item.data_quality === "tweet_level" ? t("exposureRadar.quality.tweet") : t("exposureRadar.quality.topic")}
+        </span>
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${dataConfidenceClass(dataConfidence)}`} title={item.data_confidence_reason || undefined}>
+          <Database className="size-3.5" />
+          {t(`exposureRadar.confidence.${dataConfidence}`)}
         </span>
         {item.ranking_delta ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${item.ranking_delta > 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"}`}>
@@ -1467,7 +1472,9 @@ function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionStat
   if (item.generated_comment || item.review_task_id) priority += 22;
   if (item.data_quality === "tweet_level") priority += 10;
   if (tier === "hot_opportunity") priority += 10;
-  if (tier === "rising_signal") priority += 6;
+  if (tier === "rising_opportunity") priority += 6;
+  if (tier === "needs_sampling") priority -= 8;
+  if (tier === "topic_lead") priority -= 6;
   if (velocityState === "burst") priority += 8;
   if (velocityState === "rising" || velocityState === "new") priority += 5;
   if ((item.views_per_min || 0) > 0) priority += Math.min(12, Math.round((item.views_per_min || 0) / 10));
@@ -1494,6 +1501,7 @@ function dailyActionReason(item: ExposureRadarItemApi, state?: ManualActionState
   if (item.generated_comment || item.review_task_id) return "generated";
   if (item.risk_level === "medium" || item.risk_level === "high") return "risk";
   if ((item.ranking_delta || 0) > 0) return "learned";
+  if (normalizeOpportunityTier(item.opportunity_tier) === "needs_sampling") return "score";
   if (velocityState === "burst" || velocityState === "rising" || velocityState === "new") return "velocity";
   if ((item.followers_count || 0) > 0 && (item.followers_count || 0) <= 10000) return "low_fans";
   if (item.data_quality !== "tweet_level") return "topic";
@@ -1538,9 +1546,11 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
     case "hot":
       return normalizeOpportunityTier(item.opportunity_tier) === "hot_opportunity";
     case "rising":
-      return normalizeOpportunityTier(item.opportunity_tier) === "rising_signal";
-    case "early":
-      return normalizeOpportunityTier(item.opportunity_tier) === "early_signal";
+      return normalizeOpportunityTier(item.opportunity_tier) === "rising_opportunity";
+    case "sampling":
+      return normalizeOpportunityTier(item.opportunity_tier) === "needs_sampling";
+    case "topic":
+      return normalizeOpportunityTier(item.opportunity_tier) === "topic_lead";
     case "high_score":
       return item.score >= 75;
     case "needs_review":
@@ -1596,8 +1606,16 @@ function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item
 }
 
 function normalizeOpportunityTier(value?: string) {
-  if (value === "hot_opportunity" || value === "rising_signal") return value;
-  return "early_signal";
+  if (value === "hot_opportunity") return "hot_opportunity";
+  if (value === "rising_opportunity" || value === "rising_signal") return "rising_opportunity";
+  if (value === "topic_lead") return "topic_lead";
+  if (value === "needs_sampling" || value === "early_signal") return "needs_sampling";
+  return "needs_sampling";
+}
+
+function normalizeDataConfidence(value?: string, dataQuality?: string) {
+  if (value === "real_impressions" || value === "engagement_estimate" || value === "topic_level" || value === "first_sample") return value;
+  return dataQuality === "topic_level" ? "topic_level" : "first_sample";
 }
 
 function hasEngagementMetrics(item: ExposureRadarItemApi) {
@@ -1797,7 +1815,15 @@ function velocityStateClass(state: string) {
 
 function opportunityTierClass(tier: string) {
   if (tier === "hot_opportunity") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-  if (tier === "rising_signal") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (tier === "rising_opportunity") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (tier === "topic_lead") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
+}
+
+function dataConfidenceClass(confidence: string) {
+  if (confidence === "real_impressions") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (confidence === "engagement_estimate") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  if (confidence === "topic_level") return "border-[#8b5cf6]/25 bg-[#8b5cf6]/10 text-[#c4b5fd]";
   return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
 }
 

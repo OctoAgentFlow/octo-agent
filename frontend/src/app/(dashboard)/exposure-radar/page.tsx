@@ -19,15 +19,23 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted";
+type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "handled";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
+type ManualActionState = {
+  copied?: boolean;
+  opened?: boolean;
+  saved?: boolean;
+  handled?: boolean;
+  updatedAt?: string;
+};
 
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted"];
+const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted", "handled"];
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
+const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
 
 export default function ExposureRadarPage() {
   const { t } = useT();
@@ -49,6 +57,8 @@ export default function ExposureRadarPage() {
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
+  const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
+  const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
@@ -72,6 +82,27 @@ export default function ExposureRadarPage() {
     params.set("min_hot_count", String(minHotCount));
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [hours, maxFans, minHotCount, region]);
+
+  useEffect(() => {
+    setManualActionStates(readManualActionStates());
+    setManualActionsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!manualActionsHydrated) return;
+    writeManualActionStates(manualActionStates);
+  }, [manualActionStates, manualActionsHydrated]);
+
+  const updateManualActionState = useCallback((itemID: string, patch: Partial<ManualActionState>) => {
+    setManualActionStates((current) => ({
+      ...current,
+      [itemID]: {
+        ...(current[itemID] || {}),
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+  }, []);
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -154,13 +185,13 @@ export default function ExposureRadarPage() {
   const leaderboardStats = useMemo(() => buildLeaderboardStats(items, rankChanges), [items, rankChanges]);
   const radarViewCounts = useMemo(() => {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
-      acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs)).length;
+      acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs, manualActionStates)).length;
       return acc;
-    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0 });
-  }, [items, savedMemoryIDs]);
+    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, handled: 0 });
+  }, [items, manualActionStates, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
-    return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs));
-  }, [items, radarView, savedMemoryIDs]);
+    return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
+  }, [items, manualActionStates, radarView, savedMemoryIDs]);
 
   const createDraft = useCallback(async (item: ExposureRadarItemApi) => {
     if (!selectedAccountID || !selectedBotID) {
@@ -224,13 +255,14 @@ export default function ExposureRadarPage() {
         items: current.items.map((row) => row.id === item.id ? { ...row, saved_memory_id: memory.id } : row),
       } : current);
       setSavedMemoryIDs((current) => new Set(current).add(item.id));
+      updateManualActionState(item.id, { saved: true });
       pushToast(t("exposureRadar.toast.memorySaved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
     } finally {
       setSavingMemoryID(null);
     }
-  }, [pushToast, selectedAccountID, selectedBotID, t]);
+  }, [pushToast, selectedAccountID, selectedBotID, t, updateManualActionState]);
 
   return (
     <div className="space-y-5">
@@ -360,6 +392,8 @@ export default function ExposureRadarPage() {
                 memoryDisabled={!selectedAccountID || !selectedBotID}
                 memoryAccountID={selectedAccountID}
                 onSaveMemory={saveRadarMemory}
+                manualState={manualActionStates[item.id]}
+                onManualAction={(patch) => updateManualActionState(item.id, patch)}
               />
             ))}
           </div>
@@ -731,6 +765,8 @@ function RadarCard({
   memoryAccountID,
   onCreateDraft,
   onSaveMemory,
+  manualState,
+  onManualAction,
 }: {
   item: ExposureRadarItemApi;
   rank: number;
@@ -744,6 +780,8 @@ function RadarCard({
   memoryAccountID: number;
   onCreateDraft: (item: ExposureRadarItemApi) => void;
   onSaveMemory: (item: ExposureRadarItemApi) => void;
+  manualState?: ManualActionState;
+  onManualAction: (patch: Partial<ManualActionState>) => void;
 }) {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -752,6 +790,8 @@ function RadarCard({
   const canDraft = item.data_quality === "tweet_level" && !draftDisabled;
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
+  const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
+  const handledDone = isManualActionHandled(item, manualState);
   const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
     ? "shadow-[0_0_0_1px_rgba(0,186,124,0.24),0_18px_46px_rgba(0,186,124,0.08)]"
@@ -762,10 +802,16 @@ function RadarCard({
     if (!generatedComment) return;
     try {
       await navigator.clipboard.writeText(generatedComment);
+      onManualAction({ copied: true });
       pushToast(t("exposureRadar.manualAction.copied"));
     } catch {
       pushToast(t("exposureRadar.manualAction.copyFailed"));
     }
+  };
+
+  const markHandled = () => {
+    onManualAction({ handled: true });
+    pushToast(t("exposureRadar.manualAction.handledToast"));
   };
 
   return (
@@ -806,6 +852,12 @@ function RadarCard({
           <span className="inline-flex items-center gap-1 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-xs font-semibold text-[#7ee0b5]">
             <BookmarkPlus className="size-3.5" />
             {t("exposureRadar.card.savedMemory")}
+          </span>
+        ) : null}
+        {handledDone ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-xs font-semibold text-[#7ee0b5]">
+            <CheckCircle2 className="size-3.5" />
+            {t("exposureRadar.manualAction.handledBadge")}
           </span>
         ) : null}
       </div>
@@ -852,6 +904,13 @@ function RadarCard({
           <p className="text-xs font-semibold text-[#8ecdf8]">{t("exposureRadar.card.generatedComment")}</p>
           <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#e7e9ea]">{generatedComment}</p>
           <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.card.manualPublishHint")}</p>
+          <ManualWorkflowPanel
+            copied={Boolean(manualState?.copied)}
+            opened={Boolean(manualState?.opened)}
+            saved={savedDone}
+            handled={handledDone}
+            onMarkHandled={markHandled}
+          />
         </div>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#71767b]">
@@ -867,7 +926,7 @@ function RadarCard({
                 {t("exposureRadar.manualAction.copy")}
               </Button>
               {item.url ? (
-                <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
+                <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
                   {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
                   <ExternalLink className="size-3.5" />
                 </a>
@@ -891,7 +950,7 @@ function RadarCard({
             </Button>
           )}
           {!generatedComment && item.url ? (
-            <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
+            <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
               {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
               <ExternalLink className="size-3.5" />
             </a>
@@ -899,6 +958,39 @@ function RadarCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function ManualWorkflowPanel({ copied, opened, saved, handled, onMarkHandled }: { copied: boolean; opened: boolean; saved: boolean; handled: boolean; onMarkHandled: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/30 p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualWorkflow.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.manualWorkflow.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant={handled ? "outline" : "default"} onClick={onMarkHandled}>
+          <CheckCircle2 className="size-3.5" />
+          {handled ? t("exposureRadar.manualAction.handled") : t("exposureRadar.manualAction.markHandled")}
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <ManualWorkflowStep done={copied} label={t("exposureRadar.manualWorkflow.copy")} />
+        <ManualWorkflowStep done={opened} label={t("exposureRadar.manualWorkflow.open")} />
+        <ManualWorkflowStep done={saved} label={t("exposureRadar.manualWorkflow.save")} />
+        <ManualWorkflowStep done={handled} label={t("exposureRadar.manualWorkflow.handle")} />
+      </div>
+    </div>
+  );
+}
+
+function ManualWorkflowStep({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold ${done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-[#0f1419] text-[#71767b]"}`}>
+      <CheckCircle2 className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate">{label}</span>
+    </div>
   );
 }
 
@@ -967,7 +1059,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
   };
 }
 
-function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>) {
+function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>, manualActionStates: Record<string, ManualActionState>) {
   switch (filter) {
     case "tweet":
       return item.data_quality === "tweet_level";
@@ -985,9 +1077,15 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
       return isRadarItemSaved(item, savedMemoryIDs);
     case "drafted":
       return Boolean(item.generated_comment || item.review_task_id);
+    case "handled":
+      return isManualActionHandled(item, manualActionStates[item.id]);
     default:
       return true;
   }
+}
+
+function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
+  return Boolean(state?.handled) || item.status === "handled" || item.review_status === "handled";
 }
 
 function normalizeOpportunityTier(value?: string) {
@@ -1081,6 +1179,31 @@ function writeStoredRadarRanks(key: string, ranks: Map<string, number>) {
     window.localStorage.setItem(key, JSON.stringify(Array.from(ranks.entries()).slice(0, 100)));
   } catch {
     // Local ranking memory is a UI hint only; ignore storage failures.
+  }
+}
+
+function readManualActionStates(): Record<string, ManualActionState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(radarManualActionStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, ManualActionState>;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([id, state]) => typeof id === "string" && state && typeof state === "object"));
+  } catch {
+    return {};
+  }
+}
+
+function writeManualActionStates(states: Record<string, ManualActionState>) {
+  if (typeof window === "undefined") return;
+  try {
+    const entries = Object.entries(states)
+      .sort(([, a], [, b]) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+      .slice(0, 200);
+    window.localStorage.setItem(radarManualActionStorageKey, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // Manual handling progress is a local UI aid only.
   }
 }
 

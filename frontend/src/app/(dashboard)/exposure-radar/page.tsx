@@ -19,7 +19,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "all" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
+type RadarViewFilter = "priority" | "all" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
@@ -47,7 +47,7 @@ type ManualActionState = {
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
+const radarViewFilters: RadarViewFilter[] = ["priority", "all", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
 const manualOutcomeOptions: ManualOutcome[] = ["effective", "neutral", "ineffective", "not_suitable"];
 const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "negative"; issueTags: string[] }> = {
   effective: { rating: "positive", issueTags: ["effective", "good"] },
@@ -78,7 +78,7 @@ export default function ExposureRadarPage() {
   const [handlingID, setHandlingID] = useState<string | null>(null);
   const [feedbackSavingID, setFeedbackSavingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
-  const [radarView, setRadarView] = useState<RadarViewFilter>("all");
+  const [radarView, setRadarView] = useState<RadarViewFilter>("priority");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
@@ -210,7 +210,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs, manualActionStates)).length;
       return acc;
-    }, { all: 0, hot: 0, rising: 0, sampling: 0, topic: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
+    }, { priority: 0, all: 0, hot: 0, rising: 0, sampling: 0, topic: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
   }, [items, manualActionStates, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
@@ -1018,6 +1018,11 @@ function RadarCard({
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
   const dataConfidence = normalizeDataConfidence(item.data_confidence, item.data_quality);
+  const cardToneClass = item.cooling || velocityState === "cooling"
+    ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85"
+    : opportunityTier === "needs_sampling" || opportunityTier === "topic_lead"
+      ? "border-[#2f3336] bg-[#070a0d] opacity-80"
+      : "border-[#2f3336] bg-black";
   const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
   const handledDone = isManualActionHandled(item, manualState);
   const [publishedURL, setPublishedURL] = useState(manualState?.publishedUrl || item.comment_url || "");
@@ -1039,7 +1044,7 @@ function RadarCard({
   };
 
   return (
-    <article id={radarCardAnchorID(item.id)} className={`scroll-mt-24 rounded-2xl border p-4 transition-shadow ${highlightClass} ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
+    <article id={radarCardAnchorID(item.id)} className={`scroll-mt-24 rounded-2xl border p-4 transition-shadow ${highlightClass} ${cardToneClass}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex h-7 min-w-8 items-center justify-center rounded-full border px-2 text-xs font-bold ${rankTone}`}>
           #{rank}
@@ -1540,17 +1545,20 @@ function actionPlanIcon(action: DailyActionType) {
 }
 
 function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>, manualActionStates: Record<string, ManualActionState>) {
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
   switch (filter) {
+    case "priority":
+      return tier === "hot_opportunity" || tier === "rising_opportunity";
     case "tweet":
       return item.data_quality === "tweet_level";
     case "hot":
-      return normalizeOpportunityTier(item.opportunity_tier) === "hot_opportunity";
+      return tier === "hot_opportunity";
     case "rising":
-      return normalizeOpportunityTier(item.opportunity_tier) === "rising_opportunity";
+      return tier === "rising_opportunity";
     case "sampling":
-      return normalizeOpportunityTier(item.opportunity_tier) === "needs_sampling";
+      return tier === "needs_sampling";
     case "topic":
-      return normalizeOpportunityTier(item.opportunity_tier) === "topic_lead";
+      return tier === "topic_lead";
     case "high_score":
       return item.score >= 75;
     case "needs_review":

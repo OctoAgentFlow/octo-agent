@@ -832,6 +832,7 @@ export const dict: I18nDict = {
   "exposureRadar.list.descriptionZh": "中文区优先展示 OAF 自有推文级机会；外部趋势数据只作为没有自有数据时的备用数据。",
   "exposureRadar.list.descriptionEn": "英文区优先展示 OAF 自有推文级机会；Recent Search 不可用时才回退到 X Trends 话题缓存。",
   "exposureRadar.list.filteredEmpty": "当前视图下暂无匹配信号。",
+  "exposureRadar.list.filter.priority": "优先机会",
   "exposureRadar.list.filter.all": "全部",
   "exposureRadar.list.filter.hot": "真实热帖",
   "exposureRadar.list.filter.rising": "上升机会",

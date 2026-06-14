@@ -863,6 +863,7 @@ export const dict: I18nDict = {
   "exposureRadar.list.descriptionZh": "Chinese-region cards prefer OAF-owned tweet-level opportunities, with external trend data retained only as a fallback.",
   "exposureRadar.list.descriptionEn": "English-region cards prefer OAF-owned tweet-level opportunities. If Recent Search is unavailable, the radar falls back to topic-level X Trends cache.",
   "exposureRadar.list.filteredEmpty": "No signals match this view yet.",
+  "exposureRadar.list.filter.priority": "Priority opportunities",
   "exposureRadar.list.filter.all": "All",
   "exposureRadar.list.filter.hot": "True hot posts",
   "exposureRadar.list.filter.rising": "Rising opportunities",

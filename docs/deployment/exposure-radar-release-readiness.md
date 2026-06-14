@@ -32,6 +32,10 @@ x_trends:
   exposure_search_results: 25
   exposure_max_fans: 10000
   exposure_min_heat: 3
+  exposure_hot_min_views: 1000
+  exposure_hot_min_velocity: 8
+  exposure_strong_hot_min_views: 3000
+  exposure_strong_hot_min_velocity: 30
   exposure_learning:
     ranking_enabled: true
     collector_enabled: true
@@ -49,6 +53,8 @@ Environment overrides are documented in [env.md](./env.md). If prod uses env ove
 - `x_trends.enabled=true` in the API service config.
 - `exposure_refresh_minutes` is not lower than planned API quota can support.
 - `exposure_topic_limit * exposure_search_results` is within the expected per-refresh X API budget.
+- `exposure_hot_min_views` / `exposure_hot_min_velocity` reflect the current real hot-post standard.
+- `exposure_strong_hot_min_views` / `exposure_strong_hot_min_velocity` are no lower than the normal hot thresholds.
 - `exposure_learning.ranking_enabled` is intentionally set.
 - `exposure_learning.collector_enabled` is intentionally set.
 - `exposure_learning.mode` is one of `hybrid`, `workspace`, or `scoped`.
@@ -115,6 +121,8 @@ Use the Performance panel to confirm:
 - Increase `exposure_refresh_minutes` if recent-search API usage is too high.
 - Lower `exposure_max_fans` to focus on smaller authors and less crowded reply sections.
 - Raise `exposure_min_heat` to reduce low-signal candidates.
+- Lower `exposure_hot_min_views` or `exposure_hot_min_velocity` only when real hot cards are consistently absent after a successful owned refresh.
+- Raise `exposure_strong_hot_min_views` or `exposure_strong_hot_min_velocity` when the UI needs a stricter top-hot distinction.
 - Disable `collector_enabled` if review-memory topics become too narrow or repeat too often.
 - Use `mode=scoped` when a Bot/account has enough history and should not inherit workspace-level preferences.
 - Use `mode=workspace` during cold start or when multiple Bots share similar audience/context.

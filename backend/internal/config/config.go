@@ -150,6 +150,10 @@ type XTrendsConfig struct {
 	ExposureSearchResults  int                    `yaml:"exposure_search_results"`
 	ExposureMaxFans        int64                  `yaml:"exposure_max_fans"`
 	ExposureMinHeat        int64                  `yaml:"exposure_min_heat"`
+	ExposureHotMinViews    int64                  `yaml:"exposure_hot_min_views"`
+	ExposureHotMinVelocity float64                `yaml:"exposure_hot_min_velocity"`
+	ExposureStrongHotViews int64                  `yaml:"exposure_strong_hot_min_views"`
+	ExposureStrongHotSpeed float64                `yaml:"exposure_strong_hot_min_velocity"`
 	ExposureZhSeedTopics   []string               `yaml:"exposure_zh_seed_topics"`
 	ExposureLearning       ExposureLearningConfig `yaml:"exposure_learning"`
 	Regions                []XTrendsRegionConfig  `yaml:"regions"`
@@ -640,6 +644,26 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 			cfg.ExposureMinHeat = n
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_HOT_MIN_VIEWS")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.ExposureHotMinViews = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_HOT_MIN_VELOCITY")); v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.ExposureHotMinVelocity = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_STRONG_HOT_MIN_VIEWS")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.ExposureStrongHotViews = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_STRONG_HOT_MIN_VELOCITY")); v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.ExposureStrongHotSpeed = n
+		}
+	}
 	if v := strings.TrimSpace(os.Getenv("X_TRENDS_EXPOSURE_ZH_SEED_TOPICS")); v != "" {
 		cfg.ExposureZhSeedTopics = splitCommaList(v)
 	}
@@ -685,6 +709,24 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 	}
 	if cfg.ExposureMinHeat <= 0 {
 		cfg.ExposureMinHeat = 10
+	}
+	if cfg.ExposureHotMinViews <= 0 {
+		cfg.ExposureHotMinViews = 1000
+	}
+	if cfg.ExposureHotMinVelocity <= 0 {
+		cfg.ExposureHotMinVelocity = 8
+	}
+	if cfg.ExposureStrongHotViews <= 0 {
+		cfg.ExposureStrongHotViews = 3000
+	}
+	if cfg.ExposureStrongHotSpeed <= 0 {
+		cfg.ExposureStrongHotSpeed = 30
+	}
+	if cfg.ExposureStrongHotViews < cfg.ExposureHotMinViews {
+		cfg.ExposureStrongHotViews = cfg.ExposureHotMinViews
+	}
+	if cfg.ExposureStrongHotSpeed < cfg.ExposureHotMinVelocity {
+		cfg.ExposureStrongHotSpeed = cfg.ExposureHotMinVelocity
 	}
 	if len(cfg.ExposureZhSeedTopics) == 0 {
 		cfg.ExposureZhSeedTopics = []string{"AI", "AI Agent", "Web3", "比特币", "以太坊", "加密货币", "空投", "链上", "出海", "创业", "SaaS", "增长"}

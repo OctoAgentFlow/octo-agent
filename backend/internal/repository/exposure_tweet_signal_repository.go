@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ type ExposureTweetSignalRepository struct{ DB *gorm.DB }
 type ExposureTweetSignalListQuery struct {
 	Region      string
 	MaxFans     int64
+	HotMinViews int64
 	MinVelocity float64
 	ActiveAfter time.Time
 	Limit       int
@@ -148,12 +150,16 @@ func (r *ExposureTweetSignalRepository) List(query ExposureTweetSignalListQuery)
 	if !query.ActiveAfter.IsZero() {
 		q = q.Where("published_at = ? OR published_at >= ? OR last_seen_at >= ?", time.Time{}, query.ActiveAfter, query.ActiveAfter)
 	}
+	hotMinViews := query.HotMinViews
+	if hotMinViews <= 0 {
+		hotMinViews = 1000
+	}
 	var rows []model.ExposureTweetSignal
-	err := q.Order("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= 1000 THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
+	err := q.Order(fmt.Sprintf("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= %d THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC", hotMinViews)).Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
-func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAfter time.Time, maxFans int64) (ExposureSignalDiagnosticStats, error) {
+func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAfter time.Time, maxFans int64, hotMinViews int64, hotMinVelocity float64) (ExposureSignalDiagnosticStats, error) {
 	stats := ExposureSignalDiagnosticStats{}
 	q := r.DB.Model(&model.ExposureTweetSignal{})
 	if strings.TrimSpace(region) != "" && strings.TrimSpace(region) != "all" {
@@ -165,6 +171,12 @@ func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAft
 	if maxFans <= 0 {
 		maxFans = 10000
 	}
+	if hotMinViews <= 0 {
+		hotMinViews = 1000
+	}
+	if hotMinVelocity <= 0 {
+		hotMinVelocity = 8
+	}
 	err := q.Select(`
 		COUNT(*) AS total_count,
 		COALESCE(SUM(CASE WHEN published_at = ? OR published_at >= ? OR last_seen_at >= ? THEN 1 ELSE 0 END), 0) AS in_window_count,
@@ -172,10 +184,10 @@ func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAft
 		COALESCE(SUM(CASE WHEN followers_count > ? THEN 1 ELSE 0 END), 0) AS over_fan_limit_count,
 		COALESCE(SUM(CASE WHEN impression_count > 0 THEN 1 ELSE 0 END), 0) AS real_impression_count,
 		COALESCE(SUM(CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 1 ELSE 0 END), 0) AS prior_sample_count,
-		COALESCE(SUM(CASE WHEN impression_count >= 1000 AND views_per_minute >= 8 THEN 1 ELSE 0 END), 0) AS hot_candidate_count,
-		COALESCE(SUM(CASE WHEN impression_count >= 1000 OR current_count >= 100 OR views_per_minute >= 5 THEN 1 ELSE 0 END), 0) AS rising_candidate_count,
+		COALESCE(SUM(CASE WHEN impression_count >= ? AND views_per_minute >= ? THEN 1 ELSE 0 END), 0) AS hot_candidate_count,
+		COALESCE(SUM(CASE WHEN impression_count >= ? OR current_count >= 100 OR views_per_minute >= 5 THEN 1 ELSE 0 END), 0) AS rising_candidate_count,
 		MAX(last_seen_at) AS latest_seen_at
-	`, time.Time{}, activeAfter, activeAfter, maxFans, maxFans).Scan(&stats).Error
+	`, time.Time{}, activeAfter, activeAfter, maxFans, maxFans, hotMinViews, hotMinVelocity, hotMinViews).Scan(&stats).Error
 	return stats, err
 }
 

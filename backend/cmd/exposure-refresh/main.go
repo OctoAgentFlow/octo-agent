@@ -47,6 +47,10 @@ type diagnosticSnapshot struct {
 	OwnedOverFanLimit      int64    `json:"owned_over_fan_limit"`
 	LatestOwnedSignalAt    string   `json:"latest_owned_signal_at,omitempty"`
 	FreshnessSeconds       int64    `json:"freshness_seconds"`
+	ConfiguredHotMinViews  int64    `json:"configured_hot_min_views"`
+	ConfiguredHotVelocity  float64  `json:"configured_hot_min_velocity"`
+	ConfiguredStrongViews  int64    `json:"configured_strong_hot_min_views"`
+	ConfiguredStrongSpeed  float64  `json:"configured_strong_hot_min_velocity"`
 	HotOpportunityCount    int      `json:"hot_opportunity_count"`
 	RisingOpportunityCount int      `json:"rising_opportunity_count"`
 	NeedsSamplingCount     int      `json:"needs_sampling_count"`
@@ -194,6 +198,10 @@ func summarizeDiagnostics(radar *dto.ExposureRadarResponse) diagnosticSnapshot {
 		OwnedOverFanLimit:      diag.OwnedOverFanLimit,
 		LatestOwnedSignalAt:    diag.LatestOwnedSignalAt,
 		FreshnessSeconds:       diag.FreshnessSeconds,
+		ConfiguredHotMinViews:  diag.ConfiguredHotMinViews,
+		ConfiguredHotVelocity:  diag.ConfiguredHotVelocity,
+		ConfiguredStrongViews:  diag.ConfiguredStrongViews,
+		ConfiguredStrongSpeed:  diag.ConfiguredStrongSpeed,
 		HotOpportunityCount:    diag.HotOpportunityCount,
 		RisingOpportunityCount: diag.RisingOpportunityCount,
 		NeedsSamplingCount:     diag.NeedsSamplingCount,

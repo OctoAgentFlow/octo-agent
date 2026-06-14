@@ -97,6 +97,10 @@ export type ExposureRadarDiagnosticsApi = {
   search_results: number;
   configured_max_fans: number;
   configured_min_heat: number;
+  configured_hot_min_views: number;
+  configured_hot_min_velocity: number;
+  configured_strong_hot_min_views: number;
+  configured_strong_hot_min_velocity: number;
   window_hours: number;
   requested_limit: number;
   returned_count: number;

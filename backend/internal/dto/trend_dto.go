@@ -142,6 +142,10 @@ type ExposureRadarDiagnostics struct {
 	SearchResults          int                            `json:"search_results"`
 	ConfiguredMaxFans      int64                          `json:"configured_max_fans"`
 	ConfiguredMinHeat      int                            `json:"configured_min_heat"`
+	ConfiguredHotMinViews  int64                          `json:"configured_hot_min_views"`
+	ConfiguredHotVelocity  float64                        `json:"configured_hot_min_velocity"`
+	ConfiguredStrongViews  int64                          `json:"configured_strong_hot_min_views"`
+	ConfiguredStrongSpeed  float64                        `json:"configured_strong_hot_min_velocity"`
 	WindowHours            int                            `json:"window_hours"`
 	RequestedLimit         int                            `json:"requested_limit"`
 	ReturnedCount          int                            `json:"returned_count"`

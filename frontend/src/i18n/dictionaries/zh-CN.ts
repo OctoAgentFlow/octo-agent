@@ -925,6 +925,8 @@ export const dict: I18nDict = {
   "exposureRadar.diagnostics.config.refresh": "刷新间隔：{minutes} 分钟",
   "exposureRadar.diagnostics.config.topics": "话题池：{count} 个",
   "exposureRadar.diagnostics.config.search": "每话题搜索：{count} 条 · 最小热度 {heat}",
+  "exposureRadar.diagnostics.config.hotThreshold": "热帖：{views}+ 浏览 · {speed}/min",
+  "exposureRadar.diagnostics.config.strongThreshold": "强热帖：{views}+ 浏览 · {speed}/min",
   "exposureRadar.diagnostics.issue.diagnostic_query_failed": "诊断统计读取失败，机会列表仍可按当前查询结果使用。",
   "exposureRadar.diagnostics.issue.x_trends_disabled": "X Trends / Recent Search 采集未启用，自有机会信号不会刷新。",
   "exposureRadar.diagnostics.issue.bearer_token_missing": "X Bearer Token 缺失，无法调用 Recent Search 采集推文级信号。",

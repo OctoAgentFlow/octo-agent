@@ -956,6 +956,8 @@ export const dict: I18nDict = {
   "exposureRadar.diagnostics.config.refresh": "Refresh interval: {minutes}m",
   "exposureRadar.diagnostics.config.topics": "Topic pool: {count}",
   "exposureRadar.diagnostics.config.search": "Search per topic: {count} · min heat {heat}",
+  "exposureRadar.diagnostics.config.hotThreshold": "Hot: {views}+ views · {speed}/min",
+  "exposureRadar.diagnostics.config.strongThreshold": "Strong hot: {views}+ views · {speed}/min",
   "exposureRadar.diagnostics.issue.diagnostic_query_failed": "Could not load diagnostic stats. The opportunity list still reflects the current query.",
   "exposureRadar.diagnostics.issue.x_trends_disabled": "X Trends / Recent Search collection is disabled, so owned opportunities will not refresh.",
   "exposureRadar.diagnostics.issue.bearer_token_missing": "X Bearer Token is missing, so tweet-level Recent Search collection cannot run.",

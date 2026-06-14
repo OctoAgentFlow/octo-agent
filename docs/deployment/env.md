@@ -116,6 +116,10 @@ x_trends:
   exposure_search_results: 25
   exposure_max_fans: 10000
   exposure_min_heat: 3
+  exposure_hot_min_views: 1000
+  exposure_hot_min_velocity: 8
+  exposure_strong_hot_min_views: 3000
+  exposure_strong_hot_min_velocity: 30
   exposure_learning:
     ranking_enabled: true
     collector_enabled: true
@@ -145,13 +149,17 @@ Environment overrides:
 - `X_TRENDS_EXPOSURE_SEARCH_RESULTS`
 - `X_TRENDS_EXPOSURE_MAX_FANS`
 - `X_TRENDS_EXPOSURE_MIN_HEAT`
+- `X_TRENDS_EXPOSURE_HOT_MIN_VIEWS`
+- `X_TRENDS_EXPOSURE_HOT_MIN_VELOCITY`
+- `X_TRENDS_EXPOSURE_STRONG_HOT_MIN_VIEWS`
+- `X_TRENDS_EXPOSURE_STRONG_HOT_MIN_VELOCITY`
 - `X_TRENDS_EXPOSURE_ZH_SEED_TOPICS` comma-separated Chinese collector seed topics
 - `X_TRENDS_EXPOSURE_LEARNING_RANKING_ENABLED`
 - `X_TRENDS_EXPOSURE_LEARNING_COLLECTOR_ENABLED`
 - `X_TRENDS_EXPOSURE_LEARNING_MODE` (`hybrid`, `workspace`, or `scoped`)
 - `X_TRENDS_EXPOSURE_LEARNING_WINDOW_DAYS`
 
-Both owned collectors prefer low-follower authors, skip sensitive or stale posts, and store only posts above the minimum public heat threshold. English uses configured trend regions. Chinese uses Chinese seed topics and any cached trend topics that already look Chinese. If the bearer token is missing, disabled, or does not have recent search access, English Exposure Radar falls back to topic-level X Trends cache and Chinese Exposure Radar falls back to TL1 public data.
+Both owned collectors prefer low-follower authors, skip sensitive or stale posts, and store only posts above the minimum public heat threshold. English uses configured trend regions. Chinese uses Chinese seed topics and any cached trend topics that already look Chinese. Hot-opportunity thresholds use real impression count plus sampled velocity, and can be tuned with `exposure_hot_min_*` / `exposure_strong_hot_min_*` when X search results are too sparse or too noisy. If the bearer token is missing, disabled, or does not have recent search access, English Exposure Radar falls back to topic-level X Trends cache and Chinese Exposure Radar falls back to TL1 public data.
 
 The `/api/v1/trends/exposure-radar` response includes source health metadata for the UI:
 

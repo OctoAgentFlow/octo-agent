@@ -67,10 +67,6 @@ const (
 	exposureRisingSignalTier   = "rising_opportunity"
 	exposureSamplingTier       = "needs_sampling"
 	exposureTopicLeadTier      = "topic_lead"
-	exposureHotMinViews        = int64(1000)
-	exposureHotMinVelocity     = 8.0
-	exposureStrongHotMinViews  = int64(3000)
-	exposureStrongHotVelocity  = 30.0
 	exposureRisingMinViews     = int64(100)
 	exposureRisingMinVelocity  = 5.0
 
@@ -79,6 +75,13 @@ const (
 	exposureConfidenceTopic           = "topic_level"
 	exposureConfidenceFirstSample     = "first_sample"
 )
+
+type exposureHotThresholds struct {
+	HotMinViews       int64
+	HotMinVelocity    float64
+	StrongMinViews    int64
+	StrongMinVelocity float64
+}
 
 func (s *TrendService) ExposureRadar(ctx context.Context, userID uint, query dto.ExposureRadarQuery, now time.Time) (*dto.ExposureRadarResponse, error) {
 	if now.IsZero() {
@@ -485,6 +488,7 @@ func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.Expos
 		rows, err := s.exposure.List(repository.ExposureTweetSignalListQuery{
 			Region:      "zh",
 			MaxFans:     query.MaxFans,
+			HotMinViews: s.exposureHotThresholds().HotMinViews,
 			ActiveAfter: now.Add(-time.Duration(query.Hours) * time.Hour),
 			Limit:       query.Limit,
 		})
@@ -494,7 +498,7 @@ func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.Expos
 		if len(rows) > 0 {
 			items := make([]dto.ExposureRadarItem, 0, len(rows))
 			for i := range rows {
-				items = append(items, exposureTweetSignalToRadarItem(&rows[i]))
+				items = append(items, s.exposureTweetSignalToRadarItem(&rows[i]))
 			}
 			lastCollectedAt := latestExposureSignalSeenAt(rows)
 			sourceStatus, freshnessSeconds := exposureSourceFreshness(lastCollectedAt, now, s.exposureRefreshInterval())
@@ -546,7 +550,7 @@ func (s *TrendService) exposureRadarChinese(ctx context.Context, query dto.Expos
 	}
 	items := make([]dto.ExposureRadarItem, 0, len(payload.Items))
 	for _, row := range payload.Items {
-		items = append(items, tl1PostToExposureItem(row))
+		items = append(items, s.tl1PostToExposureItem(row))
 	}
 	return &dto.ExposureRadarResponse{
 		Region:       "zh",
@@ -566,6 +570,7 @@ func (s *TrendService) exposureRadarEnglish(query dto.ExposureRadarQuery, now ti
 		rows, err := s.exposure.List(repository.ExposureTweetSignalListQuery{
 			Region:      "en",
 			MaxFans:     query.MaxFans,
+			HotMinViews: s.exposureHotThresholds().HotMinViews,
 			ActiveAfter: now.Add(-time.Duration(query.Hours) * time.Hour),
 			Limit:       query.Limit,
 		})
@@ -575,7 +580,7 @@ func (s *TrendService) exposureRadarEnglish(query dto.ExposureRadarQuery, now ti
 		if len(rows) > 0 {
 			items := make([]dto.ExposureRadarItem, 0, len(rows))
 			for i := range rows {
-				items = append(items, exposureTweetSignalToRadarItem(&rows[i]))
+				items = append(items, s.exposureTweetSignalToRadarItem(&rows[i]))
 			}
 			lastCollectedAt := latestExposureSignalSeenAt(rows)
 			sourceStatus, freshnessSeconds := exposureSourceFreshness(lastCollectedAt, now, s.exposureRefreshInterval())
@@ -893,6 +898,7 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 		maxFans = 10000
 	}
 	activeAfter := now.Add(-time.Duration(windowHours) * time.Hour)
+	thresholds := s.exposureHotThresholds()
 	diag := dto.ExposureRadarDiagnostics{
 		Status:                 "healthy",
 		Region:                 region,
@@ -905,6 +911,10 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 		SearchResults:          s.englishExposureSearchResults(),
 		ConfiguredMaxFans:      maxFans,
 		ConfiguredMinHeat:      int(s.englishExposureMinHeat()),
+		ConfiguredHotMinViews:  thresholds.HotMinViews,
+		ConfiguredHotVelocity:  thresholds.HotMinVelocity,
+		ConfiguredStrongViews:  thresholds.StrongMinViews,
+		ConfiguredStrongSpeed:  thresholds.StrongMinVelocity,
 		WindowHours:            windowHours,
 		RequestedLimit:         query.Limit,
 		ReturnedCount:          len(resp.Items),
@@ -943,7 +953,7 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 		}
 	}
 	if s != nil && s.exposure != nil {
-		stats, err := s.exposure.DiagnosticStats(region, activeAfter, maxFans)
+		stats, err := s.exposure.DiagnosticStats(region, activeAfter, maxFans, thresholds.HotMinViews, thresholds.HotMinVelocity)
 		if err != nil {
 			zap.L().Warn("exposure radar diagnostic stats failed", zap.String("region", region), zap.Error(err))
 			diag.Issues = append(diag.Issues, exposureDiagnosticIssue("diagnostic_query_failed", "warning", "Could not load stored collector diagnostics. The opportunity list still reflects the current query."))
@@ -1053,7 +1063,7 @@ func exposureRadarDiagnosticSuggestions(diag dto.ExposureRadarDiagnostics) []str
 		suggestions = append(suggestions, "Treat these cards as research leads until owned tweet-level signals become fresh.")
 	}
 	if hasIssue("no_true_hot") {
-		suggestions = append(suggestions, "Use Rising opportunities first; hot opportunities require at least 1K real impressions plus 8/min velocity. Strong hot remains 3K+ and 30/min.")
+		suggestions = append(suggestions, fmt.Sprintf("Use Rising opportunities first; hot opportunities require at least %s real impressions plus %.0f/min velocity. Strong hot remains %s+ and %.0f/min.", compactCount(diag.ConfiguredHotMinViews), diag.ConfiguredHotVelocity, compactCount(diag.ConfiguredStrongViews), diag.ConfiguredStrongSpeed))
 	}
 	if len(suggestions) == 0 {
 		suggestions = append(suggestions, "Collector health looks usable. Work from Priority opportunities first, then inspect Rising and Needs sampling cards.")
@@ -1156,7 +1166,7 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 			zap.L().Warn("exposure recent search failed", zap.String("region", region), zap.String("topic", name), zap.Error(err))
 			continue
 		}
-		selected := selectExposureTweetCandidates(tweets, now, s.exposureCandidateKeepLimit())
+		selected := selectExposureTweetCandidates(tweets, now, s.exposureCandidateKeepLimit(), s.exposureHotThresholds())
 		upserted := 0
 		for _, tweet := range selected {
 			row, ok := s.tweetSearchToExposureSignal(tweet, region, name, query, now)
@@ -1300,7 +1310,7 @@ func (s *TrendService) exposureReviewMemoryTopics(region string, now time.Time, 
 	return out
 }
 
-func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
+func (s *TrendService) tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	status := strings.TrimSpace(row.Status)
 	if status == "" {
 		status = strings.ToLower(strings.TrimSpace(row.Heat))
@@ -1322,7 +1332,7 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	}
 	velocityState := tl1VelocityState(row.Status)
 	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.CurrentStats.ViewCount, true)
-	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentStats.ViewCount, row.CurrentStats.ViewCount, row.ViewsPerMin, velocityState, true)
+	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentStats.ViewCount, row.CurrentStats.ViewCount, row.ViewsPerMin, velocityState, true, s.exposureHotThresholds())
 	url := ""
 	if row.TweetID != "" {
 		handle := strings.TrimPrefix(strings.TrimSpace(row.AuthorHandle), "@")
@@ -1372,7 +1382,7 @@ func tl1PostToExposureItem(row tl1PostItem) dto.ExposureRadarItem {
 	}
 }
 
-func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.ExposureRadarItem {
+func (s *TrendService) exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.ExposureRadarItem {
 	if row == nil {
 		return dto.ExposureRadarItem{}
 	}
@@ -1414,7 +1424,7 @@ func exposureTweetSignalToRadarItem(row *model.ExposureTweetSignal) dto.Exposure
 	velocityState := exposureVelocityState(row)
 	hasPriorSample := row.PreviousCount > 0 || row.ViewsPerMinute > 0
 	dataConfidence, confidenceReason := exposureDataConfidence("tweet_level", row.ImpressionCount, hasPriorSample)
-	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentCount, row.ImpressionCount, row.ViewsPerMinute, velocityState, hasPriorSample)
+	tier, tierReason := exposureOpportunityTier("tweet_level", row.CurrentCount, row.ImpressionCount, row.ViewsPerMinute, velocityState, hasPriorSample, s.exposureHotThresholds())
 	return dto.ExposureRadarItem{
 		ID:               region + "-tweet-" + row.TweetID,
 		Region:           region,
@@ -1696,7 +1706,7 @@ func englishTweetHeat(tweet twitter.TweetSearchItem) int64 {
 	return tweet.LikeCount + tweet.ReplyCount*3 + tweet.RetweetCount*4 + tweet.QuoteCount*4
 }
 
-func selectExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time, limit int) []twitter.TweetSearchItem {
+func selectExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time, limit int, thresholds exposureHotThresholds) []twitter.TweetSearchItem {
 	out := make([]twitter.TweetSearchItem, 0, len(tweets))
 	for _, tweet := range tweets {
 		if strings.TrimSpace(tweet.ID) == "" {
@@ -1704,7 +1714,7 @@ func selectExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Ti
 		}
 		out = append(out, tweet)
 	}
-	sortExposureTweetCandidates(out, now)
+	sortExposureTweetCandidates(out, now, thresholds)
 	seen := map[string]bool{}
 	deduped := out[:0]
 	for _, tweet := range out {
@@ -1722,10 +1732,11 @@ func selectExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Ti
 	return out
 }
 
-func sortExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time) {
+func sortExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time, thresholds exposureHotThresholds) {
+	thresholds = normalizeExposureHotThresholds(thresholds)
 	sort.SliceStable(tweets, func(i, j int) bool {
-		left := exposureTweetCandidateScore(tweets[i], now)
-		right := exposureTweetCandidateScore(tweets[j], now)
+		left := exposureTweetCandidateScore(tweets[i], now, thresholds)
+		right := exposureTweetCandidateScore(tweets[j], now, thresholds)
 		if left != right {
 			return left > right
 		}
@@ -1736,15 +1747,16 @@ func sortExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time
 	})
 }
 
-func exposureTweetCandidateScore(tweet twitter.TweetSearchItem, now time.Time) int64 {
+func exposureTweetCandidateScore(tweet twitter.TweetSearchItem, now time.Time, thresholds exposureHotThresholds) int64 {
+	thresholds = normalizeExposureHotThresholds(thresholds)
 	heat := englishTweetHeat(tweet)
 	score := heat * 10
 	if tweet.ImpressionCount > 0 {
 		score += 120000 + tweet.ImpressionCount*12
 	}
-	if tweet.ImpressionCount >= exposureStrongHotMinViews {
+	if tweet.ImpressionCount >= thresholds.StrongMinViews {
 		score += 180000
-	} else if tweet.ImpressionCount >= exposureHotMinViews {
+	} else if tweet.ImpressionCount >= thresholds.HotMinViews {
 		score += 90000
 	}
 	if tweet.FollowersCount > 0 && tweet.FollowersCount <= 10000 {
@@ -1769,18 +1781,19 @@ func exposureTweetCandidateScore(tweet twitter.TweetSearchItem, now time.Time) i
 	return score
 }
 
-func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int64, viewsPerMinute float64, velocityState string, hasPriorSample bool) (string, string) {
+func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int64, viewsPerMinute float64, velocityState string, hasPriorSample bool, thresholds exposureHotThresholds) (string, string) {
+	thresholds = normalizeExposureHotThresholds(thresholds)
 	if strings.TrimSpace(dataQuality) != "tweet_level" {
 		return exposureTopicLeadTier, "topic-level signal; inspect live posts before treating it as a reply opportunity"
 	}
-	hasMomentum := viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst"
-	if impressionCount >= exposureHotMinViews && hasMomentum {
-		if exposureStrongHot(impressionCount, viewsPerMinute) {
-			return exposureHotOpportunityTier, fmt.Sprintf("strong hot: real impressions >= %s and velocity >= %.0f/min", compactCount(exposureStrongHotMinViews), exposureStrongHotVelocity)
+	hasMomentum := viewsPerMinute >= thresholds.HotMinVelocity || velocityState == "burst"
+	if impressionCount >= thresholds.HotMinViews && hasMomentum {
+		if exposureStrongHot(impressionCount, viewsPerMinute, thresholds) {
+			return exposureHotOpportunityTier, fmt.Sprintf("strong hot: real impressions >= %s and velocity >= %.0f/min", compactCount(thresholds.StrongMinViews), thresholds.StrongMinVelocity)
 		}
-		return exposureHotOpportunityTier, fmt.Sprintf("hot opportunity: real impressions >= %s and velocity >= %.0f/min", compactCount(exposureHotMinViews), exposureHotMinVelocity)
+		return exposureHotOpportunityTier, fmt.Sprintf("hot opportunity: real impressions >= %s and velocity >= %.0f/min", compactCount(thresholds.HotMinViews), thresholds.HotMinVelocity)
 	}
-	if impressionCount >= exposureHotMinViews {
+	if impressionCount >= thresholds.HotMinViews {
 		return exposureRisingSignalTier, fmt.Sprintf("real impressions reached %s, but hot-opportunity momentum is not confirmed yet", compactCount(impressionCount))
 	}
 	if heatCount >= exposureRisingMinViews || viewsPerMinute >= exposureRisingMinVelocity || velocityState == "burst" || velocityState == "rising" {
@@ -1789,11 +1802,12 @@ func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int6
 	if !hasPriorSample || velocityState == "new" || velocityState == "unknown" {
 		return exposureSamplingTier, "first snapshot or missing velocity; wait for another sample before calling it hot"
 	}
-	return exposureSamplingTier, fmt.Sprintf("below %s real impressions; keep sampling before treating it as a hot post", compactCount(exposureHotMinViews))
+	return exposureSamplingTier, fmt.Sprintf("below %s real impressions; keep sampling before treating it as a hot post", compactCount(thresholds.HotMinViews))
 }
 
-func exposureStrongHot(impressionCount int64, viewsPerMinute float64) bool {
-	return impressionCount >= exposureStrongHotMinViews && viewsPerMinute >= exposureStrongHotVelocity
+func exposureStrongHot(impressionCount int64, viewsPerMinute float64, thresholds exposureHotThresholds) bool {
+	thresholds = normalizeExposureHotThresholds(thresholds)
+	return impressionCount >= thresholds.StrongMinViews && viewsPerMinute >= thresholds.StrongMinVelocity
 }
 
 func exposureDataConfidence(dataQuality string, impressionCount int64, hasPriorSample bool) (string, string) {
@@ -1856,6 +1870,50 @@ func (s *TrendService) englishExposureMinHeat() int64 {
 		return 3
 	}
 	return s.cfg.ExposureMinHeat
+}
+
+func (s *TrendService) exposureHotThresholds() exposureHotThresholds {
+	if s == nil {
+		return defaultExposureHotThresholds()
+	}
+	return normalizeExposureHotThresholds(exposureHotThresholds{
+		HotMinViews:       s.cfg.ExposureHotMinViews,
+		HotMinVelocity:    s.cfg.ExposureHotMinVelocity,
+		StrongMinViews:    s.cfg.ExposureStrongHotViews,
+		StrongMinVelocity: s.cfg.ExposureStrongHotSpeed,
+	})
+}
+
+func defaultExposureHotThresholds() exposureHotThresholds {
+	return exposureHotThresholds{
+		HotMinViews:       1000,
+		HotMinVelocity:    8,
+		StrongMinViews:    3000,
+		StrongMinVelocity: 30,
+	}
+}
+
+func normalizeExposureHotThresholds(value exposureHotThresholds) exposureHotThresholds {
+	defaults := defaultExposureHotThresholds()
+	if value.HotMinViews <= 0 {
+		value.HotMinViews = defaults.HotMinViews
+	}
+	if value.HotMinVelocity <= 0 {
+		value.HotMinVelocity = defaults.HotMinVelocity
+	}
+	if value.StrongMinViews <= 0 {
+		value.StrongMinViews = defaults.StrongMinViews
+	}
+	if value.StrongMinVelocity <= 0 {
+		value.StrongMinVelocity = defaults.StrongMinVelocity
+	}
+	if value.StrongMinViews < value.HotMinViews {
+		value.StrongMinViews = value.HotMinViews
+	}
+	if value.StrongMinVelocity < value.HotMinVelocity {
+		value.StrongMinVelocity = value.HotMinVelocity
+	}
+	return value
 }
 
 func (s *TrendService) exposureLearningRankingEnabled() bool {

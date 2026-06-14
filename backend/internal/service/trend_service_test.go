@@ -192,22 +192,23 @@ func TestExposureRadarOutcomeStatsPrefersTopicMatch(t *testing.T) {
 }
 
 func TestExposureOpportunityTierRequiresRealImpressionsForHot(t *testing.T) {
-	tier, reason := exposureOpportunityTier("tweet_level", 5200, 0, 80, "burst", true)
+	thresholds := defaultExposureHotThresholds()
+	tier, reason := exposureOpportunityTier("tweet_level", 5200, 0, 80, "burst", true, thresholds)
 	if tier != exposureRisingSignalTier {
 		t.Fatalf("engagement-estimated heat should not be a hot opportunity: tier=%s reason=%s", tier, reason)
 	}
 
-	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 8.4, "steady", true)
+	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 8.4, "steady", true, thresholds)
 	if tier != exposureHotOpportunityTier {
 		t.Fatalf("1K+ real impressions with 8/min velocity should be a hot opportunity: tier=%s reason=%s", tier, reason)
 	}
 
-	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 5.1, "rising", true)
+	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 5.1, "rising", true, thresholds)
 	if tier != exposureRisingSignalTier {
 		t.Fatalf("1K+ real impressions without 8/min velocity should stay rising: tier=%s reason=%s", tier, reason)
 	}
 
-	tier, reason = exposureOpportunityTier("tweet_level", 5200, 5200, 80, "burst", true)
+	tier, reason = exposureOpportunityTier("tweet_level", 5200, 5200, 80, "burst", true, thresholds)
 	if tier != exposureHotOpportunityTier {
 		t.Fatalf("real impressions with momentum should be hot: tier=%s reason=%s", tier, reason)
 	}
@@ -217,12 +218,13 @@ func TestExposureOpportunityTierRequiresRealImpressionsForHot(t *testing.T) {
 }
 
 func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
-	tier, _ := exposureOpportunityTier("topic_level", 50000, 0, 0, "", false)
+	thresholds := defaultExposureHotThresholds()
+	tier, _ := exposureOpportunityTier("topic_level", 50000, 0, 0, "", false, thresholds)
 	if tier != exposureTopicLeadTier {
 		t.Fatalf("topic-level signal tier = %s, want %s", tier, exposureTopicLeadTier)
 	}
 
-	tier, _ = exposureOpportunityTier("tweet_level", 12, 0, 0, "new", false)
+	tier, _ = exposureOpportunityTier("tweet_level", 12, 0, 0, "new", false, thresholds)
 	if tier != exposureSamplingTier {
 		t.Fatalf("first tweet sample tier = %s, want %s", tier, exposureSamplingTier)
 	}
@@ -230,6 +232,22 @@ func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
 	confidence, _ := exposureDataConfidence("tweet_level", 0, false)
 	if confidence != exposureConfidenceFirstSample {
 		t.Fatalf("first sample confidence = %s, want %s", confidence, exposureConfidenceFirstSample)
+	}
+}
+
+func TestExposureHotThresholdsNormalizeConfig(t *testing.T) {
+	svc := &TrendService{cfg: config.XTrendsConfig{
+		ExposureHotMinViews:    1800,
+		ExposureHotMinVelocity: 9.5,
+		ExposureStrongHotViews: 1200,
+		ExposureStrongHotSpeed: 3,
+	}}
+	got := svc.exposureHotThresholds()
+	if got.HotMinViews != 1800 || got.HotMinVelocity != 9.5 {
+		t.Fatalf("hot thresholds not applied: %#v", got)
+	}
+	if got.StrongMinViews != 1800 || got.StrongMinVelocity != 9.5 {
+		t.Fatalf("strong thresholds should clamp above hot thresholds: %#v", got)
 	}
 }
 
@@ -273,7 +291,7 @@ func TestSelectExposureTweetCandidatesPrioritizesRealImpressions(t *testing.T) {
 		{ID: "engagement", CreatedAt: now.Add(-30 * time.Minute), LikeCount: 30, ReplyCount: 4, RetweetCount: 2, FollowersCount: 700},
 	}
 
-	selected := selectExposureTweetCandidates(tweets, now, 2)
+	selected := selectExposureTweetCandidates(tweets, now, 2, defaultExposureHotThresholds())
 	if len(selected) != 2 {
 		t.Fatalf("selected %d candidates, want 2", len(selected))
 	}
@@ -302,7 +320,7 @@ func TestSelectExposureTweetCandidatesDedupesBeforeLimit(t *testing.T) {
 		{ID: "other", CreatedAt: now.Add(-20 * time.Minute), ImpressionCount: 5000},
 	}
 
-	selected := selectExposureTweetCandidates(tweets, now, 10)
+	selected := selectExposureTweetCandidates(tweets, now, 10, defaultExposureHotThresholds())
 	if len(selected) != 2 {
 		t.Fatalf("selected %d candidates after dedupe, want 2", len(selected))
 	}

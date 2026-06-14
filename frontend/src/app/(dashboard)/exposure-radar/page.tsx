@@ -18,6 +18,7 @@ import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
+type MaybePromise<T> = T | Promise<T>;
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
 type RadarViewFilter = "priority" | "all" | "act_now" | "watch" | "expired" | "hot" | "rising" | "sampling" | "topic" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
@@ -82,6 +83,7 @@ export default function ExposureRadarPage() {
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
+  const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
@@ -215,7 +217,18 @@ export default function ExposureRadarPage() {
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
   }, [items, manualActionStates, radarView, savedMemoryIDs]);
-  const dailyActionPlan = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs), [items, manualActionStates, savedMemoryIDs]);
+  const handlingQueue = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs, 12), [items, manualActionStates, savedMemoryIDs]);
+  const workbenchStats = useMemo(() => buildWorkbenchStats(items, manualActionStates), [items, manualActionStates]);
+
+  useEffect(() => {
+    if (handlingQueue.length === 0) {
+      setActiveWorkbenchID("");
+      return;
+    }
+    if (!activeWorkbenchID || !handlingQueue.some((entry) => entry.item.id === activeWorkbenchID)) {
+      setActiveWorkbenchID(handlingQueue[0].item.id);
+    }
+  }, [activeWorkbenchID, handlingQueue]);
 
   const createDraft = useCallback(async (item: ExposureRadarItemApi) => {
     if (!selectedAccountID || !selectedBotID) {
@@ -347,6 +360,14 @@ export default function ExposureRadarPage() {
     }
   }, [pushToast, t, updateManualActionState]);
 
+  const focusRadarItem = useCallback((itemID: string) => {
+    setRadarView("all");
+    if (typeof window === "undefined") return;
+    window.setTimeout(() => {
+      document.getElementById(radarCardAnchorID(itemID))?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, []);
+
   return (
     <div className="space-y-5">
       <section className="overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419]">
@@ -437,15 +458,21 @@ export default function ExposureRadarPage() {
         </div>
       </Card>
 
-      <DailyActionPlanPanel
-        plan={dailyActionPlan}
+      <HandlingWorkbenchPanel
+        queue={handlingQueue}
+        activeID={activeWorkbenchID}
+        stats={workbenchStats}
         draftingID={draftingID}
         draftDisabled={!selectedAccountID || !selectedBotID}
+        handlingID={handlingID}
         savingMemoryID={savingMemoryID}
         memoryDisabled={!selectedAccountID || !selectedBotID}
         onCreateDraft={createDraft}
+        onMarkHandled={markRadarHandled}
         onSaveMemory={saveRadarMemory}
         onManualAction={(itemID, patch) => updateManualActionState(itemID, patch)}
+        onActiveChange={setActiveWorkbenchID}
+        onFocusItem={focusRadarItem}
         savedMemoryIDs={savedMemoryIDs}
       />
 
@@ -546,111 +573,177 @@ function NumberButtons({ label, values, value, suffix, formatter, onChange, disa
   );
 }
 
-function DailyActionPlanPanel({
-  plan,
+function HandlingWorkbenchPanel({
+  queue,
+  activeID,
+  stats,
   draftingID,
   draftDisabled,
+  handlingID,
   savingMemoryID,
   memoryDisabled,
   savedMemoryIDs,
   onCreateDraft,
+  onMarkHandled,
   onSaveMemory,
   onManualAction,
+  onActiveChange,
+  onFocusItem,
 }: {
-  plan: DailyActionPlanItem[];
+  queue: DailyActionPlanItem[];
+  activeID: string;
+  stats: { pending: number; actNow: number; handled: number };
   draftingID: string | null;
   draftDisabled: boolean;
+  handlingID: string | null;
   savingMemoryID: string | null;
   memoryDisabled: boolean;
   savedMemoryIDs: Set<string>;
   onCreateDraft: (item: ExposureRadarItemApi) => void;
+  onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
   onSaveMemory: (item: ExposureRadarItemApi) => void;
   onManualAction: (itemID: string, patch: Partial<ManualActionState>) => void;
+  onActiveChange: (itemID: string) => void;
+  onFocusItem: (itemID: string) => void;
 }) {
   const { t } = useT();
-  const counts = useMemo(() => {
-    return plan.reduce<Record<DailyActionType, number>>((acc, row) => {
-      acc[row.action] += 1;
-      return acc;
-    }, { publish_reply: 0, generate_reply: 0, save_memory: 0, inspect: 0, review_fit: 0 });
-  }, [plan]);
+  const { pushToast } = useToast();
+  const activeIndex = Math.max(0, queue.findIndex((entry) => entry.item.id === activeID));
+  const activeEntry = queue[activeIndex] || queue[0];
+  const activeItem = activeEntry?.item;
+  const nextEntry = queue[activeIndex + 1] || queue.find((entry) => entry.item.id !== activeItem?.id);
+  const previousEntry = activeIndex > 0 ? queue[activeIndex - 1] : undefined;
+  const copyWorkbenchReply = async () => {
+    if (!activeItem?.generated_comment) return;
+    try {
+      await navigator.clipboard.writeText(activeItem.generated_comment);
+      onManualAction(activeItem.id, { copied: true });
+      pushToast(t("exposureRadar.manualAction.copied"));
+    } catch {
+      pushToast(t("exposureRadar.manualAction.copyFailed"));
+    }
+  };
+  const completeCurrentAndMoveNext = async () => {
+    if (!activeItem) return;
+    const nextID = nextEntry?.item.id || previousEntry?.item.id || "";
+    await Promise.resolve(onMarkHandled(activeItem, ""));
+    if (nextID) onActiveChange(nextID);
+  };
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <CardHeader title={t("exposureRadar.actionPlan.title")} description={t("exposureRadar.actionPlan.description")} className="mb-0" />
+        <CardHeader title={t("exposureRadar.workbench.title")} description={t("exposureRadar.workbench.description")} className="mb-0" />
         <div className="flex flex-wrap gap-2">
-          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.reply")} value={counts.publish_reply + counts.generate_reply} />
-          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.save")} value={counts.save_memory} />
-          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.inspect")} value={counts.inspect + counts.review_fit} />
+          <ActionPlanMetric label={t("exposureRadar.workbench.metric.queue")} value={stats.pending} />
+          <ActionPlanMetric label={t("exposureRadar.workbench.metric.actNow")} value={stats.actNow} />
+          <ActionPlanMetric label={t("exposureRadar.workbench.metric.handled")} value={stats.handled} />
         </div>
       </div>
-      {plan.length === 0 ? (
+      {queue.length === 0 || !activeItem ? (
         <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
-          {t("exposureRadar.actionPlan.empty")}
+          {t("exposureRadar.workbench.empty")}
         </div>
       ) : (
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {plan.map((entry, index) => {
-            const item = entry.item;
-            const savedMemoryID = radarItemSavedMemoryID(item, savedMemoryIDs);
-            const canGenerate = item.data_quality === "tweet_level" && !draftDisabled;
-            const canSave = !savedMemoryID && !memoryDisabled;
-            const primaryIsOpen = entry.action === "publish_reply" || entry.action === "inspect" || entry.action === "review_fit";
-            return (
-              <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 text-sm font-bold text-[#8ecdf8]">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${actionPlanTone(entry.action)}`}>
-                        {actionPlanIcon(entry.action)}
-                        {t(`exposureRadar.actionPlan.action.${entry.action}`)}
-                      </span>
-                      <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
-                        {item.score} {t("exposureRadar.card.score")}
-                      </span>
-                      {typeof item.views_per_min === "number" ? (
-                        <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
-                          {formatVelocityLabel(item.views_per_min, t("exposureRadar.card.velocitySampling"))}
-                        </span>
-                      ) : null}
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-2xl border border-[#1d9bf0]/20 bg-black p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+                {t("exposureRadar.workbench.focus", { current: activeIndex + 1, total: queue.length })}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${actionPlanTone(activeEntry.action)}`}>
+                {actionPlanIcon(activeEntry.action)}
+                {t(`exposureRadar.actionPlan.action.${activeEntry.action}`)}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${qualityStageClass(normalizeQualityStage(activeItem.quality_stage, activeItem))}`} title={activeItem.quality_reason || undefined}>
+                <Zap className="size-3.5" />
+                {t(`exposureRadar.qualityStage.${normalizeQualityStage(activeItem.quality_stage, activeItem)}`)}
+              </span>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
+                {activeItem.score} {t("exposureRadar.card.score")}
+              </span>
+            </div>
+            <h2 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{activeItem.title}</h2>
+            {activeItem.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{activeItem.author_handle}</p> : null}
+            <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{activeItem.content}</p>
+            <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.workbench.whyThis")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.actionPlan.reason.${activeEntry.reason}`)}</p>
+              {activeItem.quality_reason ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{activeItem.quality_reason}</p> : null}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {activeItem.generated_comment ? (
+                <Button type="button" size="sm" onClick={() => void copyWorkbenchReply()}>
+                  <Clipboard className="size-3.5" />
+                  {t("exposureRadar.workbench.copyReply")}
+                </Button>
+              ) : activeItem.data_quality === "tweet_level" ? (
+                <Button type="button" size="sm" disabled={draftDisabled || draftingID === activeItem.id} onClick={() => onCreateDraft(activeItem)}>
+                  {draftingID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <MessageSquarePlus className="size-3.5" />}
+                  {draftingID === activeItem.id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
+                </Button>
+              ) : null}
+              {activeItem.url ? (
+                <a href={activeItem.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(activeItem.id, { opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+                  {activeItem.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+              {!radarItemSavedMemoryID(activeItem, savedMemoryIDs) ? (
+                <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === activeItem.id} onClick={() => onSaveMemory(activeItem)}>
+                  {savingMemoryID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <BookmarkPlus className="size-3.5" />}
+                  {savingMemoryID === activeItem.id ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+                </Button>
+              ) : null}
+              <Button type="button" size="sm" variant="outline" onClick={() => onFocusItem(activeItem.id)}>
+                <Search className="size-3.5" />
+                {t("exposureRadar.workbench.viewCard")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled={handlingID === activeItem.id} onClick={() => void completeCurrentAndMoveNext()}>
+                {handlingID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                {t("exposureRadar.workbench.complete")}
+              </Button>
+            </div>
+            <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-[#2f3336] pt-3">
+              <Button type="button" size="sm" variant="outline" disabled={!previousEntry} onClick={() => previousEntry && onActiveChange(previousEntry.item.id)}>
+                {t("exposureRadar.workbench.previous")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled={!nextEntry} onClick={() => nextEntry && onActiveChange(nextEntry.item.id)}>
+                {t("exposureRadar.workbench.next")}
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-3">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.workbench.queue")}</p>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-[11px] font-semibold text-[#8b98a5]">{queue.length}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {queue.map((entry, index) => {
+                const item = entry.item;
+                const selected = item.id === activeItem.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onActiveChange(item.id)}
+                    className={`w-full rounded-xl border p-3 text-left transition ${selected ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419] hover:border-[#1d9bf0]/35"}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${selected ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/15 text-[#8ecdf8]" : "border-[#2f3336] bg-black text-[#8b98a5]"}`}>{index + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2 text-xs font-semibold leading-5 text-[#e7e9ea]">{item.title}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#71767b]">
+                          <span>{t(`exposureRadar.qualityStage.${normalizeQualityStage(item.quality_stage, item)}`)}</span>
+                          <span>{item.score} {t("exposureRadar.card.score")}</span>
+                          <span>{formatVelocityLabel(item.views_per_min, t("exposureRadar.card.velocitySampling"))}</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-[#e7e9ea]">{item.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.actionPlan.reason.${entry.reason}`)}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {entry.action === "generate_reply" ? (
-                        <Button type="button" size="sm" disabled={!canGenerate || draftingID === item.id} onClick={() => onCreateDraft(item)}>
-                          {draftingID === item.id ? <RefreshCw className="size-3.5 animate-spin" /> : <MessageSquarePlus className="size-3.5" />}
-                          {draftingID === item.id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
-                        </Button>
-                      ) : null}
-                      {entry.action === "save_memory" ? (
-                        <Button type="button" size="sm" disabled={!canSave || savingMemoryID === item.id} onClick={() => onSaveMemory(item)}>
-                          {savingMemoryID === item.id ? <RefreshCw className="size-3.5 animate-spin" /> : <BookmarkPlus className="size-3.5" />}
-                          {savingMemoryID === item.id ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
-                        </Button>
-                      ) : null}
-                      {primaryIsOpen && item.url ? (
-                        <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(item.id, { opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
-                          {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
-                          <ExternalLink className="size-3.5" />
-                        </a>
-                      ) : null}
-                      {entry.action !== "save_memory" && !savedMemoryID ? (
-                        <Button type="button" size="sm" variant="outline" disabled={!canSave || savingMemoryID === item.id} onClick={() => onSaveMemory(item)}>
-                          <BookmarkPlus className="size-3.5" />
-                          {t("exposureRadar.card.saveMemory")}
-                        </Button>
-                      ) : null}
-                      <a href={`#${radarCardAnchorID(item.id)}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-                        {t("exposureRadar.actionPlan.openSignal")}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </Card>
@@ -1572,7 +1665,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
   };
 }
 
-function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): DailyActionPlanItem[] {
+function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>, limit = 6): DailyActionPlanItem[] {
   return items
     .filter((item) => !isManualActionHandled(item, manualActionStates[item.id]))
     .map((item) => ({
@@ -1587,7 +1680,24 @@ function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates:
       if (a.item.score !== b.item.score) return b.item.score - a.item.score;
       return a.item.id.localeCompare(b.item.id);
     })
-    .slice(0, 6);
+    .slice(0, limit);
+}
+
+function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>) {
+  return items.reduce((acc, item) => {
+    const handled = isManualActionHandled(item, manualActionStates[item.id]);
+    const qualityStage = normalizeQualityStage(item.quality_stage, item);
+    const tier = normalizeOpportunityTier(item.opportunity_tier);
+    if (handled) {
+      acc.handled += 1;
+      return acc;
+    }
+    if (qualityStage === "act_now") acc.actNow += 1;
+    if (qualityStage === "act_now" || tier === "hot_opportunity" || tier === "rising_opportunity" || item.generated_comment || item.review_task_id) {
+      acc.pending += 1;
+    }
+    return acc;
+  }, { pending: 0, actNow: 0, handled: 0 });
 }
 
 function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>) {

@@ -73,6 +73,14 @@ npm run build
 
 Then perform the smoke test in [exposure-radar-smoke-test.md](../runbooks/exposure-radar-smoke-test.md).
 
+To validate collection immediately after deploy without waiting for the scheduler interval, run the admin-only manual refresh:
+
+```bash
+OAF_ADMIN_TOKEN="<admin bearer token>" scripts/admin-refresh-exposure-radar.sh all
+```
+
+Use `en` or `zh` instead of `all` when validating only one region.
+
 ## Operator Checks
 
 Use the page-level Source Health panel to confirm:

@@ -301,6 +301,27 @@ func (ctl *AdminController) SyncTrendsNow(c *gin.Context) {
 	response.OK(c, data)
 }
 
+func (ctl *AdminController) RefreshExposureNow(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	req := dto.ExposureRefreshNowRequest{Region: c.Query("region")}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	data, err := ctl.adminService.RefreshExposureNow(c.Request.Context(), userID, req)
+	if err != nil {
+		adminError(c, err)
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AdminController) TrendCacheStatus(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

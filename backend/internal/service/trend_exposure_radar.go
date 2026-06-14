@@ -890,14 +890,18 @@ func reviewQueueRadarStatus(status string) string {
 }
 
 func (s *TrendService) RefreshEnglishExposureSignals(ctx context.Context, now time.Time) error {
-	return s.refreshExposureSignals(ctx, "en", now)
+	return s.refreshExposureSignals(ctx, "en", now, false)
 }
 
 func (s *TrendService) RefreshChineseExposureSignals(ctx context.Context, now time.Time) error {
-	return s.refreshExposureSignals(ctx, "zh", now)
+	return s.refreshExposureSignals(ctx, "zh", now, false)
 }
 
-func (s *TrendService) refreshExposureSignals(ctx context.Context, region string, now time.Time) error {
+func (s *TrendService) ForceRefreshExposureSignals(ctx context.Context, region string, now time.Time) error {
+	return s.refreshExposureSignals(ctx, region, now, true)
+}
+
+func (s *TrendService) refreshExposureSignals(ctx context.Context, region string, now time.Time, force bool) error {
 	if s == nil || s.repo == nil || s.exposure == nil {
 		return nil
 	}
@@ -911,15 +915,17 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 	if region == "" {
 		region = "en"
 	}
-	if latest, err := s.exposure.LatestSeenAt(region); err != nil {
-		return err
-	} else if latest != nil {
-		interval := time.Duration(s.cfg.ExposureRefreshMinutes) * time.Minute
-		if interval <= 0 {
-			interval = 15 * time.Minute
-		}
-		if now.Sub(latest.UTC()) < interval {
-			return nil
+	if !force {
+		if latest, err := s.exposure.LatestSeenAt(region); err != nil {
+			return err
+		} else if latest != nil {
+			interval := time.Duration(s.cfg.ExposureRefreshMinutes) * time.Minute
+			if interval <= 0 {
+				interval = 15 * time.Minute
+			}
+			if now.Sub(latest.UTC()) < interval {
+				return nil
+			}
 		}
 	}
 	rows, err := s.exposureTopics(region, now)
@@ -1704,6 +1710,19 @@ func (s *TrendService) exposureRefreshInterval() time.Duration {
 
 func (s *TrendService) ExposureRefreshInterval() time.Duration {
 	return s.exposureRefreshInterval()
+}
+
+func (s *TrendService) ExposureRefreshReadiness() (bool, string) {
+	if s == nil || s.repo == nil || s.exposure == nil {
+		return false, "trend exposure service is not configured"
+	}
+	if !s.cfg.Enabled {
+		return false, "x trends sync disabled"
+	}
+	if strings.TrimSpace(s.cfg.BearerToken) == "" {
+		return false, "x trends bearer token missing"
+	}
+	return true, ""
 }
 
 func (s *TrendService) chineseExposureSeedTopics() []string {

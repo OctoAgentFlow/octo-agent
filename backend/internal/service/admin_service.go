@@ -374,6 +374,87 @@ func (s *AdminService) SyncTrendsNow(ctx context.Context, operatorID uint) (*dto
 	}, nil
 }
 
+func (s *AdminService) RefreshExposureNow(ctx context.Context, operatorID uint, req dto.ExposureRefreshNowRequest) (*dto.ExposureRefreshNowResponse, error) {
+	if _, err := s.requireOperator(operatorID); err != nil {
+		return nil, err
+	}
+	attemptedAt := time.Now().UTC()
+	startedAt := time.Now()
+	if s.trends == nil {
+		zap.L().Warn("admin exposure refresh skipped",
+			zap.Uint("operator_id", operatorID),
+			zap.String("reason", "trend service is not configured"),
+		)
+		return &dto.ExposureRefreshNowResponse{
+			Enabled:       false,
+			Region:        "all",
+			SkippedReason: "trend service is not configured",
+			AttemptedAt:   attemptedAt.Format(time.RFC3339),
+		}, nil
+	}
+	if ok, reason := s.trends.ExposureRefreshReadiness(); !ok {
+		zap.L().Warn("admin exposure refresh skipped",
+			zap.Uint("operator_id", operatorID),
+			zap.String("reason", reason),
+		)
+		return &dto.ExposureRefreshNowResponse{
+			Enabled:       false,
+			Region:        "all",
+			SkippedReason: reason,
+			AttemptedAt:   attemptedAt.Format(time.RFC3339),
+		}, nil
+	}
+	region := strings.ToLower(strings.TrimSpace(req.Region))
+	switch region {
+	case "", "all":
+		region = "all"
+	case "zh", "cn", "chinese":
+		region = "zh"
+	case "en", "english":
+		region = "en"
+	default:
+		return nil, ErrAdminInvalidStatus
+	}
+	regions := []string{region}
+	if region == "all" {
+		regions = []string{"en", "zh"}
+	}
+	refreshed := make([]string, 0, len(regions))
+	errs := []string{}
+	for _, value := range regions {
+		if err := s.trends.ForceRefreshExposureSignals(ctx, value, attemptedAt); err != nil {
+			errs = append(errs, value+": "+err.Error())
+			zap.L().Warn("admin exposure refresh region failed",
+				zap.Uint("operator_id", operatorID),
+				zap.String("region", value),
+				zap.Error(err),
+			)
+			continue
+		}
+		refreshed = append(refreshed, value)
+	}
+	fields := []zap.Field{
+		zap.Uint("operator_id", operatorID),
+		zap.String("region", region),
+		zap.Strings("refreshed_regions", refreshed),
+		zap.Int64("duration_ms", time.Since(startedAt).Milliseconds()),
+	}
+	if len(errs) > 0 {
+		fields = append(fields, zap.Strings("errors", errs))
+		zap.L().Warn("admin exposure refresh completed with errors", fields...)
+	} else {
+		zap.L().Info("admin exposure refresh completed", fields...)
+	}
+	return &dto.ExposureRefreshNowResponse{
+		Enabled:          true,
+		Region:           region,
+		RefreshedRegions: refreshed,
+		Errors:           errs,
+		AttemptedAt:      attemptedAt.Format(time.RFC3339),
+		DurationMs:       time.Since(startedAt).Milliseconds(),
+	}, nil
+}
+
 func (s *AdminService) TrendCacheStatus(operatorID uint) (*dto.TrendCacheStatusResponse, error) {
 	if _, err := s.requireOperator(operatorID); err != nil {
 		return nil, err

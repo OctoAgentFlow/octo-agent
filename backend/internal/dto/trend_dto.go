@@ -309,6 +309,20 @@ type TrendSyncResponse struct {
 	AttemptedAt   string `json:"attempted_at,omitempty"`
 }
 
+type ExposureRefreshNowRequest struct {
+	Region string `json:"region" form:"region"`
+}
+
+type ExposureRefreshNowResponse struct {
+	Enabled          bool     `json:"enabled"`
+	Region           string   `json:"region"`
+	RefreshedRegions []string `json:"refreshed_regions"`
+	Errors           []string `json:"errors,omitempty"`
+	SkippedReason    string   `json:"skipped_reason,omitempty"`
+	AttemptedAt      string   `json:"attempted_at,omitempty"`
+	DurationMs       int64    `json:"duration_ms"`
+}
+
 type TrendCacheRegionStatus struct {
 	RegionName      string `json:"region_name"`
 	TotalTopics     int64  `json:"total_topics"`

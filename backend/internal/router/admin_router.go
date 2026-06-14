@@ -27,6 +27,7 @@ func RegisterAdmin(rg *gin.RouterGroup, c *controller.AdminController) {
 	g.GET("/trends/cache-status", c.TrendCacheStatus)
 	g.GET("/trends/topics", c.TrendTopics)
 	g.POST("/trends/sync-now", c.SyncTrendsNow)
+	g.POST("/trends/exposure-refresh-now", c.RefreshExposureNow)
 	g.GET("/points/activities", c.ListPointActivities)
 	g.PATCH("/points/activities/:id", c.UpdatePointActivity)
 	g.GET("/points/users", c.ListPointUsers)

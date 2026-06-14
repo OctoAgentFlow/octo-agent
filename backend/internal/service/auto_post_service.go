@@ -23,9 +23,9 @@ import (
 var ErrAutoPostMonthlyLimitExceeded = errors.New("monthly auto post quota exceeded")
 var ErrAutoPostDuplicateContent = errors.New("auto_post_duplicate_content")
 
-const autoPostPreviewRunes = 280
+const contentDraftPreviewRunes = 280
 
-type autoPostPlannerRunOptions struct {
+type contentDraftPlannerRunOptions struct {
 	RespectSchedule bool
 }
 
@@ -114,14 +114,14 @@ func (s *AutoPostService) CreatePlan(userID uint, req dto.ContentDraftPlanReques
 	}
 	if plan == nil || plan.ID == 0 {
 		plan = &model.AutoPostPlan{UserID: userID, XAccountID: acc.ID}
-		applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
+		applyContentDraftPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 		if err := s.planRepo.Create(plan); err != nil {
 			return nil, err
 		}
 		item := s.toPlanItem(*plan)
 		return &item, nil
 	}
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
+	applyContentDraftPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (s *AutoPostService) UpdatePlan(userID, id uint, req dto.ContentDraftPlanRe
 		return nil, err
 	}
 	plan.XAccountID = acc.ID
-	applyAutoPostPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
+	applyContentDraftPlanRequest(plan, req, botIDForUsage(bot), acc.XSubscriptionTier)
 	if err := s.planRepo.Save(plan); err != nil {
 		return nil, err
 	}
@@ -189,8 +189,8 @@ func (s *AutoPostService) ListRuns(userID uint, query dto.ContentDraftGeneration
 		}, nil
 	}
 
-	status := normalizeAutoPostRunStatusForQuery(query.Status)
-	createdFrom, createdTo := autoPostRunTimeRange(query)
+	status := normalizeContentDraftRunStatusForQuery(query.Status)
+	createdFrom, createdTo := contentDraftRunTimeRange(query)
 	rows, total, err := s.runRepo.List(repository.ContentDraftGenerationRunListQuery{
 		UserID:      userID,
 		Status:      status,
@@ -235,7 +235,7 @@ func (s *AutoPostService) RunPlanNow(ctx context.Context, userID, planID uint) (
 	if !claimed {
 		return nil, fmt.Errorf("auto post planner is already running")
 	}
-	run, err := s.runPlannerOnce(ctx, planID, autoPostPlannerRunOptions{RespectSchedule: false})
+	run, err := s.runPlannerOnce(ctx, planID, contentDraftPlannerRunOptions{RespectSchedule: false})
 	if err != nil {
 		return nil, err
 	}
@@ -295,11 +295,11 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	input := autoPostInputFromBot(acc, bot, "")
 	input.ContentDirection = strings.TrimSpace(req.ContentDirection)
 	input.RecentPosts = recent
-	input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
-	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
+	input.ContentLengthMode = normalizeContentDraftLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
+	input.MaxCharacters = contentDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
 	input.FeedbackSignals = s.generationFeedbackSignals(userID, botIDForUsage(bot), "tweet")
 	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botIDForUsage(bot), "tweet")
-	selectedTrends := s.selectTrendsForAutoPost(userID, plan.ID, botIDForUsage(bot), req.ExcludedTrendNames, now)
+	selectedTrends := s.selectTrendsForContentDraft(userID, plan.ID, botIDForUsage(bot), req.ExcludedTrendNames, now)
 	input.SelectedTrends = trendPromptItems(selectedTrends)
 	input.TrendFeedbackSignals = s.trendFeedbackSignals(userID, botIDForUsage(bot))
 	if contentItem != nil {
@@ -315,7 +315,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 	if contentDirection == "" && contentItem != nil {
 		contentDirection = contentItem.Title
 	}
-	content, contentHash, generated, err := s.generateUniqueAutoPost(ctx, userID, acc.ID, input)
+	content, contentHash, generated, err := s.generateUniqueContentDraft(ctx, userID, acc.ID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 		ContentDirection: truncateRunes(contentDirection, 512),
 		ContentHash:      contentHash,
 		SelectedTrends:   encodeTrendTopicItems(selectedTrends),
-		GeneratedContent: fitXPostForAutoPost(content, acc.XSubscriptionTier, input.ContentLengthMode),
+		GeneratedContent: fitXPostForContentDraft(content, acc.XSubscriptionTier, input.ContentLengthMode),
 		Status:           status,
 		RiskLevel:        risk.Level,
 		CapabilityStatus: capability,
@@ -397,22 +397,22 @@ func (s *AutoPostService) RunTick(ctx context.Context) {
 }
 
 func (s *AutoPostService) runSchedulerPlan(ctx context.Context, planID uint) error {
-	_, err := s.runPlannerOnce(ctx, planID, autoPostPlannerRunOptions{RespectSchedule: true})
+	_, err := s.runPlannerOnce(ctx, planID, contentDraftPlannerRunOptions{RespectSchedule: true})
 	return err
 }
 
-func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, options autoPostPlannerRunOptions) (*model.AutoPostGenerationRun, error) {
+func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, options contentDraftPlannerRunOptions) (*model.AutoPostGenerationRun, error) {
 	now := time.Now().UTC()
 	plan, err := s.planRepo.GetByID(planID)
 	if err != nil {
 		return nil, err
 	}
-	next := s.nextAutoPostRun(*plan, now)
+	next := s.nextContentDraftRun(*plan, now)
 	finish := func(lastRun *time.Time) error {
 		return s.planRepo.FinishScheduler(plan.ID, lastRun, next)
 	}
 	recordSkip := func(reason string) (*model.AutoPostGenerationRun, error) {
-		run := s.newAutoPostRun(*plan, "skipped", reason, 0, 0, "")
+		run := s.newContentDraftRun(*plan, "skipped", reason, 0, 0, "")
 		_ = s.createSchedulerActivity(*plan, "failed", "activity.preview.autoPostSchedulerSkipped", reason)
 		if s.runRepo != nil {
 			if err := s.runRepo.Create(run); err != nil {
@@ -427,7 +427,7 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 		if err != nil {
 			msg = err.Error()
 		}
-		run := s.newAutoPostRun(*plan, "failed", reason, 0, 0, msg)
+		run := s.newContentDraftRun(*plan, "failed", reason, 0, 0, msg)
 		_ = s.createSchedulerActivity(*plan, "failed", "activity.preview.autoPostSchedulerFailed", msg)
 		if s.runRepo != nil {
 			if createErr := s.runRepo.Create(run); createErr != nil {
@@ -442,12 +442,12 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 		next = time.Time{}
 		return recordSkip("planner_disabled")
 	}
-	if options.RespectSchedule && !s.isWithinAutoPostWindow(*plan, now) {
-		next = s.nextAutoPostRun(*plan, now)
+	if options.RespectSchedule && !s.isWithinContentDraftWindow(*plan, now) {
+		next = s.nextContentDraftRun(*plan, now)
 		return recordSkip("outside_posting_window")
 	}
 	if options.RespectSchedule && plan.LastRunAt != nil && plan.MinIntervalMinutes > 0 && now.Sub(*plan.LastRunAt) < time.Duration(plan.MinIntervalMinutes)*time.Minute {
-		next = s.nextAutoPostRun(*plan, *plan.LastRunAt)
+		next = s.nextContentDraftRun(*plan, *plan.LastRunAt)
 		return recordSkip("min_interval_active")
 	}
 	acc, err := s.accountRepo.GetConnectedByUserAndAccountID(plan.UserID, plan.XAccountID)
@@ -486,7 +486,7 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 			return recordFailure("generation_failed", err)
 		}
 	}
-	run := s.newAutoPostRun(*plan, "completed", "", contentItem.ID, draft.ID, "")
+	run := s.newContentDraftRun(*plan, "completed", "", contentItem.ID, draft.ID, "")
 	run.BotID = draft.BotID
 	run.SelectedTrends = encodeTrendTopicItems(draft.SelectedTrends)
 	if s.runRepo != nil {
@@ -518,14 +518,14 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 	}
 	plan, _ := s.planRepo.GetByUserAndID(userID, draft.PlanID)
 	accountTier := xSubscriptionTierUnknown
-	mode := autoPostLengthModeStandard
+	mode := contentDraftLengthModeStandard
 	if acc, err := s.accountRepo.GetConnectedByUserAndAccountID(userID, draft.XAccountID); err == nil {
 		accountTier = acc.XSubscriptionTier
 	}
 	if plan != nil {
 		mode = plan.ContentLengthMode
 	}
-	draft.GeneratedContent = fitXPostForAutoPost(content, accountTier, mode)
+	draft.GeneratedContent = fitXPostForContentDraft(content, accountTier, mode)
 	if draft.Status == "approved" {
 		draft.Status = "pending_review"
 		draft.ApprovedAt = nil
@@ -593,11 +593,11 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 	var learningRules []dto.OAFBotAppliedLearningRule
 	input.FeedbackSignals, learningRules = appendFeedbackLearningSignalsWithRules(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "tweet", req.DisabledLearningIssues)
 	if plan != nil {
-		input.ContentLengthMode = normalizeAutoPostLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
+		input.ContentLengthMode = normalizeContentDraftLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
 	} else {
-		input.ContentLengthMode = autoPostLengthModeStandard
+		input.ContentLengthMode = contentDraftLengthModeStandard
 	}
-	input.MaxCharacters = autoPostDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
+	input.MaxCharacters = contentDraftMaxFor(acc.XSubscriptionTier, input.ContentLengthMode)
 	if contentItem != nil {
 		input.ContentItemTitle = contentItem.Title
 		input.ContentItemType = contentItem.ItemType
@@ -611,10 +611,10 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 	if err != nil {
 		return nil, err
 	}
-	content := fitXPostForAutoPost(generated.Text, acc.XSubscriptionTier, input.ContentLengthMode)
+	content := fitXPostForContentDraft(generated.Text, acc.XSubscriptionTier, input.ContentLengthMode)
 	risk := evaluateAutoCommentRisk(content, bot, nil)
 	draft.GeneratedContent = content
-	draft.ContentHash = autoPostContentHash(content)
+	draft.ContentHash = contentDraftContentHash(content)
 	draft.RiskLevel = risk.Level
 	draft.FailureCategory = risk.Category
 	draft.FailureReason = risk.Reason
@@ -753,7 +753,7 @@ func (s *AutoPostService) assertMonthlyQuota(userID uint, now time.Time) error {
 	return nil
 }
 
-func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, AIGeneratedText, error) {
+func (s *AutoPostService) generateUniqueContentDraft(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, AIGeneratedText, error) {
 	since := time.Now().UTC().AddDate(0, 0, -30)
 	var lastContent string
 	var lastHash string
@@ -771,7 +771,7 @@ func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xA
 			return "", "", AIGeneratedText{}, err
 		}
 		content := generated.Text
-		hash := autoPostContentHash(content)
+		hash := contentDraftContentHash(content)
 		exists, err := s.draftRepo.ExistsContentHashForAccountSince(userID, xAccountID, hash, since)
 		if err != nil {
 			return "", "", AIGeneratedText{}, err
@@ -785,7 +785,7 @@ func (s *AutoPostService) generateUniqueAutoPost(ctx context.Context, userID, xA
 	return "", lastHash, AIGeneratedText{}, ErrAutoPostDuplicateContent
 }
 
-func (s *AutoPostService) selectTrendsForAutoPost(userID, planID, botID uint, excluded []string, now time.Time) []dto.TrendTopicItem {
+func (s *AutoPostService) selectTrendsForContentDraft(userID, planID, botID uint, excluded []string, now time.Time) []dto.TrendTopicItem {
 	if s == nil || s.trends == nil {
 		return nil
 	}
@@ -861,7 +861,7 @@ func decodeTrendTopicItems(raw string) []dto.TrendTopicItem {
 	return items
 }
 
-func autoPostContentHash(content string) string {
+func contentDraftContentHash(content string) string {
 	normalized := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(content)), " "))
 	sum := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(sum[:])
@@ -916,7 +916,7 @@ func (s *AutoPostService) createGeneratedActivity(draft *model.AutoPostDraft, ac
 		PreviewKey:         key,
 		AccountHandle:      formatXAccountHandle(accountUsername),
 		ExecutedAt:         now,
-		ReplyTextPreview:   truncateReplyPreview(draft.GeneratedContent, autoPostPreviewRunes),
+		ReplyTextPreview:   truncateReplyPreview(draft.GeneratedContent, contentDraftPreviewRunes),
 		ReplyToTextPreview: truncateReplyPreview(draft.ContentDirection, autoReplyPreviewRunes),
 	}
 	if err := s.activityRepo.DB.Create(log).Error; err != nil {
@@ -949,7 +949,7 @@ func (s *AutoPostService) createSchedulerActivity(plan model.AutoPostPlan, statu
 	return s.activityRepo.DB.Create(log).Error
 }
 
-func (s *AutoPostService) newAutoPostRun(plan model.AutoPostPlan, status string, skipReason string, contentID uint, draftID uint, errMsg string) *model.AutoPostGenerationRun {
+func (s *AutoPostService) newContentDraftRun(plan model.AutoPostPlan, status string, skipReason string, contentID uint, draftID uint, errMsg string) *model.AutoPostGenerationRun {
 	return &model.AutoPostGenerationRun{
 		UserID:           plan.UserID,
 		PlanID:           plan.ID,
@@ -1031,7 +1031,7 @@ func (s *AutoPostService) toPlanItem(row model.AutoPostPlan) dto.AutoPostPlanIte
 		MinIntervalMinutes:   row.MinIntervalMinutes,
 		PostingWindows:       row.PostingWindows,
 		Timezone:             row.Timezone,
-		ContentLengthMode:    normalizeAutoPostLengthMode(row.ContentLengthMode, accountTier),
+		ContentLengthMode:    normalizeContentDraftLengthMode(row.ContentLengthMode, accountTier),
 		TrendRegions:         normalizeTrendRegions(decodeStringList(row.TrendRegions)),
 		TrendCategories:      normalizeTrendCategories(decodeStringList(row.TrendCategories)),
 		ExcludedTrendNames:   normalizeTrendExcludeNames(decodeStringList(row.ExcludedTrendNames)),
@@ -1112,7 +1112,7 @@ func (s *AutoPostService) contentItem(userID, contentID uint) *model.ContentLibr
 	return item
 }
 
-func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.ContentDraftPlanRequest, botID uint, accountTier string) {
+func applyContentDraftPlanRequest(plan *model.AutoPostPlan, req dto.ContentDraftPlanRequest, botID uint, accountTier string) {
 	plan.BotID = botID
 	plan.Enabled = req.Enabled
 	plan.ExecutionMode = effectiveExecutionMode(req.ExecutionMode)
@@ -1129,11 +1129,11 @@ func applyAutoPostPlanRequest(plan *model.AutoPostPlan, req dto.ContentDraftPlan
 	if plan.Timezone == "" {
 		plan.Timezone = "UTC"
 	}
-	plan.ContentLengthMode = normalizeAutoPostLengthMode(req.ContentLengthMode, accountTier)
+	plan.ContentLengthMode = normalizeContentDraftLengthMode(req.ContentLengthMode, accountTier)
 	plan.ExcludedTrendNames = encodeStringList(normalizeTrendExcludeNames(req.ExcludedTrendNames))
 	if plan.Enabled && plan.NextRunAt == nil {
 		now := time.Now().UTC()
-		next := computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
+		next := computeContentDraftNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
 		plan.NextRunAt = &next
 	}
 	if !plan.Enabled {
@@ -1149,17 +1149,17 @@ func formatOptionalTime(t *time.Time) string {
 	return t.UTC().Format(timeRFC3339)
 }
 
-type autoPostTimeWindow struct {
+type contentDraftTimeWindow struct {
 	start int
 	end   int
 }
 
-func (s *AutoPostService) isWithinAutoPostWindow(plan model.AutoPostPlan, now time.Time) bool {
-	windows := parseAutoPostWindows(plan.PostingWindows)
+func (s *AutoPostService) isWithinContentDraftWindow(plan model.AutoPostPlan, now time.Time) bool {
+	windows := parseContentDraftWindows(plan.PostingWindows)
 	if len(windows) == 0 {
 		return true
 	}
-	loc := autoPostLocation(plan.Timezone)
+	loc := contentDraftLocation(plan.Timezone)
 	local := now.In(loc)
 	minute := local.Hour()*60 + local.Minute()
 	for _, window := range windows {
@@ -1176,20 +1176,20 @@ func (s *AutoPostService) isWithinAutoPostWindow(plan model.AutoPostPlan, now ti
 	return false
 }
 
-func (s *AutoPostService) nextAutoPostRun(plan model.AutoPostPlan, now time.Time) time.Time {
-	return computeAutoPostNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
+func (s *AutoPostService) nextContentDraftRun(plan model.AutoPostPlan, now time.Time) time.Time {
+	return computeContentDraftNextRun(plan.MinIntervalMinutes, plan.PostingWindows, plan.Timezone, now)
 }
 
-func computeAutoPostNextRun(minInterval int, postingWindows string, timezone string, from time.Time) time.Time {
+func computeContentDraftNextRun(minInterval int, postingWindows string, timezone string, from time.Time) time.Time {
 	if minInterval <= 0 {
 		minInterval = 120
 	}
 	candidate := from.UTC().Add(time.Duration(minInterval) * time.Minute)
-	windows := parseAutoPostWindows(postingWindows)
+	windows := parseContentDraftWindows(postingWindows)
 	if len(windows) == 0 {
 		return candidate
 	}
-	loc := autoPostLocation(timezone)
+	loc := contentDraftLocation(timezone)
 	local := candidate.In(loc)
 	localMinute := local.Hour()*60 + local.Minute()
 	for _, window := range windows {
@@ -1209,11 +1209,11 @@ func computeAutoPostNextRun(minInterval int, postingWindows string, timezone str
 	return candidate
 }
 
-func parseAutoPostWindows(value string) []autoPostTimeWindow {
+func parseContentDraftWindows(value string) []contentDraftTimeWindow {
 	value = strings.ReplaceAll(value, "，", ",")
 	value = strings.ReplaceAll(value, ";", ",")
 	parts := strings.Split(value, ",")
-	windows := make([]autoPostTimeWindow, 0, len(parts))
+	windows := make([]contentDraftTimeWindow, 0, len(parts))
 	for _, raw := range parts {
 		part := strings.TrimSpace(raw)
 		if part == "" {
@@ -1223,17 +1223,17 @@ func parseAutoPostWindows(value string) []autoPostTimeWindow {
 		if len(bounds) != 2 {
 			continue
 		}
-		start, okStart := parseAutoPostClock(bounds[0])
-		end, okEnd := parseAutoPostClock(bounds[1])
+		start, okStart := parseContentDraftClock(bounds[0])
+		end, okEnd := parseContentDraftClock(bounds[1])
 		if !okStart || !okEnd {
 			continue
 		}
-		windows = append(windows, autoPostTimeWindow{start: start, end: end})
+		windows = append(windows, contentDraftTimeWindow{start: start, end: end})
 	}
 	return windows
 }
 
-func parseAutoPostClock(value string) (int, bool) {
+func parseContentDraftClock(value string) (int, bool) {
 	parts := strings.Split(strings.TrimSpace(value), ":")
 	if len(parts) != 2 {
 		return 0, false
@@ -1249,7 +1249,7 @@ func parseAutoPostClock(value string) (int, bool) {
 	return hour*60 + minute, true
 }
 
-func normalizeAutoPostRunStatusForQuery(value string) string {
+func normalizeContentDraftRunStatusForQuery(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "completed", "skipped", "failed":
 		return strings.ToLower(strings.TrimSpace(value))
@@ -1258,9 +1258,9 @@ func normalizeAutoPostRunStatusForQuery(value string) string {
 	}
 }
 
-func autoPostRunTimeRange(query dto.ContentDraftGenerationRunQuery) (time.Time, time.Time) {
-	if from := parseAutoPostRunQueryTime(query.DateFrom); !from.IsZero() {
-		return from, parseAutoPostRunQueryTime(query.DateTo)
+func contentDraftRunTimeRange(query dto.ContentDraftGenerationRunQuery) (time.Time, time.Time) {
+	if from := parseContentDraftRunQueryTime(query.DateFrom); !from.IsZero() {
+		return from, parseContentDraftRunQueryTime(query.DateTo)
 	}
 	now := time.Now().UTC()
 	switch strings.ToLower(strings.TrimSpace(query.Range)) {
@@ -1271,11 +1271,11 @@ func autoPostRunTimeRange(query dto.ContentDraftGenerationRunQuery) (time.Time, 
 	case "30d":
 		return now.AddDate(0, 0, -30), time.Time{}
 	default:
-		return time.Time{}, parseAutoPostRunQueryTime(query.DateTo)
+		return time.Time{}, parseContentDraftRunQueryTime(query.DateTo)
 	}
 }
 
-func parseAutoPostRunQueryTime(value string) time.Time {
+func parseContentDraftRunQueryTime(value string) time.Time {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return time.Time{}
@@ -1289,14 +1289,14 @@ func parseAutoPostRunQueryTime(value string) time.Time {
 	return time.Time{}
 }
 
-func windowContainsMinute(window autoPostTimeWindow, minute int) bool {
+func windowContainsMinute(window contentDraftTimeWindow, minute int) bool {
 	if window.start <= window.end {
 		return minute >= window.start && minute <= window.end
 	}
 	return minute >= window.start || minute <= window.end
 }
 
-func autoPostLocation(timezone string) *time.Location {
+func contentDraftLocation(timezone string) *time.Location {
 	loc, err := time.LoadLocation(strings.TrimSpace(timezone))
 	if err != nil {
 		return time.UTC

@@ -388,7 +388,7 @@ func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, 
 			plans[i].Timezone = "UTC"
 		}
 		if plans[i].NextRunAt == nil || plans[i].NextRunAt.Before(now) {
-			next := computeAutoPostNextRun(plans[i].MinIntervalMinutes, plans[i].PostingWindows, plans[i].Timezone, now)
+			next := computeContentDraftNextRun(plans[i].MinIntervalMinutes, plans[i].PostingWindows, plans[i].Timezone, now)
 			plans[i].NextRunAt = &next
 		}
 		plans[i].ProcessingAt = nil

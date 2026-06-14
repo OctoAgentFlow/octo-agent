@@ -282,7 +282,7 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 			XAccountID:       0,
 			ContentLibraryID: content.ID,
 			ContentDirection: truncateRunes(direction, 512),
-			ContentHash:      autoPostContentHash(text),
+			ContentHash:      contentDraftContentHash(text),
 			GeneratedContent: text,
 			Status:           "pending_review",
 			RiskLevel:        risk.Level,
@@ -319,8 +319,8 @@ func (s *DailyXQueueService) UpdateDraft(userID, id uint, content string) (*dto.
 		return nil, err
 	}
 	original := draft.GeneratedContent
-	draft.GeneratedContent = fitXPostForAutoPost(content, xSubscriptionTierUnknown, autoPostLengthModeStandard)
-	draft.ContentHash = autoPostContentHash(draft.GeneratedContent)
+	draft.GeneratedContent = fitXPostForContentDraft(content, xSubscriptionTierUnknown, contentDraftLengthModeStandard)
+	draft.ContentHash = contentDraftContentHash(draft.GeneratedContent)
 	if draft.Status == "approved" {
 		draft.Status = "pending_review"
 		draft.ApprovedAt = nil
@@ -395,10 +395,10 @@ func (s *DailyXQueueService) RewriteDraft(ctx context.Context, userID, id uint, 
 		return nil, err
 	}
 	now := time.Now().UTC()
-	text := fitXPostForAutoPost(generated.Text, xSubscriptionTierUnknown, autoPostLengthModeStandard)
+	text := fitXPostForContentDraft(generated.Text, xSubscriptionTierUnknown, contentDraftLengthModeStandard)
 	risk := evaluateAutoCommentRisk(text, bot, nil)
 	draft.GeneratedContent = text
-	draft.ContentHash = autoPostContentHash(text)
+	draft.ContentHash = contentDraftContentHash(text)
 	draft.RiskLevel = risk.Level
 	draft.FailureCategory = risk.Category
 	draft.FailureReason = risk.Reason
@@ -604,8 +604,8 @@ func (s *DailyXQueueService) generateInput(ctxRow *model.DailyXQueueContext, bot
 	in := GenerateAutoPostInput{
 		AccountHandle:     formatXAccountHandle(ctxRow.XHandle),
 		ContentDirection:  direction,
-		ContentLengthMode: autoPostLengthModeStandard,
-		MaxCharacters:     autoPostDraftMaxFor(xSubscriptionTierUnknown, autoPostLengthModeStandard),
+		ContentLengthMode: contentDraftLengthModeStandard,
+		MaxCharacters:     contentDraftMaxFor(xSubscriptionTierUnknown, contentDraftLengthModeStandard),
 		FeedbackSignals:   feedbackSignals,
 		HasBot:            true,
 		Name:              bot.Name,

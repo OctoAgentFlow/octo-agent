@@ -17,8 +17,8 @@ const (
 	xSubscriptionSourceManual = "manual"
 	xSubscriptionSourceXAPI   = "x_api"
 
-	autoPostLengthModeStandard = "standard"
-	autoPostLengthModeLong     = "long"
+	contentDraftLengthModeStandard = "standard"
+	contentDraftLengthModeLong     = "long"
 
 	xStandardWeightedMax = 280
 	xPremiumLongMax      = 25000
@@ -69,15 +69,15 @@ func isPremiumXTier(value string) bool {
 	return tier == xSubscriptionTierPremium || tier == xSubscriptionTierPremiumPlus
 }
 
-func normalizeAutoPostLengthMode(mode string, xTier string) string {
-	if strings.EqualFold(strings.TrimSpace(mode), autoPostLengthModeLong) && isPremiumXTier(xTier) {
-		return autoPostLengthModeLong
+func normalizeContentDraftLengthMode(mode string, xTier string) string {
+	if strings.EqualFold(strings.TrimSpace(mode), contentDraftLengthModeLong) && isPremiumXTier(xTier) {
+		return contentDraftLengthModeLong
 	}
-	return autoPostLengthModeStandard
+	return contentDraftLengthModeStandard
 }
 
-func autoPostDraftMaxFor(xTier, mode string) int {
-	if normalizeAutoPostLengthMode(mode, xTier) == autoPostLengthModeLong {
+func contentDraftMaxFor(xTier, mode string) int {
+	if normalizeContentDraftLengthMode(mode, xTier) == contentDraftLengthModeLong {
 		return xLongDraftMax
 	}
 	return xStandardDraftMax
@@ -146,8 +146,8 @@ func fitXPostForAccount(content string, accountTier string) string {
 	return fitXStandardPost(content)
 }
 
-func fitXPostForAutoPost(content string, accountTier string, mode string) string {
-	if normalizeAutoPostLengthMode(mode, accountTier) == autoPostLengthModeLong {
+func fitXPostForContentDraft(content string, accountTier string, mode string) string {
+	if normalizeContentDraftLengthMode(mode, accountTier) == contentDraftLengthModeLong {
 		return fitGeneratedTweet(content, xLongDraftMax)
 	}
 	return fitXStandardPost(content)

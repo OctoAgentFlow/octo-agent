@@ -564,8 +564,8 @@ func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic st
 	in := GenerateAutoPostInput{
 		AccountHandle:     formatXAccountHandle(acc.Username),
 		Topic:             topic,
-		ContentLengthMode: autoPostLengthModeStandard,
-		MaxCharacters:     autoPostDraftMaxFor(acc.XSubscriptionTier, autoPostLengthModeStandard),
+		ContentLengthMode: contentDraftLengthModeStandard,
+		MaxCharacters:     contentDraftMaxFor(acc.XSubscriptionTier, contentDraftLengthModeStandard),
 	}
 	if bot == nil {
 		return in

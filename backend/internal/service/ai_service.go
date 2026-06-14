@@ -414,7 +414,7 @@ func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInpu
 	}
 	lengthMode := strings.ToLower(strings.TrimSpace(in.ContentLengthMode))
 	user.WriteString("Hard rules:\n")
-	if lengthMode == autoPostLengthModeLong {
+	if lengthMode == contentDraftLengthModeLong {
 		user.WriteString(fmt.Sprintf("- X Premium longer-post mode: target 700-1200 characters, hard maximum %d characters.\n", maxCharacters))
 	} else {
 		user.WriteString("- Target 180-220 characters; never write close to the X 280-character limit.\n")
@@ -431,7 +431,7 @@ func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInpu
 		return AIGeneratedText{}, err
 	}
 	text := strings.TrimSpace(result.Text)
-	if lengthMode == autoPostLengthModeLong {
+	if lengthMode == contentDraftLengthModeLong {
 		text = fitGeneratedTweet(text, maxCharacters)
 	} else {
 		text = fitXStandardPost(text)
@@ -1648,7 +1648,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	}
 	lengthMode := strings.ToLower(strings.TrimSpace(in.ContentLengthMode))
 	user.WriteString("Hard rules:\n")
-	if lengthMode == autoPostLengthModeLong {
+	if lengthMode == contentDraftLengthModeLong {
 		user.WriteString(fmt.Sprintf("- X Premium longer-post mode: target 700-1200 characters, hard maximum %d characters.\n", maxCharacters))
 		user.WriteString("- Use short paragraphs and keep the post readable in the X timeline.\n")
 	} else {
@@ -1668,7 +1668,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 		return AIGeneratedText{}, err
 	}
 	text := strings.TrimSpace(result.Text)
-	if lengthMode == autoPostLengthModeLong {
+	if lengthMode == contentDraftLengthModeLong {
 		text = fitGeneratedTweet(text, maxCharacters)
 	} else {
 		text = fitXStandardPost(text)

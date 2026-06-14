@@ -7,7 +7,7 @@ import (
 	"octo-agent/backend/internal/dto"
 )
 
-func TestAutoPostRunTimeRangeUsesRelativeRanges(t *testing.T) {
+func TestContentDraftRunTimeRangeUsesRelativeRanges(t *testing.T) {
 	cases := []struct {
 		name       string
 		rangeValue string
@@ -21,7 +21,7 @@ func TestAutoPostRunTimeRangeUsesRelativeRanges(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			before := time.Now().UTC()
-			from, to := autoPostRunTimeRange(dto.AutoPostGenerationRunQuery{Range: tc.rangeValue})
+			from, to := contentDraftRunTimeRange(dto.ContentDraftGenerationRunQuery{Range: tc.rangeValue})
 			after := time.Now().UTC()
 
 			if from.Before(before.Add(-tc.wantAge-time.Second)) || from.After(after.Add(-tc.wantAge+time.Second)) {
@@ -34,11 +34,11 @@ func TestAutoPostRunTimeRangeUsesRelativeRanges(t *testing.T) {
 	}
 }
 
-func TestAutoPostRunTimeRangeDateFromOverridesRange(t *testing.T) {
+func TestContentDraftRunTimeRangeDateFromOverridesRange(t *testing.T) {
 	fromInput := "2026-05-25T10:11:12Z"
 	toInput := "2026-05-26T10:11:12Z"
 
-	from, to := autoPostRunTimeRange(dto.AutoPostGenerationRunQuery{
+	from, to := contentDraftRunTimeRange(dto.ContentDraftGenerationRunQuery{
 		Range:    "24h",
 		DateFrom: fromInput,
 		DateTo:   toInput,
@@ -54,8 +54,8 @@ func TestAutoPostRunTimeRangeDateFromOverridesRange(t *testing.T) {
 	}
 }
 
-func TestAutoPostRunTimeRangeAllowsDateToOnly(t *testing.T) {
-	from, to := autoPostRunTimeRange(dto.AutoPostGenerationRunQuery{DateTo: "2026-05-26"})
+func TestContentDraftRunTimeRangeAllowsDateToOnly(t *testing.T) {
+	from, to := contentDraftRunTimeRange(dto.ContentDraftGenerationRunQuery{DateTo: "2026-05-26"})
 
 	wantTo, _ := time.Parse("2006-01-02", "2026-05-26")
 	if !from.IsZero() {
@@ -66,8 +66,8 @@ func TestAutoPostRunTimeRangeAllowsDateToOnly(t *testing.T) {
 	}
 }
 
-func TestAutoPostRunTimeRangeIgnoresInvalidValues(t *testing.T) {
-	from, to := autoPostRunTimeRange(dto.AutoPostGenerationRunQuery{
+func TestContentDraftRunTimeRangeIgnoresInvalidValues(t *testing.T) {
+	from, to := contentDraftRunTimeRange(dto.ContentDraftGenerationRunQuery{
 		Range:    "all",
 		DateFrom: "not-a-time",
 		DateTo:   "also-not-a-time",

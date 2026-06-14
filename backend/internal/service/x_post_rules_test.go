@@ -35,11 +35,11 @@ func TestFitXStandardPostRespectsWeightedCharacters(t *testing.T) {
 	}
 }
 
-func TestNormalizeAutoPostLengthModeRequiresPremiumTier(t *testing.T) {
-	if got := normalizeAutoPostLengthMode(autoPostLengthModeLong, xSubscriptionTierFree); got != autoPostLengthModeStandard {
+func TestNormalizeContentDraftLengthModeRequiresPremiumTier(t *testing.T) {
+	if got := normalizeContentDraftLengthMode(contentDraftLengthModeLong, xSubscriptionTierFree); got != contentDraftLengthModeStandard {
 		t.Fatalf("expected free account long mode to fall back to standard, got %q", got)
 	}
-	if got := normalizeAutoPostLengthMode(autoPostLengthModeLong, xSubscriptionTierPremiumPlus); got != autoPostLengthModeLong {
+	if got := normalizeContentDraftLengthMode(contentDraftLengthModeLong, xSubscriptionTierPremiumPlus); got != contentDraftLengthModeLong {
 		t.Fatalf("expected Premium+ account long mode, got %q", got)
 	}
 }

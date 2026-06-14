@@ -26,7 +26,7 @@
 | P1 | Component semantics | Gradually rename local variables and type aliases from `autoPost*` to `contentDraft*` where this does not touch backend payload names. | First batch done |
 | P1 | i18n key migration | Introduce new `contentDrafts.*` and `handlingList.*` keys, then migrate page usage in small batches. | First batch done |
 | P2 | Backend API aliases | Add `/api/v1/content-drafts/*` aliases while keeping `/api/v1/auto-post/*` stable. | Done |
-| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases, billing semantic aliases, P3.3-a inventory, P3.3-b aliases, and first low-risk call-site migration done |
+| P3 | Backend internals | Rename DTO/service/model/quota/activity/scheduler symbols only after route aliases and tests cover compatibility. | Runtime aliases, billing semantic aliases, P3.3-a inventory, P3.3-b aliases, low-risk call-site migration, and helper rename pass done |
 
 ## Compatibility Notes
 
@@ -128,3 +128,10 @@ This batch is intentionally documentation and test hardening only. It does not r
 - Updated low-risk service fields and constructor parameters to use `ContentDraft*` repository aliases in Dashboard, Automation, Billing, OAF Bot, Trend, Daily X Queue, Review Queue, Publishing, and Content Draft services.
 - Updated Content Draft controller request bindings and Content Draft service helper signatures to use `ContentDraft*` DTO aliases while preserving all JSON fields and response shapes.
 - Kept legacy `NewAutoPostService`, AutoPost model names, database table names, AI usage scene strings, activity preview keys, and public legacy API route untouched.
+
+## P3.3-d Local Helper Rename Pass
+
+- Renamed pure local helpers from `autoPost*` to `contentDraft*` where the helper does not define a persisted contract.
+- Covered content draft length mode helpers, generated draft fitting, content hash generation, unique draft generation, trend selection helper, scheduler run helper, planner window parsing, run query time range parsing, and related tests.
+- Renamed `auto_post_run_time_range_test.go` to `content_draft_run_time_range_test.go`.
+- Kept error constants, model names, GORM table names, DTO JSON tags, AI usage scene values, activity preview keys, and legacy service/controller aliases untouched.

@@ -275,6 +275,14 @@ func feedbackLearningInstruction(issue string) string {
 		return "Stay tightly related to the target post, audience, and growth goal; avoid unrelated product promotion."
 	case "duplicate":
 		return "Avoid repeating the same opening, structure, and product explanation; choose a clearly different angle and phrasing."
+	case "neutral":
+		return "Lower priority for similar opportunities unless the target context, timing, or audience fit is stronger."
+	case "ineffective":
+		return "Avoid similar weak opportunity patterns; require clearer relevance, stronger context, or better audience fit before drafting."
+	case "not_suitable":
+		return "Do not recommend manual reply actions for similar signals when the topic is sensitive, off-positioning, or unlikely to support safe growth."
+	case "effective":
+		return "Prefer similar opportunity patterns when the context is relevant, safe, and aligned with the Bot persona."
 	default:
 		return "Avoid repeating the pattern that reviewers marked as accurate for this issue."
 	}

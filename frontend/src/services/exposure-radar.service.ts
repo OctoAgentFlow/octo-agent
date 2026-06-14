@@ -143,6 +143,7 @@ export type ExposureRadarDraftFeedbackPayload = {
   rating: "positive" | "negative";
   issue_tags: string[];
   comment?: string;
+  outcome?: "effective" | "neutral" | "ineffective" | "not_suitable";
 };
 
 export type ExposureRadarManualHandlePayload = {

@@ -20,6 +20,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
 type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
+type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 type ManualActionState = {
@@ -29,6 +30,9 @@ type ManualActionState = {
   handled?: boolean;
   persisted?: boolean;
   publishedUrl?: string;
+  outcome?: ManualOutcome;
+  feedbackComment?: string;
+  feedbackAt?: string;
   updatedAt?: string;
 };
 
@@ -36,6 +40,13 @@ const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
 const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
+const manualOutcomeOptions: ManualOutcome[] = ["effective", "neutral", "ineffective", "not_suitable"];
+const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "negative"; issueTags: string[] }> = {
+  effective: { rating: "positive", issueTags: ["effective", "good"] },
+  neutral: { rating: "negative", issueTags: ["neutral"] },
+  ineffective: { rating: "negative", issueTags: ["ineffective", "irrelevant"] },
+  not_suitable: { rating: "negative", issueTags: ["not_suitable", "irrelevant"] },
+};
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
 
@@ -57,6 +68,7 @@ export default function ExposureRadarPage() {
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
   const [handlingID, setHandlingID] = useState<string | null>(null);
+  const [feedbackSavingID, setFeedbackSavingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
@@ -305,6 +317,27 @@ export default function ExposureRadarPage() {
     }
   }, [pushToast, region, selectedAccountID, selectedBotID, t, updateManualActionState]);
 
+  const submitManualOutcome = useCallback(async (item: ExposureRadarItemApi, outcome: ManualOutcome, comment: string) => {
+    if (!item.review_task_id) {
+      pushToast(t("exposureRadar.manualFeedback.missingTask"));
+      return;
+    }
+    setFeedbackSavingID(item.id);
+    try {
+      await exposureRadarService.createDraftFeedback(item.review_task_id, buildManualOutcomePayload(outcome, comment, item));
+      updateManualActionState(item.id, {
+        outcome,
+        feedbackComment: comment.trim(),
+        feedbackAt: new Date().toISOString(),
+      });
+      pushToast(t("exposureRadar.manualFeedback.savedToast"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.manualFeedback.saveFailed") : t("exposureRadar.manualFeedback.saveFailed"));
+    } finally {
+      setFeedbackSavingID(null);
+    }
+  }, [pushToast, t, updateManualActionState]);
+
   return (
     <div className="space-y-5">
       <section className="overflow-hidden rounded-2xl border border-[#2f3336] bg-[#0f1419]">
@@ -437,6 +470,8 @@ export default function ExposureRadarPage() {
                 onSaveMemory={saveRadarMemory}
                 manualState={manualActionStates[item.id]}
                 onManualAction={(patch) => updateManualActionState(item.id, patch)}
+                feedbackSaving={feedbackSavingID === item.id}
+                onSubmitFeedback={submitManualOutcome}
               />
             ))}
           </div>
@@ -812,6 +847,8 @@ function RadarCard({
   onSaveMemory,
   manualState,
   onManualAction,
+  feedbackSaving,
+  onSubmitFeedback,
 }: {
   item: ExposureRadarItemApi;
   rank: number;
@@ -829,6 +866,8 @@ function RadarCard({
   onSaveMemory: (item: ExposureRadarItemApi) => void;
   manualState?: ManualActionState;
   onManualAction: (patch: Partial<ManualActionState>) => void;
+  feedbackSaving: boolean;
+  onSubmitFeedback: (item: ExposureRadarItemApi, outcome: ManualOutcome, comment: string) => void;
 }) {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -959,7 +998,13 @@ function RadarCard({
             onPublishedURLChange={setPublishedURL}
             onMarkHandled={() => onMarkHandled(item, publishedURL)}
           />
-          <ManualHandlingRecord item={item} manualState={manualState} timeZone={timeZone} />
+          <ManualHandlingRecord
+            item={item}
+            manualState={manualState}
+            timeZone={timeZone}
+            feedbackSaving={feedbackSaving}
+            onSubmitFeedback={(outcome, comment) => onSubmitFeedback(item, outcome, comment)}
+          />
         </div>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#71767b]">
@@ -1075,12 +1120,25 @@ function ManualWorkflowPanel({
   );
 }
 
-function ManualHandlingRecord({ item, manualState, timeZone }: { item: ExposureRadarItemApi; manualState?: ManualActionState; timeZone: string }) {
+function ManualHandlingRecord({
+  item,
+  manualState,
+  timeZone,
+  feedbackSaving,
+  onSubmitFeedback,
+}: {
+  item: ExposureRadarItemApi;
+  manualState?: ManualActionState;
+  timeZone: string;
+  feedbackSaving: boolean;
+  onSubmitFeedback: (outcome: ManualOutcome, comment: string) => void;
+}) {
   const { t } = useT();
   const replyURL = item.comment_url || manualState?.publishedUrl || "";
   const replyID = item.comment_tweet_id || extractTweetID(replyURL);
   const statusKey = manualRecordStatus(item, manualState);
   const updatedAt = manualState?.updatedAt ? formatDateTime(manualState.updatedAt, timeZone) : "-";
+  const [feedbackComment, setFeedbackComment] = useState(manualState?.feedbackComment || "");
   return (
     <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1108,6 +1166,34 @@ function ManualHandlingRecord({ item, manualState, timeZone }: { item: ExposureR
         <ManualRecordField label={t("exposureRadar.manualRecord.status")} value={t(`exposureRadar.manualRecord.status.${statusKey}`)} />
         <ManualRecordField label={t("exposureRadar.manualRecord.replyId")} value={replyID || t("exposureRadar.manualRecord.noReply")} />
         <ManualRecordField label={t("exposureRadar.manualRecord.updated")} value={updatedAt} />
+      </div>
+      <div className="mt-3 rounded-lg border border-[#2f3336] bg-black p-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualFeedback.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.manualFeedback.description")}</p>
+          </div>
+          {manualState?.outcome ? (
+            <span className="inline-flex h-7 items-center rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 text-xs font-semibold text-[#8ecdf8]">
+              {t("exposureRadar.manualFeedback.recorded", { outcome: t(`exposureRadar.manualFeedback.outcome.${manualState.outcome}`) })}
+            </span>
+          ) : null}
+        </div>
+        <input
+          value={feedbackComment}
+          onChange={(event) => setFeedbackComment(event.target.value)}
+          placeholder={t("exposureRadar.manualFeedback.placeholder")}
+          disabled={feedbackSaving}
+          className="mt-3 h-9 w-full rounded-full border border-[#2f3336] bg-[#0f1419] px-3 text-xs text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]"
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          {manualOutcomeOptions.map((outcome) => (
+            <Button key={outcome} type="button" size="sm" variant={manualState?.outcome === outcome ? "default" : "outline"} disabled={feedbackSaving} onClick={() => onSubmitFeedback(outcome, feedbackComment)}>
+              {feedbackSaving ? <RefreshCw className="size-3.5 animate-spin" /> : null}
+              {t(`exposureRadar.manualFeedback.outcome.${outcome}`)}
+            </Button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1238,6 +1324,22 @@ function manualRecordStatus(item: ExposureRadarItemApi, state?: ManualActionStat
   if (isManualActionHandled(item, state)) return "handled";
   if (state?.copied || state?.opened || state?.saved) return "in_progress";
   return "generated";
+}
+
+function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item: ExposureRadarItemApi) {
+  const meta = manualOutcomeFeedbackMeta[outcome];
+  const parts = [
+    comment.trim(),
+    item.comment_url ? `reply_url=${item.comment_url}` : "",
+    item.comment_tweet_id ? `reply_id=${item.comment_tweet_id}` : "",
+    item.id ? `signal_id=${item.id}` : "",
+  ].filter(Boolean);
+  return {
+    rating: meta.rating,
+    issue_tags: meta.issueTags,
+    outcome,
+    comment: parts.join(" | "),
+  };
 }
 
 function normalizeOpportunityTier(value?: string) {

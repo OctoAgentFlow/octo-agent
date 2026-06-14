@@ -946,13 +946,18 @@ func (s *AutoCommentService) CreateFeedback(userID, id uint, req dto.AutoComment
 	if rating == "" {
 		return nil, fmt.Errorf("invalid feedback rating")
 	}
+	issueTags := normalizeAutoCommentFeedbackTags(req.IssueTags)
+	if outcomeTags := autoCommentOutcomeFeedbackTags(req.Outcome); len(outcomeTags) > 0 {
+		issueTags = mergeStringListsLimited(issueTags, outcomeTags, 8)
+	}
+	comment := autoCommentOutcomeFeedbackComment(req)
 	row := &model.OAFBotGenerationFeedback{
 		UserID:           userID,
 		BotID:            task.BotID,
 		Scene:            "auto_comment",
 		Rating:           rating,
-		IssueTags:        encodeStringList(normalizeAutoCommentFeedbackTags(req.IssueTags)),
-		Comment:          truncateRunes(strings.TrimSpace(req.Comment), 500),
+		IssueTags:        encodeStringList(issueTags),
+		Comment:          truncateRunes(comment, 500),
 		SampleContext:    truncateRunes(task.TargetTweetText, 1200),
 		GeneratedContent: truncateRunes(task.GeneratedComment, 1000),
 		Provider:         "auto_comment_review",
@@ -2710,11 +2715,15 @@ func normalizeAutoCommentFeedbackRating(value string) string {
 
 func normalizeAutoCommentFeedbackTags(items []string) []string {
 	allowed := map[string]bool{
-		"too_generic": true,
-		"too_salesy":  true,
-		"irrelevant":  true,
-		"wrong_tone":  true,
-		"good":        true,
+		"too_generic":  true,
+		"too_salesy":   true,
+		"irrelevant":   true,
+		"wrong_tone":   true,
+		"good":         true,
+		"effective":    true,
+		"neutral":      true,
+		"ineffective":  true,
+		"not_suitable": true,
 	}
 	out := []string{}
 	for _, item := range items {
@@ -2722,6 +2731,44 @@ func normalizeAutoCommentFeedbackTags(items []string) []string {
 		if allowed[v] {
 			out = appendUniqueLimited(out, v, 8)
 		}
+	}
+	return out
+}
+
+func autoCommentOutcomeFeedbackTags(outcome string) []string {
+	switch strings.ToLower(strings.TrimSpace(outcome)) {
+	case "effective":
+		return []string{"effective", "good"}
+	case "neutral":
+		return []string{"neutral"}
+	case "ineffective":
+		return []string{"ineffective", "irrelevant"}
+	case "not_suitable":
+		return []string{"not_suitable", "irrelevant"}
+	default:
+		return nil
+	}
+}
+
+func autoCommentOutcomeFeedbackComment(req dto.AutoCommentFeedbackRequest) string {
+	comment := strings.TrimSpace(req.Comment)
+	outcome := strings.ToLower(strings.TrimSpace(req.Outcome))
+	if outcome == "" {
+		return comment
+	}
+	if comment == "" {
+		return "manual_outcome=" + outcome
+	}
+	return "manual_outcome=" + outcome + " | " + comment
+}
+
+func mergeStringListsLimited(primary []string, secondary []string, limit int) []string {
+	out := make([]string, 0, len(primary)+len(secondary))
+	for _, item := range primary {
+		out = appendUniqueLimited(out, item, limit)
+	}
+	for _, item := range secondary {
+		out = appendUniqueLimited(out, item, limit)
 	}
 	return out
 }

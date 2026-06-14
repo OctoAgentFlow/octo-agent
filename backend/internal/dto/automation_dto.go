@@ -669,6 +669,7 @@ type AutoCommentFeedbackRequest struct {
 	Rating    string   `json:"rating" binding:"required"`
 	IssueTags []string `json:"issue_tags"`
 	Comment   string   `json:"comment"`
+	Outcome   string   `json:"outcome"`
 }
 
 type AutoCommentDraftUpdateRequest struct {

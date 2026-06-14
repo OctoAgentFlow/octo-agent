@@ -105,6 +105,9 @@ type ExposureRadarItem struct {
 	ReviewStatus     string   `json:"review_status,omitempty"`
 	ReviewQueueURL   string   `json:"review_queue_url,omitempty"`
 	GeneratedComment string   `json:"generated_comment,omitempty"`
+	ManualActionURL  string   `json:"manual_action_url,omitempty"`
+	CommentTweetID   string   `json:"comment_tweet_id,omitempty"`
+	CommentURL       string   `json:"comment_url,omitempty"`
 	SavedMemoryID    uint     `json:"saved_memory_id,omitempty"`
 	UpdatedAt        string   `json:"updated_at,omitempty"`
 }

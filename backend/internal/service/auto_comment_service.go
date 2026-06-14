@@ -776,13 +776,21 @@ func (s *AutoCommentService) RejectTask(userID, id uint, reason string) (*dto.Au
 	return &item, nil
 }
 
-func (s *AutoCommentService) MarkTaskHandled(userID, id uint) (*dto.AutoCommentTaskItem, error) {
+func (s *AutoCommentService) MarkTaskHandled(userID, id uint, req dto.ExposureRadarManualHandleRequest) (*dto.AutoCommentTaskItem, error) {
 	task, err := s.taskRepo.GetByUserAndID(userID, id)
 	if err != nil {
 		return nil, err
 	}
 	if task.Status == "sent" || task.Status == "published" {
 		return nil, fmt.Errorf("published task is already completed")
+	}
+	publishedURL := strings.TrimSpace(req.PublishedURL)
+	commentTweetID := strings.TrimSpace(req.CommentTweetID)
+	if commentTweetID == "" && publishedURL != "" {
+		commentTweetID = extractTweetID(publishedURL)
+	}
+	if publishedURL != "" && commentTweetID == "" {
+		return nil, fmt.Errorf("published_url must be a valid X post URL")
 	}
 	if s.publishing != nil {
 		if err := s.publishing.DeleteNonPublishedSourceJobs(userID, repository.PublishSourceComment, id); err != nil {
@@ -799,7 +807,14 @@ func (s *AutoCommentService) MarkTaskHandled(userID, id uint) (*dto.AutoCommentT
 	task.BlockedAt = &now
 	task.FailureCategory = ""
 	task.FailureReason = ""
-	task.DeliveryReason = firstNonEmpty(task.DeliveryReason, "Marked as handled by the user.")
+	if task.ManualActionURL == "" {
+		task.ManualActionURL = autoCommentManualActionURL(task.TargetUsername, task.TargetTweetID)
+	}
+	if commentTweetID != "" {
+		task.CommentTweetID = truncateRunes(commentTweetID, 64)
+		task.SentAt = &now
+	}
+	task.DeliveryReason = exposureRadarManualHandledReason(task.DeliveryReason, req, task.CommentTweetID)
 	if err := s.taskRepo.Save(task); err != nil {
 		return nil, err
 	}
@@ -1863,12 +1878,18 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-var tweetIDPattern = regexp.MustCompile(`/status(?:es)?/([0-9]+)`)
+var (
+	tweetIDPattern     = regexp.MustCompile(`/status(?:es)?/([0-9]+)`)
+	tweetIDOnlyPattern = regexp.MustCompile(`^[0-9]+$`)
+)
 
 func extractTweetID(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
+	}
+	if tweetIDOnlyPattern.MatchString(raw) {
+		return raw
 	}
 	if match := tweetIDPattern.FindStringSubmatch(raw); len(match) == 2 {
 		return match[1]
@@ -2817,6 +2838,29 @@ func autoCommentManualActionURL(username, tweetID string) string {
 	return "https://x.com"
 }
 
+func autoCommentCommentURL(commentTweetID string) string {
+	commentTweetID = strings.TrimSpace(commentTweetID)
+	if commentTweetID == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://x.com/i/web/status/%s", commentTweetID)
+}
+
+func exposureRadarManualHandledReason(existing string, req dto.ExposureRadarManualHandleRequest, commentTweetID string) string {
+	parts := make([]string, 0, 3)
+	if existing = strings.TrimSpace(existing); existing != "" && !strings.Contains(existing, "Marked as manually handled") {
+		parts = append(parts, existing)
+	}
+	parts = append(parts, "Marked as manually handled by the user.")
+	if strings.TrimSpace(commentTweetID) != "" {
+		parts = append(parts, "published_reply_id="+strings.TrimSpace(commentTweetID))
+	}
+	if note := strings.TrimSpace(req.Note); note != "" {
+		parts = append(parts, "note="+truncateRunes(note, 240))
+	}
+	return truncateRunes(strings.Join(parts, " "), 1000)
+}
+
 func buildAutoCommentQuoteCandidate(comment string) string {
 	comment = strings.TrimSpace(comment)
 	if comment == "" {
@@ -3013,6 +3057,7 @@ func toAutoCommentTaskItem(row model.AutoCommentTask) dto.AutoCommentTaskItem {
 		ApprovalRequired:    row.ApprovalRequired,
 		ActivityLogID:       row.ActivityLogID,
 		CommentTweetID:      row.CommentTweetID,
+		CommentURL:          autoCommentCommentURL(row.CommentTweetID),
 		DetectedAt:          row.DetectedAt.UTC().Format(time.RFC3339),
 	}
 	if row.RetryAfterAt != nil {

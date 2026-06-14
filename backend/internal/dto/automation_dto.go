@@ -525,6 +525,12 @@ type AutoCommentTargetStatusRequest struct {
 	Status string `json:"status" binding:"required"`
 }
 
+type ExposureRadarManualHandleRequest struct {
+	PublishedURL   string `json:"published_url"`
+	CommentTweetID string `json:"comment_tweet_id"`
+	Note           string `json:"note"`
+}
+
 type AutoCommentVariantItem struct {
 	Type    string `json:"type"`
 	Label   string `json:"label"`
@@ -570,6 +576,7 @@ type AutoCommentTaskItem struct {
 	ApprovalRequired      bool                         `json:"approval_required"`
 	ActivityLogID         uint                         `json:"activity_log_id,omitempty"`
 	CommentTweetID        string                       `json:"comment_tweet_id,omitempty"`
+	CommentURL            string                       `json:"comment_url,omitempty"`
 	DetectedAt            string                       `json:"detected_at"`
 	GeneratedAt           string                       `json:"generated_at,omitempty"`
 	ApprovedAt            string                       `json:"approved_at,omitempty"`

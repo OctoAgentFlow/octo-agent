@@ -907,7 +907,9 @@ func (ctl *AutomationController) MarkCommentTaskHandled(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid draft id")
 		return
 	}
-	data, err := ctl.autoCommentService.MarkTaskHandled(userID, taskID)
+	var req dto.ExposureRadarManualHandleRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := ctl.autoCommentService.MarkTaskHandled(userID, taskID, req)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

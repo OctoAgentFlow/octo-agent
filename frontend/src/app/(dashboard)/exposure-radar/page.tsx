@@ -27,6 +27,8 @@ type ManualActionState = {
   opened?: boolean;
   saved?: boolean;
   handled?: boolean;
+  persisted?: boolean;
+  publishedUrl?: string;
   updatedAt?: string;
 };
 
@@ -54,6 +56,7 @@ export default function ExposureRadarPage() {
   const [selectedAccountID, setSelectedAccountID] = useState(0);
   const [selectedBotID, setSelectedBotID] = useState(0);
   const [draftingID, setDraftingID] = useState<string | null>(null);
+  const [handlingID, setHandlingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("all");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
@@ -232,6 +235,9 @@ export default function ExposureRadarPage() {
           review_status: task.status,
           review_queue_url: `/handling-list?type=comment&status=${encodeURIComponent(task.status === "review" ? "pending_review" : task.status)}&focus_type=comment&focus_source_id=${task.id}`,
           generated_comment: task.generated_comment,
+          manual_action_url: task.manual_action_url,
+          comment_tweet_id: task.comment_tweet_id,
+          comment_url: task.comment_url,
         } : row),
       } : current);
       pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
@@ -263,6 +269,41 @@ export default function ExposureRadarPage() {
       setSavingMemoryID(null);
     }
   }, [pushToast, selectedAccountID, selectedBotID, t, updateManualActionState]);
+
+  const markRadarHandled = useCallback(async (item: ExposureRadarItemApi, publishedURL: string) => {
+    const normalizedPublishedURL = publishedURL.trim();
+    if (!item.review_task_id) {
+      updateManualActionState(item.id, { handled: true, persisted: false, publishedUrl: normalizedPublishedURL });
+      pushToast(t("exposureRadar.manualAction.localOnlyToast"));
+      return;
+    }
+    setHandlingID(item.id);
+    try {
+      const task = await exposureRadarService.markDraftHandled(item.review_task_id, {
+        published_url: normalizedPublishedURL || undefined,
+      });
+      const persistedURL = task.comment_url || normalizedPublishedURL;
+      setData((current) => current ? {
+        ...current,
+        items: current.items.map((row) => row.id === item.id ? {
+          ...row,
+          review_status: task.status,
+          manual_action_url: task.manual_action_url || row.manual_action_url,
+          comment_tweet_id: task.comment_tweet_id,
+          comment_url: task.comment_url,
+        } : row),
+      } : current);
+      updateManualActionState(item.id, { handled: true, persisted: true, publishedUrl: persistedURL });
+      void exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 })
+        .then(setPerformance)
+        .catch(() => undefined);
+      pushToast(t("exposureRadar.manualAction.persistedToast"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.manualAction.persistFailed") : t("exposureRadar.manualAction.persistFailed"));
+    } finally {
+      setHandlingID(null);
+    }
+  }, [pushToast, region, selectedAccountID, selectedBotID, t, updateManualActionState]);
 
   return (
     <div className="space-y-5">
@@ -388,6 +429,8 @@ export default function ExposureRadarPage() {
                 drafting={draftingID === item.id}
                 draftDisabled={!selectedAccountID || !selectedBotID}
                 onCreateDraft={createDraft}
+                handling={handlingID === item.id}
+                onMarkHandled={markRadarHandled}
                 savingMemory={savingMemoryID === item.id}
                 memoryDisabled={!selectedAccountID || !selectedBotID}
                 memoryAccountID={selectedAccountID}
@@ -760,10 +803,12 @@ function RadarCard({
   savedMemoryID,
   drafting,
   draftDisabled,
+  handling,
   savingMemory,
   memoryDisabled,
   memoryAccountID,
   onCreateDraft,
+  onMarkHandled,
   onSaveMemory,
   manualState,
   onManualAction,
@@ -775,10 +820,12 @@ function RadarCard({
   savedMemoryID: number;
   drafting: boolean;
   draftDisabled: boolean;
+  handling: boolean;
   savingMemory: boolean;
   memoryDisabled: boolean;
   memoryAccountID: number;
   onCreateDraft: (item: ExposureRadarItemApi) => void;
+  onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => void;
   onSaveMemory: (item: ExposureRadarItemApi) => void;
   manualState?: ManualActionState;
   onManualAction: (patch: Partial<ManualActionState>) => void;
@@ -792,6 +839,7 @@ function RadarCard({
   const opportunityTier = normalizeOpportunityTier(item.opportunity_tier);
   const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
   const handledDone = isManualActionHandled(item, manualState);
+  const [publishedURL, setPublishedURL] = useState(manualState?.publishedUrl || item.comment_url || "");
   const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
     ? "shadow-[0_0_0_1px_rgba(0,186,124,0.24),0_18px_46px_rgba(0,186,124,0.08)]"
@@ -807,11 +855,6 @@ function RadarCard({
     } catch {
       pushToast(t("exposureRadar.manualAction.copyFailed"));
     }
-  };
-
-  const markHandled = () => {
-    onManualAction({ handled: true });
-    pushToast(t("exposureRadar.manualAction.handledToast"));
   };
 
   return (
@@ -909,7 +952,12 @@ function RadarCard({
             opened={Boolean(manualState?.opened)}
             saved={savedDone}
             handled={handledDone}
-            onMarkHandled={markHandled}
+            handling={handling}
+            publishedURL={publishedURL}
+            commentURL={item.comment_url || manualState?.publishedUrl || ""}
+            persisted={Boolean(manualState?.persisted || item.review_status === "handled" || item.comment_tweet_id || item.comment_url)}
+            onPublishedURLChange={setPublishedURL}
+            onMarkHandled={() => onMarkHandled(item, publishedURL)}
           />
         </div>
       ) : null}
@@ -961,7 +1009,29 @@ function RadarCard({
   );
 }
 
-function ManualWorkflowPanel({ copied, opened, saved, handled, onMarkHandled }: { copied: boolean; opened: boolean; saved: boolean; handled: boolean; onMarkHandled: () => void }) {
+function ManualWorkflowPanel({
+  copied,
+  opened,
+  saved,
+  handled,
+  handling,
+  publishedURL,
+  commentURL,
+  persisted,
+  onPublishedURLChange,
+  onMarkHandled,
+}: {
+  copied: boolean;
+  opened: boolean;
+  saved: boolean;
+  handled: boolean;
+  handling: boolean;
+  publishedURL: string;
+  commentURL: string;
+  persisted: boolean;
+  onPublishedURLChange: (value: string) => void;
+  onMarkHandled: () => void;
+}) {
   const { t } = useT();
   return (
     <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/30 p-3">
@@ -970,11 +1040,30 @@ function ManualWorkflowPanel({ copied, opened, saved, handled, onMarkHandled }: 
           <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualWorkflow.title")}</p>
           <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.manualWorkflow.description")}</p>
         </div>
-        <Button type="button" size="sm" variant={handled ? "outline" : "default"} onClick={onMarkHandled}>
-          <CheckCircle2 className="size-3.5" />
-          {handled ? t("exposureRadar.manualAction.handled") : t("exposureRadar.manualAction.markHandled")}
+        <Button type="button" size="sm" variant={handled ? "outline" : "default"} disabled={handling} onClick={onMarkHandled}>
+          {handling ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+          {handling ? t("exposureRadar.manualAction.saving") : handled ? t("exposureRadar.manualAction.handled") : t("exposureRadar.manualAction.markHandled")}
         </Button>
       </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="min-w-0">
+          <span className="sr-only">{t("exposureRadar.manualWorkflow.resultLabel")}</span>
+          <input
+            value={publishedURL}
+            onChange={(event) => onPublishedURLChange(event.target.value)}
+            placeholder={t("exposureRadar.manualWorkflow.resultPlaceholder")}
+            disabled={handling}
+            className="h-9 w-full rounded-full border border-[#2f3336] bg-black px-3 text-xs text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]"
+          />
+        </label>
+        {commentURL ? (
+          <a href={commentURL} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("exposureRadar.manualWorkflow.openReply")}
+            <ExternalLink className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
+      <p className="mt-2 text-xs leading-5 text-[#71767b]">{persisted ? t("exposureRadar.manualWorkflow.persisted") : t("exposureRadar.manualWorkflow.resultHint")}</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-4">
         <ManualWorkflowStep done={copied} label={t("exposureRadar.manualWorkflow.copy")} />
         <ManualWorkflowStep done={opened} label={t("exposureRadar.manualWorkflow.open")} />

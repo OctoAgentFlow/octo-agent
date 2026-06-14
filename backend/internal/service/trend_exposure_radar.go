@@ -688,6 +688,9 @@ func (s *TrendService) annotateExposureRadarReviewState(userID uint, resp *dto.E
 		resp.Items[i].ReviewStatus = row.Status
 		resp.Items[i].ReviewQueueURL = fmt.Sprintf("/execution-queue?type=comment&status=%s&focus_type=comment&focus_source_id=%d", url.QueryEscape(reviewQueueRadarStatus(row.Status)), row.ID)
 		resp.Items[i].GeneratedComment = row.GeneratedComment
+		resp.Items[i].ManualActionURL = firstNonEmpty(row.ManualActionURL, autoCommentManualActionURL(row.TargetUsername, row.TargetTweetID))
+		resp.Items[i].CommentTweetID = row.CommentTweetID
+		resp.Items[i].CommentURL = autoCommentCommentURL(row.CommentTweetID)
 	}
 	return resp
 }

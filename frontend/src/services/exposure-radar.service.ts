@@ -52,6 +52,9 @@ export type ExposureRadarItemApi = {
   review_status?: string;
   review_queue_url?: string;
   generated_comment?: string;
+  manual_action_url?: string;
+  comment_tweet_id?: string;
+  comment_url?: string;
   saved_memory_id?: number;
   updated_at?: string;
 };
@@ -131,12 +134,21 @@ export type ExposureRadarDraftApi = {
       preference_status?: string;
     }>;
   };
+  manual_action_url?: string;
+  comment_tweet_id?: string;
+  comment_url?: string;
 };
 
 export type ExposureRadarDraftFeedbackPayload = {
   rating: "positive" | "negative";
   issue_tags: string[];
   comment?: string;
+};
+
+export type ExposureRadarManualHandlePayload = {
+  published_url?: string;
+  comment_tweet_id?: string;
+  note?: string;
 };
 
 export type ExposureRadarPerformanceData = {
@@ -278,6 +290,10 @@ export const exposureRadarService = {
   },
   async rejectDraft(id: number, reason: string) {
     const res = await request.post<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}/reject`, { reason });
+    return res.data.data;
+  },
+  async markDraftHandled(id: number, payload: ExposureRadarManualHandlePayload = {}) {
+    const res = await request.post<ApiResponse<ExposureRadarDraftApi>>(`/exposure-radar/drafts/${id}/handled`, payload);
     return res.data.data;
   },
   async createDraftFeedback(id: number, payload: ExposureRadarDraftFeedbackPayload) {

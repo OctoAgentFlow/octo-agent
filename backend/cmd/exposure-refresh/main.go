@@ -45,6 +45,17 @@ type diagnosticSnapshot struct {
 	OwnedInWindowCount     int64    `json:"owned_in_window_count"`
 	OwnedUnderFanLimit     int64    `json:"owned_under_fan_limit"`
 	OwnedOverFanLimit      int64    `json:"owned_over_fan_limit"`
+	VisiblePoolCount       int64    `json:"visible_pool_count"`
+	WindowRealViewCount    int64    `json:"window_real_view_count"`
+	WindowPriorSampleCount int64    `json:"window_prior_sample_count"`
+	MaxImpressionCount     int64    `json:"max_impression_count"`
+	MaxViewsPerMinute      float64  `json:"max_views_per_minute"`
+	HotViewsGap            int64    `json:"hot_views_gap"`
+	HotVelocityGap         float64  `json:"hot_velocity_gap"`
+	RealViewCoverage       float64  `json:"real_view_coverage"`
+	SamplingCoverage       float64  `json:"sampling_coverage"`
+	TopMissingReason       string   `json:"top_missing_reason,omitempty"`
+	TopMissingDetail       string   `json:"top_missing_detail,omitempty"`
 	LatestOwnedSignalAt    string   `json:"latest_owned_signal_at,omitempty"`
 	FreshnessSeconds       int64    `json:"freshness_seconds"`
 	ConfiguredHotMinViews  int64    `json:"configured_hot_min_views"`
@@ -196,6 +207,17 @@ func summarizeDiagnostics(radar *dto.ExposureRadarResponse) diagnosticSnapshot {
 		OwnedInWindowCount:     diag.OwnedInWindowCount,
 		OwnedUnderFanLimit:     diag.OwnedUnderFanLimit,
 		OwnedOverFanLimit:      diag.OwnedOverFanLimit,
+		VisiblePoolCount:       diag.VisiblePoolCount,
+		WindowRealViewCount:    diag.WindowRealViewCount,
+		WindowPriorSampleCount: diag.WindowPriorSampleCount,
+		MaxImpressionCount:     diag.MaxImpressionCount,
+		MaxViewsPerMinute:      diag.MaxViewsPerMinute,
+		HotViewsGap:            diag.HotViewsGap,
+		HotVelocityGap:         diag.HotVelocityGap,
+		RealViewCoverage:       diag.RealViewCoverage,
+		SamplingCoverage:       diag.SamplingCoverage,
+		TopMissingReason:       diag.TopMissingReason,
+		TopMissingDetail:       diag.TopMissingDetail,
 		LatestOwnedSignalAt:    diag.LatestOwnedSignalAt,
 		FreshnessSeconds:       diag.FreshnessSeconds,
 		ConfiguredHotMinViews:  diag.ConfiguredHotMinViews,

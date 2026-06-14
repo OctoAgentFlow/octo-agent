@@ -51,10 +51,15 @@ type ExposureSignalDiagnosticStats struct {
 	InWindowCount        int64
 	UnderFanLimitCount   int64
 	OverFanLimitCount    int64
+	VisiblePoolCount     int64
 	RealImpressionCount  int64
+	WindowRealViewCount  int64
 	PriorSampleCount     int64
+	WindowPriorSamples   int64
 	HotCandidateCount    int64
 	RisingCandidateCount int64
+	MaxImpressionCount   int64
+	MaxViewsPerMinute    float64
 	LatestSeenAt         time.Time
 }
 
@@ -186,8 +191,24 @@ func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAft
 		COALESCE(SUM(CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 1 ELSE 0 END), 0) AS prior_sample_count,
 		COALESCE(SUM(CASE WHEN impression_count >= ? AND views_per_minute >= ? THEN 1 ELSE 0 END), 0) AS hot_candidate_count,
 		COALESCE(SUM(CASE WHEN impression_count >= ? OR current_count >= 100 OR views_per_minute >= 5 THEN 1 ELSE 0 END), 0) AS rising_candidate_count,
+		COALESCE(SUM(CASE WHEN (published_at = ? OR published_at >= ? OR last_seen_at >= ?) AND (followers_count = 0 OR followers_count <= ?) THEN 1 ELSE 0 END), 0) AS visible_pool_count,
+		COALESCE(SUM(CASE WHEN (published_at = ? OR published_at >= ? OR last_seen_at >= ?) AND (followers_count = 0 OR followers_count <= ?) AND impression_count > 0 THEN 1 ELSE 0 END), 0) AS window_real_view_count,
+		COALESCE(SUM(CASE WHEN (published_at = ? OR published_at >= ? OR last_seen_at >= ?) AND (followers_count = 0 OR followers_count <= ?) AND (previous_count > 0 OR views_per_minute > 0) THEN 1 ELSE 0 END), 0) AS window_prior_samples,
+		COALESCE(MAX(CASE WHEN (published_at = ? OR published_at >= ? OR last_seen_at >= ?) AND (followers_count = 0 OR followers_count <= ?) THEN impression_count ELSE 0 END), 0) AS max_impression_count,
+		COALESCE(MAX(CASE WHEN (published_at = ? OR published_at >= ? OR last_seen_at >= ?) AND (followers_count = 0 OR followers_count <= ?) THEN views_per_minute ELSE 0 END), 0) AS max_views_per_minute,
 		MAX(last_seen_at) AS latest_seen_at
-	`, time.Time{}, activeAfter, activeAfter, maxFans, maxFans, hotMinViews, hotMinVelocity, hotMinViews).Scan(&stats).Error
+	`,
+		time.Time{}, activeAfter, activeAfter,
+		maxFans,
+		maxFans,
+		hotMinViews, hotMinVelocity,
+		hotMinViews,
+		time.Time{}, activeAfter, activeAfter, maxFans,
+		time.Time{}, activeAfter, activeAfter, maxFans,
+		time.Time{}, activeAfter, activeAfter, maxFans,
+		time.Time{}, activeAfter, activeAfter, maxFans,
+		time.Time{}, activeAfter, activeAfter, maxFans,
+	).Scan(&stats).Error
 	return stats, err
 }
 

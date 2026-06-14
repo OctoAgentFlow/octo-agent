@@ -926,6 +926,12 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 		diag.RequestedLimit = 50
 	}
 	for _, item := range resp.Items {
+		if item.ImpressionCount > diag.MaxImpressionCount {
+			diag.MaxImpressionCount = item.ImpressionCount
+		}
+		if item.ViewsPerMin > diag.MaxViewsPerMinute {
+			diag.MaxViewsPerMinute = item.ViewsPerMin
+		}
 		switch strings.TrimSpace(item.DataQuality) {
 		case "tweet_level":
 			diag.TweetLevelCount++
@@ -962,6 +968,21 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 			diag.OwnedInWindowCount = stats.InWindowCount
 			diag.OwnedUnderFanLimit = stats.UnderFanLimitCount
 			diag.OwnedOverFanLimit = stats.OverFanLimitCount
+			if stats.VisiblePoolCount > 0 {
+				diag.VisiblePoolCount = stats.VisiblePoolCount
+			}
+			if stats.WindowRealViewCount > 0 {
+				diag.WindowRealViewCount = stats.WindowRealViewCount
+			}
+			if stats.WindowPriorSamples > 0 {
+				diag.WindowPriorSampleCount = stats.WindowPriorSamples
+			}
+			if stats.MaxImpressionCount > diag.MaxImpressionCount {
+				diag.MaxImpressionCount = stats.MaxImpressionCount
+			}
+			if stats.MaxViewsPerMinute > diag.MaxViewsPerMinute {
+				diag.MaxViewsPerMinute = stats.MaxViewsPerMinute
+			}
 			if !stats.LatestSeenAt.IsZero() {
 				diag.LatestOwnedSignalAt = stats.LatestSeenAt.UTC().Format(time.RFC3339)
 				if diag.FreshnessSeconds == 0 {
@@ -970,11 +991,88 @@ func (s *TrendService) withExposureRadarDiagnostics(resp *dto.ExposureRadarRespo
 			}
 		}
 	}
+	finalizeExposureRadarHotGapDiagnostics(&diag)
 	diag.Status = exposureRadarDiagnosticStatus(diag)
 	diag.Issues = append(diag.Issues, exposureRadarDiagnosticIssues(diag)...)
 	diag.Suggestions = exposureRadarDiagnosticSuggestions(diag)
 	resp.Diagnostics = diag
 	return resp
+}
+
+func finalizeExposureRadarHotGapDiagnostics(diag *dto.ExposureRadarDiagnostics) {
+	if diag == nil {
+		return
+	}
+	if diag.VisiblePoolCount == 0 && diag.TweetLevelCount > 0 {
+		diag.VisiblePoolCount = int64(diag.TweetLevelCount)
+	}
+	if diag.WindowRealViewCount == 0 && diag.RealImpressionCount > 0 {
+		diag.WindowRealViewCount = int64(diag.RealImpressionCount)
+	}
+	if diag.WindowPriorSampleCount == 0 && diag.TweetLevelCount > diag.FirstSampleCount {
+		diag.WindowPriorSampleCount = int64(diag.TweetLevelCount - diag.FirstSampleCount)
+	}
+	if diag.ConfiguredHotMinViews > diag.MaxImpressionCount {
+		diag.HotViewsGap = diag.ConfiguredHotMinViews - diag.MaxImpressionCount
+	}
+	if diag.ConfiguredHotVelocity > diag.MaxViewsPerMinute {
+		diag.HotVelocityGap = diag.ConfiguredHotVelocity - diag.MaxViewsPerMinute
+	}
+	diag.RealViewCoverage = exposureRatio(diag.WindowRealViewCount, diag.VisiblePoolCount)
+	diag.SamplingCoverage = exposureRatio(diag.WindowPriorSampleCount, diag.VisiblePoolCount)
+	diag.TopMissingReason, diag.TopMissingDetail = exposureRadarTopMissingReason(*diag)
+}
+
+func exposureRatio(part, total int64) float64 {
+	if part <= 0 || total <= 0 {
+		return 0
+	}
+	value := float64(part) / float64(total)
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func exposureMaxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func exposureRadarTopMissingReason(diag dto.ExposureRadarDiagnostics) (string, string) {
+	if diag.HotOpportunityCount > 0 {
+		return "none", "Hot opportunities are already visible in the current window."
+	}
+	if !diag.XTrendsEnabled || !diag.BearerTokenConfigured {
+		return "x_config_blocked", "X Recent Search collection is not fully configured."
+	}
+	if diag.OwnedSignalCount == 0 {
+		return "no_owned_signals", "No owned tweet-level signals have been collected for this region yet."
+	}
+	if diag.OwnedInWindowCount == 0 {
+		return "window_too_short", fmt.Sprintf("Owned signals exist, but none are inside the last %dh window.", diag.WindowHours)
+	}
+	if diag.VisiblePoolCount == 0 && diag.OwnedOverFanLimit > 0 {
+		return "fan_filter_strict", fmt.Sprintf("Stored signals are outside the current <=%s follower filter.", compactCount(diag.ConfiguredMaxFans))
+	}
+	if diag.VisiblePoolCount > 0 && diag.VisiblePoolCount < int64(exposureMaxInt(3, diag.RequestedLimit/4)) {
+		return "query_low_yield", fmt.Sprintf("Only %d visible candidates are in this window, so the topic/query pool may be too narrow.", diag.VisiblePoolCount)
+	}
+	if diag.VisiblePoolCount > 0 && diag.RealViewCoverage < 0.35 {
+		return "x_impressions_sparse", fmt.Sprintf("Only %d/%d visible candidates have real X view counts.", diag.WindowRealViewCount, diag.VisiblePoolCount)
+	}
+	if diag.VisiblePoolCount > 0 && diag.SamplingCoverage < 0.35 {
+		return "insufficient_resampling", fmt.Sprintf("Only %d/%d visible candidates have a prior sample for velocity.", diag.WindowPriorSampleCount, diag.VisiblePoolCount)
+	}
+	if diag.MaxImpressionCount < diag.ConfiguredHotMinViews {
+		return "views_below_threshold", fmt.Sprintf("Best visible post has %s views, still %s below the hot threshold.", compactCount(diag.MaxImpressionCount), compactCount(diag.HotViewsGap))
+	}
+	if diag.MaxViewsPerMinute < diag.ConfiguredHotVelocity {
+		return "velocity_below_threshold", fmt.Sprintf("Best visible velocity is %.1f/min, still %.1f/min below the hot threshold.", diag.MaxViewsPerMinute, diag.HotVelocityGap)
+	}
+	return "no_true_hot", "Visible candidates are close, but none satisfy both real views and velocity together."
 }
 
 func exposureRadarDiagnosticStatus(diag dto.ExposureRadarDiagnostics) string {
@@ -1063,12 +1161,31 @@ func exposureRadarDiagnosticSuggestions(diag dto.ExposureRadarDiagnostics) []str
 		suggestions = append(suggestions, "Treat these cards as research leads until owned tweet-level signals become fresh.")
 	}
 	if hasIssue("no_true_hot") {
+		if reasonSuggestion := exposureRadarMissingReasonSuggestion(diag); reasonSuggestion != "" {
+			suggestions = append(suggestions, reasonSuggestion)
+		}
 		suggestions = append(suggestions, fmt.Sprintf("Use Rising opportunities first; hot opportunities require at least %s real impressions plus %.0f/min velocity. Strong hot remains %s+ and %.0f/min.", compactCount(diag.ConfiguredHotMinViews), diag.ConfiguredHotVelocity, compactCount(diag.ConfiguredStrongViews), diag.ConfiguredStrongSpeed))
 	}
 	if len(suggestions) == 0 {
 		suggestions = append(suggestions, "Collector health looks usable. Work from Priority opportunities first, then inspect Rising and Needs sampling cards.")
 	}
 	return compactExposureRadarStringList(suggestions)
+}
+
+func exposureRadarMissingReasonSuggestion(diag dto.ExposureRadarDiagnostics) string {
+	switch diag.TopMissingReason {
+	case "query_low_yield":
+		return "Current topic/query yield is low; broaden Chinese seed topics or increase topic/search coverage before lowering hot thresholds."
+	case "x_impressions_sparse":
+		return "X returned sparse real-view data in this window; inspect Rising cards and wait for another refresh before treating this as a threshold issue."
+	case "insufficient_resampling":
+		return "Most candidates need a second sample; run another refresh after the interval so velocity labels become reliable."
+	case "views_below_threshold":
+		return fmt.Sprintf("Best visible views are %s below the hot threshold; lower the view threshold only if this gap stays consistent across multiple refreshes.", compactCount(diag.HotViewsGap))
+	case "velocity_below_threshold":
+		return fmt.Sprintf("Best visible speed is %.1f/min below the hot threshold; the candidates have views but not enough momentum yet.", diag.HotVelocityGap)
+	}
+	return ""
 }
 
 func exposureDiagnosticIssue(code, severity, message string) dto.ExposureRadarDiagnosticIssue {

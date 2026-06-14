@@ -108,6 +108,17 @@ export type ExposureRadarDiagnosticsApi = {
   owned_in_window_count: number;
   owned_under_fan_limit: number;
   owned_over_fan_limit: number;
+  visible_pool_count: number;
+  window_real_view_count: number;
+  window_prior_sample_count: number;
+  max_impression_count: number;
+  max_views_per_minute: number;
+  hot_views_gap: number;
+  hot_velocity_gap: number;
+  real_view_coverage: number;
+  sampling_coverage: number;
+  top_missing_reason?: string;
+  top_missing_detail?: string;
   latest_owned_signal_at?: string;
   freshness_seconds?: number;
   tweet_level_count: number;

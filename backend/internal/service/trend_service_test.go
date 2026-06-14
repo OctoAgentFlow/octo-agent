@@ -281,6 +281,51 @@ func TestExposureRadarDiagnosticsExplainsNoTrueHot(t *testing.T) {
 	if !diagnosticHasIssue(out.Diagnostics.Issues, "no_true_hot") {
 		t.Fatalf("expected no_true_hot issue, got %#v", out.Diagnostics.Issues)
 	}
+	if out.Diagnostics.TopMissingReason == "" {
+		t.Fatalf("expected top missing reason to be populated")
+	}
+}
+
+func TestExposureRadarTopMissingReasonClassifiesHotGap(t *testing.T) {
+	base := dto.ExposureRadarDiagnostics{
+		XTrendsEnabled:        true,
+		BearerTokenConfigured: true,
+		OwnedSignalCount:      100,
+		OwnedInWindowCount:    20,
+		VisiblePoolCount:      20,
+		RequestedLimit:        20,
+		ConfiguredHotMinViews: 1000,
+		ConfiguredHotVelocity: 8,
+		MaxImpressionCount:    900,
+		MaxViewsPerMinute:     9,
+		RealViewCoverage:      0.2,
+		SamplingCoverage:      0.8,
+	}
+
+	reason, _ := exposureRadarTopMissingReason(base)
+	if reason != "x_impressions_sparse" {
+		t.Fatalf("reason = %s, want x_impressions_sparse", reason)
+	}
+
+	base.RealViewCoverage = 0.8
+	base.SamplingCoverage = 0.2
+	reason, _ = exposureRadarTopMissingReason(base)
+	if reason != "insufficient_resampling" {
+		t.Fatalf("reason = %s, want insufficient_resampling", reason)
+	}
+
+	base.SamplingCoverage = 0.8
+	reason, _ = exposureRadarTopMissingReason(base)
+	if reason != "views_below_threshold" {
+		t.Fatalf("reason = %s, want views_below_threshold", reason)
+	}
+
+	base.MaxImpressionCount = 1200
+	base.MaxViewsPerMinute = 3
+	reason, _ = exposureRadarTopMissingReason(base)
+	if reason != "velocity_below_threshold" {
+		t.Fatalf("reason = %s, want velocity_below_threshold", reason)
+	}
 }
 
 func TestSelectExposureTweetCandidatesPrioritizesRealImpressions(t *testing.T) {

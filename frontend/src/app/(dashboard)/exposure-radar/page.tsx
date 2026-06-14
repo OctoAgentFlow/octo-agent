@@ -782,6 +782,8 @@ function CollectionDiagnosticsPanel({ diagnostics, timeZone }: { diagnostics: Ex
   const status = normalizeDiagnosticStatus(diagnostics.status);
   const issues = diagnostics.issues || [];
   const suggestions = diagnosticSuggestions(diagnostics, t);
+  const missingReason = diagnostics.top_missing_reason || "none";
+  const visiblePool = diagnostics.visible_pool_count || diagnostics.tweet_level_count || 0;
   return (
     <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -816,6 +818,25 @@ function CollectionDiagnosticsPanel({ diagnostics, timeZone }: { diagnostics: Ex
         <DiagnosticMetric label={t("exposureRadar.diagnostics.metric.rising")} value={formatCompact(diagnostics.rising_opportunity_count || 0)} detail={t("exposureRadar.diagnostics.metric.risingDetail")} />
         <DiagnosticMetric label={t("exposureRadar.diagnostics.metric.sampling")} value={formatCompact(diagnostics.needs_sampling_count || 0)} detail={t("exposureRadar.diagnostics.metric.samplingDetail")} />
         <DiagnosticMetric label={t("exposureRadar.diagnostics.metric.realViews")} value={formatCompact(diagnostics.real_impression_count || 0)} detail={t("exposureRadar.diagnostics.metric.realViewsDetail")} />
+      </div>
+
+      <div className="mt-4 rounded-xl border border-[#1d9bf0]/20 bg-[#07111a] p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.diagnostics.gap.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{diagnosticMissingReasonDetail(diagnostics, t)}</p>
+          </div>
+          <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${missingReason === "none" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]"}`}>
+            <Gauge className="size-3.5" />
+            {diagnosticMissingReasonText(missingReason, t)}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <DiagnosticMetric label={t("exposureRadar.diagnostics.gap.maxViews")} value={formatCompact(diagnostics.max_impression_count || 0)} detail={(diagnostics.hot_views_gap || 0) > 0 ? t("exposureRadar.diagnostics.gap.viewsMissing", { count: formatCompact(diagnostics.hot_views_gap || 0) }) : t("exposureRadar.diagnostics.gap.viewsReady")} />
+          <DiagnosticMetric label={t("exposureRadar.diagnostics.gap.maxSpeed")} value={`${formatOneDecimal(diagnostics.max_views_per_minute || 0)}/min`} detail={(diagnostics.hot_velocity_gap || 0) > 0 ? t("exposureRadar.diagnostics.gap.speedMissing", { speed: formatOneDecimal(diagnostics.hot_velocity_gap || 0) }) : t("exposureRadar.diagnostics.gap.speedReady")} />
+          <DiagnosticMetric label={t("exposureRadar.diagnostics.gap.realCoverage")} value={formatPercent(diagnostics.real_view_coverage || 0)} detail={t("exposureRadar.diagnostics.gap.realCoverageDetail", { count: diagnostics.window_real_view_count || 0, total: visiblePool })} />
+          <DiagnosticMetric label={t("exposureRadar.diagnostics.gap.sampleCoverage")} value={formatPercent(diagnostics.sampling_coverage || 0)} detail={t("exposureRadar.diagnostics.gap.sampleCoverageDetail", { count: diagnostics.window_prior_sample_count || 0, total: visiblePool })} />
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -1975,6 +1996,33 @@ function diagnosticIssueText(issue: ExposureRadarDiagnosticIssueApi, t: (key: st
   return issue.message || issue.code;
 }
 
+function diagnosticMissingReasonText(reason: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  const code = reason || "none";
+  const known = new Set([
+    "none",
+    "x_config_blocked",
+    "no_owned_signals",
+    "window_too_short",
+    "fan_filter_strict",
+    "query_low_yield",
+    "x_impressions_sparse",
+    "insufficient_resampling",
+    "views_below_threshold",
+    "velocity_below_threshold",
+    "no_true_hot",
+  ]);
+  if (known.has(code)) return t(`exposureRadar.diagnostics.gap.reason.${code}`);
+  return code;
+}
+
+function diagnosticMissingReasonDetail(diagnostics: ExposureRadarDiagnosticsApi, t: (key: string, params?: Record<string, string | number>) => string) {
+  return t("exposureRadar.diagnostics.gap.detail", {
+    views: formatCompact(diagnostics.configured_hot_min_views || 0),
+    speed: formatOneDecimal(diagnostics.configured_hot_min_velocity || 0),
+    pool: diagnostics.visible_pool_count || diagnostics.tweet_level_count || 0,
+  });
+}
+
 function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, t: (key: string, params?: Record<string, string | number>) => string) {
   const codes = new Set((diagnostics.issues || []).map((issue) => issue.code));
   const suggestions: string[] = [];
@@ -1987,6 +2035,7 @@ function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, t: (key
   if (codes.has("window_too_short")) add("exposureRadar.diagnostics.suggestion.widenWindow");
   if (codes.has("fan_filter_strict")) add("exposureRadar.diagnostics.suggestion.raiseFans");
   if (codes.has("topic_cache_only") || codes.has("external_fallback")) add("exposureRadar.diagnostics.suggestion.researchOnly");
+  if (codes.has("no_true_hot") && diagnostics.top_missing_reason) add(`exposureRadar.diagnostics.suggestion.${diagnostics.top_missing_reason}`);
   if (codes.has("no_true_hot")) add("exposureRadar.diagnostics.suggestion.useRising");
   if (suggestions.length === 0) add("exposureRadar.diagnostics.suggestion.operate");
   return suggestions.slice(0, 5);

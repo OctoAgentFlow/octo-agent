@@ -79,6 +79,14 @@ To validate collection immediately after deploy without waiting for the schedule
 OAF_ADMIN_TOKEN="<admin bearer token>" scripts/admin-refresh-exposure-radar.sh all
 ```
 
+On the prod-lite server, operators can run the tokenless server-local refresh script from the active release:
+
+```bash
+ssh ubuntu@<your-server-ip> 'sh /home/ubuntu/octo/current/scripts/prod-lite-refresh-exposure-radar.sh all'
+```
+
+The server-local script loads the production config and `/home/ubuntu/octo/shared/backend/configs/.env`, refreshes Exposure Radar directly through the backend service layer, and prints a JSON diagnostic summary for `en` and `zh`.
+
 Use `en` or `zh` instead of `all` when validating only one region.
 
 ## Operator Checks

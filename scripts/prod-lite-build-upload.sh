@@ -25,6 +25,7 @@ echo "[build] backend linux/amd64 binaries"
   cd "$ROOT_DIR/backend"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$WORK_DIR/backend/bin/api" ./cmd/api
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$WORK_DIR/backend/bin/admin" ./cmd/admin
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$WORK_DIR/backend/bin/exposure-refresh" ./cmd/exposure-refresh
 )
 
 echo "[build] frontend api bundle"
@@ -45,7 +46,8 @@ rsync -a --delete --exclude cache "$ROOT_DIR/frontend/.next-admin" "$WORK_DIR/fr
 rsync -a --delete "$ROOT_DIR/frontend/public" "$WORK_DIR/frontend/"
 cp "$ROOT_DIR/frontend/package.json" "$ROOT_DIR/frontend/package-lock.json" "$ROOT_DIR/frontend/next.config.ts" "$WORK_DIR/frontend/"
 cp "$ROOT_DIR/scripts/prod-lite-activate-remote.sh" "$WORK_DIR/scripts/"
-chmod +x "$WORK_DIR/backend/bin/api" "$WORK_DIR/backend/bin/admin" "$WORK_DIR/scripts/prod-lite-activate-remote.sh"
+cp "$ROOT_DIR/scripts/prod-lite-refresh-exposure-radar.sh" "$WORK_DIR/scripts/"
+chmod +x "$WORK_DIR/backend/bin/api" "$WORK_DIR/backend/bin/admin" "$WORK_DIR/backend/bin/exposure-refresh" "$WORK_DIR/scripts/prod-lite-activate-remote.sh" "$WORK_DIR/scripts/prod-lite-refresh-exposure-radar.sh"
 
 echo "$COMMIT" >"$WORK_DIR/REVISION"
 

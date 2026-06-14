@@ -292,7 +292,7 @@ func (s *AutoPostService) GenerateDraft(ctx context.Context, userID, planID uint
 			return nil, fmt.Errorf("content item is not active")
 		}
 	}
-	input := autoPostInputFromBot(acc, bot, "")
+	input := contentDraftInputFromBot(acc, bot, "")
 	input.ContentDirection = strings.TrimSpace(req.ContentDirection)
 	input.RecentPosts = recent
 	input.ContentLengthMode = normalizeContentDraftLengthMode(plan.ContentLengthMode, acc.XSubscriptionTier)
@@ -586,7 +586,7 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 		botID = botIDForUsage(bot)
 	}
 	feedbackRows := s.generationFeedbackRows(userID, botID, "tweet")
-	input := autoPostInputFromBot(acc, bot, "")
+	input := contentDraftInputFromBot(acc, bot, "")
 	input.ContentDirection = strings.TrimSpace(draft.ContentDirection)
 	input.RecentPosts = recent
 	input.FeedbackSignals = feedbackSignalsFromRows(feedbackRows)
@@ -607,7 +607,7 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 		input.ContentItemGoal = contentItem.GrowthGoal
 		input.ContentItemCTA = contentItem.CTAPreference
 	}
-	generated, err := s.ai.RewriteAutoPost(ctx, input, draft.GeneratedContent, req.RewriteMode, req.Feedback)
+	generated, err := s.ai.RewriteContentDraft(ctx, input, draft.GeneratedContent, req.RewriteMode, req.Feedback)
 	if err != nil {
 		return nil, err
 	}
@@ -753,7 +753,7 @@ func (s *AutoPostService) assertMonthlyQuota(userID uint, now time.Time) error {
 	return nil
 }
 
-func (s *AutoPostService) generateUniqueContentDraft(ctx context.Context, userID, xAccountID uint, input GenerateAutoPostInput) (string, string, AIGeneratedText, error) {
+func (s *AutoPostService) generateUniqueContentDraft(ctx context.Context, userID, xAccountID uint, input GenerateContentDraftInput) (string, string, AIGeneratedText, error) {
 	since := time.Now().UTC().AddDate(0, 0, -30)
 	var lastContent string
 	var lastHash string
@@ -766,7 +766,7 @@ func (s *AutoPostService) generateUniqueContentDraft(ctx context.Context, userID
 				input.ContentDirection += "\nGenerate a different angle from the same content source."
 			}
 		}
-		generated, err := s.ai.GenerateAutoPost(ctx, input)
+		generated, err := s.ai.GenerateContentDraft(ctx, input)
 		if err != nil {
 			return "", "", AIGeneratedText{}, err
 		}

@@ -307,14 +307,14 @@ func (s *PostService) Generate(ctx context.Context, userID uint, req dto.PostGen
 	}
 	botID := botIDForUsage(bot)
 	selectedTrends := s.selectTrendsForManualPost(userID, botID, req.ExcludedTrendNames, now)
-	input := autoPostInputFromBot(acc, bot, req.Topic)
+	input := contentDraftInputFromBot(acc, bot, req.Topic)
 	input.SelectedTrends = trendPromptItems(selectedTrends)
 	input.FeedbackSignals = s.generationFeedbackSignals(userID, botID, "tweet")
 	input.FeedbackSignals = appendFeedbackLearningSignals(input.FeedbackSignals, s.verdictRepo, s.prefRepo, userID, botID, "tweet")
 	if s.trends != nil {
 		input.TrendFeedbackSignals = s.trends.FeedbackPromptSignals(userID, botID)
 	}
-	generated, err := s.ai.GenerateAutoPost(ctx, input)
+	generated, err := s.ai.GenerateContentDraft(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -560,8 +560,8 @@ func (s *PostService) generationFeedbackSignals(userID, botID uint, scene string
 	return feedbackSignalsFromRows(rows)
 }
 
-func autoPostInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic string) GenerateAutoPostInput {
-	in := GenerateAutoPostInput{
+func contentDraftInputFromBot(acc *model.TwitterAccount, bot *model.OAFBot, topic string) GenerateContentDraftInput {
+	in := GenerateContentDraftInput{
 		AccountHandle:     formatXAccountHandle(acc.Username),
 		Topic:             topic,
 		ContentLengthMode: contentDraftLengthModeStandard,

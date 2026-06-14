@@ -339,6 +339,15 @@ type GenerateAutoPostInput struct {
 	LanguageStrategy     string
 }
 
+// GenerateContentDraftInput is the preferred runtime name for the former
+// Auto Post generation input. It aliases the legacy type so callers keep the
+// same in-memory contract while new code can use Content Draft terminology.
+type GenerateContentDraftInput = GenerateAutoPostInput
+
+func (s *AIService) RewriteContentDraft(ctx context.Context, in GenerateContentDraftInput, originalContent string, rewriteMode string, feedback string) (AIGeneratedText, error) {
+	return s.RewriteAutoPost(ctx, in, originalContent, rewriteMode, feedback)
+}
+
 func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInput, originalContent string, rewriteMode string, feedback string) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
@@ -1512,6 +1521,10 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 	return profile, strings.TrimSpace(result.Text), result.Usage, nil
 }
 
+func (s *AIService) GenerateContentDraft(ctx context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
+	return s.GenerateAutoPost(ctx, in)
+}
+
 func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
@@ -1676,7 +1689,7 @@ func (s *AIService) GenerateAutoPost(ctx context.Context, in GenerateAutoPostInp
 	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
 }
 
-func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 	handle := strings.TrimSpace(in.AccountHandle)
 	if handle == "" {
 		handle = "@account"

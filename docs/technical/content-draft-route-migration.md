@@ -227,3 +227,23 @@ activity keys unchanged.
 P3.4-b still avoids the high-risk migrations from P3.4-a Category 3: no table
 renames, no queue type rewrites, no AI usage scene rewrites, no historical
 activity key rewrites, and no route removals.
+
+## P3.4-c AI Service Content Draft Aliases
+
+- Added `GenerateContentDraftInput` as an alias over the legacy
+  `GenerateAutoPostInput` type.
+- Added `AIService.GenerateContentDraft` and `AIService.RewriteContentDraft`
+  wrappers over the legacy `GenerateAutoPost` and `RewriteAutoPost` methods.
+- Moved low-risk backend call sites to the new wrappers:
+  - Content Draft generation and rewrite flows.
+  - Manual post generation that reuses the same content draft prompt input.
+  - Daily X Queue rewrite fallback.
+- Renamed the shared local helper from `autoPostInputFromBot` to
+  `contentDraftInputFromBot`.
+- Kept `GenerateAutoPost`, `RewriteAutoPost`, `GenerateAutoPostInput`, prompt
+  behavior, `scene=auto_post`, database models, JSON fields, activity keys, and
+  legacy route contracts unchanged.
+
+The remaining `GenerateAutoPost*` references in runtime code are compatibility
+definitions or wrapper internals. Tests may still reference the old alias while
+gradually moving to the new names.

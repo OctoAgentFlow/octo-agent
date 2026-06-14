@@ -35,8 +35,8 @@ var (
 	ErrDailyXQueueDraftUnsupported = errors.New("draft is not available in daily x queue")
 )
 
-type dailyXQueueTextGenerator func(context.Context, GenerateAutoPostInput) (AIGeneratedText, error)
-type dailyXQueueRewriteGenerator func(context.Context, GenerateAutoPostInput, string, string, string) (AIGeneratedText, error)
+type dailyXQueueTextGenerator func(context.Context, GenerateContentDraftInput) (AIGeneratedText, error)
+type dailyXQueueRewriteGenerator func(context.Context, GenerateContentDraftInput, string, string, string) (AIGeneratedText, error)
 
 type DailyXQueueService struct {
 	contextRepo      *repository.DailyXQueueContextRepository
@@ -600,8 +600,8 @@ func (s *DailyXQueueService) contextForDraft(userID, botID uint) (*model.DailyXQ
 	return nil, err
 }
 
-func (s *DailyXQueueService) generateInput(ctxRow *model.DailyXQueueContext, bot *model.OAFBot, content *model.ContentLibraryItem, direction string, feedbackSignals []string) GenerateAutoPostInput {
-	in := GenerateAutoPostInput{
+func (s *DailyXQueueService) generateInput(ctxRow *model.DailyXQueueContext, bot *model.OAFBot, content *model.ContentLibraryItem, direction string, feedbackSignals []string) GenerateContentDraftInput {
+	in := GenerateContentDraftInput{
 		AccountHandle:     formatXAccountHandle(ctxRow.XHandle),
 		ContentDirection:  direction,
 		ContentLengthMode: contentDraftLengthModeStandard,
@@ -658,7 +658,7 @@ func (s *DailyXQueueService) memoryRows(userID, botID uint) []model.OAFBotGenera
 	return rows
 }
 
-func (s *DailyXQueueService) callGenerateText(ctx context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+func (s *DailyXQueueService) callGenerateText(ctx context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 	if s.generateText != nil {
 		return s.generateText(ctx, in)
 	}
@@ -668,14 +668,14 @@ func (s *DailyXQueueService) callGenerateText(ctx context.Context, in GenerateAu
 	return s.ai.GenerateDailyXQueuePost(ctx, in)
 }
 
-func (s *DailyXQueueService) callRewriteText(ctx context.Context, in GenerateAutoPostInput, original string, mode string, feedback string) (AIGeneratedText, error) {
+func (s *DailyXQueueService) callRewriteText(ctx context.Context, in GenerateContentDraftInput, original string, mode string, feedback string) (AIGeneratedText, error) {
 	if s.rewriteText != nil {
 		return s.rewriteText(ctx, in, original, mode, feedback)
 	}
 	if s.ai == nil {
 		return AIGeneratedText{}, fmt.Errorf("ai service is not configured")
 	}
-	return s.ai.RewriteAutoPost(ctx, in, original, mode, feedback)
+	return s.ai.RewriteContentDraft(ctx, in, original, mode, feedback)
 }
 
 func (s *DailyXQueueService) createFeedback(userID, botID uint, rating string, issueTags []string, comment string, sampleContext string, generatedContent string) error {

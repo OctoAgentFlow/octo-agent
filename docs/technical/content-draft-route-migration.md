@@ -258,3 +258,20 @@ gradually moving to the new names.
   the compatibility anchor behind the new alias.
 - Did not change runtime behavior, prompt behavior, `scene=auto_post`, database
   models, JSON fields, activity keys, or route contracts.
+
+## P3.4-e Display-Only Label Cleanup
+
+- Changed display-only fallback labels from `Auto Post` to Content Draft wording
+  in Dashboard and Review Queue DTO construction.
+- Kept the frontend Handling List compatible with all three labels:
+  `Auto Post`, `Content Draft`, and `Content Draft Planner`.
+- Updated user-facing Content Draft publish failure copy while keeping
+  `publish_jobs.source_type`, legacy activity keys, and API route contracts
+  unchanged.
+- Updated the Daily X Queue blocking error copy from Auto Post wording to
+  Content Draft wording.
+- Left compatibility/storage surfaces untouched:
+  - `System / Auto Post` activity source values.
+  - GORM model comments and migration descriptions.
+  - AI prompt compatibility text.
+  - Legacy `AutoPost*` type and method definitions.

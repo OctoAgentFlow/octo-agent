@@ -661,7 +661,7 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts cannot be approved from Auto Post")
+		return nil, fmt.Errorf("daily x queue drafts cannot be approved from Content Drafts")
 	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be approved from status %s", draft.Status)

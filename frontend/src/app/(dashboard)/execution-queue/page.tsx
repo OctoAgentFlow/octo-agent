@@ -158,7 +158,7 @@ function normalizeTargetSummary(type: string, value: string | undefined, t: (key
   const summary = (value || "").trim();
   if (!summary) return "—";
   if (type === "post" && summary === "Content Library Item") return t("handlingList.target.contentLibraryItem");
-  if (type === "post" && summary === "Auto Post") return t("handlingList.target.autoPostPlanner");
+  if (type === "post" && ["Auto Post", "Content Draft", "Content Draft Planner"].includes(summary)) return t("handlingList.target.autoPostPlanner");
   return summary;
 }
 

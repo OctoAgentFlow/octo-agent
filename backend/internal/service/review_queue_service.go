@@ -669,7 +669,7 @@ func (s *ReviewQueueService) reviewQueueVerdictSourceContext(userID uint, row mo
 		if err != nil {
 			return "", "", ""
 		}
-		return truncateRunes(draft.GeneratedContent, 220), truncateRunes(firstNonEmpty(draft.ContentDirection, "Auto Post"), 120), normalizeReviewQueueStatus(draft.Status)
+		return truncateRunes(draft.GeneratedContent, 220), truncateRunes(firstNonEmpty(draft.ContentDirection, "Content Draft Planner"), 120), normalizeReviewQueueStatus(draft.Status)
 	case "comment":
 		task, err := s.commentTaskRepo.GetByUserAndID(userID, row.SourceID)
 		if err != nil {
@@ -856,7 +856,7 @@ func (s *ReviewQueueService) autoPostDraftToReviewQueueItem(draft model.AutoPost
 		target = "Content Library Item"
 	}
 	if target == "" {
-		target = "Auto Post"
+		target = "Content Draft Planner"
 	}
 	contentTitle := ""
 	var exposureTrace *dto.ExposureSourceTrace

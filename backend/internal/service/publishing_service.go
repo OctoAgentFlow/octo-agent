@@ -586,14 +586,14 @@ func autoPublishFailureAlertTitle(sourceType string) string {
 	if sourceType == repository.PublishSourceComment {
 		return "Auto Comment X publish failed"
 	}
-	return "Auto Post X publish failed"
+	return "Content Draft X publish failed"
 }
 
 func autoPublishFailureAlertMessage(sourceType string) string {
 	if sourceType == repository.PublishSourceComment {
 		return "Auto Comment scheduler failed to publish to X."
 	}
-	return "Auto Post scheduler failed to publish to X."
+	return "Content Draft publishing failed in the X publishing pipeline."
 }
 
 func shouldAutoPublishRealJob(job *model.PublishJob, cfg config.XPublisherConfig) bool {

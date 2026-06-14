@@ -283,7 +283,7 @@ func dashboardPostDraftToReviewQueueItem(draft model.AutoPostDraft) dto.ReviewQu
 	}
 	target := strings.TrimSpace(draft.ContentDirection)
 	if target == "" {
-		target = "Auto Post"
+		target = "Content Draft Planner"
 	}
 	return dto.ReviewQueueItem{
 		ID:               draft.ID,
@@ -324,7 +324,7 @@ func dashboardReviewQueueSummary(item dto.ReviewQueueItem) dto.DashboardWorkbenc
 func dashboardWorkbenchTypeTitle(itemType string) string {
 	switch itemType {
 	case "post":
-		return "Auto Post"
+		return "Content Draft"
 	case "reply":
 		return "Auto Reply"
 	case "comment":

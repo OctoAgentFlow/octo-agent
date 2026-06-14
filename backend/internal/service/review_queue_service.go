@@ -174,7 +174,7 @@ func (s *ReviewQueueService) List(userID uint, query dto.ReviewQueueQuery) (*dto
 		if isDailyXQueueDraft(draft) {
 			continue
 		}
-		item := s.autoPostDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
+		item := s.contentDraftToReviewQueueItem(draft, botNames[draft.BotID], accountNames[draft.XAccountID])
 		applyPublishJobToReviewQueueItem(&item, postJobs[draft.ID])
 		incrementReviewQueueStats(&stats, item.Status)
 		if typeFilter != "" && typeFilter != "all" && item.Type != typeFilter {
@@ -841,7 +841,7 @@ func autoReplyDraftToReviewQueueItem(draft model.AutoReplyDraft, botName string,
 	}
 }
 
-func (s *ReviewQueueService) autoPostDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, accountName string) dto.ReviewQueueItem {
+func (s *ReviewQueueService) contentDraftToReviewQueueItem(draft model.AutoPostDraft, botName string, accountName string) dto.ReviewQueueItem {
 	status := normalizeReviewQueueStatus(draft.Status)
 	mode := inferReviewQueueExecutionMode(draft.CapabilityStatus)
 	reasons := make([]string, 0, 2)

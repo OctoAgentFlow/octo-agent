@@ -275,3 +275,35 @@ gradually moving to the new names.
   - GORM model comments and migration descriptions.
   - AI prompt compatibility text.
   - Legacy `AutoPost*` type and method definitions.
+
+## P3.5 Remaining Legacy Reference Audit
+
+- Added `docs/technical/legacy-content-draft-reference-audit.md` as the
+  remaining-reference inventory.
+- Classified remaining `AutoPost`, `auto_post`, `autoPost`, `auto-post`, and
+  `Auto Post` references into:
+  - Low-risk internal cleanup.
+  - Compatibility contracts that should remain.
+  - Future migration-only surfaces.
+- Kept this as documentation and boundary-setting. The audit does not change
+  routes, database tables, JSON fields, quota storage, activity keys, AI scene
+  strings, or queue type values.
+
+## P3.6 Low-Risk Internal Naming Cleanup
+
+- Renamed internal Automation service helpers:
+  - `syncAutoPostPlannerEnabled` -> `syncContentDraftPlannerEnabled`
+  - `applyAutoPostPlannerState` -> `applyContentDraftPlannerState`
+- Renamed the pure AI rewrite prompt helper from
+  `normalizeAutoPostRewriteMode` to `normalizeContentDraftRewriteMode`.
+- Renamed Review Queue and Publishing service internal helpers to
+  Content Draft wording:
+  - `autoPostDraftToReviewQueueItem` -> `contentDraftToReviewQueueItem`
+  - `processAutoPostPublishJob` -> `processContentDraftPublishJob`
+- Added `PickActiveForContentDraft` to the Content Library repository and kept
+  `PickActiveForAutoPost` as a compatibility wrapper.
+- Moved the Content Draft scheduler generation call site to
+  `PickActiveForContentDraft`.
+- Kept all persisted and public contracts unchanged, including DB table names,
+  model names, JSON fields, `scene=auto_post`, activity keys, queue types, and
+  legacy API routes.

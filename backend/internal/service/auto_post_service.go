@@ -466,7 +466,7 @@ func (s *AutoPostService) runPlannerOnce(ctx context.Context, planID uint, optio
 		return recordFailure("bot_load_failed", err)
 	}
 	botID := botIDForUsage(bot)
-	contentItem, err := s.contentRepo.PickActiveForAutoPost(plan.UserID, plan.XAccountID, botID)
+	contentItem, err := s.contentRepo.PickActiveForContentDraft(plan.UserID, plan.XAccountID, botID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return recordSkip("no_active_content_source")

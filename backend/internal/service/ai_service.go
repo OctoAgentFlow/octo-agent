@@ -413,7 +413,7 @@ func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInpu
 	writeGenerationFeedbackSignals(&user, "Recent negative Auto Post feedback to fix:", in.FeedbackSignals)
 	user.WriteString("Original draft:\n")
 	user.WriteString(strings.TrimSpace(originalContent) + "\n")
-	user.WriteString("Rewrite mode: " + normalizeAutoPostRewriteMode(rewriteMode) + "\n")
+	user.WriteString("Rewrite mode: " + normalizeContentDraftRewriteMode(rewriteMode) + "\n")
 	if strings.TrimSpace(feedback) != "" {
 		user.WriteString("Reviewer feedback: " + strings.TrimSpace(feedback) + "\n")
 	}
@@ -448,7 +448,7 @@ func (s *AIService) RewriteAutoPost(ctx context.Context, in GenerateAutoPostInpu
 	return AIGeneratedText{Text: text, Usage: result.Usage}, nil
 }
 
-func normalizeAutoPostRewriteMode(mode string) string {
+func normalizeContentDraftRewriteMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "more_specific":
 		return "make the post more concrete with a clearer use case or operational detail"

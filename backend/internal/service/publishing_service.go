@@ -512,7 +512,7 @@ func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 		return s.failJob(job, "simulated_publish_failed", "publish content is empty", true)
 	}
 	if shouldAutoPublishRealJob(job, s.cfg) {
-		return s.processAutoPostPublishJob(ctx, job, now)
+		return s.processContentDraftPublishJob(ctx, job, now)
 	}
 	return s.completeJob(job, PublishResult{
 		RawResponse: "simulated publish succeeded",
@@ -520,7 +520,7 @@ func (s *PublishingService) processJob(ctx context.Context, id uint) error {
 	}, repository.PublishModeSimulated, "activity.preview.simulatedPublishSuccess")
 }
 
-func (s *PublishingService) processAutoPostPublishJob(ctx context.Context, job *model.PublishJob, now time.Time) error {
+func (s *PublishingService) processContentDraftPublishJob(ctx context.Context, job *model.PublishJob, now time.Time) error {
 	account, err := s.validateManualPublishJob(job, now)
 	if err != nil {
 		category := "auto_publish_validation_failed"

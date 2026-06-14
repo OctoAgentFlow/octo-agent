@@ -96,7 +96,7 @@ func (r *ContentLibraryRepository) MarkUsed(item *model.ContentLibraryItem, at t
 	return r.Save(item)
 }
 
-func (r *ContentLibraryRepository) PickActiveForAutoPost(userID, xAccountID, botID uint) (*model.ContentLibraryItem, error) {
+func (r *ContentLibraryRepository) PickActiveForContentDraft(userID, xAccountID, botID uint) (*model.ContentLibraryItem, error) {
 	q := r.DB.Where("user_id = ? AND status = ?", userID, "active").
 		Where("(twitter_account_id IS NULL OR twitter_account_id = ?)", xAccountID)
 	if botID > 0 {
@@ -111,6 +111,10 @@ func (r *ContentLibraryRepository) PickActiveForAutoPost(userID, xAccountID, bot
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *ContentLibraryRepository) PickActiveForAutoPost(userID, xAccountID, botID uint) (*model.ContentLibraryItem, error) {
+	return r.PickActiveForContentDraft(userID, xAccountID, botID)
 }
 
 func (r *ContentLibraryRepository) ListActiveForGenerationContext(userID, xAccountID, botID uint, limit int) ([]model.ContentLibraryItem, error) {

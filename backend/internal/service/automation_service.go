@@ -63,7 +63,7 @@ func (s *AutomationService) List(userID uint) (*dto.AutomationsResponse, error) 
 	for _, m := range modules {
 		item := toAutomationModuleData(m)
 		if item.Type == repository.AutomationTypePost {
-			if err := s.applyAutoPostPlannerState(userID, &item); err != nil {
+			if err := s.applyContentDraftPlannerState(userID, &item); err != nil {
 				return nil, err
 			}
 		}
@@ -144,7 +144,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	cfg.SafetyRequireApproval = req.Safety.RequireApproval
 	cfg.SafetyMaxPerHour = 0
 	cfg.SafetyBlockedKeywords = string(keywords)
-	if err := s.syncAutoPostPlannerEnabled(userID, typ, req.Enabled, cfg.FrequencyIntervalMinutes); err != nil {
+	if err := s.syncContentDraftPlannerEnabled(userID, typ, req.Enabled, cfg.FrequencyIntervalMinutes); err != nil {
 		return nil, err
 	}
 
@@ -173,7 +173,7 @@ func (s *AutomationService) Update(userID uint, typ string, req dto.AutomationCo
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {
-		if err := s.applyAutoPostPlannerState(userID, &data); err != nil {
+		if err := s.applyContentDraftPlannerState(userID, &data); err != nil {
 			return nil, err
 		}
 	}
@@ -226,7 +226,7 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 		}
 	}
 	cfg.Enabled = enabled
-	if err := s.syncAutoPostPlannerEnabled(userID, typ, enabled, cfg.FrequencyIntervalMinutes); err != nil {
+	if err := s.syncContentDraftPlannerEnabled(userID, typ, enabled, cfg.FrequencyIntervalMinutes); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -254,7 +254,7 @@ func (s *AutomationService) Toggle(userID uint, typ string, enabled bool) (*dto.
 	}
 	data := toAutomationModuleData(*cfg)
 	if typ == repository.AutomationTypePost {
-		if err := s.applyAutoPostPlannerState(userID, &data); err != nil {
+		if err := s.applyContentDraftPlannerState(userID, &data); err != nil {
 			return nil, err
 		}
 	}
@@ -364,7 +364,7 @@ func isReviewQueueNeedsReviewStatus(status string) bool {
 	}
 }
 
-func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, enabled bool, intervalMinutes int) error {
+func (s *AutomationService) syncContentDraftPlannerEnabled(userID uint, typ string, enabled bool, intervalMinutes int) error {
 	if typ != repository.AutomationTypePost || s.contentDraftPlanRepo == nil {
 		return nil
 	}
@@ -396,7 +396,7 @@ func (s *AutomationService) syncAutoPostPlannerEnabled(userID uint, typ string, 
 	return s.contentDraftPlanRepo.SaveAll(plans)
 }
 
-func (s *AutomationService) applyAutoPostPlannerState(userID uint, item *dto.AutomationModuleData) error {
+func (s *AutomationService) applyContentDraftPlannerState(userID uint, item *dto.AutomationModuleData) error {
 	if s.contentDraftPlanRepo == nil || item == nil {
 		return nil
 	}

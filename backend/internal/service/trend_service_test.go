@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -196,9 +197,22 @@ func TestExposureOpportunityTierRequiresRealImpressionsForHot(t *testing.T) {
 		t.Fatalf("engagement-estimated heat should not be a hot opportunity: tier=%s reason=%s", tier, reason)
 	}
 
+	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 8.4, "steady", true)
+	if tier != exposureHotOpportunityTier {
+		t.Fatalf("1K+ real impressions with 8/min velocity should be a hot opportunity: tier=%s reason=%s", tier, reason)
+	}
+
+	tier, reason = exposureOpportunityTier("tweet_level", 1300, 1300, 5.1, "rising", true)
+	if tier != exposureRisingSignalTier {
+		t.Fatalf("1K+ real impressions without 8/min velocity should stay rising: tier=%s reason=%s", tier, reason)
+	}
+
 	tier, reason = exposureOpportunityTier("tweet_level", 5200, 5200, 80, "burst", true)
 	if tier != exposureHotOpportunityTier {
 		t.Fatalf("real impressions with momentum should be hot: tier=%s reason=%s", tier, reason)
+	}
+	if !strings.Contains(reason, "strong hot") {
+		t.Fatalf("strong hot reason should be explicit, got %q", reason)
 	}
 }
 

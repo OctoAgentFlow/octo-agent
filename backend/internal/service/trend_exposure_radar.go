@@ -67,8 +67,10 @@ const (
 	exposureRisingSignalTier   = "rising_opportunity"
 	exposureSamplingTier       = "needs_sampling"
 	exposureTopicLeadTier      = "topic_lead"
-	exposureHotMinViews        = int64(3000)
-	exposureHotMinVelocity     = 30.0
+	exposureHotMinViews        = int64(1000)
+	exposureHotMinVelocity     = 8.0
+	exposureStrongHotMinViews  = int64(3000)
+	exposureStrongHotVelocity  = 30.0
 	exposureRisingMinViews     = int64(100)
 	exposureRisingMinVelocity  = 5.0
 
@@ -1014,7 +1016,7 @@ func exposureRadarDiagnosticIssues(diag dto.ExposureRadarDiagnostics) []dto.Expo
 		issues = append(issues, exposureDiagnosticIssue("fan_filter_strict", "info", "Stored signals exist, but the author follower filter removes them from this view."))
 	}
 	if diag.ReturnedCount > 0 && diag.TweetLevelCount > 0 && diag.HotOpportunityCount == 0 {
-		issues = append(issues, exposureDiagnosticIssue("no_true_hot", "info", "Tweet-level signals are available, but none meet the true-hot threshold of real impressions plus momentum."))
+		issues = append(issues, exposureDiagnosticIssue("no_true_hot", "info", "Tweet-level signals are available, but none meet the hot-opportunity threshold of real impressions plus momentum."))
 	}
 	if diag.TweetLevelCount > 0 && diag.FirstSampleCount == diag.TweetLevelCount {
 		issues = append(issues, exposureDiagnosticIssue("first_sample_only", "info", "All tweet-level signals are first snapshots, so velocity needs another collector pass before hot/rising labels become reliable."))
@@ -1051,7 +1053,7 @@ func exposureRadarDiagnosticSuggestions(diag dto.ExposureRadarDiagnostics) []str
 		suggestions = append(suggestions, "Treat these cards as research leads until owned tweet-level signals become fresh.")
 	}
 	if hasIssue("no_true_hot") {
-		suggestions = append(suggestions, "Use Rising opportunities first; true-hot requires at least 3K real impressions plus momentum.")
+		suggestions = append(suggestions, "Use Rising opportunities first; hot opportunities require at least 1K real impressions plus 8/min velocity. Strong hot remains 3K+ and 30/min.")
 	}
 	if len(suggestions) == 0 {
 		suggestions = append(suggestions, "Collector health looks usable. Work from Priority opportunities first, then inspect Rising and Needs sampling cards.")
@@ -1740,8 +1742,10 @@ func exposureTweetCandidateScore(tweet twitter.TweetSearchItem, now time.Time) i
 	if tweet.ImpressionCount > 0 {
 		score += 120000 + tweet.ImpressionCount*12
 	}
-	if tweet.ImpressionCount >= exposureHotMinViews {
+	if tweet.ImpressionCount >= exposureStrongHotMinViews {
 		score += 180000
+	} else if tweet.ImpressionCount >= exposureHotMinViews {
+		score += 90000
 	}
 	if tweet.FollowersCount > 0 && tweet.FollowersCount <= 10000 {
 		score += 12000
@@ -1769,12 +1773,15 @@ func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int6
 	if strings.TrimSpace(dataQuality) != "tweet_level" {
 		return exposureTopicLeadTier, "topic-level signal; inspect live posts before treating it as a reply opportunity"
 	}
-	hasMomentum := viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst" || velocityState == "rising"
+	hasMomentum := viewsPerMinute >= exposureHotMinVelocity || velocityState == "burst"
 	if impressionCount >= exposureHotMinViews && hasMomentum {
-		return exposureHotOpportunityTier, fmt.Sprintf("real impressions >= %s and momentum is active", compactCount(impressionCount))
+		if exposureStrongHot(impressionCount, viewsPerMinute) {
+			return exposureHotOpportunityTier, fmt.Sprintf("strong hot: real impressions >= %s and velocity >= %.0f/min", compactCount(exposureStrongHotMinViews), exposureStrongHotVelocity)
+		}
+		return exposureHotOpportunityTier, fmt.Sprintf("hot opportunity: real impressions >= %s and velocity >= %.0f/min", compactCount(exposureHotMinViews), exposureHotMinVelocity)
 	}
 	if impressionCount >= exposureHotMinViews {
-		return exposureRisingSignalTier, fmt.Sprintf("real impressions reached %s, but hot momentum is not confirmed yet", compactCount(impressionCount))
+		return exposureRisingSignalTier, fmt.Sprintf("real impressions reached %s, but hot-opportunity momentum is not confirmed yet", compactCount(impressionCount))
 	}
 	if heatCount >= exposureRisingMinViews || viewsPerMinute >= exposureRisingMinVelocity || velocityState == "burst" || velocityState == "rising" {
 		return exposureRisingSignalTier, fmt.Sprintf("heat >= %s or momentum is emerging", compactCount(exposureRisingMinViews))
@@ -1783,6 +1790,10 @@ func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int6
 		return exposureSamplingTier, "first snapshot or missing velocity; wait for another sample before calling it hot"
 	}
 	return exposureSamplingTier, fmt.Sprintf("below %s real impressions; keep sampling before treating it as a hot post", compactCount(exposureHotMinViews))
+}
+
+func exposureStrongHot(impressionCount int64, viewsPerMinute float64) bool {
+	return impressionCount >= exposureStrongHotMinViews && viewsPerMinute >= exposureStrongHotVelocity
 }
 
 func exposureDataConfidence(dataQuality string, impressionCount int64, hasPriorSample bool) (string, string) {

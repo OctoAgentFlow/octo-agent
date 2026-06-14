@@ -149,7 +149,7 @@ func (r *ExposureTweetSignalRepository) List(query ExposureTweetSignalListQuery)
 		q = q.Where("published_at = ? OR published_at >= ? OR last_seen_at >= ?", time.Time{}, query.ActiveAfter, query.ActiveAfter)
 	}
 	var rows []model.ExposureTweetSignal
-	err := q.Order("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= 3000 THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
+	err := q.Order("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= 1000 THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
@@ -172,8 +172,8 @@ func (r *ExposureTweetSignalRepository) DiagnosticStats(region string, activeAft
 		COALESCE(SUM(CASE WHEN followers_count > ? THEN 1 ELSE 0 END), 0) AS over_fan_limit_count,
 		COALESCE(SUM(CASE WHEN impression_count > 0 THEN 1 ELSE 0 END), 0) AS real_impression_count,
 		COALESCE(SUM(CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 1 ELSE 0 END), 0) AS prior_sample_count,
-		COALESCE(SUM(CASE WHEN impression_count >= 3000 AND (views_per_minute >= 30 OR current_count >= 3000) THEN 1 ELSE 0 END), 0) AS hot_candidate_count,
-		COALESCE(SUM(CASE WHEN impression_count >= 3000 OR current_count >= 100 OR views_per_minute >= 5 THEN 1 ELSE 0 END), 0) AS rising_candidate_count,
+		COALESCE(SUM(CASE WHEN impression_count >= 1000 AND views_per_minute >= 8 THEN 1 ELSE 0 END), 0) AS hot_candidate_count,
+		COALESCE(SUM(CASE WHEN impression_count >= 1000 OR current_count >= 100 OR views_per_minute >= 5 THEN 1 ELSE 0 END), 0) AS rising_candidate_count,
 		MAX(last_seen_at) AS latest_seen_at
 	`, time.Time{}, activeAfter, activeAfter, maxFans, maxFans).Scan(&stats).Error
 	return stats, err

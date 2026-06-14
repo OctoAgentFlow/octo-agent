@@ -55,10 +55,10 @@ func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 		nil,
 		nil,
 	)
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		return AIGeneratedText{Text: "Draft for " + in.ContentDirection}, nil
 	}
-	svc.rewriteText = func(_ context.Context, _ GenerateAutoPostInput, _ string, mode string, _ string) (AIGeneratedText, error) {
+	svc.rewriteText = func(_ context.Context, _ GenerateContentDraftInput, _ string, mode string, _ string) (AIGeneratedText, error) {
 		return AIGeneratedText{Text: "Rewritten draft with " + mode}, nil
 	}
 	return svc, db
@@ -107,8 +107,8 @@ func TestDailyXQueueSetupCanUseExistingOAFBotWithoutCreatingDuplicate(t *testing
 	}); err != nil {
 		t.Fatalf("source material: %v", err)
 	}
-	var captured GenerateAutoPostInput
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	var captured GenerateContentDraftInput
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		if captured.Name == "" {
 			captured = in
 		}
@@ -171,8 +171,8 @@ func TestDailyXQueueCanSelectExistingContentLibraryItemForOAFBot(t *testing.T) {
 	if selected.SourceMaterial.Title != item.Title {
 		t.Fatalf("expected selected source title %q, got %q", item.Title, selected.SourceMaterial.Title)
 	}
-	var captured GenerateAutoPostInput
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	var captured GenerateContentDraftInput
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		if captured.ContentItemTitle == "" {
 			captured = in
 		}
@@ -451,7 +451,7 @@ func TestDailyXQueueStoresCompleteDraftsWhenGeneratorReturnsLongText(t *testing.
 	svc, _ := newDailyXQueueTestService(t)
 	userID := uint(31)
 	setupDailyXQueueFixture(t, svc, userID)
-	svc.generateText = func(_ context.Context, _ GenerateAutoPostInput) (AIGeneratedText, error) {
+	svc.generateText = func(_ context.Context, _ GenerateContentDraftInput) (AIGeneratedText, error) {
 		return AIGeneratedText{Text: strings.Repeat("Daily X Queue keeps review first. ", 12) + "Trailing unfinished fragment"}, nil
 	}
 
@@ -477,7 +477,7 @@ func TestDailyXQueueNextGenerationUsesRejectedDraftsAndFeedbackToAvoidRepeating(
 	userID := uint(32)
 	setupDailyXQueueFixture(t, svc, userID)
 	calls := 0
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		calls++
 		return AIGeneratedText{Text: fmt.Sprintf("Rejected template draft %d for %s.", calls, in.ContentDirection)}, nil
 	}
@@ -491,8 +491,8 @@ func TestDailyXQueueNextGenerationUsesRejectedDraftsAndFeedbackToAvoidRepeating(
 		}
 	}
 
-	var captured GenerateAutoPostInput
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	var captured GenerateContentDraftInput
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		if captured.ContentDirection == "" {
 			captured = in
 		}
@@ -545,8 +545,8 @@ func TestDailyXQueueApproveAndCopyCreateOAFBotMemoryForNextGeneration(t *testing
 		t.Fatalf("expected useful_output memory, got %s", joinedTags)
 	}
 
-	var captured GenerateAutoPostInput
-	svc.generateText = func(_ context.Context, in GenerateAutoPostInput) (AIGeneratedText, error) {
+	var captured GenerateContentDraftInput
+	svc.generateText = func(_ context.Context, in GenerateContentDraftInput) (AIGeneratedText, error) {
 		if captured.ContentDirection == "" {
 			captured = in
 		}

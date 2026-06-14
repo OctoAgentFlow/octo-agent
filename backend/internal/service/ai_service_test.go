@@ -43,6 +43,27 @@ func TestFitGeneratedTweetKeepsShortContent(t *testing.T) {
 	}
 }
 
+func TestGenerateContentDraftInputAliasesLegacyAutoPostInput(t *testing.T) {
+	contentDraft := GenerateContentDraftInput{
+		AccountHandle:    "@octo_agent_flow",
+		ContentDirection: "Turn a Content Library source into a reviewable post draft.",
+		MaxCharacters:    220,
+		HasBot:           true,
+		Name:             "Operator Bot",
+	}
+
+	var legacy GenerateAutoPostInput = contentDraft
+	var roundTrip GenerateContentDraftInput = legacy
+
+	if roundTrip.AccountHandle != contentDraft.AccountHandle ||
+		roundTrip.ContentDirection != contentDraft.ContentDirection ||
+		roundTrip.MaxCharacters != contentDraft.MaxCharacters ||
+		roundTrip.HasBot != contentDraft.HasBot ||
+		roundTrip.Name != contentDraft.Name {
+		t.Fatalf("content draft input alias lost fields: %#v", roundTrip)
+	}
+}
+
 func TestFitAutoReplyContentKeepsValidReplyBeyondPreviewLimit(t *testing.T) {
 	input := "Glad to hear it is easing your posting stress! The review-first execution queue is designed exactly for that, letting you control replies while saving time. Let us know what reply workflow you want to tune next."
 	if len([]rune(input)) <= autoReplyPreviewRunes {

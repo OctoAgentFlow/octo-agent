@@ -247,3 +247,14 @@ activity key rewrites, and no route removals.
 The remaining `GenerateAutoPost*` references in runtime code are compatibility
 definitions or wrapper internals. Tests may still reference the old alias while
 gradually moving to the new names.
+
+## P3.4-d AI Service Test Alias Cleanup
+
+- Migrated Daily X Queue service tests from `GenerateAutoPostInput` to
+  `GenerateContentDraftInput`.
+- Added a small alias contract test proving `GenerateContentDraftInput` and
+  `GenerateAutoPostInput` can round-trip without losing fields.
+- Kept the legacy `GenerateAutoPostInput` type available because it is still
+  the compatibility anchor behind the new alias.
+- Did not change runtime behavior, prompt behavior, `scene=auto_post`, database
+  models, JSON fields, activity keys, or route contracts.

@@ -31,6 +31,7 @@ type TrendService struct {
 	contentDraftPlanRepo *repository.ContentDraftPlanRepository
 	contentRepo          *repository.ContentLibraryRepository
 	commentRepo          *repository.AutoCommentTaskRepository
+	generationFeedback   *repository.OAFBotGenerationFeedbackRepository
 	cfg                  config.XTrendsConfig
 }
 
@@ -48,6 +49,13 @@ func NewTrendService(repo *repository.TrendTopicRepository, exposure *repository
 func (s *TrendService) WithAutoCommentTaskRepository(repo *repository.AutoCommentTaskRepository) *TrendService {
 	if s != nil {
 		s.commentRepo = repo
+	}
+	return s
+}
+
+func (s *TrendService) WithOAFBotGenerationFeedbackRepository(repo *repository.OAFBotGenerationFeedbackRepository) *TrendService {
+	if s != nil {
+		s.generationFeedback = repo
 	}
 	return s
 }

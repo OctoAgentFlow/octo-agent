@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/config"
+	"octo-agent/backend/internal/dto"
 	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 )
@@ -149,5 +150,42 @@ func TestSelectRelevantTrendTopicsKeepsStrongMatchDespiteFeedback(t *testing.T) 
 	}
 	if selected[0].TrendName != "AI Agents" {
 		t.Fatalf("strong matched trend should remain selectable, got %s", selected[0].TrendName)
+	}
+}
+
+func TestExposureRadarOutcomeFeedbackMetadataAndDelta(t *testing.T) {
+	meta := exposureRadarOutcomeFeedbackMetadata("manual_outcome=effective | region=en | topic=AI Agents | opportunity_type=contextual_reply | data_quality=tweet_level")
+	if meta["manual_outcome"] != "effective" || meta["region"] != "en" || meta["topic"] != "AI Agents" {
+		t.Fatalf("unexpected metadata: %#v", meta)
+	}
+	stat := exposureRadarOutcomePerformanceFromFeedback(model.OAFBotGenerationFeedback{}, meta)
+	if stat.Effective != 1 || exposureRadarOutcomeRankingDelta(stat) != 3 {
+		t.Fatalf("unexpected effective stat: %#v delta=%d", stat, exposureRadarOutcomeRankingDelta(stat))
+	}
+
+	negative := exposureRadarOutcomePerformanceFromFeedback(model.OAFBotGenerationFeedback{}, map[string]string{"manual_outcome": "not_suitable"})
+	if negative.NotSuitable != 1 || exposureRadarOutcomeRankingDelta(negative) != -6 {
+		t.Fatalf("unexpected not_suitable stat: %#v delta=%d", negative, exposureRadarOutcomeRankingDelta(negative))
+	}
+}
+
+func TestExposureRadarOutcomeStatsPrefersTopicMatch(t *testing.T) {
+	outcomes := map[string]exposureRadarOutcomePerformance{}
+	for _, key := range exposureRadarOutcomeKeysFromMetadata("en", map[string]string{
+		"topic":            "AI Agents",
+		"opportunity_type": "contextual_reply",
+		"data_quality":     "tweet_level",
+	}) {
+		outcomes[key] = exposureRadarOutcomePerformance{Effective: 1}
+	}
+
+	stat := exposureRadarOutcomeStatsForItem(outcomes, dto.ExposureRadarItem{
+		Region:          "en",
+		TopicName:       "AI Agents",
+		OpportunityType: "contextual_reply",
+		DataQuality:     "tweet_level",
+	})
+	if stat.Effective != 1 {
+		t.Fatalf("topic match should not double count dimension matches: %#v", stat)
 	}
 }

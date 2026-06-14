@@ -1333,6 +1333,10 @@ function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item
     item.comment_url ? `reply_url=${item.comment_url}` : "",
     item.comment_tweet_id ? `reply_id=${item.comment_tweet_id}` : "",
     item.id ? `signal_id=${item.id}` : "",
+    item.region ? `region=${item.region}` : "",
+    item.topic_name ? `topic=${item.topic_name}` : "",
+    item.opportunity_type ? `opportunity_type=${item.opportunity_type}` : "",
+    item.data_quality ? `data_quality=${item.data_quality}` : "",
   ].filter(Boolean);
   return {
     rating: meta.rating,

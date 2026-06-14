@@ -55,6 +55,13 @@ type exposureRadarTopicPerformance struct {
 	Rejected int64
 }
 
+type exposureRadarOutcomePerformance struct {
+	Effective   int64
+	Neutral     int64
+	Ineffective int64
+	NotSuitable int64
+}
+
 const (
 	exposureHotOpportunityTier = "hot_opportunity"
 	exposureRisingSignalTier   = "rising_signal"
@@ -734,7 +741,7 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 	if resp != nil {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
 	}
-	if resp == nil || userID == 0 || s == nil || s.commentRepo == nil || len(resp.Items) == 0 {
+	if resp == nil || userID == 0 || s == nil || len(resp.Items) == 0 {
 		return resp
 	}
 	if !s.exposureLearningRankingEnabled() {
@@ -761,49 +768,77 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 		scope.BotID = 0
 		scope.XAccountID = 0
 	}
-	rows, err := s.commentRepo.ExposureRadarTopicPerformanceByRegionSince(scope)
-	if err != nil {
-		zap.L().Warn("exposure radar performance ranking lookup failed", zap.Uint("user_id", userID), zap.String("region", resp.Region), zap.Error(err))
-		return resp
+	perf := map[string]exposureRadarTopicPerformance{}
+	if s.commentRepo != nil {
+		rows, err := s.commentRepo.ExposureRadarTopicPerformanceByRegionSince(scope)
+		if err != nil {
+			zap.L().Warn("exposure radar performance ranking lookup failed", zap.Uint("user_id", userID), zap.String("region", resp.Region), zap.Error(err))
+		} else {
+			perf = exposureRadarTopicPerformanceMap(rows)
+		}
 	}
-	perf := exposureRadarTopicPerformanceMap(rows)
+	outcomes := s.exposureRadarOutcomePerformanceMap(userID, scope, windowStart)
 	scopeLabel := "selected Bot/account"
 	rankingScope := "selected_bot_account"
 	if mode == "workspace" || (query.BotID == 0 && query.XAccountID == 0) {
 		scopeLabel = "workspace"
 		rankingScope = "workspace"
 	}
-	if len(perf) == 0 && mode == "hybrid" && (query.BotID > 0 || query.XAccountID > 0) {
+	if len(perf) == 0 && len(outcomes) == 0 && mode == "hybrid" && (query.BotID > 0 || query.XAccountID > 0) {
 		scope.BotID = 0
 		scope.XAccountID = 0
-		rows, err = s.commentRepo.ExposureRadarTopicPerformanceByRegionSince(scope)
-		if err != nil {
-			zap.L().Warn("exposure radar fallback ranking lookup failed", zap.Uint("user_id", userID), zap.String("region", resp.Region), zap.Error(err))
-			return resp
+		if s.commentRepo != nil {
+			rows, err := s.commentRepo.ExposureRadarTopicPerformanceByRegionSince(scope)
+			if err != nil {
+				zap.L().Warn("exposure radar fallback ranking lookup failed", zap.Uint("user_id", userID), zap.String("region", resp.Region), zap.Error(err))
+			} else {
+				perf = exposureRadarTopicPerformanceMap(rows)
+			}
 		}
-		perf = exposureRadarTopicPerformanceMap(rows)
+		outcomes = s.exposureRadarOutcomePerformanceMap(userID, scope, windowStart)
 		scopeLabel = "workspace"
 		rankingScope = "workspace"
 	}
-	if len(perf) == 0 {
+	if len(perf) == 0 && len(outcomes) == 0 {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
 		return resp
 	}
 	resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, rankingScope)
 	for i := range resp.Items {
+		totalDelta := 0
+		reasons := []string{}
 		topic := exposureRadarItemTopic(resp.Items[i])
 		key := exposureRadarTopicKey(resp.Items[i].Region, topic)
-		stat, ok := perf[key]
-		if !ok {
-			continue
+		if stat, ok := perf[key]; ok {
+			delta := exposureRadarRankingDelta(stat.Positive, stat.Rejected)
+			if delta != 0 {
+				totalDelta += delta
+			}
+			if reason := exposureRadarRankingReason(stat.Positive, stat.Rejected, scopeLabel); reason != "" {
+				reasons = append(reasons, reason)
+			}
 		}
-		delta := exposureRadarRankingDelta(stat.Positive, stat.Rejected)
-		if delta == 0 {
-			continue
+		outcomeStat := exposureRadarOutcomeStatsForItem(outcomes, resp.Items[i])
+		if !exposureRadarOutcomePerformanceEmpty(outcomeStat) {
+			delta := exposureRadarOutcomeRankingDelta(outcomeStat)
+			if delta != 0 {
+				totalDelta += delta
+			}
+			if reason := exposureRadarOutcomeRankingReason(outcomeStat, scopeLabel); reason != "" {
+				reasons = append(reasons, reason)
+			}
+			if outcomeStat.NotSuitable > 0 {
+				resp.Items[i].RecommendedUse = exposureRadarConservativeRecommendedUse(resp.Items[i].RecommendedUse)
+			}
 		}
-		resp.Items[i].Score = radarMaxInt(0, radarMinInt(100, resp.Items[i].Score+delta))
-		resp.Items[i].RankingDelta = delta
-		resp.Items[i].RankingReason = exposureRadarRankingReason(stat.Positive, stat.Rejected, scopeLabel)
+		totalDelta = radarMaxInt(-16, radarMinInt(16, totalDelta))
+		if totalDelta != 0 {
+			resp.Items[i].Score = radarMaxInt(0, radarMinInt(100, resp.Items[i].Score+totalDelta))
+			resp.Items[i].RankingDelta = totalDelta
+		}
+		if reason := exposureRadarJoinRankingReasons(reasons...); reason != "" {
+			resp.Items[i].RankingReason = reason
+		}
 	}
 	sort.SliceStable(resp.Items, func(i, j int) bool {
 		if resp.Items[i].Score != resp.Items[j].Score {
@@ -1660,6 +1695,163 @@ func exposureRadarTopicPerformanceMap(rows []repository.ExposureRadarTopicPerfor
 	return out
 }
 
+func (s *TrendService) exposureRadarOutcomePerformanceMap(userID uint, scope repository.ExposureRadarTaskScope, since time.Time) map[string]exposureRadarOutcomePerformance {
+	if s == nil || s.generationFeedback == nil || userID == 0 {
+		return nil
+	}
+	if scope.BotID == 0 && scope.XAccountID > 0 {
+		return nil
+	}
+	rows, err := s.generationFeedback.ListRecentByUserBotSceneSince(userID, scope.BotID, "auto_comment", since, 500)
+	if err != nil {
+		zap.L().Warn("exposure radar outcome ranking lookup failed", zap.Uint("user_id", userID), zap.String("region", scope.Region), zap.Error(err))
+		return nil
+	}
+	scopeRegion := normalizeExposureRegion(scope.Region)
+	out := map[string]exposureRadarOutcomePerformance{}
+	for _, row := range rows {
+		meta := exposureRadarOutcomeFeedbackMetadata(row.Comment)
+		stat := exposureRadarOutcomePerformanceFromFeedback(row, meta)
+		if exposureRadarOutcomePerformanceEmpty(stat) {
+			continue
+		}
+		region := normalizeExposureRegion(meta["region"])
+		if region == "" {
+			continue
+		}
+		if scopeRegion != "" && region != scopeRegion {
+			continue
+		}
+		for _, key := range exposureRadarOutcomeKeysFromMetadata(region, meta) {
+			current := out[key]
+			current.Effective += stat.Effective
+			current.Neutral += stat.Neutral
+			current.Ineffective += stat.Ineffective
+			current.NotSuitable += stat.NotSuitable
+			out[key] = current
+		}
+	}
+	return out
+}
+
+func exposureRadarOutcomeFeedbackMetadata(comment string) map[string]string {
+	meta := map[string]string{}
+	for _, part := range strings.Split(comment, "|") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		pair := strings.SplitN(part, "=", 2)
+		if len(pair) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(pair[0]))
+		value := strings.TrimSpace(pair[1])
+		if key != "" && value != "" {
+			meta[key] = value
+		}
+	}
+	return meta
+}
+
+func exposureRadarOutcomePerformanceFromFeedback(row model.OAFBotGenerationFeedback, meta map[string]string) exposureRadarOutcomePerformance {
+	outcome := strings.ToLower(strings.TrimSpace(meta["manual_outcome"]))
+	if outcome == "" {
+		return exposureRadarOutcomePerformance{}
+	}
+	switch outcome {
+	case "effective":
+		return exposureRadarOutcomePerformance{Effective: 1}
+	case "neutral":
+		return exposureRadarOutcomePerformance{Neutral: 1}
+	case "ineffective":
+		return exposureRadarOutcomePerformance{Ineffective: 1}
+	case "not_suitable":
+		return exposureRadarOutcomePerformance{NotSuitable: 1}
+	}
+	for _, tag := range decodeStringList(row.IssueTags) {
+		switch strings.ToLower(strings.TrimSpace(tag)) {
+		case "effective":
+			return exposureRadarOutcomePerformance{Effective: 1}
+		case "neutral":
+			return exposureRadarOutcomePerformance{Neutral: 1}
+		case "ineffective":
+			return exposureRadarOutcomePerformance{Ineffective: 1}
+		case "not_suitable":
+			return exposureRadarOutcomePerformance{NotSuitable: 1}
+		}
+	}
+	return exposureRadarOutcomePerformance{}
+}
+
+func exposureRadarOutcomeKeysFromMetadata(region string, meta map[string]string) []string {
+	return compactExposureRadarStringList([]string{
+		exposureRadarOutcomeKey(region, "topic", meta["topic"]),
+		exposureRadarOutcomeKey(region, "opportunity_type", meta["opportunity_type"]),
+		exposureRadarOutcomeKey(region, "data_quality", meta["data_quality"]),
+	})
+}
+
+func exposureRadarOutcomeStatsForItem(outcomes map[string]exposureRadarOutcomePerformance, item dto.ExposureRadarItem) exposureRadarOutcomePerformance {
+	if len(outcomes) == 0 {
+		return exposureRadarOutcomePerformance{}
+	}
+	if topicKey := exposureRadarOutcomeKey(item.Region, "topic", exposureRadarItemTopic(item)); topicKey != "" {
+		if stat, ok := outcomes[topicKey]; ok {
+			return stat
+		}
+	}
+	keys := compactExposureRadarStringList([]string{
+		exposureRadarOutcomeKey(item.Region, "opportunity_type", item.OpportunityType),
+		exposureRadarOutcomeKey(item.Region, "data_quality", item.DataQuality),
+	})
+	seen := map[string]bool{}
+	stat := exposureRadarOutcomePerformance{}
+	for _, key := range keys {
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		current, ok := outcomes[key]
+		if !ok {
+			continue
+		}
+		stat.Effective += current.Effective
+		stat.Neutral += current.Neutral
+		stat.Ineffective += current.Ineffective
+		stat.NotSuitable += current.NotSuitable
+	}
+	return stat
+}
+
+func exposureRadarOutcomeKey(region, dimension, value string) string {
+	region = normalizeExposureRegion(region)
+	if region == "" {
+		region = "unknown"
+	}
+	dimension = strings.ToLower(strings.TrimSpace(dimension))
+	value = strings.TrimSpace(value)
+	if dimension == "" || value == "" {
+		return ""
+	}
+	return region + ":" + dimension + ":" + normalizeTrendName(value)
+}
+
+func exposureRadarOutcomePerformanceEmpty(stat exposureRadarOutcomePerformance) bool {
+	return stat.Effective == 0 && stat.Neutral == 0 && stat.Ineffective == 0 && stat.NotSuitable == 0
+}
+
+func compactExposureRadarStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 func exposureRadarItemTopic(item dto.ExposureRadarItem) string {
 	for _, value := range []string{item.TopicName, item.Title} {
 		value = strings.TrimSpace(value)
@@ -1703,6 +1895,70 @@ func exposureRadarRankingReason(positive, rejected int64, scopeLabel string) str
 	default:
 		return ""
 	}
+}
+
+func exposureRadarOutcomeRankingDelta(stat exposureRadarOutcomePerformance) int {
+	delta := int(stat.Effective*3 - stat.Neutral - stat.Ineffective*4 - stat.NotSuitable*6)
+	if delta > 8 {
+		return 8
+	}
+	if delta < -8 {
+		return -8
+	}
+	return delta
+}
+
+func exposureRadarOutcomeRankingReason(stat exposureRadarOutcomePerformance, scopeLabel string) string {
+	if strings.TrimSpace(scopeLabel) == "" {
+		scopeLabel = "workspace"
+	}
+	parts := []string{}
+	if stat.Effective > 0 {
+		parts = append(parts, fmt.Sprintf("%d effective", stat.Effective))
+	}
+	if stat.Neutral > 0 {
+		parts = append(parts, fmt.Sprintf("%d neutral", stat.Neutral))
+	}
+	if stat.Ineffective > 0 {
+		parts = append(parts, fmt.Sprintf("%d ineffective", stat.Ineffective))
+	}
+	if stat.NotSuitable > 0 {
+		parts = append(parts, fmt.Sprintf("%d not suitable", stat.NotSuitable))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	suffix := ""
+	if stat.Ineffective > 0 || stat.NotSuitable > 0 {
+		suffix = " Review fit carefully."
+	}
+	return fmt.Sprintf("Recent %s manual outcome feedback: %s for similar signals.%s", scopeLabel, strings.Join(parts, ", "), suffix)
+}
+
+func exposureRadarJoinRankingReasons(reasons ...string) string {
+	out := make([]string, 0, len(reasons))
+	seen := map[string]bool{}
+	for _, reason := range reasons {
+		reason = strings.TrimSpace(reason)
+		if reason == "" || seen[reason] {
+			continue
+		}
+		seen[reason] = true
+		out = append(out, reason)
+	}
+	return strings.Join(out, " ")
+}
+
+func exposureRadarConservativeRecommendedUse(value string) string {
+	value = strings.TrimSpace(value)
+	prefix := "Review fit before replying; consider saving as memory or skipping if the context is sensitive or off-positioning."
+	if value == "" {
+		return prefix
+	}
+	if strings.Contains(value, prefix) {
+		return value
+	}
+	return prefix + " Original suggestion: " + value
 }
 
 func isExposureRadarMetaKeyword(value string) bool {

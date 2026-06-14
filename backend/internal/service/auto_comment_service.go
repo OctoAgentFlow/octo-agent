@@ -950,7 +950,7 @@ func (s *AutoCommentService) CreateFeedback(userID, id uint, req dto.AutoComment
 	if outcomeTags := autoCommentOutcomeFeedbackTags(req.Outcome); len(outcomeTags) > 0 {
 		issueTags = mergeStringListsLimited(issueTags, outcomeTags, 8)
 	}
-	comment := autoCommentOutcomeFeedbackComment(req)
+	comment := autoCommentOutcomeFeedbackComment(req, task)
 	row := &model.OAFBotGenerationFeedback{
 		UserID:           userID,
 		BotID:            task.BotID,
@@ -2750,16 +2750,45 @@ func autoCommentOutcomeFeedbackTags(outcome string) []string {
 	}
 }
 
-func autoCommentOutcomeFeedbackComment(req dto.AutoCommentFeedbackRequest) string {
-	comment := strings.TrimSpace(req.Comment)
+func autoCommentOutcomeFeedbackComment(req dto.AutoCommentFeedbackRequest, task *model.AutoCommentTask) string {
+	commentParts := []string{}
+	if comment := strings.TrimSpace(req.Comment); comment != "" {
+		commentParts = append(commentParts, comment)
+	}
 	outcome := strings.ToLower(strings.TrimSpace(req.Outcome))
-	if outcome == "" {
-		return comment
+	if outcome != "" {
+		commentParts = append(commentParts, "manual_outcome="+outcome)
 	}
-	if comment == "" {
-		return "manual_outcome=" + outcome
+	if task != nil && strings.TrimSpace(task.SourceType) == "exposure_radar" {
+		if strings.TrimSpace(task.SourceRegion) != "" {
+			commentParts = append(commentParts, "region="+strings.TrimSpace(task.SourceRegion))
+		}
+		if topic := exposureRadarPrimaryTaskTopic(task); topic != "" {
+			commentParts = append(commentParts, "topic="+topic)
+		}
+		if strings.TrimSpace(task.SourceRef) != "" {
+			commentParts = append(commentParts, "source_ref="+strings.TrimSpace(task.SourceRef))
+		}
 	}
-	return "manual_outcome=" + outcome + " | " + comment
+	return strings.Join(commentParts, " | ")
+}
+
+func exposureRadarPrimaryTaskTopic(task *model.AutoCommentTask) string {
+	if task == nil {
+		return ""
+	}
+	topics := decodeStringList(task.MatchedKeywords)
+	if len(topics) == 0 {
+		topics = []string{task.MatchedKeywords}
+	}
+	for _, topic := range topics {
+		topic = strings.TrimSpace(topic)
+		if topic == "" || strings.EqualFold(topic, "exposure_radar") || strings.EqualFold(topic, task.SourceRegion) {
+			continue
+		}
+		return truncateRunes(topic, 120)
+	}
+	return ""
 }
 
 func mergeStringListsLimited(primary []string, secondary []string, limit int) []string {

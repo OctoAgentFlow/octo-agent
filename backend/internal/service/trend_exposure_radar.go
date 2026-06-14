@@ -937,8 +937,9 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 			zap.L().Warn("exposure recent search failed", zap.String("region", region), zap.String("topic", name), zap.Error(err))
 			continue
 		}
+		selected := selectExposureTweetCandidates(tweets, now, s.exposureCandidateKeepLimit())
 		upserted := 0
-		for _, tweet := range tweets {
+		for _, tweet := range selected {
 			row, ok := s.tweetSearchToExposureSignal(tweet, region, name, query, now)
 			if !ok {
 				continue
@@ -948,7 +949,7 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 			}
 			upserted++
 		}
-		zap.L().Debug("exposure topic scanned", zap.String("region", region), zap.String("topic", name), zap.Int("candidates", len(tweets)), zap.Int("upserted", upserted))
+		zap.L().Debug("exposure topic scanned", zap.String("region", region), zap.String("topic", name), zap.Int("candidates", len(tweets)), zap.Int("selected", len(selected)), zap.Int("upserted", upserted))
 	}
 	return nil
 }
@@ -1476,6 +1477,77 @@ func englishTweetHeat(tweet twitter.TweetSearchItem) int64 {
 	return tweet.LikeCount + tweet.ReplyCount*3 + tweet.RetweetCount*4 + tweet.QuoteCount*4
 }
 
+func selectExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time, limit int) []twitter.TweetSearchItem {
+	out := make([]twitter.TweetSearchItem, 0, len(tweets))
+	for _, tweet := range tweets {
+		if strings.TrimSpace(tweet.ID) == "" {
+			continue
+		}
+		out = append(out, tweet)
+	}
+	sortExposureTweetCandidates(out, now)
+	seen := map[string]bool{}
+	deduped := out[:0]
+	for _, tweet := range out {
+		id := strings.TrimSpace(tweet.ID)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		deduped = append(deduped, tweet)
+	}
+	out = deduped
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func sortExposureTweetCandidates(tweets []twitter.TweetSearchItem, now time.Time) {
+	sort.SliceStable(tweets, func(i, j int) bool {
+		left := exposureTweetCandidateScore(tweets[i], now)
+		right := exposureTweetCandidateScore(tweets[j], now)
+		if left != right {
+			return left > right
+		}
+		if tweets[i].CreatedAt.Equal(tweets[j].CreatedAt) {
+			return tweets[i].ID < tweets[j].ID
+		}
+		return tweets[i].CreatedAt.After(tweets[j].CreatedAt)
+	})
+}
+
+func exposureTweetCandidateScore(tweet twitter.TweetSearchItem, now time.Time) int64 {
+	heat := englishTweetHeat(tweet)
+	score := heat * 10
+	if tweet.ImpressionCount > 0 {
+		score += 120000 + tweet.ImpressionCount*12
+	}
+	if tweet.ImpressionCount >= exposureHotMinViews {
+		score += 180000
+	}
+	if tweet.FollowersCount > 0 && tweet.FollowersCount <= 10000 {
+		score += 12000
+	}
+	if tweet.CreatedAt.IsZero() {
+		return score
+	}
+	age := now.Sub(tweet.CreatedAt)
+	switch {
+	case age < 0:
+		score -= 10000
+	case age <= 2*time.Hour:
+		score += 12000
+	case age <= 8*time.Hour:
+		score += 7000
+	case age <= 24*time.Hour:
+		score += 2000
+	default:
+		score -= 50000
+	}
+	return score
+}
+
 func exposureOpportunityTier(dataQuality string, heatCount, impressionCount int64, viewsPerMinute float64, velocityState string, hasPriorSample bool) (string, string) {
 	if strings.TrimSpace(dataQuality) != "tweet_level" {
 		return exposureTopicLeadTier, "topic-level signal; inspect live posts before treating it as a reply opportunity"
@@ -1521,7 +1593,7 @@ func (s *TrendService) englishExposureTopicLimit() int {
 
 func (s *TrendService) englishExposureSearchResults() int {
 	if s == nil || s.cfg.ExposureSearchResults <= 0 {
-		return 25
+		return 50
 	}
 	if s.cfg.ExposureSearchResults < 10 {
 		return 10
@@ -1530,6 +1602,18 @@ func (s *TrendService) englishExposureSearchResults() int {
 		return 100
 	}
 	return s.cfg.ExposureSearchResults
+}
+
+func (s *TrendService) exposureCandidateKeepLimit() int {
+	searchResults := s.englishExposureSearchResults()
+	limit := searchResults / 2
+	if limit < 10 {
+		return 10
+	}
+	if limit > 20 {
+		return 20
+	}
+	return limit
 }
 
 func (s *TrendService) englishExposureMaxFans() int64 {

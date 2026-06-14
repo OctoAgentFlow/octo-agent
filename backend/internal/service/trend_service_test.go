@@ -218,3 +218,37 @@ func TestExposureOpportunityTierSeparatesSamplingAndTopicLeads(t *testing.T) {
 		t.Fatalf("first sample confidence = %s, want %s", confidence, exposureConfidenceFirstSample)
 	}
 }
+
+func TestSelectExposureTweetCandidatesPrioritizesRealImpressions(t *testing.T) {
+	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	tweets := []twitter.TweetSearchItem{
+		{ID: "recent-low", CreatedAt: now.Add(-10 * time.Minute), LikeCount: 4, ReplyCount: 1, FollowersCount: 900},
+		{ID: "older-real", CreatedAt: now.Add(-3 * time.Hour), ImpressionCount: 4200, LikeCount: 10, FollowersCount: 8000},
+		{ID: "engagement", CreatedAt: now.Add(-30 * time.Minute), LikeCount: 30, ReplyCount: 4, RetweetCount: 2, FollowersCount: 700},
+	}
+
+	selected := selectExposureTweetCandidates(tweets, now, 2)
+	if len(selected) != 2 {
+		t.Fatalf("selected %d candidates, want 2", len(selected))
+	}
+	if selected[0].ID != "older-real" {
+		t.Fatalf("real impression candidate should rank first, got %s", selected[0].ID)
+	}
+	if selected[1].ID != "engagement" {
+		t.Fatalf("engagement candidate should beat low-heat recency, got %s", selected[1].ID)
+	}
+}
+
+func TestSelectExposureTweetCandidatesDedupesBeforeLimit(t *testing.T) {
+	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	tweets := []twitter.TweetSearchItem{
+		{ID: "same", CreatedAt: now.Add(-10 * time.Minute), ImpressionCount: 300},
+		{ID: "same", CreatedAt: now.Add(-5 * time.Minute), ImpressionCount: 10000},
+		{ID: "other", CreatedAt: now.Add(-20 * time.Minute), ImpressionCount: 5000},
+	}
+
+	selected := selectExposureTweetCandidates(tweets, now, 10)
+	if len(selected) != 2 {
+		t.Fatalf("selected %d candidates after dedupe, want 2", len(selected))
+	}
+}

@@ -137,7 +137,7 @@ func (r *ExposureTweetSignalRepository) List(query ExposureTweetSignalListQuery)
 		q = q.Where("published_at = ? OR published_at >= ? OR last_seen_at >= ?", time.Time{}, query.ActiveAfter, query.ActiveAfter)
 	}
 	var rows []model.ExposureTweetSignal
-	err := q.Order("views_per_minute DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
+	err := q.Order("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= 3000 THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 

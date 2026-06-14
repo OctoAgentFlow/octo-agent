@@ -675,7 +675,7 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 		cfg.ExposureTopicLimit = 16
 	}
 	if cfg.ExposureSearchResults <= 0 || cfg.ExposureSearchResults > 100 {
-		cfg.ExposureSearchResults = 25
+		cfg.ExposureSearchResults = 50
 	}
 	if cfg.ExposureSearchResults < 10 {
 		cfg.ExposureSearchResults = 10
@@ -684,7 +684,7 @@ func applyXTrendsConfig(cfg *XTrendsConfig) {
 		cfg.ExposureMaxFans = 10000
 	}
 	if cfg.ExposureMinHeat <= 0 {
-		cfg.ExposureMinHeat = 3
+		cfg.ExposureMinHeat = 10
 	}
 	if len(cfg.ExposureZhSeedTopics) == 0 {
 		cfg.ExposureZhSeedTopics = []string{"AI", "AI Agent", "Web3", "比特币", "以太坊", "加密货币", "空投", "链上", "出海", "创业", "SaaS", "增长"}

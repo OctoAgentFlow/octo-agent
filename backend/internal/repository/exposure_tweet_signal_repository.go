@@ -21,6 +21,14 @@ type ExposureTweetSignalListQuery struct {
 	Limit       int
 }
 
+type ExposureTweetSignalResampleQuery struct {
+	Region      string
+	MaxFans     int64
+	HotMinViews int64
+	ActiveAfter time.Time
+	Limit       int
+}
+
 type ExposureSignalRegionStat struct {
 	Region       string
 	SignalCount  int64
@@ -161,6 +169,32 @@ func (r *ExposureTweetSignalRepository) List(query ExposureTweetSignalListQuery)
 	}
 	var rows []model.ExposureTweetSignal
 	err := q.Order(fmt.Sprintf("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= %d THEN 0 ELSE 1 END ASC, views_per_minute DESC, impression_count DESC, current_count DESC, followers_count ASC, last_seen_at DESC", hotMinViews)).Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+func (r *ExposureTweetSignalRepository) ListResampleCandidates(query ExposureTweetSignalResampleQuery) ([]model.ExposureTweetSignal, error) {
+	limit := query.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 80
+	}
+	hotMinViews := query.HotMinViews
+	if hotMinViews <= 0 {
+		hotMinViews = 1000
+	}
+	q := r.DB.Model(&model.ExposureTweetSignal{}).Where("tweet_id <> ''")
+	if strings.TrimSpace(query.Region) != "" && strings.TrimSpace(query.Region) != "all" {
+		q = q.Where("region = ?", strings.TrimSpace(query.Region))
+	}
+	if query.MaxFans > 0 {
+		q = q.Where("followers_count = 0 OR followers_count <= ?", query.MaxFans)
+	}
+	if !query.ActiveAfter.IsZero() {
+		q = q.Where("published_at = ? OR published_at >= ? OR last_seen_at >= ?", time.Time{}, query.ActiveAfter, query.ActiveAfter)
+	}
+	var rows []model.ExposureTweetSignal
+	err := q.Order(fmt.Sprintf("CASE WHEN previous_count > 0 OR views_per_minute > 0 THEN 1 ELSE 0 END ASC, CASE WHEN impression_count > 0 THEN 0 ELSE 1 END ASC, CASE WHEN impression_count >= %d THEN 0 ELSE 1 END ASC, impression_count DESC, current_count DESC, last_seen_at DESC", hotMinViews)).
+		Limit(limit).
+		Find(&rows).Error
 	return rows, err
 }
 

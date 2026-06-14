@@ -1268,6 +1268,10 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 			}
 		}
 	}
+	resampledIDs, resampled, err := s.refreshExistingExposureSignals(ctx, region, now)
+	if err != nil {
+		zap.L().Warn("exposure resample lookup failed", zap.String("region", region), zap.Error(err))
+	}
 	rows, err := s.exposureTopics(region, now)
 	if err != nil {
 		return err
@@ -1286,6 +1290,9 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 		selected := selectExposureTweetCandidates(tweets, now, s.exposureCandidateKeepLimit(), s.exposureHotThresholds())
 		upserted := 0
 		for _, tweet := range selected {
+			if resampledIDs[strings.TrimSpace(tweet.ID)] {
+				continue
+			}
 			row, ok := s.tweetSearchToExposureSignal(tweet, region, name, query, now)
 			if !ok {
 				continue
@@ -1295,9 +1302,67 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 			}
 			upserted++
 		}
-		zap.L().Debug("exposure topic scanned", zap.String("region", region), zap.String("topic", name), zap.Int("candidates", len(tweets)), zap.Int("selected", len(selected)), zap.Int("upserted", upserted))
+		zap.L().Debug("exposure topic scanned", zap.String("region", region), zap.String("topic", name), zap.Int("candidates", len(tweets)), zap.Int("selected", len(selected)), zap.Int("upserted", upserted), zap.Int("resampled_before_scan", resampled))
 	}
 	return nil
+}
+
+func (s *TrendService) refreshExistingExposureSignals(ctx context.Context, region string, now time.Time) (map[string]bool, int, error) {
+	resampledIDs := map[string]bool{}
+	if s == nil || s.exposure == nil {
+		return resampledIDs, 0, nil
+	}
+	if normalizeExposureRegion(region) != "zh" {
+		return resampledIDs, 0, nil
+	}
+	rows, err := s.exposure.ListResampleCandidates(repository.ExposureTweetSignalResampleQuery{
+		Region:      region,
+		MaxFans:     s.englishExposureMaxFans(),
+		HotMinViews: s.exposureHotThresholds().HotMinViews,
+		ActiveAfter: now.Add(-s.exposureResampleWindow(region)),
+		Limit:       s.exposureResampleLimit(region),
+	})
+	if err != nil || len(rows) == 0 {
+		return resampledIDs, 0, err
+	}
+	ids := make([]string, 0, len(rows))
+	existingByID := map[string]model.ExposureTweetSignal{}
+	for _, row := range rows {
+		id := strings.TrimSpace(row.TweetID)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+		existingByID[id] = row
+	}
+	if len(ids) == 0 {
+		return resampledIDs, 0, nil
+	}
+	tweets, err := twitter.LookupTweetsByIDs(ctx, s.cfg.BearerToken, ids)
+	if err != nil {
+		return resampledIDs, 0, err
+	}
+	upserted := 0
+	for _, tweet := range tweets {
+		existing := existingByID[strings.TrimSpace(tweet.ID)]
+		topicName := strings.TrimSpace(existing.TopicName)
+		sourceQuery := strings.TrimSpace(existing.SourceQuery)
+		if sourceQuery == "" && topicName != "" {
+			sourceQuery = buildRecentSearchQuery(topicName, region)
+		}
+		row, ok := s.tweetSearchToExposureSignal(tweet, region, topicName, sourceQuery, now)
+		if !ok {
+			continue
+		}
+		row.Source = radarFirstNonEmpty(existing.Source, "x_tweet_lookup")
+		if err := s.exposure.UpsertSignal(row, now); err != nil {
+			return resampledIDs, upserted, err
+		}
+		resampledIDs[strings.TrimSpace(tweet.ID)] = true
+		upserted++
+	}
+	zap.L().Debug("exposure existing signals resampled", zap.String("region", region), zap.Int("candidates", len(rows)), zap.Int("looked_up", len(tweets)), zap.Int("upserted", upserted))
+	return resampledIDs, upserted, nil
 }
 
 func (s *TrendService) englishExposureTopics(now time.Time) ([]model.TrendTopic, error) {
@@ -1973,6 +2038,27 @@ func (s *TrendService) exposureCandidateKeepLimit() int {
 		return 20
 	}
 	return limit
+}
+
+func (s *TrendService) exposureResampleLimit(region string) int {
+	limit := s.exposureCandidateKeepLimit() * 4
+	if normalizeExposureRegion(region) == "zh" {
+		limit = s.exposureCandidateKeepLimit() * 5
+	}
+	if limit < 30 {
+		return 30
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
+}
+
+func (s *TrendService) exposureResampleWindow(region string) time.Duration {
+	if normalizeExposureRegion(region) == "zh" {
+		return 8 * time.Hour
+	}
+	return 4 * time.Hour
 }
 
 func (s *TrendService) englishExposureMaxFans() int64 {

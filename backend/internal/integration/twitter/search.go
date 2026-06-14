@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const recentSearchEndpoint = "https://api.x.com/2/tweets/search/recent"
+const (
+	recentSearchEndpoint = "https://api.x.com/2/tweets/search/recent"
+	tweetLookupEndpoint  = "https://api.x.com/2/tweets"
+)
 
 type TweetSearchItem struct {
 	ID              string
@@ -66,6 +69,10 @@ func SearchRecentTweets(ctx context.Context, bearerToken, query string, maxResul
 	return SearchRecentTweetsWithClient(ctx, defaultHTTP, bearerToken, query, maxResults)
 }
 
+func LookupTweetsByIDs(ctx context.Context, bearerToken string, ids []string) ([]TweetSearchItem, error) {
+	return LookupTweetsByIDsWithClient(ctx, defaultHTTP, bearerToken, ids)
+}
+
 func SearchRecentTweetsWithClient(ctx context.Context, client *http.Client, bearerToken, query string, maxResults int) ([]TweetSearchItem, error) {
 	token := strings.TrimSpace(bearerToken)
 	if token == "" {
@@ -114,6 +121,50 @@ func SearchRecentTweetsWithClient(ctx context.Context, client *http.Client, bear
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("decode recent search response: %w", err)
 	}
+	return parseTweetSearchItems(out), nil
+}
+
+func LookupTweetsByIDsWithClient(ctx context.Context, client *http.Client, bearerToken string, ids []string) ([]TweetSearchItem, error) {
+	token := strings.TrimSpace(bearerToken)
+	if token == "" {
+		return nil, fmt.Errorf("missing x bearer token")
+	}
+	ids = compactTweetIDs(ids, 100)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if client == nil {
+		client = defaultHTTP
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tweetLookupEndpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	q := req.URL.Query()
+	q.Set("ids", strings.Join(ids, ","))
+	q.Set("tweet.fields", "author_id,created_at,public_metrics,lang")
+	q.Set("expansions", "author_id")
+	q.Set("user.fields", "username,name,public_metrics")
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, newPublishError(resp, raw)
+	}
+	var out recentSearchResp
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode tweet lookup response: %w", err)
+	}
+	return parseTweetSearchItems(out), nil
+}
+
+func parseTweetSearchItems(out recentSearchResp) []TweetSearchItem {
 	users := map[string]tweetSearchUser{}
 	for _, user := range out.Includes.Users {
 		users[user.ID] = user
@@ -143,7 +194,34 @@ func SearchRecentTweetsWithClient(ctx context.Context, client *http.Client, bear
 			Raw:             string(rowRaw),
 		})
 	}
-	return items, nil
+	return items
+}
+
+func compactTweetIDs(ids []string, limit int) []string {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	out := make([]string, 0, minInt(limit, len(ids)))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func RecentSearchLiveURL(query string) string {

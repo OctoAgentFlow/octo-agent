@@ -65,18 +65,18 @@ func (r *ExposureTweetSignalRepository) UpsertSignal(row *model.ExposureTweetSig
 		return nil
 	}
 	var existing model.ExposureTweetSignal
-	err := r.DB.Where("tweet_id = ?", row.TweetID).First(&existing).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			if row.FirstSeenAt.IsZero() {
-				row.FirstSeenAt = now
-			}
-			if row.LastSeenAt.IsZero() {
-				row.LastSeenAt = now
-			}
-			return r.DB.Create(row).Error
+	result := r.DB.Where("tweet_id = ?", row.TweetID).Limit(1).Find(&existing)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		if row.FirstSeenAt.IsZero() {
+			row.FirstSeenAt = now
 		}
-		return err
+		if row.LastSeenAt.IsZero() {
+			row.LastSeenAt = now
+		}
+		return r.DB.Create(row).Error
 	}
 	prevCount := existing.CurrentCount
 	prevSeen := existing.LastSeenAt
@@ -119,12 +119,12 @@ func (r *ExposureTweetSignalRepository) LatestSeenAt(region string) (*time.Time,
 	if strings.TrimSpace(region) != "" {
 		q = q.Where("region = ?", strings.TrimSpace(region))
 	}
-	err := q.Order("last_seen_at DESC").First(&row).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		}
-		return nil, err
+	result := q.Order("last_seen_at DESC").Limit(1).Find(&row)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
 	}
 	t := row.LastSeenAt
 	return &t, nil

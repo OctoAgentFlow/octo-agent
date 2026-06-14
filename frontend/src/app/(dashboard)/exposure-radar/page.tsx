@@ -23,6 +23,14 @@ type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_scor
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
+type DailyActionType = "publish_reply" | "generate_reply" | "save_memory" | "inspect" | "review_fit";
+type DailyActionReason = "generated" | "velocity" | "low_fans" | "learned" | "risk" | "topic" | "score";
+type DailyActionPlanItem = {
+  item: ExposureRadarItemApi;
+  action: DailyActionType;
+  reason: DailyActionReason;
+  priority: number;
+};
 type ManualActionState = {
   copied?: boolean;
   opened?: boolean;
@@ -207,6 +215,7 @@ export default function ExposureRadarPage() {
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
   }, [items, manualActionStates, radarView, savedMemoryIDs]);
+  const dailyActionPlan = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs), [items, manualActionStates, savedMemoryIDs]);
 
   const createDraft = useCallback(async (item: ExposureRadarItemApi) => {
     if (!selectedAccountID || !selectedBotID) {
@@ -427,6 +436,18 @@ export default function ExposureRadarPage() {
         </div>
       </Card>
 
+      <DailyActionPlanPanel
+        plan={dailyActionPlan}
+        draftingID={draftingID}
+        draftDisabled={!selectedAccountID || !selectedBotID}
+        savingMemoryID={savingMemoryID}
+        memoryDisabled={!selectedAccountID || !selectedBotID}
+        onCreateDraft={createDraft}
+        onSaveMemory={saveRadarMemory}
+        onManualAction={(itemID, patch) => updateManualActionState(itemID, patch)}
+        savedMemoryIDs={savedMemoryIDs}
+      />
+
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <CardHeader title={t("exposureRadar.list.title")} description={t(region === "zh" ? "exposureRadar.list.descriptionZh" : "exposureRadar.list.descriptionEn")} />
@@ -520,6 +541,126 @@ function NumberButtons({ label, values, value, suffix, formatter, onChange, disa
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function DailyActionPlanPanel({
+  plan,
+  draftingID,
+  draftDisabled,
+  savingMemoryID,
+  memoryDisabled,
+  savedMemoryIDs,
+  onCreateDraft,
+  onSaveMemory,
+  onManualAction,
+}: {
+  plan: DailyActionPlanItem[];
+  draftingID: string | null;
+  draftDisabled: boolean;
+  savingMemoryID: string | null;
+  memoryDisabled: boolean;
+  savedMemoryIDs: Set<string>;
+  onCreateDraft: (item: ExposureRadarItemApi) => void;
+  onSaveMemory: (item: ExposureRadarItemApi) => void;
+  onManualAction: (itemID: string, patch: Partial<ManualActionState>) => void;
+}) {
+  const { t } = useT();
+  const counts = useMemo(() => {
+    return plan.reduce<Record<DailyActionType, number>>((acc, row) => {
+      acc[row.action] += 1;
+      return acc;
+    }, { publish_reply: 0, generate_reply: 0, save_memory: 0, inspect: 0, review_fit: 0 });
+  }, [plan]);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.actionPlan.title")} description={t("exposureRadar.actionPlan.description")} className="mb-0" />
+        <div className="flex flex-wrap gap-2">
+          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.reply")} value={counts.publish_reply + counts.generate_reply} />
+          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.save")} value={counts.save_memory} />
+          <ActionPlanMetric label={t("exposureRadar.actionPlan.metric.inspect")} value={counts.inspect + counts.review_fit} />
+        </div>
+      </div>
+      {plan.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
+          {t("exposureRadar.actionPlan.empty")}
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {plan.map((entry, index) => {
+            const item = entry.item;
+            const savedMemoryID = radarItemSavedMemoryID(item, savedMemoryIDs);
+            const canGenerate = item.data_quality === "tweet_level" && !draftDisabled;
+            const canSave = !savedMemoryID && !memoryDisabled;
+            const primaryIsOpen = entry.action === "publish_reply" || entry.action === "inspect" || entry.action === "review_fit";
+            return (
+              <div key={item.id} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[#1d9bf0]/30 bg-[#1d9bf0]/10 text-sm font-bold text-[#8ecdf8]">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${actionPlanTone(entry.action)}`}>
+                        {actionPlanIcon(entry.action)}
+                        {t(`exposureRadar.actionPlan.action.${entry.action}`)}
+                      </span>
+                      <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
+                        {item.score} {t("exposureRadar.card.score")}
+                      </span>
+                      {item.views_per_min ? (
+                        <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
+                          {Math.round(item.views_per_min)}/min
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-[#e7e9ea]">{item.title}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.actionPlan.reason.${entry.reason}`)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {entry.action === "generate_reply" ? (
+                        <Button type="button" size="sm" disabled={!canGenerate || draftingID === item.id} onClick={() => onCreateDraft(item)}>
+                          {draftingID === item.id ? <RefreshCw className="size-3.5 animate-spin" /> : <MessageSquarePlus className="size-3.5" />}
+                          {draftingID === item.id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
+                        </Button>
+                      ) : null}
+                      {entry.action === "save_memory" ? (
+                        <Button type="button" size="sm" disabled={!canSave || savingMemoryID === item.id} onClick={() => onSaveMemory(item)}>
+                          {savingMemoryID === item.id ? <RefreshCw className="size-3.5 animate-spin" /> : <BookmarkPlus className="size-3.5" />}
+                          {savingMemoryID === item.id ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
+                        </Button>
+                      ) : null}
+                      {primaryIsOpen && item.url ? (
+                        <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(item.id, { opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+                          {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : null}
+                      {entry.action !== "save_memory" && !savedMemoryID ? (
+                        <Button type="button" size="sm" variant="outline" disabled={!canSave || savingMemoryID === item.id} onClick={() => onSaveMemory(item)}>
+                          <BookmarkPlus className="size-3.5" />
+                          {t("exposureRadar.card.saveMemory")}
+                        </Button>
+                      ) : null}
+                      <a href={`#${radarCardAnchorID(item.id)}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+                        {t("exposureRadar.actionPlan.openSignal")}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ActionPlanMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-24 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-white">{value}</p>
     </div>
   );
 }
@@ -897,7 +1038,7 @@ function RadarCard({
   };
 
   return (
-    <article className={`rounded-2xl border p-4 transition-shadow ${highlightClass} ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
+    <article id={radarCardAnchorID(item.id)} className={`scroll-mt-24 rounded-2xl border p-4 transition-shadow ${highlightClass} ${item.cooling || velocityState === "cooling" ? "border-[#64748b]/35 bg-[#0b0f14] opacity-85" : "border-[#2f3336] bg-black"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex h-7 min-w-8 items-center justify-center rounded-full border px-2 text-xs font-bold ${rankTone}`}>
           #{rank}
@@ -1282,6 +1423,95 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
   };
 }
 
+function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): DailyActionPlanItem[] {
+  return items
+    .filter((item) => !isManualActionHandled(item, manualActionStates[item.id]))
+    .map((item) => ({
+      item,
+      action: dailyActionType(item, manualActionStates[item.id], savedMemoryIDs),
+      reason: dailyActionReason(item, manualActionStates[item.id]),
+      priority: dailyActionPriority(item, manualActionStates[item.id], savedMemoryIDs),
+    }))
+    .filter((entry) => entry.priority > 0)
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      if (a.item.score !== b.item.score) return b.item.score - a.item.score;
+      return a.item.id.localeCompare(b.item.id);
+    })
+    .slice(0, 6);
+}
+
+function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>) {
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
+  let priority = item.score || 0;
+  if (item.generated_comment || item.review_task_id) priority += 22;
+  if (item.data_quality === "tweet_level") priority += 10;
+  if (tier === "hot_opportunity") priority += 10;
+  if (tier === "rising_signal") priority += 6;
+  if (velocityState === "burst") priority += 8;
+  if (velocityState === "rising" || velocityState === "new") priority += 5;
+  if ((item.views_per_min || 0) > 0) priority += Math.min(12, Math.round((item.views_per_min || 0) / 10));
+  if ((item.followers_count || 0) > 0 && (item.followers_count || 0) <= 10000) priority += 5;
+  if ((item.ranking_delta || 0) > 0) priority += Math.min(8, item.ranking_delta || 0);
+  if (item.risk_level === "medium") priority -= 6;
+  if (item.risk_level === "high") priority -= 18;
+  if (velocityState === "cooling" || item.cooling) priority -= 10;
+  if (isRadarItemSaved(item, savedMemoryIDs)) priority -= 4;
+  if (state?.opened || state?.copied || state?.saved) priority -= 8;
+  return priority;
+}
+
+function dailyActionType(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>): DailyActionType {
+  if (item.generated_comment || item.review_task_id) return "publish_reply";
+  if (item.risk_level === "medium" || item.risk_level === "high") return "review_fit";
+  if (item.data_quality === "tweet_level") return "generate_reply";
+  if (!isRadarItemSaved(item, savedMemoryIDs) && !state?.saved) return "save_memory";
+  return "inspect";
+}
+
+function dailyActionReason(item: ExposureRadarItemApi, state?: ManualActionState): DailyActionReason {
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  if (item.generated_comment || item.review_task_id) return "generated";
+  if (item.risk_level === "medium" || item.risk_level === "high") return "risk";
+  if ((item.ranking_delta || 0) > 0) return "learned";
+  if (velocityState === "burst" || velocityState === "rising" || velocityState === "new") return "velocity";
+  if ((item.followers_count || 0) > 0 && (item.followers_count || 0) <= 10000) return "low_fans";
+  if (item.data_quality !== "tweet_level") return "topic";
+  if (state?.opened || state?.copied) return "score";
+  return "score";
+}
+
+function actionPlanTone(action: DailyActionType) {
+  switch (action) {
+    case "publish_reply":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "generate_reply":
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    case "save_memory":
+      return "border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]";
+    case "review_fit":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    default:
+      return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
+  }
+}
+
+function actionPlanIcon(action: DailyActionType) {
+  switch (action) {
+    case "publish_reply":
+      return <CheckCircle2 className="size-3.5" />;
+    case "generate_reply":
+      return <MessageSquarePlus className="size-3.5" />;
+    case "save_memory":
+      return <BookmarkPlus className="size-3.5" />;
+    case "review_fit":
+      return <ShieldAlert className="size-3.5" />;
+    default:
+      return <Search className="size-3.5" />;
+  }
+}
+
 function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFilter, savedMemoryIDs: Set<string>, manualActionStates: Record<string, ManualActionState>) {
   switch (filter) {
     case "tweet":
@@ -1381,6 +1611,10 @@ function memoryLink(id: number, accountID: number) {
   if (id > 0) params.set("content_item_id", String(id));
   if (accountID > 0) params.set("account", String(accountID));
   return `/content-drafts?${params.toString()}`;
+}
+
+function radarCardAnchorID(id: string) {
+  return `radar-signal-${id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 function compactTitle(value: string) {

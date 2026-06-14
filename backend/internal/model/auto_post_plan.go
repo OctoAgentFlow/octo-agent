@@ -2,6 +2,8 @@ package model
 
 import "time"
 
+// AutoPostPlan is a legacy persisted contract. Keep the model name and the
+// derived auto_post_plans table stable until a deliberate data migration exists.
 type AutoPostPlan struct {
 	Base
 	UserID               uint       `gorm:"index;not null;uniqueIndex:ux_auto_post_plan_account;comment:所属用户ID" json:"user_id"`

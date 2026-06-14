@@ -95,6 +95,22 @@ function statusLabelKey(status: string) {
   return keys[s] || "admin.status.unknown";
 }
 
+function contentDraftEnabledPlans(overview: AdminOverviewApi) {
+  return overview.execution.content_draft_enabled_plans ?? overview.execution.auto_post_enabled_plans;
+}
+
+function contentDraftDueNow(overview: AdminOverviewApi) {
+  return overview.execution.content_draft_due_now ?? overview.execution.auto_post_due_now;
+}
+
+function contentDraftSkipped24h(overview: AdminOverviewApi) {
+  return overview.execution.content_draft_skipped_24h ?? overview.execution.auto_post_skipped_24h;
+}
+
+function contentDraftFailed24h(overview: AdminOverviewApi) {
+  return overview.execution.content_draft_failed_24h ?? overview.execution.auto_post_failed_24h;
+}
+
 function planLabel(plan: string, t: (key: string) => string) {
   const p = plan.toLowerCase();
   if (p === "free_trial") return t("admin.plans.freeTrial");
@@ -595,7 +611,7 @@ function AdminHero({
     overview.billing.needs_review +
     overview.activity.failed +
     overview.execution.publish_failed +
-    overview.execution.auto_post_failed_24h +
+    contentDraftFailed24h(overview) +
     overview.execution.needs_reauth_accounts +
     configIssueCount(overview);
   return (
@@ -705,6 +721,9 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
   const { t } = useT();
   const reviewCount = overview.billing.review_needed + overview.billing.needs_review;
   const publishBacklog = overview.execution.publish_pending + overview.execution.publish_processing;
+  const draftDueNow = contentDraftDueNow(overview);
+  const draftFailed24h = contentDraftFailed24h(overview);
+  const draftEnabledPlans = contentDraftEnabledPlans(overview);
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -760,8 +779,8 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
             <Metric label={t("admin.execution.publishBacklog")} value={publishBacklog} icon={ReceiptText} tone={publishBacklog > 0 ? "warn" : "good"} href="/handling-list?status=ready_to_publish" />
             <Metric label={t("admin.execution.publishFailed")} value={overview.execution.publish_failed} icon={AlertTriangle} tone={overview.execution.publish_failed > 0 ? "danger" : "good"} href="/handling-list?status=failed" />
             <Metric label={t("admin.execution.publishedThisMonth")} value={overview.execution.published_this_month} icon={CheckCircle2} tone="good" />
-            <Metric label={t("admin.execution.contentDraftDueNow")} value={overview.execution.auto_post_due_now} icon={Activity} tone={overview.execution.auto_post_due_now > 0 ? "warn" : "default"} href="/content-drafts?panel=planner" />
-            <Metric label={t("admin.execution.contentDraftFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/content-drafts?panel=history&run_status=failed&account_scope=all&run_range=24h" />
+            <Metric label={t("admin.execution.contentDraftDueNow")} value={draftDueNow} icon={Activity} tone={draftDueNow > 0 ? "warn" : "default"} href="/content-drafts?panel=planner" />
+            <Metric label={t("admin.execution.contentDraftFailed24h")} value={draftFailed24h} icon={AlertTriangle} tone={draftFailed24h > 0 ? "danger" : "good"} href="/content-drafts?panel=history&run_status=failed&account_scope=all&run_range=24h" />
             <Metric label={t("admin.execution.needsReauth")} value={overview.execution.needs_reauth_accounts} icon={ShieldCheck} tone={overview.execution.needs_reauth_accounts > 0 ? "warn" : "good"} href="/accounts?filter=needs_reauth" />
           </div>
         </Card>
@@ -771,7 +790,7 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
             <Metric label={t("admin.execution.monthlyAI")} value={overview.execution.monthly_ai_generations} icon={Activity} />
             <Metric label={t("admin.execution.monthlyX")} value={overview.execution.monthly_x_publishes} icon={CheckCircle2} />
             <Metric label={t("admin.execution.monthlyCost")} value={`${overview.execution.monthly_cost_amount} USDT`} icon={Coins} tone={overview.execution.monthly_cost_cents > 0 ? "warn" : "default"} />
-            <Metric label={t("admin.execution.contentDraftEnabled")} value={overview.execution.auto_post_enabled_plans} icon={Settings} href="/content-drafts?panel=planner" />
+            <Metric label={t("admin.execution.contentDraftEnabled")} value={draftEnabledPlans} icon={Settings} href="/content-drafts?panel=planner" />
           </div>
         </Card>
       </section>
@@ -1683,6 +1702,8 @@ function ActivitySection({
 }) {
   const { t } = useT();
   const timeZone = usePreferredTimeZone();
+  const draftSkipped24h = contentDraftSkipped24h(overview);
+  const draftFailed24h = contentDraftFailed24h(overview);
   return (
     <div className="space-y-4">
       <section className="grid gap-3 md:grid-cols-4">
@@ -1705,6 +1726,7 @@ function ActivitySection({
               <p className="mt-2 break-words text-[#71767b]">
                 {event.account_handle || t("admin.activity.noAccount")} · {formatDate(event.executed_at, timeZone)}
               </p>
+              <p className="mt-2 line-clamp-2 break-words text-xs text-[#aab4bd]">{t(event.preview_display_key || event.preview_key)}</p>
               {event.error_message ? <p className="mt-3 line-clamp-3 break-words rounded-xl border border-[#f4212e]/20 bg-[#f4212e]/10 p-3 text-xs text-[#ff8a91]">{event.error_message}</p> : null}
             </div>
           ))}
@@ -1716,8 +1738,8 @@ function ActivitySection({
         <div className="grid gap-3 md:grid-cols-4">
           <Metric label={t("admin.execution.publishPending")} value={overview.execution.publish_pending} icon={ReceiptText} tone={overview.execution.publish_pending > 0 ? "warn" : "good"} href="/handling-list?status=ready_to_publish" />
           <Metric label={t("admin.execution.publishProcessing")} value={overview.execution.publish_processing} icon={Activity} href="/handling-list?status=processing" />
-          <Metric label={t("admin.execution.contentDraftSkipped24h")} value={overview.execution.auto_post_skipped_24h} icon={AlertTriangle} tone={overview.execution.auto_post_skipped_24h > 0 ? "warn" : "good"} href="/content-drafts?panel=history&run_status=skipped&account_scope=all&run_range=24h" />
-          <Metric label={t("admin.execution.contentDraftFailed24h")} value={overview.execution.auto_post_failed_24h} icon={AlertTriangle} tone={overview.execution.auto_post_failed_24h > 0 ? "danger" : "good"} href="/content-drafts?panel=history&run_status=failed&account_scope=all&run_range=24h" />
+          <Metric label={t("admin.execution.contentDraftSkipped24h")} value={draftSkipped24h} icon={AlertTriangle} tone={draftSkipped24h > 0 ? "warn" : "good"} href="/content-drafts?panel=history&run_status=skipped&account_scope=all&run_range=24h" />
+          <Metric label={t("admin.execution.contentDraftFailed24h")} value={draftFailed24h} icon={AlertTriangle} tone={draftFailed24h > 0 ? "danger" : "good"} href="/content-drafts?panel=history&run_status=failed&account_scope=all&run_range=24h" />
         </div>
       </Card>
     </div>

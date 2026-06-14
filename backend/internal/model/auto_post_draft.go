@@ -2,6 +2,8 @@ package model
 
 import "time"
 
+// AutoPostDraft is a legacy persisted contract. New Content Draft runtime code
+// may alias it, but the model/table/json field contract must remain stable.
 type AutoPostDraft struct {
 	Base
 	UserID           uint       `gorm:"index;not null;comment:所属用户ID" json:"user_id"`

@@ -58,6 +58,7 @@ export type AnalyticsOverview = {
     status: "failed" | "review";
     account_handle: string;
     preview_key: string;
+    preview_display_key?: string;
     executed_at: string;
     error_message?: string;
   }>;
@@ -116,6 +117,7 @@ export type AnalyticsOverview = {
       status: string;
       account_handle: string;
       preview_key: string;
+      preview_display_key?: string;
       executed_at: string;
       message?: string;
     }>;

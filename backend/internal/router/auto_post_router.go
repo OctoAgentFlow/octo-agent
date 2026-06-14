@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RegisterAutoPost keeps the legacy /auto-post API available for old clients
+// and rollback safety. New clients should use RegisterContentDrafts.
 func RegisterAutoPost(rg *gin.RouterGroup, c *controller.ContentDraftController) {
 	registerAutoPostRoutes(rg.Group("/auto-post"), c)
 }

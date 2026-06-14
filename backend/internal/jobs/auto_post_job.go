@@ -18,7 +18,9 @@ func RunContentDraftOnce(ctx context.Context, svc *service.ContentDraftService) 
 	svc.RunTick(requestid.NewContext(ctx, "scheduler"))
 }
 
-// RunAutoPostOnce is the legacy scheduler entrypoint retained for compatibility.
+// RunAutoPostOnce is the legacy scheduler entrypoint retained for imports,
+// tests, and rollback compatibility. Active scheduling should call
+// RunContentDraftOnce.
 func RunAutoPostOnce(ctx context.Context, svc *service.AutoPostService) {
 	RunContentDraftOnce(ctx, svc)
 }

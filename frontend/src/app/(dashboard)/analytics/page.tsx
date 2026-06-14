@@ -76,6 +76,7 @@ function attentionRecord(item: AnalyticsOverview["attention_items"][number]): Ac
     type: item.type,
     status: item.status,
     previewKey: item.preview_key,
+    previewDisplayKey: item.preview_display_key,
     accountHandle: item.account_handle,
     executedAt: item.executed_at,
     errorMessage: item.error_message,
@@ -659,7 +660,7 @@ export default function AnalyticsPage() {
                   {overview.auto_dm_operations.recent_events.map((item) => (
                     <div key={item.id} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-white">{t(item.preview_key)}</p>
+                        <p className="text-sm font-medium text-white">{t(item.preview_display_key || item.preview_key)}</p>
                         <span className="text-xs text-[#71767b]">{formatDateTime(item.executed_at, timeZone)}</span>
                       </div>
                       <p className="mt-1 line-clamp-2 break-words text-xs text-[#71767b]">{item.message || item.account_handle || "—"}</p>

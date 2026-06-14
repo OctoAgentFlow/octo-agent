@@ -49,29 +49,31 @@ type PlanLimitsData struct {
 	DailyReplyDrafts         int64 `json:"daily_reply_drafts"`
 	DailyOpportunityDrafts   int64 `json:"daily_opportunity_drafts"`
 	DailyReviewCapacity      int64 `json:"daily_review_capacity"`
-	MonthlyAutoPosts         int64 `json:"monthly_auto_posts"`
-	MonthlyAutoReplies       int64 `json:"monthly_auto_replies"`
-	MonthlyAutoComments      int64 `json:"monthly_auto_comments"`
-	MonthlyAutoDMs           int64 `json:"monthly_auto_dms"`
-	AutoCommentTargets       int64 `json:"auto_comment_targets"`
-	MonthlyAutoCommentScans  int64 `json:"monthly_auto_comment_scans"`
-	DailyAutoPosts           int64 `json:"daily_auto_posts"`
-	DailyAutoReplies         int64 `json:"daily_auto_replies"`
-	DailyAutoComments        int64 `json:"daily_auto_comments"`
-	DailyAutoDMs             int64 `json:"daily_auto_dms"`
-	AnalyticsDays            int64 `json:"analytics_days"`
-	TeamSeats                int64 `json:"team_seats"`
-	FullPersonaFields        bool  `json:"full_persona_fields"`
-	AutoDMImport             bool  `json:"auto_dm_import"`
-	AdvancedBotStrategy      bool  `json:"advanced_bot_strategy"`
-	BulkReview               bool  `json:"bulk_review"`
-	BotPerformance           bool  `json:"bot_performance"`
-	DataExport               bool  `json:"data_export"`
-	MultiBotMatrix           bool  `json:"multi_bot_matrix"`
-	ABTesting                bool  `json:"ab_testing"`
-	AdvancedFlowBuilder      bool  `json:"advanced_flow_builder"`
-	AdvancedRiskRules        bool  `json:"advanced_risk_rules"`
-	PrioritySupport          bool  `json:"priority_support"`
+	// Legacy quota fields are still part of the public billing contract. Keep
+	// them until API consumers have fully moved to the semantic fields above.
+	MonthlyAutoPosts        int64 `json:"monthly_auto_posts"`
+	MonthlyAutoReplies      int64 `json:"monthly_auto_replies"`
+	MonthlyAutoComments     int64 `json:"monthly_auto_comments"`
+	MonthlyAutoDMs          int64 `json:"monthly_auto_dms"`
+	AutoCommentTargets      int64 `json:"auto_comment_targets"`
+	MonthlyAutoCommentScans int64 `json:"monthly_auto_comment_scans"`
+	DailyAutoPosts          int64 `json:"daily_auto_posts"`
+	DailyAutoReplies        int64 `json:"daily_auto_replies"`
+	DailyAutoComments       int64 `json:"daily_auto_comments"`
+	DailyAutoDMs            int64 `json:"daily_auto_dms"`
+	AnalyticsDays           int64 `json:"analytics_days"`
+	TeamSeats               int64 `json:"team_seats"`
+	FullPersonaFields       bool  `json:"full_persona_fields"`
+	AutoDMImport            bool  `json:"auto_dm_import"`
+	AdvancedBotStrategy     bool  `json:"advanced_bot_strategy"`
+	BulkReview              bool  `json:"bulk_review"`
+	BotPerformance          bool  `json:"bot_performance"`
+	DataExport              bool  `json:"data_export"`
+	MultiBotMatrix          bool  `json:"multi_bot_matrix"`
+	ABTesting               bool  `json:"ab_testing"`
+	AdvancedFlowBuilder     bool  `json:"advanced_flow_builder"`
+	AdvancedRiskRules       bool  `json:"advanced_risk_rules"`
+	PrioritySupport         bool  `json:"priority_support"`
 }
 
 type PlanFeatureData struct {
@@ -82,9 +84,10 @@ type PlanFeatureData struct {
 }
 
 type PlanUsageData struct {
-	OAFBots                int64 `json:"oaf_bots"`
-	TwitterAccounts        int64 `json:"twitter_accounts"`
-	AIGenerationsMonth     int64 `json:"ai_generations_month"`
+	OAFBots            int64 `json:"oaf_bots"`
+	TwitterAccounts    int64 `json:"twitter_accounts"`
+	AIGenerationsMonth int64 `json:"ai_generations_month"`
+	// Legacy usage fields mirror the semantic counters below for older clients.
 	AutoPostsMonth         int64 `json:"auto_posts_month"`
 	AutoRepliesMonth       int64 `json:"auto_replies_month"`
 	AutoCommentsMonth      int64 `json:"auto_comments_month"`

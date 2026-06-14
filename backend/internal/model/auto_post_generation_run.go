@@ -1,5 +1,7 @@
 package model
 
+// AutoPostGenerationRun is a legacy persisted contract for scheduler history.
+// Keep the model/table/json field contract stable for historical runs.
 type AutoPostGenerationRun struct {
 	Base
 	UserID           uint   `gorm:"index;not null;comment:所属用户ID" json:"user_id"`

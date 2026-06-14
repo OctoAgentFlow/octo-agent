@@ -1304,21 +1304,29 @@ func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
 	monthlyCostCents, monthlyAIGenerations := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "openai", monthStart, monthEnd)
 	xCostCents, monthlyXPublishes := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "x", monthStart, monthEnd)
 	monthlyCostCents += xCostCents
+	contentDraftEnabledPlans := s.mustCount(&model.AutoPostPlan{}, "enabled = ?", true)
+	contentDraftDueNow := s.mustCount(&model.AutoPostPlan{}, "enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, now)
+	contentDraftSkipped24h := s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "skipped", since24h)
+	contentDraftFailed24h := s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "failed", since24h)
 	return dto.AdminExecutionSummary{
-		PublishPending:       s.mustCount(&model.PublishJob{}, "status = ?", "pending"),
-		PublishProcessing:    s.mustCount(&model.PublishJob{}, "status = ?", "processing"),
-		PublishFailed:        s.mustCount(&model.PublishJob{}, "status = ?", "failed"),
-		PublishedThisMonth:   s.mustCount(&model.PublishJob{}, "status = ? AND published_at IS NOT NULL AND published_at >= ? AND published_at < ?", "published", monthStart, monthEnd),
-		AutoPostEnabledPlans: s.mustCount(&model.AutoPostPlan{}, "enabled = ?", true),
-		AutoPostDueNow:       s.mustCount(&model.AutoPostPlan{}, "enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, now),
-		AutoPostSkipped24h:   s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "skipped", since24h),
-		AutoPostFailed24h:    s.mustCount(&model.AutoPostGenerationRun{}, "status = ? AND created_at >= ?", "failed", since24h),
-		NeedsReauthAccounts:  s.mustCount(&model.TwitterAccount{}, "status = ?", "needs_reauth"),
-		MonthlyAIGenerations: monthlyAIGenerations,
-		MonthlyXPublishes:    monthlyXPublishes,
-		MonthlyCostCents:     monthlyCostCents,
-		MonthlyCostAmount:    adminCentsAmountString(monthlyCostCents),
-		PromptGuard:          promptGuard,
+		PublishPending:           s.mustCount(&model.PublishJob{}, "status = ?", "pending"),
+		PublishProcessing:        s.mustCount(&model.PublishJob{}, "status = ?", "processing"),
+		PublishFailed:            s.mustCount(&model.PublishJob{}, "status = ?", "failed"),
+		PublishedThisMonth:       s.mustCount(&model.PublishJob{}, "status = ? AND published_at IS NOT NULL AND published_at >= ? AND published_at < ?", "published", monthStart, monthEnd),
+		ContentDraftEnabledPlans: contentDraftEnabledPlans,
+		ContentDraftDueNow:       contentDraftDueNow,
+		ContentDraftSkipped24h:   contentDraftSkipped24h,
+		ContentDraftFailed24h:    contentDraftFailed24h,
+		AutoPostEnabledPlans:     contentDraftEnabledPlans,
+		AutoPostDueNow:           contentDraftDueNow,
+		AutoPostSkipped24h:       contentDraftSkipped24h,
+		AutoPostFailed24h:        contentDraftFailed24h,
+		NeedsReauthAccounts:      s.mustCount(&model.TwitterAccount{}, "status = ?", "needs_reauth"),
+		MonthlyAIGenerations:     monthlyAIGenerations,
+		MonthlyXPublishes:        monthlyXPublishes,
+		MonthlyCostCents:         monthlyCostCents,
+		MonthlyCostAmount:        adminCentsAmountString(monthlyCostCents),
+		PromptGuard:              promptGuard,
 	}
 }
 
@@ -1417,6 +1425,7 @@ func (s *AdminService) recentActivity(limit int) ([]dto.AdminActivityListItem, e
 			Type:          row.Type,
 			Status:        row.Status,
 			PreviewKey:    row.PreviewKey,
+			DisplayKey:    activityPreviewDisplayKey(row.PreviewKey),
 			AccountHandle: row.AccountHandle,
 			ExecutedAt:    row.ExecutedAt.UTC().Format(time.RFC3339),
 			ErrorMessage:  row.ErrorMessage,

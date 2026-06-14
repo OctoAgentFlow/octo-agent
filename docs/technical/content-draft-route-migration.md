@@ -135,3 +135,95 @@ This batch is intentionally documentation and test hardening only. It does not r
 - Covered content draft length mode helpers, generated draft fitting, content hash generation, unique draft generation, trend selection helper, scheduler run helper, planner window parsing, run query time range parsing, and related tests.
 - Renamed `auto_post_run_time_range_test.go` to `content_draft_run_time_range_test.go`.
 - Kept error constants, model names, GORM table names, DTO JSON tags, AI usage scene values, activity preview keys, and legacy service/controller aliases untouched.
+
+## P3.4-a Remaining Legacy Contract Audit
+
+This batch is an audit and boundary-labeling pass. It documents the remaining
+`AutoPost` surfaces and adds code comments around the high-risk compatibility
+points. It does not rename database tables, JSON fields, activity keys, AI usage
+scene strings, queue types, public routes, or historical data.
+
+### Category 1: Must Remain For Historical Compatibility
+
+These surfaces are legacy contracts, not ordinary naming leftovers.
+
+| Surface | Current Contract | Why It Must Stay | Boundary |
+| --- | --- | --- | --- |
+| GORM models and tables | `AutoPostPlan`, `AutoPostDraft`, `AutoPostGenerationRun`; derived tables `auto_post_plans`, `auto_post_drafts`, `auto_post_generation_runs` | Existing production data, migrations, scheduler history, review queue joins, and publish jobs depend on these names. | Do not rename without a DB migration and rollback plan. Comments added to the model files. |
+| Public legacy API | `/api/v1/auto-post/*` | Older frontend builds, bookmarks, scripts, and rollback paths may still call it. | Keep as alias beside `/api/v1/content-drafts/*`; remove only after prod access logs are clean. Comment added in router. |
+| Billing legacy JSON | `monthly_auto_posts`, `daily_auto_posts`, `auto_posts_month`, `auto_posts_today`, and sibling legacy quota fields | API consumers and stored plan semantics may still read these fields. | Keep legacy fields and fill semantic aliases from them. Comment added in billing DTO. |
+| Automation DTO JSON | `AutoPost*` DTOs with existing JSON fields such as `generated_content`, `daily_limit`, `selected_trends` | The route alias uses the same wire shape for compatibility. | Prefer `ContentDraft*` aliases in new code; do not rename JSON tags yet. Comment added in automation DTO. |
+| AI usage scenes | `AIGenerationSceneAutoPost = "auto_post"` and sibling auto scene strings | Historical cost/usage rows are keyed by scene string. | Add display aliases for product wording; do not rewrite scene values in P3.4. Comment added in repository. |
+| Activity preview keys | `activity.preview.autoPost*` | Historical `activity_logs.preview_key` values and dictionaries depend on these exact keys. | Add display/dictionary aliases before changing future emissions. |
+| Queue/review types | `queue_type = "auto_post"` and related review/publish paths | Stored review items and feedback learning logic use the type string. | Keep stored type stable until a data migration exists. |
+| Admin legacy metrics | `auto_post_enabled_plans`, `auto_post_due_now`, `auto_post_skipped_24h`, `auto_post_failed_24h` | Admin dashboard/API consumers may still read these keys. | Add semantic aliases before changing legacy fields. Comment added in admin DTO. |
+| Scheduler wrapper | `RunAutoPostOnce` | Existing imports/tests/rollback code may still reference the old entrypoint. | Active scheduling should use `RunContentDraftOnce`; keep wrapper until references are gone. Comment updated in job file. |
+
+### Category 2: Internal Semantic Alias Layer
+
+These are safe places to continue improving product language because they can
+alias the legacy contract instead of changing it.
+
+| Surface | Current State | Next Safe Action |
+| --- | --- | --- |
+| Controller/service runtime | `ContentDraftController` and `ContentDraftService` alias legacy implementations. | Keep using `ContentDraft*` names in new wiring; leave `AutoPost*` wrappers in place. |
+| Repository aliases | `ContentDraftPlanRepository`, `ContentDraftRepository`, `ContentDraftGenerationRunRepository` alias legacy repositories. | Continue moving local variables and constructor parameters to the alias names. |
+| DTO aliases | `ContentDraft*` DTO aliases wrap the legacy `AutoPost*` wire contract. | Continue using aliases in handlers/services while keeping JSON tags unchanged. |
+| Frontend services/routes | New callers use `/content-drafts`; legacy `autoPostService` and `/auto-post` route remain. | New UI code should import content draft services; legacy wrappers stay until logs are clean. |
+| Helper names | P3.3-d moved pure local helpers to `contentDraft*`. | Continue renaming only non-persisted helpers when tests cover the call site. |
+| Admin display labels | Admin metrics still use legacy JSON keys. | Add `content_draft_*` semantic aliases in a later small batch, while keeping old fields. |
+| AI generation method names | `GenerateAutoPost`, `RewriteAutoPost`, and `GenerateAutoPostInput` are still internal method/type names. | Add `GenerateContentDraft` / `RewriteContentDraft` wrappers first if we want cleaner call sites. |
+| Automation service helper names | `syncAutoPostPlannerEnabled` and `applyAutoPostPlannerState` are internal names. | Rename or wrap only after confirming no public payload or DB field changes are involved. |
+
+### Category 3: Future High-Risk Migration Only
+
+These should not be touched during routine cleanup. Treat them as explicit data
+migration projects.
+
+| Surface | Why It Is High Risk | Required Gate Before Migration |
+| --- | --- | --- |
+| Renaming `auto_post_*` tables or Go models | Can break GORM table resolution, migrations, joins, and production data access. | Dedicated DB migration, `TableName()` compatibility tests, staging/prod backup, rollback script. |
+| Renaming quota storage fields | Subscription packages and usage counters still map semantic limits to old storage fields. | Full billing compatibility test matrix and dual-read/dual-write period. |
+| Rewriting AI usage scene values | Historical cost dashboards and monthly usage rows are keyed by old scene strings. | Backfill script plus reporting comparison before and after. |
+| Rewriting activity preview keys | Historical activity rows may lose labels if keys change. | Dictionary/display alias first, then optional future-key emission with backward mapping. |
+| Changing `queue_type = "auto_post"` | Review queue, feedback learning, and publish flow can stop resolving old items. | Data migration plus queue compatibility tests over old and new rows. |
+| Removing `/auto-post` or `/execution-queue` routes | Breaks old sessions/bookmarks and reduces rollback safety. | Production access-log audit showing no meaningful traffic for a defined window. |
+| Removing legacy TypeScript service/types | Some pages and tests still import old service/type wrappers. | Frontend `rg` audit must show no live imports outside compatibility wrappers. |
+
+### P3.4-a Decision
+
+- Stop treating every `AutoPost` string as cleanup debt.
+- Keep Category 1 contracts stable until a real migration exists.
+- Use Category 2 aliases for normal product-language cleanup.
+- Defer Category 3 migrations until there is a separate release plan with data
+  migration, compatibility tests, backups, and rollback.
+
+Recommended next step: P3.4-b should add semantic aliases for admin execution
+metrics and activity display labels while keeping the old API keys and stored
+activity keys unchanged.
+
+## P3.4-b Admin And Activity Display Aliases
+
+- Added additive admin execution metric aliases:
+  - `content_draft_enabled_plans`
+  - `content_draft_due_now`
+  - `content_draft_skipped_24h`
+  - `content_draft_failed_24h`
+- Kept the legacy admin JSON fields `auto_post_enabled_plans`,
+  `auto_post_due_now`, `auto_post_skipped_24h`, and `auto_post_failed_24h` in
+  the same response for existing dashboard/API consumers.
+- Added additive activity `preview_display_key` fields for activity list and
+  admin recent activity responses.
+- Mapped legacy stored `activity.preview.autoPost*` keys to new display aliases
+  such as `activity.preview.contentDraftGenerated` and
+  `activity.preview.contentDraftPublishJobCreated`.
+- Kept stored `activity_logs.preview_key` values unchanged; this batch only
+  changes display resolution and additive response fields.
+- Updated frontend Admin metrics to prefer the new `content_draft_*` fields with
+  legacy `auto_post_*` fallback.
+- Updated frontend activity narratives and analytics recent-event display to
+  prefer `preview_display_key`, with old `preview_key` fallback.
+
+P3.4-b still avoids the high-risk migrations from P3.4-a Category 3: no table
+renames, no queue type rewrites, no AI usage scene rewrites, no historical
+activity key rewrites, and no route removals.

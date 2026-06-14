@@ -11,6 +11,7 @@ export type ActivityRecord = {
   type: ActivityType;
   status: ActivityStatus;
   previewKey: string;
+  previewDisplayKey?: string;
   accountHandle: string;
   sourceModule?: ActivitySourceModule;
   executedAt: string; // ISO string for easy future API swap

@@ -11,6 +11,8 @@ import (
 )
 
 const (
+	// Compatibility boundary: persisted AI usage rows use these scene strings.
+	// Add display aliases for new product language; do not rewrite history here.
 	AIGenerationSceneAutoPost            = "auto_post"
 	AIGenerationSceneAutoReply           = "auto_reply"
 	AIGenerationSceneAutoComment         = "auto_comment"

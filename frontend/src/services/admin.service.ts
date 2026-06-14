@@ -53,6 +53,10 @@ export type AdminExecutionSummaryApi = {
   publish_processing: number;
   publish_failed: number;
   published_this_month: number;
+  content_draft_enabled_plans?: number;
+  content_draft_due_now?: number;
+  content_draft_skipped_24h?: number;
+  content_draft_failed_24h?: number;
   auto_post_enabled_plans: number;
   auto_post_due_now: number;
   auto_post_skipped_24h: number;
@@ -110,6 +114,7 @@ export type AdminActivityListItemApi = {
   type: string;
   status: string;
   preview_key: string;
+  preview_display_key?: string;
   account_handle: string;
   executed_at: string;
   error_message?: string;

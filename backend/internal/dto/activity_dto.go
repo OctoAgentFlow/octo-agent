@@ -18,6 +18,7 @@ type ActivityItemData struct {
 	Type            string `json:"type"`
 	Status          string `json:"status"`
 	PreviewKey      string `json:"preview_key"`
+	DisplayKey      string `json:"preview_display_key,omitempty"`
 	AccountHandle   string `json:"account_handle"`
 	SourceModule    string `json:"source_module,omitempty"`
 	ExecutedAt      string `json:"executed_at"`

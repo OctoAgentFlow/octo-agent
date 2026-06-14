@@ -93,6 +93,7 @@ func (s *ActivityService) List(userID uint, query dto.ActivityQuery) (*dto.Activ
 			Type:                item.Type,
 			Status:              item.Status,
 			PreviewKey:          item.PreviewKey,
+			DisplayKey:          activityPreviewDisplayKey(item.PreviewKey),
 			AccountHandle:       accountHandle,
 			SourceModule:        sourceModule,
 			ExecutedAt:          item.ExecutedAt.UTC().Format(time.RFC3339),
@@ -176,5 +177,28 @@ func activityDisplaySource(typ string, accountHandle string) (string, string) {
 		return strings.TrimSpace(parts[0]), "dm"
 	default:
 		return handle, ""
+	}
+}
+
+func activityPreviewDisplayKey(previewKey string) string {
+	switch previewKey {
+	case "activity.preview.autoPostDraftGenerated":
+		return "activity.preview.contentDraftGenerated"
+	case "activity.preview.autoPostAutopilotPrepared":
+		return "activity.preview.contentDraftReadyToHandle"
+	case "activity.preview.autoPostRiskReview":
+		return "activity.preview.contentDraftRiskReview"
+	case "activity.preview.autoPostSchedulerSkipped":
+		return "activity.preview.contentDraftSchedulerSkipped"
+	case "activity.preview.autoPostSchedulerFailed":
+		return "activity.preview.contentDraftSchedulerFailed"
+	case "activity.preview.autoPostPublishJobCreated":
+		return "activity.preview.contentDraftPublishJobCreated"
+	case "activity.preview.autoPostSimulatedPublishSuccess":
+		return "activity.preview.contentDraftSimulatedPublishSuccess"
+	case "activity.preview.autoPostSimulatedPublishFailed":
+		return "activity.preview.contentDraftSimulatedPublishFailed"
+	default:
+		return previewKey
 	}
 }

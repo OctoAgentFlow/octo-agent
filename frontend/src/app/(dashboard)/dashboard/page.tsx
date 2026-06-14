@@ -302,6 +302,7 @@ export default function DashboardPage() {
           type: item.type,
           status: item.status,
           previewKey: item.preview_key,
+          previewDisplayKey: item.preview_display_key,
           accountHandle: item.account_handle,
           sourceModule: item.source_module,
           executedAt: item.executed_at,

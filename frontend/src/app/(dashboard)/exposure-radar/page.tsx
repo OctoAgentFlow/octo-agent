@@ -19,7 +19,7 @@ import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
 type RankChange = { kind: "new" | "up" | "down"; delta?: number };
-type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "handled";
+type RadarViewFilter = "all" | "hot" | "rising" | "early" | "tweet" | "high_score" | "needs_review" | "saved" | "drafted" | "pending_handling" | "handled" | "backfilled";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
 type ManualActionState = {
@@ -35,7 +35,7 @@ type ManualActionState = {
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
-const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted", "handled"];
+const radarViewFilters: RadarViewFilter[] = ["all", "hot", "rising", "early", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
 
@@ -190,7 +190,7 @@ export default function ExposureRadarPage() {
     return radarViewFilters.reduce<Record<RadarViewFilter, number>>((acc, filter) => {
       acc[filter] = filter === "all" ? items.length : items.filter((item) => radarItemMatchesFilter(item, filter, savedMemoryIDs, manualActionStates)).length;
       return acc;
-    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, handled: 0 });
+    }, { all: 0, hot: 0, rising: 0, early: 0, tweet: 0, high_score: 0, needs_review: 0, saved: 0, drafted: 0, pending_handling: 0, handled: 0, backfilled: 0 });
   }, [items, manualActionStates, savedMemoryIDs]);
   const displayedItems = useMemo(() => {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
@@ -959,6 +959,7 @@ function RadarCard({
             onPublishedURLChange={setPublishedURL}
             onMarkHandled={() => onMarkHandled(item, publishedURL)}
           />
+          <ManualHandlingRecord item={item} manualState={manualState} timeZone={timeZone} />
         </div>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#71767b]">
@@ -1074,6 +1075,53 @@ function ManualWorkflowPanel({
   );
 }
 
+function ManualHandlingRecord({ item, manualState, timeZone }: { item: ExposureRadarItemApi; manualState?: ManualActionState; timeZone: string }) {
+  const { t } = useT();
+  const replyURL = item.comment_url || manualState?.publishedUrl || "";
+  const replyID = item.comment_tweet_id || extractTweetID(replyURL);
+  const statusKey = manualRecordStatus(item, manualState);
+  const updatedAt = manualState?.updatedAt ? formatDateTime(manualState.updatedAt, timeZone) : "-";
+  return (
+    <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualRecord.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.manualRecord.description")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {item.manual_action_url ? (
+            <a href={item.manual_action_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-black">
+              {t("exposureRadar.manualRecord.openOriginal")}
+              <ExternalLink className="size-3.5" />
+            </a>
+          ) : null}
+          {replyURL ? (
+            <a href={replyURL} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#00ba7c]/30 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5] hover:bg-[#00ba7c]/15">
+              {t("exposureRadar.manualRecord.openReply")}
+              <ExternalLink className="size-3.5" />
+            </a>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <ManualRecordField label={t("exposureRadar.manualRecord.task")} value={item.review_task_id ? `#${item.review_task_id}` : "-"} />
+        <ManualRecordField label={t("exposureRadar.manualRecord.status")} value={t(`exposureRadar.manualRecord.status.${statusKey}`)} />
+        <ManualRecordField label={t("exposureRadar.manualRecord.replyId")} value={replyID || t("exposureRadar.manualRecord.noReply")} />
+        <ManualRecordField label={t("exposureRadar.manualRecord.updated")} value={updatedAt} />
+      </div>
+    </div>
+  );
+}
+
+function ManualRecordField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-[#2f3336] bg-black px-3 py-2">
+      <p className="text-[11px] text-[#71767b]">{label}</p>
+      <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]" title={value}>{value}</p>
+    </div>
+  );
+}
+
 function ManualWorkflowStep({ done, label }: { done: boolean; label: string }) {
   return (
     <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold ${done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-[#0f1419] text-[#71767b]"}`}>
@@ -1166,8 +1214,12 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
       return isRadarItemSaved(item, savedMemoryIDs);
     case "drafted":
       return Boolean(item.generated_comment || item.review_task_id);
+    case "pending_handling":
+      return Boolean(item.generated_comment || item.review_task_id) && !isManualActionHandled(item, manualActionStates[item.id]);
     case "handled":
       return isManualActionHandled(item, manualActionStates[item.id]);
+    case "backfilled":
+      return hasManualBackfill(item, manualActionStates[item.id]);
     default:
       return true;
   }
@@ -1175,6 +1227,17 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
 
 function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
   return Boolean(state?.handled) || item.status === "handled" || item.review_status === "handled";
+}
+
+function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState) {
+  return Boolean(item.comment_url || item.comment_tweet_id || state?.publishedUrl);
+}
+
+function manualRecordStatus(item: ExposureRadarItemApi, state?: ManualActionState) {
+  if (hasManualBackfill(item, state)) return "backfilled";
+  if (isManualActionHandled(item, state)) return "handled";
+  if (state?.copied || state?.opened || state?.saved) return "in_progress";
+  return "generated";
 }
 
 function normalizeOpportunityTier(value?: string) {
@@ -1331,7 +1394,9 @@ function formatPercent(value: number) {
 }
 
 function extractTweetID(raw: string) {
-  const match = raw.match(/\/status(?:es)?\/(\d+)/);
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
   return match?.[1] || "";
 }
 

@@ -43,6 +43,7 @@ func Start(
 		var lastBillingScan time.Time
 		var lastPointExpiry time.Time
 		var lastGrossMarginCheck time.Time
+		var lastExposureRefresh time.Time
 		runEmail := func() {
 			if authService != nil {
 				if _, err := authService.CleanupExpiredEmailCodes(); err != nil {
@@ -103,9 +104,24 @@ func Start(
 		runTrends := func() {
 			RunTrendSyncOnce(context.Background(), trends)
 		}
+		runExposure := func() {
+			if trends == nil {
+				return
+			}
+			interval := trends.ExposureRefreshInterval()
+			if interval <= 0 {
+				return
+			}
+			if !lastExposureRefresh.IsZero() && time.Since(lastExposureRefresh) < interval {
+				return
+			}
+			lastExposureRefresh = time.Now()
+			RunExposureRefreshOnce(context.Background(), trends)
+		}
 		runEmail()
 		RunScheduledPostsOnce(context.Background(), postService, postRepo)
 		RunContentDraftOnce(context.Background(), contentDraft)
+		runExposure()
 		runTrends()
 		RunPublishingOnce(context.Background(), publishing)
 		runBillingScanner()
@@ -115,6 +131,7 @@ func Start(
 			runEmail()
 			RunScheduledPostsOnce(context.Background(), postService, postRepo)
 			RunContentDraftOnce(context.Background(), contentDraft)
+			runExposure()
 			runTrends()
 			RunPublishingOnce(context.Background(), publishing)
 			runBillingScanner()

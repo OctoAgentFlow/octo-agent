@@ -1702,6 +1702,10 @@ func (s *TrendService) exposureRefreshInterval() time.Duration {
 	return time.Duration(s.cfg.ExposureRefreshMinutes) * time.Minute
 }
 
+func (s *TrendService) ExposureRefreshInterval() time.Duration {
+	return s.exposureRefreshInterval()
+}
+
 func (s *TrendService) chineseExposureSeedTopics() []string {
 	defaults := []string{"AI", "AI Agent", "Web3", "比特币", "以太坊", "加密货币", "空投", "链上", "出海", "创业", "SaaS", "增长"}
 	if s == nil || len(s.cfg.ExposureZhSeedTopics) == 0 {

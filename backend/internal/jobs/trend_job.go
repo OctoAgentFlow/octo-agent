@@ -36,3 +36,30 @@ func RunTrendSyncOnce(ctx context.Context, svc *service.TrendService) {
 			zap.Int("synced_topics", result.SyncedTopics))
 	}
 }
+
+func RunExposureRefreshOnce(ctx context.Context, svc *service.TrendService) {
+	if svc == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now().UTC()
+	startedAt := time.Now()
+	ctx = requestid.NewContext(ctx, "scheduler-exposure")
+	englishErr := svc.RefreshEnglishExposureSignals(ctx, now)
+	chineseErr := svc.RefreshChineseExposureSignals(ctx, now)
+	fields := []zap.Field{
+		zap.Duration("duration", time.Since(startedAt)),
+		zap.Time("refreshed_at", now),
+	}
+	if englishErr != nil {
+		zap.L().Warn("english exposure refresh failed", append(fields, zap.Error(englishErr))...)
+	}
+	if chineseErr != nil {
+		zap.L().Warn("chinese exposure refresh failed", append(fields, zap.Error(chineseErr))...)
+	}
+	if englishErr == nil && chineseErr == nil {
+		zap.L().Info("exposure radar refresh completed", fields...)
+	}
+}

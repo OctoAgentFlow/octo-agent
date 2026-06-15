@@ -32,6 +32,21 @@ type DailyActionPlanItem = {
   reason: DailyActionReason;
   priority: number;
 };
+type OpportunityExplanation = {
+  fit: string;
+  reasons: string[];
+  angles: string[];
+  avoid: string[];
+};
+type ReplyAngleID = "operatorObservation" | "lightQuestion" | "peerExperience" | "cautionNote" | "topicResearch";
+type ReplyAngleSuggestion = {
+  id: ReplyAngleID;
+  title: string;
+  description: string;
+  prompt: string;
+  tone: string;
+};
+type ReplyAngleGenerationGuide = { label: string; tone: string; instruction: string };
 type ManualActionState = {
   copied?: boolean;
   opened?: boolean;
@@ -55,6 +70,33 @@ const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "n
   neutral: { rating: "negative", issueTags: ["neutral"] },
   ineffective: { rating: "negative", issueTags: ["ineffective", "irrelevant"] },
   not_suitable: { rating: "negative", issueTags: ["not_suitable", "irrelevant"] },
+};
+const replyAngleGenerationGuides: Record<ReplyAngleID, ReplyAngleGenerationGuide> = {
+  operatorObservation: {
+    label: "Operator observation",
+    tone: "concrete viewpoint",
+    instruction: "Anchor on one specific detail from the post, then add one short, verifiable operator or builder observation. Do not turn it into a product pitch.",
+  },
+  lightQuestion: {
+    label: "Light question",
+    tone: "low-pressure question",
+    instruction: "Ask one natural question about a detail in the post. Keep it light, not interrogative, and do not steer the thread into the product.",
+  },
+  peerExperience: {
+    label: "Peer experience",
+    tone: "peer-to-peer experience",
+    instruction: "Respond to the author's point first, then add one short experience or caution that fits their context. Talk less about yourself.",
+  },
+  cautionNote: {
+    label: "Caution note",
+    tone: "careful boundary",
+    instruction: "Add one conservative reminder, condition, or boundary. Avoid exaggerated claims, sensitive judgments, and unverified facts.",
+  },
+  topicResearch: {
+    label: "Find a specific post first",
+    tone: "research first",
+    instruction: "This is a topic-level lead. Do not conclude from the topic alone; find a specific post first, then write a short contextual reply.",
+  },
 };
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
@@ -84,6 +126,7 @@ export default function ExposureRadarPage() {
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
   const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
+  const [selectedReplyAngleIDs, setSelectedReplyAngleIDs] = useState<Record<string, string>>({});
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
@@ -127,6 +170,9 @@ export default function ExposureRadarPage() {
         updatedAt: new Date().toISOString(),
       },
     }));
+  }, []);
+  const updateSelectedReplyAngle = useCallback((itemID: string, angleID: string) => {
+    setSelectedReplyAngleIDs((current) => ({ ...current, [itemID]: angleID }));
   }, []);
 
   const load = useCallback(async () => {
@@ -230,7 +276,7 @@ export default function ExposureRadarPage() {
     }
   }, [activeWorkbenchID, handlingQueue]);
 
-  const createDraft = useCallback(async (item: ExposureRadarItemApi) => {
+  const createDraft = useCallback(async (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => {
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccount"));
       return;
@@ -258,8 +304,8 @@ export default function ExposureRadarPage() {
         score: item.score,
         risk_level: item.risk_level,
         opportunity_type: item.opportunity_type,
-        recommended_use: item.recommended_use,
-        reason: item.reason,
+        recommended_use: buildDraftRecommendedUse(item, replyAngle),
+        reason: buildDraftReason(item, replyAngle),
       });
       setData((current) => current ? {
         ...current,
@@ -282,14 +328,14 @@ export default function ExposureRadarPage() {
     }
   }, [pushToast, selectedAccountID, selectedBotID, t]);
 
-  const saveRadarMemory = useCallback(async (item: ExposureRadarItemApi) => {
+  const saveRadarMemory = useCallback(async (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => {
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
       return;
     }
     setSavingMemoryID(item.id);
     try {
-      const memory = await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID));
+      const memory = await contentLibraryService.create(buildRadarMemoryPayload(item, selectedAccountID, selectedBotID, replyAngle));
       setData((current) => current ? {
         ...current,
         items: current.items.map((row) => row.id === item.id ? { ...row, saved_memory_id: memory.id } : row),
@@ -467,10 +513,12 @@ export default function ExposureRadarPage() {
         handlingID={handlingID}
         savingMemoryID={savingMemoryID}
         memoryDisabled={!selectedAccountID || !selectedBotID}
+        selectedReplyAngleIDs={selectedReplyAngleIDs}
         onCreateDraft={createDraft}
         onMarkHandled={markRadarHandled}
         onSaveMemory={saveRadarMemory}
         onManualAction={(itemID, patch) => updateManualActionState(itemID, patch)}
+        onSelectReplyAngle={updateSelectedReplyAngle}
         onActiveChange={setActiveWorkbenchID}
         onFocusItem={focusRadarItem}
         savedMemoryIDs={savedMemoryIDs}
@@ -583,10 +631,12 @@ function HandlingWorkbenchPanel({
   savingMemoryID,
   memoryDisabled,
   savedMemoryIDs,
+  selectedReplyAngleIDs,
   onCreateDraft,
   onMarkHandled,
   onSaveMemory,
   onManualAction,
+  onSelectReplyAngle,
   onActiveChange,
   onFocusItem,
 }: {
@@ -599,10 +649,12 @@ function HandlingWorkbenchPanel({
   savingMemoryID: string | null;
   memoryDisabled: boolean;
   savedMemoryIDs: Set<string>;
-  onCreateDraft: (item: ExposureRadarItemApi) => void;
+  selectedReplyAngleIDs: Record<string, string>;
+  onCreateDraft: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
-  onSaveMemory: (item: ExposureRadarItemApi) => void;
+  onSaveMemory: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onManualAction: (itemID: string, patch: Partial<ManualActionState>) => void;
+  onSelectReplyAngle: (itemID: string, angleID: string) => void;
   onActiveChange: (itemID: string) => void;
   onFocusItem: (itemID: string) => void;
 }) {
@@ -613,6 +665,9 @@ function HandlingWorkbenchPanel({
   const activeItem = activeEntry?.item;
   const nextEntry = queue[activeIndex + 1] || queue.find((entry) => entry.item.id !== activeItem?.id);
   const previousEntry = activeIndex > 0 ? queue[activeIndex - 1] : undefined;
+  const activeExplanation = activeItem ? buildOpportunityExplanation(activeItem, t) : null;
+  const replyAngles = activeItem ? buildReplyAngleSuggestions(activeItem, t) : [];
+  const selectedReplyAngle = replyAngles.find((angle) => angle.id === selectedReplyAngleIDs[activeItem?.id || ""]) || replyAngles[0];
   const copyWorkbenchReply = async () => {
     if (!activeItem?.generated_comment) return;
     try {
@@ -665,11 +720,14 @@ function HandlingWorkbenchPanel({
             <h2 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{activeItem.title}</h2>
             {activeItem.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{activeItem.author_handle}</p> : null}
             <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{activeItem.content}</p>
-            <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.workbench.whyThis")}</p>
-              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.actionPlan.reason.${activeEntry.reason}`)}</p>
-              {activeItem.quality_reason ? <p className="mt-2 text-xs leading-5 text-[#71767b]">{activeItem.quality_reason}</p> : null}
-            </div>
+            {activeExplanation ? <OpportunityExplanationPanel explanation={activeExplanation} /> : null}
+            {replyAngles.length ? (
+              <ReplyAngleSuggestionsPanel
+                suggestions={replyAngles}
+                selectedID={selectedReplyAngle?.id || ""}
+                onSelect={(angleID) => onSelectReplyAngle(activeItem.id, angleID)}
+              />
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               {activeItem.generated_comment ? (
                 <Button type="button" size="sm" onClick={() => void copyWorkbenchReply()}>
@@ -677,7 +735,7 @@ function HandlingWorkbenchPanel({
                   {t("exposureRadar.workbench.copyReply")}
                 </Button>
               ) : activeItem.data_quality === "tweet_level" ? (
-                <Button type="button" size="sm" disabled={draftDisabled || draftingID === activeItem.id} onClick={() => onCreateDraft(activeItem)}>
+                <Button type="button" size="sm" disabled={draftDisabled || draftingID === activeItem.id} onClick={() => onCreateDraft(activeItem, selectedReplyAngle)}>
                   {draftingID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <MessageSquarePlus className="size-3.5" />}
                   {draftingID === activeItem.id ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
                 </Button>
@@ -689,7 +747,7 @@ function HandlingWorkbenchPanel({
                 </a>
               ) : null}
               {!radarItemSavedMemoryID(activeItem, savedMemoryIDs) ? (
-                <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === activeItem.id} onClick={() => onSaveMemory(activeItem)}>
+                <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingMemoryID === activeItem.id} onClick={() => onSaveMemory(activeItem, selectedReplyAngle)}>
                   {savingMemoryID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <BookmarkPlus className="size-3.5" />}
                   {savingMemoryID === activeItem.id ? t("exposureRadar.card.savingMemory") : t("exposureRadar.card.saveMemory")}
                 </Button>
@@ -755,6 +813,97 @@ function ActionPlanMetric({ label, value }: { label: string; value: number }) {
     <div className="min-w-24 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
       <p className="text-[11px] text-[#71767b]">{label}</p>
       <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function OpportunityExplanationPanel({ explanation }: { explanation: OpportunityExplanation }) {
+  const { t } = useT();
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.explanation.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{explanation.fit}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        <ExplanationColumn
+          icon={<TrendingUp className="size-3.5" />}
+          title={t("exposureRadar.explanation.reasons")}
+          items={explanation.reasons}
+          tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]"
+        />
+        <ExplanationColumn
+          icon={<MessageCircle className="size-3.5" />}
+          title={t("exposureRadar.explanation.angles")}
+          items={explanation.angles}
+          tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]"
+        />
+        <ExplanationColumn
+          icon={<ShieldAlert className="size-3.5" />}
+          title={t("exposureRadar.explanation.avoid")}
+          items={explanation.avoid}
+          tone="border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReplyAngleSuggestionsPanel({ suggestions, selectedID, onSelect }: { suggestions: ReplyAngleSuggestion[]; selectedID: string; onSelect: (angleID: string) => void }) {
+  const { t } = useT();
+  return (
+    <div className="mt-4 rounded-2xl border border-[#1d9bf0]/20 bg-[#08131f] p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.replyAngles.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.replyAngles.description")}</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-[11px] font-semibold text-[#8ecdf8]">
+          <MessageCircle className="size-3.5" />
+          {t("exposureRadar.replyAngles.selected")}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {suggestions.map((suggestion) => {
+          const selected = suggestion.id === selectedID;
+          return (
+            <button
+              key={suggestion.id}
+              type="button"
+              onClick={() => onSelect(suggestion.id)}
+              className={`rounded-xl border p-3 text-left transition ${selected ? "border-[#1d9bf0]/70 bg-[#1d9bf0]/15" : "border-[#2f3336] bg-black hover:border-[#1d9bf0]/45"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{suggestion.title}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-[#8ecdf8]">{suggestion.tone}</p>
+                </div>
+                {selected ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#1d9bf0]" /> : null}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{suggestion.description}</p>
+              <p className="mt-2 rounded-lg border border-[#2f3336] bg-[#0f1419] px-2 py-2 text-[11px] leading-5 text-[#71767b]">{suggestion.prompt}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ExplanationColumn({ icon, title, items, tone }: { icon: ReactNode; title: string; items: string[]; tone: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold ${tone}`}>
+        {icon}
+        {title}
+      </div>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <p key={item} className="text-xs leading-5 text-[#8b98a5]">{item}</p>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1208,7 +1357,7 @@ function RadarCard({
   memoryAccountID: number;
   onCreateDraft: (item: ExposureRadarItemApi) => void;
   onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => void;
-  onSaveMemory: (item: ExposureRadarItemApi) => void;
+  onSaveMemory: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   manualState?: ManualActionState;
   onManualAction: (patch: Partial<ManualActionState>) => void;
   feedbackSaving: boolean;
@@ -1635,9 +1784,12 @@ function formatVelocityLabel(value: number | undefined, samplingLabel: string) {
   return `${rounded}/min`;
 }
 
-function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number): ContentLibraryItemPayload {
+function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number, selectedReplyAngle?: ReplyAngleSuggestion): ContentLibraryItemPayload {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const opportunityExplanation = buildMemoryOpportunityExplanation(item);
+  const replyAngleIDs = buildReplyAngleIDs(item);
+  const selectedReplyGuide = selectedReplyAngle ? replyAngleGenerationGuides[selectedReplyAngle.id] : undefined;
   const title = compactTitle(item.topic_name || item.title || "Exposure Radar signal");
   const bodyLines = [
     `Signal: ${item.title}`,
@@ -1648,6 +1800,7 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     item.recommended_use ? `Suggested operator action: ${item.recommended_use}` : "",
     item.ranking_reason ? `Ranking note: ${item.ranking_reason}` : "",
     item.quality_reason ? `Quality stage: ${qualityStage}; ${item.quality_reason}` : `Quality stage: ${qualityStage}.`,
+    formatMemoryOpportunityExplanation(opportunityExplanation, selectedReplyGuide, replyAngleIDs),
     `Radar metadata: region=${item.region}; quality=${item.data_quality}; score=${item.score}; velocity=${velocityState}; risk=${item.risk_level || "unknown"}.`,
   ].filter(Boolean);
   return {
@@ -1657,12 +1810,196 @@ function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: n
     item_type: "data_insight",
     body: bodyLines.join("\n"),
     source_url: item.url || undefined,
-    topics: uniqueList(["exposure-radar", item.region, item.topic_name, velocityState, qualityStage, item.opportunity_type, item.data_quality]),
-    growth_goal: "Use as OAF Bot memory for context-aware X replies and posts.",
-    cta_preference: "Use only when relevant. Keep replies review-first and do not force product promotion.",
+    topics: uniqueList(["exposure-radar", "operator-explanation", item.region, item.topic_name, velocityState, qualityStage, item.opportunity_type, item.data_quality, selectedReplyAngle ? `reply-angle-${selectedReplyAngle.id}` : "", ...replyAngleIDs.map((id) => `reply-angle-${id}`)]),
+    growth_goal: "Use as OAF Bot memory for context-aware X replies, opportunity review, and safe manual growth decisions.",
+    cta_preference: "Use only when relevant. Keep replies review-first, match the selected angle, and do not force product promotion.",
     priority: clampPriority(item.score),
     status: "active",
   };
+}
+
+function buildMemoryOpportunityExplanation(item: ExposureRadarItemApi): OpportunityExplanation {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const reasons = uniqueList([
+    item.quality_reason || memoryQualityReason(qualityStage),
+    item.data_quality === "topic_level" ? "This is a topic-level signal, so a specific post should be selected before replying." : "",
+    velocityState === "burst" ? "Velocity is in burst mode, so the operator should inspect it quickly." : "",
+    velocityState === "rising" ? "Momentum is still rising, so a timely reply may land before the thread gets crowded." : "",
+    velocityState === "new" ? "The signal is new, so the reply surface may still be open." : "",
+    typeof item.views_per_min === "number" && item.views_per_min > 0 ? `Current velocity is about ${formatVelocityLabel(item.views_per_min, "0/min")}.` : "",
+    typeof item.impression_count === "number" && item.impression_count > 0 ? `The post has about ${formatCompact(item.impression_count)} views, so it is not a cold-start signal.` : "",
+    typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? `The author has about ${formatCompact(item.followers_count)} followers, which may make the reply surface friendlier.` : "",
+    (item.ranking_delta || 0) > 0 ? "Historical feedback gives similar signals a positive ranking boost." : "",
+  ]).slice(0, 3);
+  const angleGuides = buildReplyAngleIDs(item).map((id) => {
+    const guide = replyAngleGenerationGuides[id];
+    return `${guide.label}: ${guide.instruction}`;
+  });
+  const avoid = uniqueList([
+    qualityStage === "expired" ? "Do not force a late reply after the discussion has cooled." : "",
+    item.data_quality === "topic_level" ? "Do not make claims from the topic alone; inspect the actual post first." : "",
+    item.risk_level === "medium" || item.risk_level === "high" ? "Avoid sensitive judgments, exaggerated promises, and unverified facts." : "",
+    "Do not directly pitch the product or drop links.",
+    "Avoid generic replies; the response must fit the original context.",
+  ]).slice(0, 3);
+  return {
+    fit: memoryOpportunityFitText(item),
+    reasons: reasons.length ? reasons : [memoryQualityReason("watch")],
+    angles: angleGuides.length ? angleGuides : [replyAngleGenerationGuides.lightQuestion.instruction],
+    avoid: avoid.length ? avoid : ["Avoid generic replies; the response must fit the original context."],
+  };
+}
+
+function formatMemoryOpportunityExplanation(explanation: OpportunityExplanation, selectedReplyGuide: ReplyAngleGenerationGuide | undefined, replyAngleIDs: ReplyAngleID[]) {
+  const suggestedAngles = replyAngleIDs
+    .map((id) => replyAngleGenerationGuides[id])
+    .map((guide) => `${guide.label} (${guide.tone})`)
+    .join(", ");
+  return [
+    "Operator explanation:",
+    `Fit: ${explanation.fit}`,
+    `Why handle: ${explanation.reasons.join(" | ")}`,
+    `Reply angles: ${explanation.angles.join(" | ")}`,
+    selectedReplyGuide ? `Selected reply angle: ${selectedReplyGuide.label} (${selectedReplyGuide.tone}) - ${selectedReplyGuide.instruction}` : "",
+    suggestedAngles ? `Suggested angle tags: ${suggestedAngles}` : "",
+    `Avoid: ${explanation.avoid.join(" | ")}`,
+  ].filter(Boolean).join("\n");
+}
+
+function memoryQualityReason(qualityStage: string) {
+  if (qualityStage === "act_now") return "Still inside the handling window, so a reply is less likely to miss the conversation rhythm.";
+  if (qualityStage === "expired") return "May be past the best window, so confirm the post is still active before acting.";
+  return "Worth watching until velocity or context becomes clearer.";
+}
+
+function memoryOpportunityFitText(item: ExposureRadarItemApi) {
+  if (item.risk_level === "medium" || item.risk_level === "high") {
+    return "This opportunity needs a brand-fit check first. Use a conservative, factual reply if you engage.";
+  }
+  if (item.data_quality === "topic_level") {
+    return "This is a topic-level lead. Open live search first, then choose a specific post manually.";
+  }
+  if (typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000) {
+    return "The author is still relatively small, so the reply surface may be easier to enter with a useful point.";
+  }
+  if (normalizeQualityStage(item.quality_stage, item) === "act_now") {
+    return "This opportunity is still inside the useful window, so it is worth checking and handling first.";
+  }
+  return "Treat this as a candidate signal. Confirm context and persona fit before replying.";
+}
+
+function buildOpportunityExplanation(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string): OpportunityExplanation {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const reasons = uniqueList([
+    item.quality_reason || t(`exposureRadar.explanation.reason.${qualityStage}`),
+    item.data_quality === "topic_level" ? t("exposureRadar.explanation.reason.topicLevel") : "",
+    velocityState === "burst" || velocityState === "rising" || velocityState === "new" ? t(`exposureRadar.explanation.reason.velocity.${velocityState}`) : "",
+    typeof item.views_per_min === "number" && item.views_per_min > 0 ? t("exposureRadar.explanation.reason.speed", { speed: formatVelocityLabel(item.views_per_min, "0/min") }) : "",
+    typeof item.impression_count === "number" && item.impression_count > 0 ? t("exposureRadar.explanation.reason.views", { count: formatCompact(item.impression_count) }) : "",
+    typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? t("exposureRadar.explanation.reason.lowFans", { count: formatCompact(item.followers_count) }) : "",
+    (item.ranking_delta || 0) > 0 ? t("exposureRadar.explanation.reason.learned") : "",
+  ]).slice(0, 3);
+  const angles = uniqueList([
+    item.generated_comment ? t("exposureRadar.explanation.angle.generated") : "",
+    item.data_quality === "topic_level" ? t("exposureRadar.explanation.angle.topicResearch") : "",
+    item.risk_level === "medium" || item.risk_level === "high" ? t("exposureRadar.explanation.angle.lowRiskQuestion") : "",
+    tier === "hot_opportunity" || qualityStage === "act_now" ? t("exposureRadar.explanation.angle.operatorInsight") : "",
+    typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? t("exposureRadar.explanation.angle.peerReply") : "",
+    item.topic_name ? t("exposureRadar.explanation.angle.topic", { topic: item.topic_name }) : "",
+    t("exposureRadar.explanation.angle.default"),
+  ]).slice(0, 3);
+  const avoid = uniqueList([
+    qualityStage === "expired" ? t("exposureRadar.explanation.avoid.expired") : "",
+    item.data_quality === "topic_level" ? t("exposureRadar.explanation.avoid.topicLevel") : "",
+    item.risk_level === "medium" || item.risk_level === "high" ? t("exposureRadar.explanation.avoid.risk") : "",
+    t("exposureRadar.explanation.avoid.promotion"),
+    t("exposureRadar.explanation.avoid.generic"),
+  ]).slice(0, 3);
+  return {
+    fit: opportunityFitText(item, t),
+    reasons: reasons.length ? reasons : [t("exposureRadar.explanation.reason.watch")],
+    angles: angles.length ? angles : [t("exposureRadar.explanation.angle.default")],
+    avoid: avoid.length ? avoid : [t("exposureRadar.explanation.avoid.generic")],
+  };
+}
+
+function opportunityFitText(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (item.risk_level === "medium" || item.risk_level === "high") {
+    return t("exposureRadar.explanation.fit.risk");
+  }
+  if (item.data_quality === "topic_level") {
+    return t("exposureRadar.explanation.fit.topic");
+  }
+  if (typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000) {
+    return t("exposureRadar.explanation.fit.lowFans");
+  }
+  if (normalizeQualityStage(item.quality_stage, item) === "act_now") {
+    return t("exposureRadar.explanation.fit.actNow");
+  }
+  return t("exposureRadar.explanation.fit.default");
+}
+
+function buildReplyAngleSuggestions(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string): ReplyAngleSuggestion[] {
+  return buildReplyAngleIDs(item).map((id) => replyAngle(id, t));
+}
+
+function buildReplyAngleIDs(item: ExposureRadarItemApi): ReplyAngleID[] {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
+  const risky = item.risk_level === "medium" || item.risk_level === "high";
+  const lowFans = typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000;
+  const candidates: Array<ReplyAngleID | undefined> = [
+    item.data_quality === "topic_level" ? "topicResearch" : undefined,
+    risky ? "cautionNote" : undefined,
+    qualityStage === "act_now" || tier === "hot_opportunity" ? "operatorObservation" : undefined,
+    lowFans ? "peerExperience" : undefined,
+    !risky ? "lightQuestion" : undefined,
+    "operatorObservation",
+    "lightQuestion",
+    "peerExperience",
+  ];
+  const seen = new Set<ReplyAngleID>();
+  const suggestions: ReplyAngleID[] = [];
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+    suggestions.push(candidate);
+    if (suggestions.length >= 3) break;
+  }
+  return suggestions;
+}
+
+function replyAngle(id: ReplyAngleID, t: (key: string, params?: Record<string, string | number>) => string): ReplyAngleSuggestion {
+  return {
+    id,
+    title: t(`exposureRadar.replyAngles.${id}.title`),
+    description: t(`exposureRadar.replyAngles.${id}.description`),
+    prompt: t(`exposureRadar.replyAngles.${id}.prompt`),
+    tone: t(`exposureRadar.replyAngles.${id}.tone`),
+  };
+}
+
+function buildDraftRecommendedUse(item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) {
+  if (!replyAngle) return item.recommended_use;
+  const generationGuide = replyAngleGenerationGuides[replyAngle.id];
+  return [
+    item.recommended_use,
+    `Selected reply angle: ${generationGuide.label}`,
+    `Angle tone: ${generationGuide.tone}`,
+    `Angle instruction: ${generationGuide.instruction}`,
+  ].filter(Boolean).join("\n\n");
+}
+
+function buildDraftReason(item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) {
+  if (!replyAngle) return item.reason;
+  const generationGuide = replyAngleGenerationGuides[replyAngle.id];
+  return [
+    item.reason,
+    `Operator selected reply angle: ${generationGuide.label} - ${generationGuide.instruction}`,
+  ].filter(Boolean).join("\n\n");
 }
 
 function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>, limit = 6): DailyActionPlanItem[] {

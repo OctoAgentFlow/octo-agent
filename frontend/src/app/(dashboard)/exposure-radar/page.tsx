@@ -79,6 +79,12 @@ type OpportunityExplanation = {
   angles: string[];
   avoid: string[];
 };
+type SignalDecisionSummary = {
+  mode: "act_now" | "watch" | "research" | "skip";
+  title: string;
+  detail: string;
+  proof: string[];
+};
 type ReplyAngleID = "operatorObservation" | "lightQuestion" | "peerExperience" | "cautionNote" | "topicResearch";
 type ReplyAngleSuggestion = {
   id: ReplyAngleID;
@@ -219,6 +225,7 @@ export default function ExposureRadarPage() {
   const [feedbackSavingID, setFeedbackSavingID] = useState<string | null>(null);
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [savingSeedID, setSavingSeedID] = useState<string | null>(null);
+  const [generatingSeedDraftID, setGeneratingSeedDraftID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("priority");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
@@ -595,6 +602,31 @@ export default function ExposureRadarPage() {
     }
   }, [loadContentDraftBridge, pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
+  const generateContentDraftFromRadarSeed = useCallback(async (item: ExposureRadarItemApi) => {
+    if (!selectedAccountID || !selectedBotID) {
+      pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
+      return;
+    }
+    const plan = findContentDraftPlanForSeed(contentDraftBridge.plans, selectedAccountID, selectedBotID);
+    setGeneratingSeedDraftID(item.id);
+    try {
+      const seed = await contentLibraryService.create(buildRadarContentSeedPayload(item, selectedAccountID, selectedBotID));
+      recordManualAction(item, { saved: true, taskStatus: "in_progress" });
+      if (!plan) {
+        void loadContentDraftBridge();
+        pushToast(t("exposureRadar.toast.seedSavedPlanMissing"));
+        return;
+      }
+      await contentDraftService.generateDraft(plan.id, buildSeedDraftDirection(item), seed.id);
+      await loadContentDraftBridge();
+      pushToast(t("exposureRadar.toast.seedDraftGenerated"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.seedDraftFailed") : t("exposureRadar.toast.seedDraftFailed"));
+    } finally {
+      setGeneratingSeedDraftID(null);
+    }
+  }, [contentDraftBridge.plans, loadContentDraftBridge, pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
+
   const markRadarHandled = useCallback(async (item: ExposureRadarItemApi, publishedURL: string) => {
     const normalizedPublishedURL = publishedURL.trim();
     setHandlingID(item.id);
@@ -771,6 +803,17 @@ export default function ExposureRadarPage() {
         timeZone={timeZone}
       />
 
+      <DailyReviewReportPanel
+        data={data}
+        strategy={growthStrategy}
+        moves={todayMoves}
+        recentRecords={recentManualRecords}
+        weeklyReview={weeklyReview}
+        safety={safetyCenter}
+        learningProfile={exposureLearningProfile}
+        timeZone={timeZone}
+      />
+
       <ContentDraftOperatingPanel
         bridge={contentDraftBridge}
         loading={contentDraftBridgeLoading}
@@ -877,6 +920,7 @@ export default function ExposureRadarPage() {
         strategy={growthStrategy}
         moves={todayMoves}
         recentRecords={recentManualRecords}
+        contentDraftBridge={contentDraftBridge}
       />
 
       <div id="radar-strategy" className="scroll-mt-24">
@@ -935,12 +979,14 @@ export default function ExposureRadarPage() {
           onMarkHandled={markRadarHandled}
           onSaveMemory={saveRadarMemory}
           onSaveContentSeed={saveRadarContentSeed}
+          onGenerateContentDraft={generateContentDraftFromRadarSeed}
           onManualAction={recordManualAction}
           onSelectReplyAngle={updateSelectedReplyAngle}
           onActiveChange={setActiveWorkbenchID}
           onFocusItem={focusRadarItem}
           savedMemoryIDs={savedMemoryIDs}
           savingSeedID={savingSeedID}
+          generatingSeedDraftID={generatingSeedDraftID}
         />
       </div>
 
@@ -987,6 +1033,8 @@ export default function ExposureRadarPage() {
                 onSaveMemory={saveRadarMemory}
                 onSaveContentSeed={saveRadarContentSeed}
                 savingSeed={savingSeedID === item.id}
+                onGenerateContentDraft={generateContentDraftFromRadarSeed}
+                generatingSeedDraft={generatingSeedDraftID === item.id}
                 manualState={manualActionStates[item.id]}
                 onManualAction={(patch) => recordManualAction(item, patch)}
                 feedbackSaving={feedbackSavingID === item.id}
@@ -1202,6 +1250,102 @@ function DailySessionProgressPanel({
           <MiniStat icon={<Zap className="size-3.5" />} label={t("exposureRadar.session.metric.moves")} value={String(moves.length)} />
           <MiniStat icon={<BarChart3 className="size-3.5" />} label={t("exposureRadar.session.metric.backfilled")} value={String(backfilledToday)} />
           <MiniStat icon={<Clock3 className="size-3.5" />} label={t("exposureRadar.session.metric.last")} value={lastActivity ? formatDateTime(lastActivity, timeZone) : "-"} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DailyReviewReportPanel({
+  data,
+  strategy,
+  moves,
+  recentRecords,
+  weeklyReview,
+  safety,
+  learningProfile,
+  timeZone,
+}: {
+  data: ExposureRadarData | null;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const todayRecords = recentRecords.filter((record) => isRecentManualRecord(record, 24));
+  const handledToday = todayRecords.filter((record) => record.handled_at || record.task_status === "done").length;
+  const backfilledToday = todayRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  const effectiveToday = todayRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60).length;
+  const topResult = bestExposureResultRecord(todayRecords) || bestExposureResultRecord(recentRecords);
+  const topTopics = buildDailyReviewTopics(todayRecords, moves).slice(0, 4);
+  const nextActions = buildDailyReviewActions({ data, moves, recentRecords, safety, learningProfile, t }).slice(0, 4);
+  const report = buildDailyReviewReportText({ data, strategy, moves, recentRecords, weeklyReview, safety, learningProfile, timeZone, t });
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(report);
+      pushToast(t("exposureRadar.dailyReview.copied"));
+    } catch {
+      pushToast(t("exposureRadar.dailyReview.copyFailed"));
+    }
+  };
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.dailyReview.title")} description={t("exposureRadar.dailyReview.description")} className="mb-0" />
+        <Button type="button" variant="outline" onClick={() => void copyReport()}>
+          <Clipboard className="size-4" />
+          {t("exposureRadar.dailyReview.copy")}
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <GrowthDeskMetric icon={<CheckCircle2 className="size-3.5" />} label={t("exposureRadar.dailyReview.metric.handled")} value={String(handledToday)} detail={t("exposureRadar.dailyReview.metric.handledDetail")} />
+        <GrowthDeskMetric icon={<BarChart3 className="size-3.5" />} label={t("exposureRadar.dailyReview.metric.backfilled")} value={String(backfilledToday)} detail={t("exposureRadar.dailyReview.metric.backfilledDetail")} />
+        <GrowthDeskMetric icon={<TrendingUp className="size-3.5" />} label={t("exposureRadar.dailyReview.metric.effective")} value={String(effectiveToday)} detail={weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : t("exposureRadar.dailyReview.metric.effectiveDetail")} />
+        <GrowthDeskMetric icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.dailyReview.metric.safety")} value={String((safety?.watch_count || 0) + (safety?.block_count || 0))} detail={t("exposureRadar.dailyReview.metric.safetyDetail")} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyReview.reportTitle")}</p>
+          <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-xs leading-5 text-[#c9d1d9]">{report}</pre>
+        </div>
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyReview.bestResult")}</p>
+            {topResult ? (
+              <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <p className="line-clamp-2 text-xs font-semibold text-[#e7e9ea]">{topResult.title}</p>
+                <p className="mt-1 text-[11px] text-[#71767b]">{t("exposureRadar.dailyReview.bestResultDetail", { score: topResult.result_score || 0, views: formatCompact(topResult.result_impression_count || 0) })}</p>
+              </div>
+            ) : (
+              <p className="mt-3 rounded-xl border border-dashed border-[#2f3336] px-3 py-5 text-center text-xs text-[#71767b]">{t("exposureRadar.dailyReview.noResult")}</p>
+            )}
+          </div>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyReview.nextActions")}</p>
+            <div className="mt-3 space-y-2">
+              {nextActions.map((action) => (
+                <div key={action} className="flex gap-2 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs leading-5 text-[#8b98a5]">
+                  <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-[#8ecdf8]" />
+                  <span>{action}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {topTopics.length ? (
+            <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyReview.topTopics")}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {topTopics.map((topic) => (
+                  <span key={topic} className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 py-1 text-xs font-semibold text-[#8ecdf8]">{topic}</span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </Card>
@@ -1735,6 +1879,7 @@ function FirstDayLaunchPanel({
   strategy,
   moves,
   recentRecords,
+  contentDraftBridge,
 }: {
   selectedAccountID: number;
   selectedBotID: number;
@@ -1743,11 +1888,14 @@ function FirstDayLaunchPanel({
   strategy: ExposureRadarGrowthStrategyApi | null;
   moves: DailyActionPlanItem[];
   recentRecords: ExposureRadarManualRecordApi[];
+  contentDraftBridge: ContentDraftBridgeData;
 }) {
   const { t } = useT();
   const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
   const handledCount = recentRecords.filter((record) => record.handled_at || record.task_status === "done").length;
   const resultCount = recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  const savedCount = recentRecords.filter((record) => record.saved_at || record.saved_memory_id).length;
+  const pendingDraftCount = contentDraftBridge.drafts.filter((draft) => draft.status === "draft" || draft.status === "pending_review" || draft.status === "approved" || draft.status === "ready_to_publish").length;
   const steps: Array<{ key: FirstDayStepKey; done: boolean; anchor: string }> = ([
     { key: "account", done: selectedAccountID > 0 && selectedBotID > 0 },
     { key: "strategy", done: strategyReady },
@@ -1761,6 +1909,14 @@ function FirstDayLaunchPanel({
   const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
   const selectedAccount = accounts.find((account) => account.id === selectedAccountID);
   const selectedBot = bots.find((bot) => bot.id === selectedBotID);
+  const checklist = [
+    { key: "account", done: selectedAccountID > 0 && selectedBotID > 0, value: selectedAccount ? `@${selectedAccount.username}` : t("exposureRadar.firstDay.selected.missing") },
+    { key: "strategy", done: strategyReady, value: strategy?.target_audience || t("exposureRadar.firstDay.selected.missing") },
+    { key: "queue", done: moves.length > 0, value: String(moves.length) },
+    { key: "reply", done: moves.some((entry) => entry.item.generated_comment || entry.item.review_task_id) || handledCount > 0, value: String(moves.filter((entry) => entry.item.generated_comment || entry.item.review_task_id).length) },
+    { key: "seed", done: savedCount > 0 || pendingDraftCount > 0, value: String(savedCount + pendingDraftCount) },
+    { key: "result", done: resultCount > 0, value: String(resultCount) },
+  ];
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1804,6 +1960,30 @@ function FirstDayLaunchPanel({
             <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.${step.key}.description`)}</p>
           </a>
         ))}
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstDay.checklist.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.firstDay.checklist.description")}</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-[#16181c] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <CheckCircle2 className="size-3.5" />
+            {checklist.filter((item) => item.done).length}/{checklist.length}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {checklist.map((item) => (
+            <div key={item.key} className={`rounded-xl border p-3 ${item.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.checklist.${item.key}.title`)}</p>
+                {item.done ? <CheckCircle2 className="size-3.5 text-[#7ee0b5]" /> : <Clock3 className="size-3.5 text-[#71767b]" />}
+              </div>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.checklist.${item.key}.description`)}</p>
+              <p className="mt-2 truncate text-xs font-semibold text-[#8ecdf8]">{item.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2232,6 +2412,7 @@ function HandlingWorkbenchPanel({
   handlingID,
   savingMemoryID,
   savingSeedID,
+  generatingSeedDraftID,
   memoryDisabled,
   savedMemoryIDs,
   selectedReplyAngleIDs,
@@ -2239,6 +2420,7 @@ function HandlingWorkbenchPanel({
   onMarkHandled,
   onSaveMemory,
   onSaveContentSeed,
+  onGenerateContentDraft,
   onManualAction,
   onSelectReplyAngle,
   onActiveChange,
@@ -2252,6 +2434,7 @@ function HandlingWorkbenchPanel({
   handlingID: string | null;
   savingMemoryID: string | null;
   savingSeedID: string | null;
+  generatingSeedDraftID: string | null;
   memoryDisabled: boolean;
   savedMemoryIDs: Set<string>;
   selectedReplyAngleIDs: Record<string, string>;
@@ -2259,6 +2442,7 @@ function HandlingWorkbenchPanel({
   onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
   onSaveMemory: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onSaveContentSeed: (item: ExposureRadarItemApi) => void;
+  onGenerateContentDraft: (item: ExposureRadarItemApi) => void;
   onManualAction: (item: ExposureRadarItemApi, patch: Partial<ManualActionState>, replyAngle?: ReplyAngleSuggestion) => void;
   onSelectReplyAngle: (itemID: string, angleID: string) => void;
   onActiveChange: (itemID: string) => void;
@@ -2326,6 +2510,7 @@ function HandlingWorkbenchPanel({
             <h2 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{activeItem.title}</h2>
             {activeItem.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{activeItem.author_handle}</p> : null}
             <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{activeItem.content}</p>
+            <SignalDecisionCard summary={buildSignalDecisionSummary(activeItem, t)} />
             {activeExplanation ? <OpportunityExplanationPanel explanation={activeExplanation} /> : null}
             {replyAngles.length ? (
               <ReplyAngleSuggestionsPanel
@@ -2364,6 +2549,10 @@ function HandlingWorkbenchPanel({
               <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingSeedID === activeItem.id} onClick={() => onSaveContentSeed(activeItem)}>
                 {savingSeedID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
                 {savingSeedID === activeItem.id ? t("exposureRadar.card.savingSeed") : t("exposureRadar.card.saveSeed")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || generatingSeedDraftID === activeItem.id} onClick={() => onGenerateContentDraft(activeItem)}>
+                {generatingSeedDraftID === activeItem.id ? <RefreshCw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                {generatingSeedDraftID === activeItem.id ? t("exposureRadar.card.generatingSeedDraft") : t("exposureRadar.card.generateSeedDraft")}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => onFocusItem(activeItem.id)}>
                 <Search className="size-3.5" />
@@ -2623,6 +2812,32 @@ function ReplyPlanColumn({ icon, title, items, tone }: { icon: ReactNode; title:
       <div className="mt-3 space-y-2">
         {items.map((item) => (
           <p key={item} className="text-xs leading-5 text-[#8b98a5]">{item}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SignalDecisionCard({ summary }: { summary: SignalDecisionSummary }) {
+  const { t } = useT();
+  return (
+    <div className={`mt-4 rounded-2xl border p-3 ${signalDecisionTone(summary.mode)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold opacity-80">{t("exposureRadar.decision.label")}</p>
+          <p className="mt-1 text-sm font-semibold">{summary.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-85">{summary.detail}</p>
+        </div>
+        <span className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border border-current/20 bg-black/20 px-2.5 py-1 text-[11px] font-semibold">
+          <Zap className="size-3.5" />
+          {t(`exposureRadar.decision.mode.${summary.mode}`)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {summary.proof.map((proof) => (
+          <div key={proof} className="rounded-xl border border-current/15 bg-black/20 px-3 py-2 text-[11px] leading-4 opacity-90">
+            {proof}
+          </div>
         ))}
       </div>
     </div>
@@ -3178,6 +3393,8 @@ function RadarCard({
   onSaveMemory,
   onSaveContentSeed,
   savingSeed,
+  onGenerateContentDraft,
+  generatingSeedDraft,
   manualState,
   onManualAction,
   feedbackSaving,
@@ -3200,6 +3417,8 @@ function RadarCard({
   onSaveMemory: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onSaveContentSeed: (item: ExposureRadarItemApi) => void;
   savingSeed: boolean;
+  onGenerateContentDraft: (item: ExposureRadarItemApi) => void;
+  generatingSeedDraft: boolean;
   manualState?: ManualActionState;
   onManualAction: (patch: Partial<ManualActionState>) => void;
   feedbackSaving: boolean;
@@ -3377,6 +3596,7 @@ function RadarCard({
       {item.velocity_history?.length ? (
         <VelocitySparkline values={item.velocity_history} />
       ) : null}
+      <SignalDecisionCard summary={buildSignalDecisionSummary(item, t)} />
       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
         <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.card.recommended")}</p>
         <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.recommended_use}</p>
@@ -3452,6 +3672,10 @@ function RadarCard({
           <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || savingSeed} onClick={() => onSaveContentSeed(item)}>
             {savingSeed ? <RefreshCw className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
             {savingSeed ? t("exposureRadar.card.savingSeed") : t("exposureRadar.card.saveSeed")}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={memoryDisabled || generatingSeedDraft} onClick={() => onGenerateContentDraft(item)}>
+            {generatingSeedDraft ? <RefreshCw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+            {generatingSeedDraft ? t("exposureRadar.card.generatingSeedDraft") : t("exposureRadar.card.generateSeedDraft")}
           </Button>
           {!generatedComment && item.url ? (
             <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true, taskStatus: "in_progress" })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
@@ -3833,6 +4057,75 @@ function buildRadarContentSeedPayload(item: ExposureRadarItemApi, twitterAccount
     cta_preference: "Use as research context only. Keep the final post useful, specific, and manually reviewed before publishing.",
     priority: clampPriority(item.score),
     status: "active",
+  };
+}
+
+function findContentDraftPlanForSeed(plans: ContentDraftPlanApi[], accountID: number, botID: number) {
+  return plans.find((plan) => plan.x_account_id === accountID && plan.bot_id === botID && plan.enabled)
+    || plans.find((plan) => plan.x_account_id === accountID && plan.bot_id === botID)
+    || null;
+}
+
+function buildSeedDraftDirection(item: ExposureRadarItemApi) {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  return [
+    "Create an original X post or short thread seed from this Exposure Radar signal.",
+    "Do not copy the source post. Do not directly pitch the product.",
+    `Signal title: ${item.title}`,
+    item.content ? `Observed context: ${item.content}` : "",
+    item.topic_name ? `Topic: ${item.topic_name}` : "",
+    exposureMetricSummary(item),
+    item.reason ? `Why this matters: ${item.reason}` : "",
+    item.recommended_use ? `Suggested operator angle: ${item.recommended_use}` : "",
+    `Quality stage: ${qualityStage}; velocity: ${velocityState}; risk: ${item.risk_level || "unknown"}.`,
+    "Write with a concise founder/operator voice. Make it useful even if readers never saw the source post.",
+  ].filter(Boolean).join("\n");
+}
+
+function buildSignalDecisionSummary(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string): SignalDecisionSummary {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
+  const velocityState = normalizeVelocityState(item.velocity_state, item.status);
+  const riskHigh = item.risk_level === "high";
+  const riskMedium = item.risk_level === "medium";
+  const topicLevel = item.data_quality === "topic_level";
+  const proof = uniqueList([
+    t("exposureRadar.decision.proof.score", { score: item.score || 0 }),
+    typeof item.impression_count === "number" && item.impression_count > 0 ? t("exposureRadar.decision.proof.views", { views: formatCompact(item.impression_count) }) : "",
+    typeof item.views_per_min === "number" && item.views_per_min > 0 ? t("exposureRadar.decision.proof.speed", { speed: formatVelocityLabel(item.views_per_min, "0/min") }) : "",
+    typeof item.followers_count === "number" && item.followers_count > 0 ? t("exposureRadar.decision.proof.followers", { followers: formatCompact(item.followers_count) }) : "",
+    item.ranking_delta ? t("exposureRadar.decision.proof.learning", { delta: item.ranking_delta }) : "",
+  ]).slice(0, 3);
+  if (topicLevel) {
+    return {
+      mode: "research",
+      title: t("exposureRadar.decision.research.title"),
+      detail: t("exposureRadar.decision.research.detail"),
+      proof: proof.length ? proof : [t("exposureRadar.decision.proof.topicLevel")],
+    };
+  }
+  if (riskHigh || qualityStage === "expired" || velocityState === "cooling") {
+    return {
+      mode: "skip",
+      title: t(riskHigh ? "exposureRadar.decision.skipRisk.title" : "exposureRadar.decision.skipExpired.title"),
+      detail: t(riskHigh ? "exposureRadar.decision.skipRisk.detail" : "exposureRadar.decision.skipExpired.detail"),
+      proof: proof.length ? proof : [t("exposureRadar.decision.proof.risk")],
+    };
+  }
+  if (qualityStage === "act_now" || tier === "hot_opportunity" || velocityState === "burst") {
+    return {
+      mode: "act_now",
+      title: t("exposureRadar.decision.actNow.title"),
+      detail: t("exposureRadar.decision.actNow.detail"),
+      proof: proof.length ? proof : [t("exposureRadar.decision.proof.actNow")],
+    };
+  }
+  return {
+    mode: "watch",
+    title: t(riskMedium ? "exposureRadar.decision.watchRisk.title" : "exposureRadar.decision.watch.title"),
+    detail: t(riskMedium ? "exposureRadar.decision.watchRisk.detail" : "exposureRadar.decision.watch.detail"),
+    proof: proof.length ? proof : [t("exposureRadar.decision.proof.watch")],
   };
 }
 
@@ -4470,6 +4763,89 @@ function buildGrowthDeskBriefPreview({
     t("exposureRadar.command.brief.previewLine.safety", { count: (safety?.watch_count || 0) + (safety?.block_count || 0) }),
     t("exposureRadar.command.brief.previewLine.effective", { rate: weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-" }),
   ].join("\n");
+}
+
+function buildDailyReviewReportText({
+  data,
+  strategy,
+  moves,
+  recentRecords,
+  weeklyReview,
+  safety,
+  learningProfile,
+  timeZone,
+  t,
+}: {
+  data: ExposureRadarData | null;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+  timeZone: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const todayRecords = recentRecords.filter((record) => isRecentManualRecord(record, 24));
+  const handledToday = todayRecords.filter((record) => record.handled_at || record.task_status === "done").length;
+  const backfilledToday = todayRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  const effectiveToday = todayRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60).length;
+  const topResult = bestExposureResultRecord(todayRecords) || bestExposureResultRecord(recentRecords);
+  const topTopics = buildDailyReviewTopics(todayRecords, moves).slice(0, 4);
+  const nextActions = buildDailyReviewActions({ data, moves, recentRecords, safety, learningProfile, t }).slice(0, 4);
+  return [
+    t("exposureRadar.dailyReview.report.heading"),
+    t("exposureRadar.dailyReview.report.line.region", { region: data?.region || "-", time: data?.updated_at ? formatDateTime(data.updated_at, timeZone) : "-" }),
+    t("exposureRadar.dailyReview.report.line.strategy", { audience: strategy?.target_audience || "-", topics: (strategy?.core_topics || []).slice(0, 4).join(", ") || "-" }),
+    t("exposureRadar.dailyReview.report.line.metrics", { handled: handledToday, backfilled: backfilledToday, effective: effectiveToday, queued: moves.length }),
+    t("exposureRadar.dailyReview.report.line.safety", { warnings: (safety?.watch_count || 0) + (safety?.block_count || 0), rate: weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-" }),
+    topResult ? t("exposureRadar.dailyReview.report.line.best", { title: compactTitle(topResult.title || "-"), score: topResult.result_score || 0, views: formatCompact(topResult.result_impression_count || 0) }) : t("exposureRadar.dailyReview.report.line.bestEmpty"),
+    t("exposureRadar.dailyReview.report.line.topics", { topics: topTopics.join(", ") || "-" }),
+    "",
+    t("exposureRadar.dailyReview.report.next"),
+    nextActions.map((action, index) => `${index + 1}. ${action}`).join("\n"),
+  ].join("\n");
+}
+
+function buildDailyReviewTopics(records: ExposureRadarManualRecordApi[], moves: DailyActionPlanItem[]) {
+  const counts = new Map<string, number>();
+  const add = (value?: string) => {
+    const topic = (value || "").trim();
+    if (!topic) return;
+    counts.set(topic, (counts.get(topic) || 0) + 1);
+  };
+  records.forEach((record) => add(record.topic_name || record.title));
+  moves.forEach((move) => add(move.item.topic_name || move.item.title));
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([topic]) => compactTitle(topic));
+}
+
+function buildDailyReviewActions({
+  data,
+  moves,
+  recentRecords,
+  safety,
+  learningProfile,
+  t,
+}: {
+  data: ExposureRadarData | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const actions: string[] = [];
+  const todayRecords = recentRecords.filter((record) => isRecentManualRecord(record, 24));
+  const pendingBackfill = todayRecords.filter((record) => (record.handled_at || record.task_status === "done") && !record.result_checked_at && !record.result_score).length;
+  if (pendingBackfill > 0) actions.push(t("exposureRadar.dailyReview.action.backfill", { count: pendingBackfill }));
+  if (moves.length > 0) actions.push(t("exposureRadar.dailyReview.action.handle", { title: compactTitle(moves[0].item.title) }));
+  if ((safety?.watch_count || 0) + (safety?.block_count || 0) > 0) actions.push(t("exposureRadar.dailyReview.action.safety"));
+  if (learningProfile.boostedTopics.size > 0) actions.push(t("exposureRadar.dailyReview.action.reuseTopic", { topic: Array.from(learningProfile.boostedTopics)[0] }));
+  if (data?.diagnostics?.top_missing_reason) actions.push(t("exposureRadar.dailyReview.action.fixSignal", { reason: data.diagnostics.top_missing_reason }));
+  if (!actions.length) actions.push(t("exposureRadar.dailyReview.action.default"));
+  return actions;
 }
 
 function buildPeopleRadar(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): PeopleRadarEntry[] {
@@ -5135,6 +5511,19 @@ function learningImpactTone(tone: LearningImpactRow["tone"]) {
       return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
     default:
       return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  }
+}
+
+function signalDecisionTone(mode: SignalDecisionSummary["mode"]) {
+  switch (mode) {
+    case "act_now":
+      return "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "research":
+      return "border-[#1d9bf0]/30 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    case "skip":
+      return "border-[#64748b]/35 bg-[#64748b]/10 text-[#94a3b8]";
+    default:
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
   }
 }
 

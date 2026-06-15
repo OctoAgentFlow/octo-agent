@@ -656,6 +656,26 @@ type ExposureRadarManualRecordsResponse struct {
 	Items []ExposureRadarManualRecordItem `json:"items"`
 }
 
+type ExposureRadarResultLookupRequest struct {
+	PublishedURL   string `json:"published_url"`
+	CommentTweetID string `json:"comment_tweet_id"`
+}
+
+type ExposureRadarResultLookupResponse struct {
+	PublishedURL          string `json:"published_url,omitempty"`
+	CommentTweetID        string `json:"comment_tweet_id,omitempty"`
+	Status                string `json:"status"`
+	Source                string `json:"source"`
+	Message               string `json:"message,omitempty"`
+	MetricsFetched        bool   `json:"metrics_fetched"`
+	ResultImpressionCount *int64 `json:"result_impression_count,omitempty"`
+	ResultLikeCount       *int64 `json:"result_like_count,omitempty"`
+	ResultReplyCount      *int64 `json:"result_reply_count,omitempty"`
+	ResultRetweetCount    *int64 `json:"result_retweet_count,omitempty"`
+	ResultQuoteCount      *int64 `json:"result_quote_count,omitempty"`
+	ResultBookmarkCount   *int64 `json:"result_bookmark_count,omitempty"`
+}
+
 type ExposureRadarGrowthStrategyRequest struct {
 	BotID          uint     `json:"bot_id"`
 	XAccountID     uint     `json:"x_account_id"`

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"octo-agent/backend/internal/dto"
+	"octo-agent/backend/internal/integration/twitter"
 	"octo-agent/backend/internal/model"
 	"octo-agent/backend/internal/repository"
 
@@ -19,6 +21,7 @@ type ExposureRadarManualService struct {
 	repo         *repository.ExposureRadarManualRecordRepository
 	strategyRepo *repository.ExposureRadarGrowthStrategyRepository
 	peopleRepo   *repository.ExposureRadarPeopleNoteRepository
+	xBearerToken string
 }
 
 func NewExposureRadarManualService(repo *repository.ExposureRadarManualRecordRepository) *ExposureRadarManualService {
@@ -32,6 +35,11 @@ func (s *ExposureRadarManualService) WithGrowthStrategyRepository(repo *reposito
 
 func (s *ExposureRadarManualService) WithPeopleNoteRepository(repo *repository.ExposureRadarPeopleNoteRepository) *ExposureRadarManualService {
 	s.peopleRepo = repo
+	return s
+}
+
+func (s *ExposureRadarManualService) WithXBearerToken(token string) *ExposureRadarManualService {
+	s.xBearerToken = strings.TrimSpace(token)
 	return s
 }
 
@@ -97,6 +105,52 @@ func (s *ExposureRadarManualService) ListRecentRecords(userID uint, region strin
 		items = append(items, exposureRadarManualRecordToDTO(row))
 	}
 	return &dto.ExposureRadarManualRecordsResponse{Items: items}, nil
+}
+
+func (s *ExposureRadarManualService) ResolvePublishingResult(ctx context.Context, req dto.ExposureRadarResultLookupRequest) (*dto.ExposureRadarResultLookupResponse, error) {
+	publishedURL := strings.TrimSpace(req.PublishedURL)
+	tweetID := firstNonEmpty(strings.TrimSpace(req.CommentTweetID), extractTweetID(publishedURL))
+	if tweetID == "" {
+		return nil, fmt.Errorf("valid X reply URL or tweet id is required")
+	}
+	resp := &dto.ExposureRadarResultLookupResponse{
+		PublishedURL:   publishedURL,
+		CommentTweetID: tweetID,
+		Status:         "id_only",
+		Source:         "parsed_url",
+		Message:        "Reply tweet id was parsed from the URL.",
+	}
+	if resp.PublishedURL == "" {
+		resp.PublishedURL = fmt.Sprintf("https://x.com/i/web/status/%s", tweetID)
+	}
+	if s == nil || strings.TrimSpace(s.xBearerToken) == "" {
+		resp.Status = "token_missing"
+		resp.Message = "Reply tweet id was parsed, but X bearer token is not configured for metric lookup."
+		return resp, nil
+	}
+	tweets, err := twitter.LookupTweetsByIDs(ctx, s.xBearerToken, []string{tweetID})
+	if err != nil {
+		resp.Status = "lookup_failed"
+		resp.Message = err.Error()
+		return resp, nil
+	}
+	if len(tweets) == 0 {
+		resp.Status = "not_found"
+		resp.Message = "X did not return metrics for this reply tweet."
+		return resp, nil
+	}
+	row := tweets[0]
+	resp.Status = "fetched"
+	resp.Source = "x_api"
+	resp.Message = "Public metrics were fetched from X."
+	resp.MetricsFetched = true
+	resp.ResultImpressionCount = int64Ptr(row.ImpressionCount)
+	resp.ResultLikeCount = int64Ptr(row.LikeCount)
+	resp.ResultReplyCount = int64Ptr(row.ReplyCount)
+	resp.ResultRetweetCount = int64Ptr(row.RetweetCount)
+	resp.ResultQuoteCount = int64Ptr(row.QuoteCount)
+	resp.ResultBookmarkCount = int64Ptr(row.BookmarkCount)
+	return resp, nil
 }
 
 func (s *ExposureRadarManualService) GetGrowthStrategy(userID uint, region string, botID uint, xAccountID uint) (*dto.ExposureRadarGrowthStrategyItem, error) {
@@ -627,6 +681,10 @@ func applyInt64IfNonNegative(target *int64, value int64) bool {
 	}
 	*target = value
 	return true
+}
+
+func int64Ptr(value int64) *int64 {
+	return &value
 }
 
 func limitManualString(value string, max int) string {

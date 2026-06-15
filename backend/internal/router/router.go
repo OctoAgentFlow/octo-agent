@@ -97,7 +97,8 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, autoCommentScanLedgerRepo, activityRepo, userRepo, oafBotRepo, contentLibraryRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, publishingService)
 	exposureRadarManualService := service.NewExposureRadarManualService(exposureRadarManualRecordRepo).
 		WithGrowthStrategyRepository(exposureRadarGrowthStrategyRepo).
-		WithPeopleNoteRepository(exposureRadarPeopleNoteRepo)
+		WithPeopleNoteRepository(exposureRadarPeopleNoteRepo).
+		WithXBearerToken(cfg.XTrends.BearerToken)
 	contentLibraryService := service.NewContentLibraryService(contentLibraryRepo, twitterAccountRepo, oafBotRepo)
 	trendService := service.NewTrendService(trendTopicRepo, exposureTweetSignalRepo, trendFeedbackRepo, oafBotRepo, contentDraftPlanRepo, contentLibraryRepo, cfg.XTrends).
 		WithAutoCommentTaskRepository(autoCommentTaskRepo).

@@ -212,6 +212,21 @@ export type ExposureRadarManualHandlePayload = {
   note?: string;
 };
 
+export type ExposureRadarResultLookupApi = {
+  published_url?: string;
+  comment_tweet_id?: string;
+  status: "fetched" | "token_missing" | "lookup_failed" | "not_found" | "id_only" | string;
+  source: string;
+  message?: string;
+  metrics_fetched: boolean;
+  result_impression_count?: number;
+  result_like_count?: number;
+  result_reply_count?: number;
+  result_retweet_count?: number;
+  result_quote_count?: number;
+  result_bookmark_count?: number;
+};
+
 export type ExposureRadarSafetyCheckApi = {
   key: string;
   status: "pass" | "watch" | "block" | string;
@@ -601,6 +616,10 @@ export const exposureRadarService = {
     const res = await request.get<ApiResponse<{ items: ExposureRadarManualRecordApi[] }>>("/exposure-radar/manual-records", {
       params: { signal_ids: signalIds.join(",") },
     });
+    return res.data.data;
+  },
+  async resolveManualResult(payload: { published_url?: string; comment_tweet_id?: string }) {
+    const res = await request.post<ApiResponse<ExposureRadarResultLookupApi>>("/exposure-radar/manual-records/resolve-result", payload);
     return res.data.data;
   },
   async recentManualRecords(params: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {

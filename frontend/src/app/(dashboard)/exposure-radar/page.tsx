@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -24,6 +24,9 @@ type RadarViewFilter = "priority" | "all" | "act_now" | "watch" | "expired" | "h
 type ManualOutcome = "effective" | "neutral" | "ineffective" | "not_suitable";
 type LeaderboardStatus = "new" | "burst" | "rising" | "steady" | "cooling" | "unknown";
 type LeaderboardStats = Record<LeaderboardStatus, number> & { newCount: number; movers: number };
+type WorkbenchStats = { pending: number; actNow: number; handled: number };
+type DailyDeskFocusKey = "setup" | "strategy" | "handle" | "backfill" | "review";
+type SignalQualityStatus = "ready" | "warming" | "empty" | "limited";
 type DailyActionType = "publish_reply" | "generate_reply" | "save_memory" | "inspect" | "review_fit";
 type DailyActionReason = "generated" | "quality" | "expired" | "velocity" | "low_fans" | "learned" | "risk" | "topic" | "score";
 type DailyActionPlanItem = {
@@ -33,6 +36,7 @@ type DailyActionPlanItem = {
   priority: number;
 };
 type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
+type FirstDayStepKey = "account" | "strategy" | "queue" | "result";
 type PeopleRadarStage = "priority" | "repeat" | "engaged" | "watch" | "avoid" | "new";
 type PeopleRadarEntry = {
   key: string;
@@ -124,6 +128,10 @@ type StrategyFormState = {
   dailyMoveLimit: number;
   safetyMode: string;
   operatorNotes: string;
+};
+type StarterStrategyTemplate = {
+  key: string;
+  form: StrategyFormState;
 };
 
 const hourOptions = [1, 2, 4, 8];
@@ -661,52 +669,87 @@ export default function ExposureRadarPage() {
         </div>
       </section>
 
-      <Card className="bg-[#0f1419]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <CardHeader title={t("exposureRadar.filters.title")} description={t("exposureRadar.filters.description")} className="mb-0" />
-          <Button type="button" variant="outline" onClick={() => void load()} disabled={loadState === "loading"}>
-            <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
-            {t("common.refresh")}
-          </Button>
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-4">
-          <SegmentedControl
-            label={t("exposureRadar.filters.region")}
-            options={[
-              { value: "zh", label: t("exposureRadar.region.zh") },
-              { value: "en", label: t("exposureRadar.region.en") },
-            ]}
-            value={region}
-            onChange={(value) => setRegion(value as ExposureRadarRegion)}
-          />
-          <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} />
-          <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} />
-          <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
-        </div>
-        {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
-        {data?.diagnostics ? <CollectionDiagnosticsPanel diagnostics={data.diagnostics} timeZone={timeZone} /> : null}
-        <div className="mt-4 border-t border-[#2f3336] pt-4">
-          <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
-          <div className="grid gap-3 md:grid-cols-2 md:items-end">
-            <SelectField
-              icon={<Users className="size-4" />}
-              label={t("exposureRadar.draft.account")}
-              value={selectedAccountID}
-              onChange={setSelectedAccountID}
-              emptyLabel={t("exposureRadar.draft.noAccounts")}
-              options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
-            />
-            <SelectField
-              icon={<Bot className="size-4" />}
-              label={t("exposureRadar.draft.bot")}
-              value={selectedBotID}
-              onChange={setSelectedBotID}
-              emptyLabel={t("exposureRadar.draft.noBots")}
-              options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
-            />
+      <DailyGrowthDeskPanel
+        selectedAccountID={selectedAccountID}
+        selectedBotID={selectedBotID}
+        strategy={growthStrategy}
+        moves={todayMoves}
+        stats={workbenchStats}
+        people={peopleRadar}
+        recentRecords={recentManualRecords}
+        weeklyReview={weeklyReview}
+        safety={safetyCenter}
+        lastRefreshedAt={lastRefreshedAt}
+        timeZone={timeZone}
+        loadState={loadState}
+        onRefresh={() => void load()}
+      />
+
+      <GrowthDeskCommandPanel
+        data={data}
+        strategy={growthStrategy}
+        moves={todayMoves}
+        people={peopleRadar}
+        recentRecords={recentManualRecords}
+        weeklyReview={weeklyReview}
+        safety={safetyCenter}
+        timeZone={timeZone}
+        loadState={loadState}
+        manualActionStates={manualActionStates}
+        onFocusItem={(itemID) => {
+          setActiveWorkbenchID(itemID);
+          focusRadarItem(itemID);
+        }}
+      />
+
+      <div id="radar-setup" className="scroll-mt-24">
+        <Card className="bg-[#0f1419]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <CardHeader title={t("exposureRadar.filters.title")} description={t("exposureRadar.filters.description")} className="mb-0" />
+            <Button type="button" variant="outline" onClick={() => void load()} disabled={loadState === "loading"}>
+              <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+              {t("common.refresh")}
+            </Button>
           </div>
-        </div>
-      </Card>
+          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <SegmentedControl
+              label={t("exposureRadar.filters.region")}
+              options={[
+                { value: "zh", label: t("exposureRadar.region.zh") },
+                { value: "en", label: t("exposureRadar.region.en") },
+              ]}
+              value={region}
+              onChange={(value) => setRegion(value as ExposureRadarRegion)}
+            />
+            <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} />
+            <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} />
+            <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
+          </div>
+          {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
+          {data?.diagnostics ? <CollectionDiagnosticsPanel diagnostics={data.diagnostics} timeZone={timeZone} /> : null}
+          <div className="mt-4 border-t border-[#2f3336] pt-4">
+            <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
+            <div className="grid gap-3 md:grid-cols-2 md:items-end">
+              <SelectField
+                icon={<Users className="size-4" />}
+                label={t("exposureRadar.draft.account")}
+                value={selectedAccountID}
+                onChange={setSelectedAccountID}
+                emptyLabel={t("exposureRadar.draft.noAccounts")}
+                options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
+              />
+              <SelectField
+                icon={<Bot className="size-4" />}
+                label={t("exposureRadar.draft.bot")}
+                value={selectedBotID}
+                onChange={setSelectedBotID}
+                emptyLabel={t("exposureRadar.draft.noBots")}
+                options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
+              />
+            </div>
+          </div>
+        </Card>
+      </div>
 
       <FirstDayLaunchPanel
         selectedAccountID={selectedAccountID}
@@ -716,19 +759,23 @@ export default function ExposureRadarPage() {
         recentRecords={recentManualRecords}
       />
 
-      <StrategySetupPanel
-        strategy={growthStrategy}
-        region={region}
-        saving={strategySaving}
-        onSave={saveGrowthStrategy}
-      />
+      <div id="radar-strategy" className="scroll-mt-24">
+        <StrategySetupPanel
+          strategy={growthStrategy}
+          region={region}
+          saving={strategySaving}
+          onSave={saveGrowthStrategy}
+        />
+      </div>
 
-      <GrowthReviewPanel
-        review={weeklyReview}
-        safety={safetyCenter}
-        recentRecords={recentManualRecords}
-        timeZone={timeZone}
-      />
+      <div id="radar-results" className="scroll-mt-24">
+        <GrowthReviewPanel
+          review={weeklyReview}
+          safety={safetyCenter}
+          recentRecords={recentManualRecords}
+          timeZone={timeZone}
+        />
+      </div>
 
       <TodayMovesPanel
         moves={todayMoves}
@@ -741,35 +788,39 @@ export default function ExposureRadarPage() {
         onTaskStatus={(item, taskStatus) => recordManualAction(item, taskStatus === "done" ? { taskStatus, handled: true } : { taskStatus })}
       />
 
-      <PeopleRadarPanel
-        people={peopleRadar}
-        savingKey={peopleNoteSavingKey}
-        onSaveNote={savePeopleNote}
-        onFocus={(itemID) => {
-          setActiveWorkbenchID(itemID);
-          focusRadarItem(itemID);
-        }}
-      />
+      <div id="radar-people" className="scroll-mt-24">
+        <PeopleRadarPanel
+          people={peopleRadar}
+          savingKey={peopleNoteSavingKey}
+          onSaveNote={savePeopleNote}
+          onFocus={(itemID) => {
+            setActiveWorkbenchID(itemID);
+            focusRadarItem(itemID);
+          }}
+        />
+      </div>
 
-      <HandlingWorkbenchPanel
-        queue={handlingQueue}
-        activeID={activeWorkbenchID}
-        stats={workbenchStats}
-        draftingID={draftingID}
-        draftDisabled={!selectedAccountID || !selectedBotID}
-        handlingID={handlingID}
-        savingMemoryID={savingMemoryID}
-        memoryDisabled={!selectedAccountID || !selectedBotID}
-        selectedReplyAngleIDs={selectedReplyAngleIDs}
-        onCreateDraft={createDraft}
-        onMarkHandled={markRadarHandled}
-        onSaveMemory={saveRadarMemory}
-        onManualAction={recordManualAction}
-        onSelectReplyAngle={updateSelectedReplyAngle}
-        onActiveChange={setActiveWorkbenchID}
-        onFocusItem={focusRadarItem}
-        savedMemoryIDs={savedMemoryIDs}
-      />
+      <div id="radar-workbench" className="scroll-mt-24">
+        <HandlingWorkbenchPanel
+          queue={handlingQueue}
+          activeID={activeWorkbenchID}
+          stats={workbenchStats}
+          draftingID={draftingID}
+          draftDisabled={!selectedAccountID || !selectedBotID}
+          handlingID={handlingID}
+          savingMemoryID={savingMemoryID}
+          memoryDisabled={!selectedAccountID || !selectedBotID}
+          selectedReplyAngleIDs={selectedReplyAngleIDs}
+          onCreateDraft={createDraft}
+          onMarkHandled={markRadarHandled}
+          onSaveMemory={saveRadarMemory}
+          onManualAction={recordManualAction}
+          onSelectReplyAngle={updateSelectedReplyAngle}
+          onActiveChange={setActiveWorkbenchID}
+          onFocusItem={focusRadarItem}
+          savedMemoryIDs={savedMemoryIDs}
+        />
+      </div>
 
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -841,6 +892,382 @@ function LightMetric({ icon, label, value }: { icon: ReactNode; label: string; v
   );
 }
 
+function DailyGrowthDeskPanel({
+  selectedAccountID,
+  selectedBotID,
+  strategy,
+  moves,
+  stats,
+  people,
+  recentRecords,
+  weeklyReview,
+  safety,
+  lastRefreshedAt,
+  timeZone,
+  loadState,
+  onRefresh,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  stats: WorkbenchStats;
+  people: PeopleRadarEntry[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  lastRefreshedAt: string;
+  timeZone: string;
+  loadState: LoadState;
+  onRefresh: () => void;
+}) {
+  const { t } = useT();
+  const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
+  const dailyLimit = Math.max(1, Math.min(50, strategy?.daily_move_limit || 10));
+  const recentHandled = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
+  const recentBackfilled = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.result_checked_at || record.result_score)).length;
+  const priorityPeople = people.filter((person) => person.stage === "priority" || person.stage === "repeat").length;
+  const safetyWarnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const completionPercent = Math.min(100, Math.round((recentHandled / dailyLimit) * 100));
+  const focusKey = dailyDeskFocusKey({ selectedAccountID, selectedBotID, strategyReady, stats, moves, recentBackfilled });
+  const focusAnchor = dailyDeskFocusAnchor(focusKey);
+  const refreshedLabel = lastRefreshedAt ? formatDateTime(lastRefreshedAt, timeZone) : "-";
+  const effectiveRate = weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-";
+  const rhythmSteps = ["scan", "reply", "save", "review"];
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+              <Activity className="size-3.5" />
+              {t("exposureRadar.dailyDesk.badge")}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+              <Clock3 className="size-3.5" />
+              {t("exposureRadar.dailyDesk.refreshed", { time: refreshedLabel })}
+            </span>
+          </div>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#e7e9ea]">{t("exposureRadar.dailyDesk.title")}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.dailyDesk.description")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a href={focusAnchor} className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+            {t(`exposureRadar.dailyDesk.focus.${focusKey}.cta`)}
+            <ArrowRight className="size-4" />
+          </a>
+          <Button type="button" variant="outline" onClick={onRefresh} disabled={loadState === "loading"}>
+            <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+            {t("exposureRadar.dailyDesk.refresh")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.dailyDesk.focus.${focusKey}.title`)}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.dailyDesk.focus.${focusKey}.description`)}</p>
+            </div>
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+              <Target className="size-3.5" />
+              {t("exposureRadar.dailyDesk.focusLabel")}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <GrowthDeskMetric icon={<CheckCircle2 className="size-4" />} label={t("exposureRadar.dailyDesk.metric.target")} value={`${recentHandled}/${dailyLimit}`} detail={t("exposureRadar.dailyDesk.metric.targetDetail", { percent: completionPercent })} />
+            <GrowthDeskMetric icon={<Zap className="size-4" />} label={t("exposureRadar.dailyDesk.metric.queue")} value={String(stats.pending)} detail={t("exposureRadar.dailyDesk.metric.queueDetail", { count: stats.actNow })} />
+            <GrowthDeskMetric icon={<Users className="size-4" />} label={t("exposureRadar.dailyDesk.metric.people")} value={String(priorityPeople)} detail={t("exposureRadar.dailyDesk.metric.peopleDetail")} />
+            <GrowthDeskMetric icon={<ShieldAlert className="size-4" />} label={t("exposureRadar.dailyDesk.metric.safety")} value={String(safetyWarnings)} detail={t("exposureRadar.dailyDesk.metric.safetyDetail")} />
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#202327]">
+            <div className="h-full rounded-full bg-[#00ba7c]" style={{ width: `${completionPercent}%` }} />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyDesk.pulse.title")}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <MiniStat icon={<MessageCircle className="size-3.5" />} label={t("exposureRadar.dailyDesk.pulse.moves")} value={String(moves.length)} />
+            <MiniStat icon={<Database className="size-3.5" />} label={t("exposureRadar.dailyDesk.pulse.backfilled")} value={String(recentBackfilled)} />
+            <MiniStat icon={<BarChart3 className="size-3.5" />} label={t("exposureRadar.dailyDesk.pulse.effective")} value={effectiveRate} />
+            <MiniStat icon={<CalendarClock className="size-3.5" />} label={t("exposureRadar.dailyDesk.pulse.days")} value={String(weeklyReview?.days || 7)} />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-[#71767b]">{t("exposureRadar.dailyDesk.pulse.hint")}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        {rhythmSteps.map((step, index) => (
+          <a key={step} href={dailyDeskRhythmAnchor(step)} className="rounded-xl border border-[#2f3336] bg-black p-3 transition hover:border-[#1d9bf0]/45 hover:bg-[#1d9bf0]/10">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#2f3336] bg-[#0f1419] text-[11px] font-semibold text-[#8ecdf8]">0{index + 1}</span>
+              <ArrowRight className="size-3.5 text-[#71767b]" />
+            </div>
+            <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.dailyDesk.rhythm.${step}.title`)}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.dailyDesk.rhythm.${step}.description`)}</p>
+          </a>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function GrowthDeskMetric({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex items-center gap-2 text-[11px] font-semibold text-[#71767b]">{icon}{label}</div>
+      <p className="mt-2 text-xl font-semibold text-white">{value}</p>
+      <p className="mt-1 text-[11px] leading-4 text-[#71767b]">{detail}</p>
+    </div>
+  );
+}
+
+function GrowthDeskCommandPanel({
+  data,
+  strategy,
+  moves,
+  people,
+  recentRecords,
+  weeklyReview,
+  safety,
+  timeZone,
+  loadState,
+  manualActionStates,
+  onFocusItem,
+}: {
+  data: ExposureRadarData | null;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  people: PeopleRadarEntry[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  timeZone: string;
+  loadState: LoadState;
+  manualActionStates: Record<string, ManualActionState>;
+  onFocusItem: (itemID: string) => void;
+}) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const items = data?.items || [];
+  const handledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
+  const backfilledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.result_checked_at || record.result_score)).length;
+  const pendingBackfill = recentRecords.filter((record) => (record.handled_at || record.published_url || record.task_status === "done") && !record.result_checked_at && !record.result_score).slice(0, 5);
+  const bestResult = bestExposureResultRecord(recentRecords);
+  const topMove = moves[0];
+  const topPeople = people.slice(0, 3);
+  const safetyWarnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const signalQuality = exposureSignalQualityStatus(data, loadState);
+  const learningTopics = buildExposureLearningTopics(recentRecords, items).slice(0, 4);
+  const learningAngles = buildExposureLearningAngles(recentRecords, manualActionStates).slice(0, 4);
+  const copyBrief = async () => {
+    const brief = buildGrowthDeskBrief({
+      data,
+      strategy,
+      moves,
+      people: topPeople,
+      recentRecords,
+      weeklyReview,
+      safety,
+      timeZone,
+      t,
+    });
+    try {
+      await navigator.clipboard.writeText(brief);
+      pushToast(t("exposureRadar.command.copyToast"));
+    } catch {
+      pushToast(t("exposureRadar.manualAction.copyFailed"));
+    }
+  };
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <CardHeader title={t("exposureRadar.command.title")} description={t("exposureRadar.command.description")} className="mb-0" />
+        <div className="flex flex-wrap gap-2">
+          <a href="#radar-workbench" className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+            {t("exposureRadar.command.openWorkbench")}
+            <ArrowRight className="size-4" />
+          </a>
+          <Button type="button" variant="outline" onClick={() => void copyBrief()}>
+            <Clipboard className="size-4" />
+            {t("exposureRadar.command.copyBrief")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {["p58", "p59", "p60", "p61", "p62", "p63", "p64"].map((key) => (
+          <span key={key} className="inline-flex items-center gap-1 rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-semibold text-[#8b98a5]">
+            {t(`exposureRadar.command.milestone.${key}`)}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.plan.title")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.plan.description")}</p>
+            </div>
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+              <Clock3 className="size-3.5" />
+              {t("exposureRadar.command.plan.timebox")}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
+            <CommandStep index={1} title={t("exposureRadar.command.plan.scan.title")} detail={t("exposureRadar.command.plan.scan.detail", { count: items.length })} anchor="#radar-setup" />
+            <CommandStep index={2} title={t("exposureRadar.command.plan.reply.title")} detail={t("exposureRadar.command.plan.reply.detail", { count: moves.length })} anchor="#radar-workbench" />
+            <CommandStep index={3} title={t("exposureRadar.command.plan.people.title")} detail={t("exposureRadar.command.plan.people.detail", { count: topPeople.length })} anchor="#radar-people" />
+            <CommandStep index={4} title={t("exposureRadar.command.plan.learn.title")} detail={t("exposureRadar.command.plan.learn.detail", { count: backfilledToday })} anchor="#radar-results" />
+          </div>
+          {topMove ? (
+            <div className="mt-4 rounded-xl border border-[#1d9bf0]/25 bg-[#08131f] p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[#8ecdf8]">{t("exposureRadar.command.plan.topMove")}</p>
+                  <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{topMove.item.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.actionPlan.reason.${topMove.reason}`)}</p>
+                </div>
+                <Button type="button" size="sm" onClick={() => onFocusItem(topMove.item.id)}>
+                  <Search className="size-3.5" />
+                  {t("exposureRadar.command.focus")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.results.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.results.description")}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <MiniStat icon={<CheckCircle2 className="size-3.5" />} label={t("exposureRadar.command.results.handled")} value={String(handledToday)} />
+            <MiniStat icon={<BarChart3 className="size-3.5" />} label={t("exposureRadar.command.results.backfilled")} value={String(backfilledToday)} />
+            <MiniStat icon={<Clock3 className="size-3.5" />} label={t("exposureRadar.command.results.pending")} value={String(pendingBackfill.length)} />
+          </div>
+          {bestResult ? (
+            <div className="mt-3 rounded-xl border border-[#00ba7c]/25 bg-[#061a14] p-3">
+              <p className="text-xs font-semibold text-[#7ee0b5]">{t("exposureRadar.command.results.best")}</p>
+              <p className="mt-1 line-clamp-2 text-sm font-semibold text-[#e7e9ea]">{bestResult.title || bestResult.topic_name || bestResult.signal_id}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.command.results.bestDetail", { score: bestResult.result_score || 0, impressions: formatCompact(bestResult.result_impression_count || 0) })}</p>
+            </div>
+          ) : (
+            <p className="mt-3 rounded-xl border border-dashed border-[#2f3336] bg-[#0f1419] px-3 py-4 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.results.empty")}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.people.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.people.description")}</p>
+          <div className="mt-3 space-y-2">
+            {topPeople.length ? topPeople.map((person) => (
+              <button key={person.key} type="button" onClick={() => onFocusItem(person.latestItem.id)} className="w-full rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-left transition hover:border-[#1d9bf0]/45">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#e7e9ea]">{person.name}</p>
+                    {person.handle ? <p className="mt-0.5 text-xs text-[#71767b]">@{person.handle}</p> : null}
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${peopleRadarStageTone(person.stage)}`}>{t(`exposureRadar.peopleRadar.stage.${person.stage}`)}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.command.people.next", { count: person.count, score: person.maxScore })}</p>
+              </button>
+            )) : <p className="rounded-xl border border-dashed border-[#2f3336] bg-[#0f1419] px-3 py-4 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.people.empty")}</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.safety.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.safety.description")}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <MiniStat icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.command.safety.warnings")} value={String(safetyWarnings)} />
+            <MiniStat icon={<Target className="size-3.5" />} label={t("exposureRadar.command.safety.mode")} value={strategy?.safety_mode ? t(`exposureRadar.strategy.safetyMode.${strategy.safety_mode}`) : "-"} />
+          </div>
+          <ul className="mt-3 space-y-2">
+            {["manual", "pace", "fit"].map((key) => (
+              <li key={key} className="flex gap-2 text-xs leading-5 text-[#8b98a5]">
+                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#00ba7c]" />
+                <span>{t(`exposureRadar.command.safety.rule.${key}`)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.signalHealth.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.signalHealth.description")}</p>
+          <div className={`mt-3 rounded-xl border p-3 ${signalQualityTone(signalQuality)}`}>
+            <p className="text-sm font-semibold">{t(`exposureRadar.command.signalHealth.status.${signalQuality}`)}</p>
+            <p className="mt-1 text-xs leading-5 opacity-85">{signalHealthDetail(data, loadState, t)}</p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <MiniStat icon={<Eye className="size-3.5" />} label={t("exposureRadar.command.signalHealth.maxViews")} value={formatCompact(data?.diagnostics?.max_impression_count || 0)} />
+            <MiniStat icon={<Gauge className="size-3.5" />} label={t("exposureRadar.command.signalHealth.maxVelocity")} value={formatVelocityLabel(data?.diagnostics?.max_views_per_minute || 0, "-")} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.learning.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.learning.description")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <CommandList title={t("exposureRadar.command.learning.topics")} items={learningTopics} empty={t("exposureRadar.command.learning.empty")} />
+            <CommandList title={t("exposureRadar.command.learning.angles")} items={learningAngles} empty={t("exposureRadar.command.learning.empty")} />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.command.brief.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.command.brief.description")}</p>
+          <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.command.brief.previewTitle")}</p>
+            <p className="mt-2 whitespace-pre-line text-xs leading-5 text-[#8b98a5]">{buildGrowthDeskBriefPreview({ data, moves, people: topPeople, safety, weeklyReview, t })}</p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CommandStep({ index, title, detail, anchor }: { index: number; title: string; detail: string; anchor: string }) {
+  return (
+    <a href={anchor} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 transition hover:border-[#1d9bf0]/45 hover:bg-[#1d9bf0]/10">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#2f3336] bg-black text-[11px] font-semibold text-[#8ecdf8]">0{index}</span>
+        <ArrowRight className="size-3.5 text-[#71767b]" />
+      </div>
+      <p className="mt-2 text-sm font-semibold text-[#e7e9ea]">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-[#71767b]">{detail}</p>
+    </a>
+  );
+}
+
+function CommandList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <p className="text-xs font-semibold text-[#e7e9ea]">{title}</p>
+      {items.length ? (
+        <ul className="mt-2 space-y-2">
+          {items.map((item) => (
+            <li key={item} className="flex gap-2 text-xs leading-5 text-[#8b98a5]">
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#1d9bf0]" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-[#71767b]">{empty}</p>
+      )}
+    </div>
+  );
+}
+
 function SegmentedControl({ label, options, value, onChange }: { label: string; options: Array<{ value: string; label: string }>; value: string; onChange: (value: string) => void }) {
   return (
     <div>
@@ -888,33 +1315,76 @@ function FirstDayLaunchPanel({
   const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
   const handledCount = recentRecords.filter((record) => record.handled_at || record.task_status === "done").length;
   const resultCount = recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
-  const steps = [
+  const steps: Array<{ key: FirstDayStepKey; done: boolean; anchor: string }> = ([
     { key: "account", done: selectedAccountID > 0 && selectedBotID > 0 },
     { key: "strategy", done: strategyReady },
     { key: "queue", done: moves.length > 0 },
     { key: "result", done: resultCount > 0 || handledCount > 0 },
-  ];
+  ] satisfies Array<{ key: FirstDayStepKey; done: boolean }>).map((step) => ({
+    ...step,
+    anchor: step.key === "account" ? "#radar-setup" : step.key === "strategy" ? "#radar-strategy" : "#radar-workbench",
+  }));
   const doneCount = steps.filter((step) => step.done).length;
+  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <CardHeader title={t("exposureRadar.firstDay.title")} description={t("exposureRadar.firstDay.description")} className="mb-0" />
-        <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-right">
-          <p className="text-[11px] text-[#71767b]">{t("exposureRadar.firstDay.progress")}</p>
-          <p className="text-2xl font-semibold text-white">{doneCount}/4</p>
+        <div>
+          <CardHeader title={t("exposureRadar.firstDay.title")} description={t("exposureRadar.firstDay.description")} className="mb-0" />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <LeaderboardPill label={t("exposureRadar.firstDay.metric.ready")} value={moves.length} tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]" />
+            <LeaderboardPill label={t("exposureRadar.firstDay.metric.handled")} value={handledCount} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
+            <LeaderboardPill label={t("exposureRadar.firstDay.metric.backfilled")} value={resultCount} tone="border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-64">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] text-[#71767b]">{t("exposureRadar.firstDay.progress")}</p>
+              <p className="text-2xl font-semibold text-white">{doneCount}/4</p>
+            </div>
+            <a href={nextStep.anchor} className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+              {doneCount === steps.length ? t("exposureRadar.firstDay.cta.done") : t(`exposureRadar.firstDay.cta.${nextStep.key}`)}
+              <ArrowRight className="size-3.5" />
+            </a>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#202327]">
+            <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${Math.round((doneCount / steps.length) * 100)}%` }} />
+          </div>
         </div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-4">
         {steps.map((step, index) => (
-          <div key={step.key} className={`rounded-2xl border p-4 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}>
+          <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#2f3336] text-xs font-semibold text-[#8b98a5]">{index + 1}</span>
               {step.done ? <CheckCircle2 className="size-4 text-[#7ee0b5]" /> : <Clock3 className="size-4 text-[#71767b]" />}
             </div>
             <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.${step.key}.title`)}</p>
             <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.${step.key}.description`)}</p>
-          </div>
+          </a>
         ))}
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstDay.timebox.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.firstDay.timebox.description")}</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-[#16181c] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Clock3 className="size-3.5" />
+            {t("exposureRadar.firstDay.timebox.total")}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
+          {["strategy", "scan", "reply", "backfill"].map((key) => (
+            <div key={key} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <p className="text-[11px] font-semibold text-[#8ecdf8]">{t(`exposureRadar.firstDay.timebox.${key}.time`)}</p>
+              <p className="mt-1 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.timebox.${key}.title`)}</p>
+              <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.timebox.${key}.description`)}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </Card>
   );
@@ -923,10 +1393,17 @@ function FirstDayLaunchPanel({
 function StrategySetupPanel({ strategy, region, saving, onSave }: { strategy: ExposureRadarGrowthStrategyApi | null; region: ExposureRadarRegion; saving: boolean; onSave: (form: StrategyFormState) => void }) {
   const { t } = useT();
   const [form, setForm] = useState<StrategyFormState>(() => strategyFormFromApi(strategy));
+  const templates = useMemo(() => buildStarterStrategyTemplates(t, region), [region, t]);
   useEffect(() => {
     setForm(strategyFormFromApi(strategy));
   }, [strategy]);
   const setField = <K extends keyof StrategyFormState,>(key: K, value: StrategyFormState[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const applyTemplate = (template: StarterStrategyTemplate) => {
+    setForm((current) => ({
+      ...current,
+      ...template.form,
+    }));
+  };
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -935,6 +1412,30 @@ function StrategySetupPanel({ strategy, region, saving, onSave }: { strategy: Ex
           <SlidersHorizontal className="size-3.5" />
           {t(`exposureRadar.region.${region}`)}
         </span>
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.strategy.templates.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.strategy.templates.description")}</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-[#16181c] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <Target className="size-3.5" />
+            {t("exposureRadar.strategy.templates.badge")}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-4">
+          {templates.map((template) => (
+            <button key={template.key} type="button" onClick={() => applyTemplate(template)} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 text-left transition hover:border-[#1d9bf0]/45 hover:bg-[#1d9bf0]/10">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.strategy.templates.${template.key}.name`)}</p>
+              <p className="mt-1 min-h-10 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.strategy.templates.${template.key}.description`)}</p>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#8ecdf8]">
+                {t("exposureRadar.strategy.templates.apply")}
+                <ArrowRight className="size-3.5" />
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <StrategyInput label={t("exposureRadar.strategy.targetAudience")} value={form.targetAudience} onChange={(value) => setField("targetAudience", value)} placeholder={t("exposureRadar.strategy.targetAudiencePlaceholder")} />
@@ -1056,7 +1557,7 @@ function TodayMovesPanel({
   onTaskStatus,
 }: {
   moves: DailyActionPlanItem[];
-  stats: { pending: number; actNow: number; handled: number };
+  stats: WorkbenchStats;
   activeID: string;
   onFocus: (itemID: string) => void;
   onTaskStatus: (item: ExposureRadarItemApi, taskStatus: DailyTaskStatus) => void;
@@ -1294,7 +1795,7 @@ function HandlingWorkbenchPanel({
 }: {
   queue: DailyActionPlanItem[];
   activeID: string;
-  stats: { pending: number; actNow: number; handled: number };
+  stats: WorkbenchStats;
   draftingID: string | null;
   draftDisabled: boolean;
   handlingID: string | null;
@@ -2236,12 +2737,21 @@ function RadarCard({
   const savedDone = savedMemoryID > 0 || Boolean(manualState?.saved);
   const handledDone = isManualActionHandled(item, manualState);
   const [publishedURL, setPublishedURL] = useState(manualState?.publishedUrl || item.comment_url || "");
+  const [resultResolving, setResultResolving] = useState(false);
+  const lastHydratedPublishedURLRef = useRef(manualState?.publishedUrl || item.comment_url || "");
   const rankTone = rank <= 3 ? "border-[#f59e0b]/35 bg-[#f59e0b]/15 text-[#f6d96b]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   const highlightClass = rankChange?.kind === "up" || rankChange?.kind === "new"
     ? "shadow-[0_0_0_1px_rgba(0,186,124,0.24),0_18px_46px_rgba(0,186,124,0.08)]"
     : rankChange?.kind === "down"
       ? "shadow-[0_0_0_1px_rgba(244,33,46,0.20)]"
       : "";
+  useEffect(() => {
+    const nextURL = manualState?.publishedUrl || item.comment_url || "";
+    if (nextURL && nextURL !== lastHydratedPublishedURLRef.current) {
+      lastHydratedPublishedURLRef.current = nextURL;
+      setPublishedURL(nextURL);
+    }
+  }, [item.comment_url, manualState?.publishedUrl]);
   const copyComment = async () => {
     if (!generatedComment) return;
     try {
@@ -2250,6 +2760,45 @@ function RadarCard({
       pushToast(t("exposureRadar.manualAction.copied"));
     } catch {
       pushToast(t("exposureRadar.manualAction.copyFailed"));
+    }
+  };
+  const resolvePublishedResult = async () => {
+    const nextURL = publishedURL.trim();
+    const commentTweetID = item.comment_tweet_id || extractTweetID(nextURL);
+    if (!nextURL && !commentTweetID) {
+      pushToast(t("exposureRadar.resultLookup.missing"));
+      return;
+    }
+    setResultResolving(true);
+    try {
+      const result = await exposureRadarService.resolveManualResult({
+        published_url: nextURL || undefined,
+        comment_tweet_id: commentTweetID || undefined,
+      });
+      const resolvedURL = result.published_url || nextURL;
+      if (resolvedURL) {
+        setPublishedURL(resolvedURL);
+      }
+      const patch: Partial<ManualActionState> = {
+        publishedUrl: resolvedURL,
+        taskStatus: handledDone ? "done" : "in_progress",
+      };
+      if (typeof result.result_impression_count === "number") patch.resultImpressionCount = result.result_impression_count;
+      if (typeof result.result_like_count === "number") patch.resultLikeCount = result.result_like_count;
+      if (typeof result.result_reply_count === "number") patch.resultReplyCount = result.result_reply_count;
+      if (typeof result.result_retweet_count === "number") patch.resultRetweetCount = result.result_retweet_count;
+      if (typeof result.result_quote_count === "number") patch.resultQuoteCount = result.result_quote_count;
+      if (typeof result.result_bookmark_count === "number") patch.resultBookmarkCount = result.result_bookmark_count;
+      if (result.metrics_fetched) {
+        patch.resultCheckedAt = new Date().toISOString();
+      }
+      onManualAction(patch);
+      const status = normalizeResultLookupStatus(result.status);
+      pushToast(t(`exposureRadar.resultLookup.${status}`));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.resultLookup.failed") : t("exposureRadar.resultLookup.failed"));
+    } finally {
+      setResultResolving(false);
     }
   };
 
@@ -2357,13 +2906,16 @@ function RadarCard({
             saved={savedDone}
             handled={handledDone}
             handling={handling}
+            resultResolving={resultResolving}
             publishedURL={publishedURL}
-            commentURL={item.comment_url || manualState?.publishedUrl || ""}
+            commentURL={manualState?.publishedUrl || item.comment_url || ""}
             persisted={Boolean(manualState?.persisted || item.review_status === "handled" || item.comment_tweet_id || item.comment_url)}
             onPublishedURLChange={setPublishedURL}
+            onResolveResult={() => void resolvePublishedResult()}
             onMarkHandled={() => onMarkHandled(item, publishedURL)}
           />
           <ManualHandlingRecord
+            key={`${item.id}:${manualResultFormKey(manualState)}`}
             item={item}
             manualState={manualState}
             timeZone={timeZone}
@@ -2427,10 +2979,12 @@ function ManualWorkflowPanel({
   saved,
   handled,
   handling,
+  resultResolving,
   publishedURL,
   commentURL,
   persisted,
   onPublishedURLChange,
+  onResolveResult,
   onMarkHandled,
 }: {
   copied: boolean;
@@ -2438,13 +2992,16 @@ function ManualWorkflowPanel({
   saved: boolean;
   handled: boolean;
   handling: boolean;
+  resultResolving: boolean;
   publishedURL: string;
   commentURL: string;
   persisted: boolean;
   onPublishedURLChange: (value: string) => void;
+  onResolveResult: () => void;
   onMarkHandled: () => void;
 }) {
   const { t } = useT();
+  const replyURL = publishedURL.trim() || commentURL;
   return (
     <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-black/30 p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2457,7 +3014,7 @@ function ManualWorkflowPanel({
           {handling ? t("exposureRadar.manualAction.saving") : handled ? t("exposureRadar.manualAction.handled") : t("exposureRadar.manualAction.markHandled")}
         </Button>
       </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
         <label className="min-w-0">
           <span className="sr-only">{t("exposureRadar.manualWorkflow.resultLabel")}</span>
           <input
@@ -2468,8 +3025,12 @@ function ManualWorkflowPanel({
             className="h-9 w-full rounded-full border border-[#2f3336] bg-black px-3 text-xs text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]"
           />
         </label>
-        {commentURL ? (
-          <a href={commentURL} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+        <Button type="button" size="sm" variant="outline" disabled={handling || resultResolving || !replyURL} onClick={onResolveResult} className="h-9">
+          {resultResolving ? <RefreshCw className="size-3.5 animate-spin" /> : <BarChart3 className="size-3.5" />}
+          {resultResolving ? t("exposureRadar.resultLookup.loading") : t("exposureRadar.resultLookup.button")}
+        </Button>
+        {replyURL ? (
+          <a href={replyURL} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
             {t("exposureRadar.manualWorkflow.openReply")}
             <ExternalLink className="size-3.5" />
           </a>
@@ -2502,20 +3063,12 @@ function ManualHandlingRecord({
   onSubmitResult: (result: { impressions?: number; likes?: number; replies?: number; reposts?: number; quotes?: number; bookmarks?: number; notes?: string }) => void;
 }) {
   const { t } = useT();
-  const replyURL = item.comment_url || manualState?.publishedUrl || "";
+  const replyURL = manualState?.publishedUrl || item.comment_url || "";
   const replyID = item.comment_tweet_id || extractTweetID(replyURL);
   const statusKey = manualRecordStatus(item, manualState);
   const updatedAt = manualState?.updatedAt ? formatDateTime(manualState.updatedAt, timeZone) : "-";
   const [feedbackComment, setFeedbackComment] = useState(manualState?.feedbackComment || "");
-  const [resultForm, setResultForm] = useState({
-    impressions: manualState?.resultImpressionCount ? String(manualState.resultImpressionCount) : "",
-    likes: manualState?.resultLikeCount ? String(manualState.resultLikeCount) : "",
-    replies: manualState?.resultReplyCount ? String(manualState.resultReplyCount) : "",
-    reposts: manualState?.resultRetweetCount ? String(manualState.resultRetweetCount) : "",
-    quotes: manualState?.resultQuoteCount ? String(manualState.resultQuoteCount) : "",
-    bookmarks: manualState?.resultBookmarkCount ? String(manualState.resultBookmarkCount) : "",
-    notes: manualState?.resultNotes || "",
-  });
+  const [resultForm, setResultForm] = useState(() => manualResultFormFromState(manualState));
   const saveResult = () => onSubmitResult({
     impressions: parseOptionalCount(resultForm.impressions),
     likes: parseOptionalCount(resultForm.likes),
@@ -3113,7 +3666,7 @@ function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates:
     .slice(0, limit);
 }
 
-function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>) {
+function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>): WorkbenchStats {
   return items.reduce((acc, item) => {
     const handled = isManualActionHandled(item, manualActionStates[item.id]);
     if (isDeferredManualTask(manualActionStates[item.id])) return acc;
@@ -3129,6 +3682,206 @@ function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: 
     }
     return acc;
   }, { pending: 0, actNow: 0, handled: 0 });
+}
+
+function dailyDeskFocusKey({
+  selectedAccountID,
+  selectedBotID,
+  strategyReady,
+  stats,
+  moves,
+  recentBackfilled,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategyReady: boolean;
+  stats: WorkbenchStats;
+  moves: DailyActionPlanItem[];
+  recentBackfilled: number;
+}): DailyDeskFocusKey {
+  if (!selectedAccountID || !selectedBotID) return "setup";
+  if (!strategyReady) return "strategy";
+  if (stats.actNow > 0 || moves.length > 0) return "handle";
+  if (stats.handled > 0 && recentBackfilled === 0) return "backfill";
+  return "review";
+}
+
+function dailyDeskFocusAnchor(key: DailyDeskFocusKey) {
+  if (key === "setup") return "#radar-setup";
+  if (key === "strategy") return "#radar-strategy";
+  if (key === "backfill" || key === "review") return "#radar-results";
+  return "#radar-workbench";
+}
+
+function dailyDeskRhythmAnchor(step: string) {
+  if (step === "scan") return "#radar-setup";
+  if (step === "save") return "#radar-people";
+  if (step === "review") return "#radar-results";
+  return "#radar-workbench";
+}
+
+function isRecentManualRecord(record: ExposureRadarManualRecordApi, hours: number) {
+  const value = Math.max(
+    manualRecordTimeValue(record.handled_at),
+    manualRecordTimeValue(record.result_checked_at),
+    manualRecordTimeValue(record.feedback_at),
+    manualRecordTimeValue(record.updated_at),
+    manualRecordTimeValue(record.created_at),
+  );
+  if (!value) return false;
+  return Date.now() - value <= hours * 60 * 60 * 1000;
+}
+
+function manualRecordTimeValue(value?: string) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function bestExposureResultRecord(records: ExposureRadarManualRecordApi[]) {
+  return records
+    .filter((record) => record.result_checked_at || record.result_score || record.result_impression_count)
+    .slice()
+    .sort((a, b) => {
+      const scoreDelta = (b.result_score || 0) - (a.result_score || 0);
+      if (scoreDelta !== 0) return scoreDelta;
+      const impressionDelta = (b.result_impression_count || 0) - (a.result_impression_count || 0);
+      if (impressionDelta !== 0) return impressionDelta;
+      return manualRecordTimeValue(b.result_checked_at || b.updated_at) - manualRecordTimeValue(a.result_checked_at || a.updated_at);
+    })[0];
+}
+
+function exposureSignalQualityStatus(data: ExposureRadarData | null, loadState: LoadState): SignalQualityStatus {
+  if (loadState === "loading" || !data) return "warming";
+  if (!data.items.length) return "empty";
+  const diagnostics = data.diagnostics;
+  if (diagnostics?.status === "limited" || diagnostics?.status === "stale" || diagnostics?.status === "fallback" || diagnostics?.status === "blocked") return "limited";
+  if (data.items.some((item) => item.data_quality === "tweet_level" && normalizeQualityStage(item.quality_stage, item) !== "expired")) return "ready";
+  return "warming";
+}
+
+function signalQualityTone(status: SignalQualityStatus) {
+  switch (status) {
+    case "ready":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "empty":
+      return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+    case "limited":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    default:
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  }
+}
+
+function signalHealthDetail(data: ExposureRadarData | null, loadState: LoadState, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (loadState === "loading" || !data) return t("exposureRadar.command.signalHealth.detail.warming");
+  if (!data.items.length) {
+    const reason = data.diagnostics?.top_missing_reason || data.diagnostics?.top_missing_detail || data.source_notice || "-";
+    return t("exposureRadar.command.signalHealth.detail.empty", { reason });
+  }
+  if (data.diagnostics?.top_missing_reason) {
+    return t("exposureRadar.command.signalHealth.detail.limited", { reason: data.diagnostics.top_missing_reason });
+  }
+  return t("exposureRadar.command.signalHealth.detail.ready", { count: data.items.length });
+}
+
+function buildExposureLearningTopics(records: ExposureRadarManualRecordApi[], items: ExposureRadarItemApi[]) {
+  const scores = new Map<string, { count: number; score: number }>();
+  const add = (topic: string | undefined, score: number) => {
+    const key = (topic || "").trim();
+    if (!key) return;
+    const existing = scores.get(key) || { count: 0, score: 0 };
+    existing.count += 1;
+    existing.score += score;
+    scores.set(key, existing);
+  };
+  records.forEach((record) => add(record.topic_name || record.title, Math.max(record.result_score || 0, record.score || 0)));
+  items.forEach((item) => add(item.topic_name || item.title, item.score || 0));
+  return Array.from(scores.entries())
+    .sort((a, b) => (b[1].score + b[1].count * 10) - (a[1].score + a[1].count * 10))
+    .map(([topic, value]) => `${topic} · ${value.count}`);
+}
+
+function buildExposureLearningAngles(records: ExposureRadarManualRecordApi[], states: Record<string, ManualActionState>) {
+  const counts = new Map<string, number>();
+  const add = (value?: string) => {
+    const key = (value || "").trim();
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  };
+  records.forEach((record) => add(record.reply_angle_title || record.reply_angle_id));
+  Object.values(states).forEach((state) => add(state.replyAngleTitle || state.replyAngleID));
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([angle, count]) => `${angle} · ${count}`);
+}
+
+function buildGrowthDeskBrief({
+  data,
+  strategy,
+  moves,
+  people,
+  recentRecords,
+  weeklyReview,
+  safety,
+  timeZone,
+  t,
+}: {
+  data: ExposureRadarData | null;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  people: PeopleRadarEntry[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  timeZone: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const refreshed = data?.updated_at ? formatDateTime(data.updated_at, timeZone) : "-";
+  const handledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
+  const backfilledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.result_checked_at || record.result_score)).length;
+  const safetyWarnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const topMoves = moves.slice(0, 3).map((entry, index) => `${index + 1}. ${entry.item.title} ${entry.item.author_handle ? `@${entry.item.author_handle}` : ""} · ${entry.item.score}`);
+  const topPeople = people.slice(0, 3).map((person, index) => `${index + 1}. ${person.name}${person.handle ? ` @${person.handle}` : ""} · ${person.stage}`);
+  return [
+    t("exposureRadar.command.brief.heading"),
+    t("exposureRadar.command.brief.line.region", { region: data?.region || "-", refreshed }),
+    t("exposureRadar.command.brief.line.strategy", { audience: strategy?.target_audience || "-", topics: (strategy?.core_topics || []).slice(0, 3).join(", ") || "-" }),
+    t("exposureRadar.command.brief.line.metrics", { signals: data?.items.length || 0, moves: moves.length, handled: handledToday, backfilled: backfilledToday }),
+    t("exposureRadar.command.brief.line.safety", { warnings: safetyWarnings, effective: weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-" }),
+    "",
+    t("exposureRadar.command.brief.line.moves"),
+    topMoves.length ? topMoves.join("\n") : t("exposureRadar.command.brief.none"),
+    "",
+    t("exposureRadar.command.brief.line.people"),
+    topPeople.length ? topPeople.join("\n") : t("exposureRadar.command.brief.none"),
+    "",
+    t("exposureRadar.command.brief.footer"),
+  ].join("\n");
+}
+
+function buildGrowthDeskBriefPreview({
+  data,
+  moves,
+  people,
+  safety,
+  weeklyReview,
+  t,
+}: {
+  data: ExposureRadarData | null;
+  moves: DailyActionPlanItem[];
+  people: PeopleRadarEntry[];
+  safety: ExposureRadarSafetyCenterData | null;
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return [
+    t("exposureRadar.command.brief.previewLine.signals", { count: data?.items.length || 0 }),
+    t("exposureRadar.command.brief.previewLine.moves", { count: moves.length }),
+    t("exposureRadar.command.brief.previewLine.people", { count: people.length }),
+    t("exposureRadar.command.brief.previewLine.safety", { count: (safety?.watch_count || 0) + (safety?.block_count || 0) }),
+    t("exposureRadar.command.brief.previewLine.effective", { rate: weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-" }),
+  ].join("\n");
 }
 
 function buildPeopleRadar(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): PeopleRadarEntry[] {
@@ -3492,6 +4245,30 @@ function strategyFormFromApi(strategy: ExposureRadarGrowthStrategyApi | null): S
   };
 }
 
+function buildStarterStrategyTemplates(t: (key: string) => string, region: ExposureRadarRegion): StarterStrategyTemplate[] {
+  const baseDailyLimit = region === "en" ? 8 : 10;
+  const build = (key: string, primaryGoal: string, replyStyle: string, dailyMoveLimit = baseDailyLimit): StarterStrategyTemplate => ({
+    key,
+    form: {
+      targetAudience: t(`exposureRadar.strategy.templates.${key}.targetAudience`),
+      primaryGoal,
+      coreTopics: t(`exposureRadar.strategy.templates.${key}.coreTopics`),
+      avoidTopics: t(`exposureRadar.strategy.templates.${key}.avoidTopics`),
+      competitors: "",
+      replyStyle,
+      dailyMoveLimit,
+      safetyMode: "conservative",
+      operatorNotes: t(`exposureRadar.strategy.templates.${key}.operatorNotes`),
+    },
+  });
+  return [
+    build("web3Builder", "relationships", "operator_observation"),
+    build("aiAgent", "awareness", "peer_experience"),
+    build("saasFounder", "traffic", "light_question", Math.max(6, baseDailyLimit - 2)),
+    build("creatorOperator", "community", "caution_note"),
+  ];
+}
+
 function parseCommaList(value: string): string[] {
   return value
     .split(/[,，\n]/)
@@ -3505,6 +4282,48 @@ function parseOptionalCount(value: string): number | undefined {
   if (!trimmed) return undefined;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function manualResultFormFromState(state?: ManualActionState) {
+  return {
+    impressions: formatOptionalCount(state?.resultImpressionCount),
+    likes: formatOptionalCount(state?.resultLikeCount),
+    replies: formatOptionalCount(state?.resultReplyCount),
+    reposts: formatOptionalCount(state?.resultRetweetCount),
+    quotes: formatOptionalCount(state?.resultQuoteCount),
+    bookmarks: formatOptionalCount(state?.resultBookmarkCount),
+    notes: state?.resultNotes || "",
+  };
+}
+
+function manualResultFormKey(state?: ManualActionState) {
+  return [
+    state?.resultImpressionCount ?? "",
+    state?.resultLikeCount ?? "",
+    state?.resultReplyCount ?? "",
+    state?.resultRetweetCount ?? "",
+    state?.resultQuoteCount ?? "",
+    state?.resultBookmarkCount ?? "",
+    state?.resultNotes ?? "",
+    state?.resultCheckedAt ?? "",
+  ].join(":");
+}
+
+function formatOptionalCount(value?: number) {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+function normalizeResultLookupStatus(value?: string) {
+  switch (value) {
+    case "fetched":
+    case "token_missing":
+    case "lookup_failed":
+    case "not_found":
+    case "id_only":
+      return value;
+    default:
+      return "failed";
+  }
 }
 
 function mergeOptionalNumber(primary?: number, fallback?: number) {

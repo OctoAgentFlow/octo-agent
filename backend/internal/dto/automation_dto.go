@@ -531,6 +531,136 @@ type ExposureRadarManualHandleRequest struct {
 	Note           string `json:"note"`
 }
 
+type ExposureRadarSafetyCheckItem struct {
+	Key    string `json:"key"`
+	Status string `json:"status"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+type ExposureRadarManualRecordRequest struct {
+	BotID            uint                           `json:"bot_id"`
+	XAccountID       uint                           `json:"x_account_id"`
+	SignalID         string                         `json:"signal_id" binding:"required"`
+	Region           string                         `json:"region"`
+	DataSource       string                         `json:"data_source"`
+	DataQuality      string                         `json:"data_quality"`
+	TweetID          string                         `json:"tweet_id"`
+	URL              string                         `json:"url"`
+	Title            string                         `json:"title"`
+	Content          string                         `json:"content"`
+	AuthorID         string                         `json:"author_id"`
+	AuthorHandle     string                         `json:"author_handle"`
+	AuthorName       string                         `json:"author_name"`
+	TopicName        string                         `json:"topic_name"`
+	Score            int                            `json:"score"`
+	RiskLevel        string                         `json:"risk_level"`
+	OpportunityType  string                         `json:"opportunity_type"`
+	OpportunityTier  string                         `json:"opportunity_tier"`
+	QualityStage     string                         `json:"quality_stage"`
+	ViewsPerMinute   float64                        `json:"views_per_minute"`
+	FollowersCount   int64                          `json:"followers_count"`
+	HeatCount        int64                          `json:"heat_count"`
+	ReplyCount       int64                          `json:"reply_count"`
+	RetweetCount     int64                          `json:"retweet_count"`
+	LikeCount        int64                          `json:"like_count"`
+	QuoteCount       int64                          `json:"quote_count"`
+	BookmarkCount    int64                          `json:"bookmark_count"`
+	ImpressionCount  int64                          `json:"impression_count"`
+	ReviewTaskID     uint                           `json:"review_task_id"`
+	SavedMemoryID    uint                           `json:"saved_memory_id"`
+	GeneratedComment string                         `json:"generated_comment"`
+	TaskStatus       string                         `json:"task_status"`
+	Copied           bool                           `json:"copied"`
+	Opened           bool                           `json:"opened"`
+	Saved            bool                           `json:"saved"`
+	Handled          bool                           `json:"handled"`
+	PublishedURL     string                         `json:"published_url"`
+	Outcome          string                         `json:"outcome"`
+	FeedbackComment  string                         `json:"feedback_comment"`
+	SafetyStatus     string                         `json:"safety_status"`
+	SafetySummary    string                         `json:"safety_summary"`
+	SafetyChecks     []ExposureRadarSafetyCheckItem `json:"safety_checks"`
+	ReplyAngleID     string                         `json:"reply_angle_id"`
+	ReplyAngleTitle  string                         `json:"reply_angle_title"`
+}
+
+type ExposureRadarManualRecordItem struct {
+	ID               uint                           `json:"id"`
+	BotID            uint                           `json:"bot_id,omitempty"`
+	XAccountID       uint                           `json:"x_account_id,omitempty"`
+	SignalID         string                         `json:"signal_id"`
+	Region           string                         `json:"region"`
+	DataSource       string                         `json:"data_source,omitempty"`
+	DataQuality      string                         `json:"data_quality,omitempty"`
+	TweetID          string                         `json:"tweet_id,omitempty"`
+	URL              string                         `json:"url,omitempty"`
+	Title            string                         `json:"title,omitempty"`
+	Content          string                         `json:"content,omitempty"`
+	AuthorID         string                         `json:"author_id,omitempty"`
+	AuthorHandle     string                         `json:"author_handle,omitempty"`
+	AuthorName       string                         `json:"author_name,omitempty"`
+	TopicName        string                         `json:"topic_name,omitempty"`
+	Score            int                            `json:"score"`
+	RiskLevel        string                         `json:"risk_level,omitempty"`
+	OpportunityType  string                         `json:"opportunity_type,omitempty"`
+	OpportunityTier  string                         `json:"opportunity_tier,omitempty"`
+	QualityStage     string                         `json:"quality_stage,omitempty"`
+	ViewsPerMinute   float64                        `json:"views_per_minute,omitempty"`
+	FollowersCount   int64                          `json:"followers_count,omitempty"`
+	HeatCount        int64                          `json:"heat_count,omitempty"`
+	ReplyCount       int64                          `json:"reply_count,omitempty"`
+	RetweetCount     int64                          `json:"retweet_count,omitempty"`
+	LikeCount        int64                          `json:"like_count,omitempty"`
+	QuoteCount       int64                          `json:"quote_count,omitempty"`
+	BookmarkCount    int64                          `json:"bookmark_count,omitempty"`
+	ImpressionCount  int64                          `json:"impression_count,omitempty"`
+	ReviewTaskID     uint                           `json:"review_task_id,omitempty"`
+	SavedMemoryID    uint                           `json:"saved_memory_id,omitempty"`
+	GeneratedComment string                         `json:"generated_comment,omitempty"`
+	TaskStatus       string                         `json:"task_status,omitempty"`
+	PublishedURL     string                         `json:"published_url,omitempty"`
+	Outcome          string                         `json:"outcome,omitempty"`
+	FeedbackComment  string                         `json:"feedback_comment,omitempty"`
+	SafetyStatus     string                         `json:"safety_status,omitempty"`
+	SafetySummary    string                         `json:"safety_summary,omitempty"`
+	SafetyChecks     []ExposureRadarSafetyCheckItem `json:"safety_checks,omitempty"`
+	ReplyAngleID     string                         `json:"reply_angle_id,omitempty"`
+	ReplyAngleTitle  string                         `json:"reply_angle_title,omitempty"`
+	CopiedAt         string                         `json:"copied_at,omitempty"`
+	OpenedAt         string                         `json:"opened_at,omitempty"`
+	SavedAt          string                         `json:"saved_at,omitempty"`
+	HandledAt        string                         `json:"handled_at,omitempty"`
+	FeedbackAt       string                         `json:"feedback_at,omitempty"`
+	CreatedAt        string                         `json:"created_at,omitempty"`
+	UpdatedAt        string                         `json:"updated_at,omitempty"`
+}
+
+type ExposureRadarManualRecordsResponse struct {
+	Items []ExposureRadarManualRecordItem `json:"items"`
+}
+
+type ExposureRadarPersonItem struct {
+	Key             string                        `json:"key"`
+	Name            string                        `json:"name"`
+	Handle          string                        `json:"handle,omitempty"`
+	Count           int                           `json:"count"`
+	Handled         int                           `json:"handled"`
+	Copied          int                           `json:"copied"`
+	Opened          int                           `json:"opened"`
+	Saved           int                           `json:"saved"`
+	Feedback        int                           `json:"feedback"`
+	MaxScore        int                           `json:"max_score"`
+	TotalEngagement int64                         `json:"total_engagement"`
+	Followers       int64                         `json:"followers,omitempty"`
+	Stage           string                        `json:"stage"`
+	LatestRecord    ExposureRadarManualRecordItem `json:"latest_record"`
+}
+
+type ExposureRadarPeopleResponse struct {
+	Items []ExposureRadarPersonItem `json:"items"`
+}
+
 type AutoCommentVariantItem struct {
 	Type    string `json:"type"`
 	Label   string `json:"label"`

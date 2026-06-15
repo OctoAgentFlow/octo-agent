@@ -63,6 +63,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.CostUsageLedger{},
 		&model.TrendTopic{},
 		&model.ExposureTweetSignal{},
+		&model.ExposureRadarManualRecord{},
 		&model.TrendFeedback{},
 		&model.TrendOperationRule{},
 	); err != nil {

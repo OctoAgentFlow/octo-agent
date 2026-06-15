@@ -49,6 +49,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	contentDraftRunRepo := repository.NewContentDraftGenerationRunRepository(db)
 	trendTopicRepo := repository.NewTrendTopicRepository(db)
 	exposureTweetSignalRepo := repository.NewExposureTweetSignalRepository(db)
+	exposureRadarManualRecordRepo := repository.NewExposureRadarManualRecordRepository(db)
 	trendFeedbackRepo := repository.NewTrendFeedbackRepository(db)
 	contentLibraryRepo := repository.NewContentLibraryRepository(db)
 	dailyXQueueContextRepo := repository.NewDailyXQueueContextRepository(db)
@@ -92,6 +93,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	autoReplyService := service.NewAutoReplyService(twitterAccountRepo, automationRepo, activityRepo, replyReservationRepo, userRepo, autoReplyDraftRepo, oafBotRepo, contentLibraryRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, publishingService)
 	autoDMService := service.NewAutoDMService(twitterAccountRepo, automationRepo, activityRepo, autoDMTaskRepo, autoDMInboundEventRepo, autoDMRecipientRuleRepo, autoDMRecipientImportRepo, userRepo, oafBotRepo, contentLibraryRepo, aiGenerationUsageRepo, aiService, cfg.App.FrontendBaseURL)
 	autoCommentService := service.NewAutoCommentService(twitterAccountRepo, automationRepo, autoCommentTargetRepo, autoCommentTaskRepo, autoCommentScanLedgerRepo, activityRepo, userRepo, oafBotRepo, contentLibraryRepo, aiGenerationUsageRepo, oafBotFeedbackRepo, reviewQueueVerdictRepo, oafBotLearningRulePrefRepo, aiService, publishingService)
+	exposureRadarManualService := service.NewExposureRadarManualService(exposureRadarManualRecordRepo)
 	contentLibraryService := service.NewContentLibraryService(contentLibraryRepo, twitterAccountRepo, oafBotRepo)
 	trendService := service.NewTrendService(trendTopicRepo, exposureTweetSignalRepo, trendFeedbackRepo, oafBotRepo, contentDraftPlanRepo, contentLibraryRepo, cfg.XTrends).
 		WithAutoCommentTaskRepository(autoCommentTaskRepo).
@@ -104,7 +106,7 @@ func NewAPI(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	wc := controller.NewWalletController(walletService)
 	dc := controller.NewDashboardController(dashboardService)
 	acc := controller.NewAccountController(accountService, cfg.App.FrontendBaseURL)
-	auto := controller.NewAutomationController(automationService, autoReplyService, autoDMService, autoCommentService)
+	auto := controller.NewAutomationController(automationService, autoReplyService, autoDMService, autoCommentService, exposureRadarManualService)
 	contentDraft := controller.NewContentDraftController(contentDraftService)
 	dailyXQueue := controller.NewDailyXQueueController(dailyXQueueService)
 	trends := controller.NewTrendController(trendService)

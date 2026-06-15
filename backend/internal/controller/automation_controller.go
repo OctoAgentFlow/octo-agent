@@ -17,10 +17,11 @@ import (
 )
 
 type AutomationController struct {
-	automationService  *service.AutomationService
-	autoReplyService   *service.AutoReplyService
-	autoDMService      *service.AutoDMService
-	autoCommentService *service.AutoCommentService
+	automationService          *service.AutomationService
+	autoReplyService           *service.AutoReplyService
+	autoDMService              *service.AutoDMService
+	autoCommentService         *service.AutoCommentService
+	exposureRadarManualService *service.ExposureRadarManualService
 }
 
 func getUintParam(c *gin.Context, name string) (uint, bool) {
@@ -32,8 +33,14 @@ func getUintParam(c *gin.Context, name string) (uint, bool) {
 	return uint(value), true
 }
 
-func NewAutomationController(automationService *service.AutomationService, autoReplyService *service.AutoReplyService, autoDMService *service.AutoDMService, autoCommentService *service.AutoCommentService) *AutomationController {
-	return &AutomationController{automationService: automationService, autoReplyService: autoReplyService, autoDMService: autoDMService, autoCommentService: autoCommentService}
+func NewAutomationController(automationService *service.AutomationService, autoReplyService *service.AutoReplyService, autoDMService *service.AutoDMService, autoCommentService *service.AutoCommentService, exposureRadarManualService *service.ExposureRadarManualService) *AutomationController {
+	return &AutomationController{
+		automationService:          automationService,
+		autoReplyService:           autoReplyService,
+		autoDMService:              autoDMService,
+		autoCommentService:         autoCommentService,
+		exposureRadarManualService: exposureRadarManualService,
+	}
 }
 
 func automationActionError(c *gin.Context, err error) bool {
@@ -910,6 +917,70 @@ func (ctl *AutomationController) MarkCommentTaskHandled(c *gin.Context) {
 	var req dto.ExposureRadarManualHandleRequest
 	_ = c.ShouldBindJSON(&req)
 	data, err := ctl.autoCommentService.MarkTaskHandled(userID, taskID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpsertExposureRadarManualRecord(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ExposureRadarManualRecordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.exposureRadarManualService.Upsert(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListExposureRadarManualRecords(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	raw := strings.TrimSpace(c.Query("signal_ids"))
+	var signalIDs []string
+	if raw != "" {
+		signalIDs = strings.Split(raw, ",")
+	}
+	data, err := ctl.exposureRadarManualService.ListBySignalIDs(userID, signalIDs)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ListExposureRadarPeople(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days := 30
+	if raw := strings.TrimSpace(c.Query("days")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+	limit := 20
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	data, err := ctl.exposureRadarManualService.ListPeople(userID, c.Query("region"), days, limit)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

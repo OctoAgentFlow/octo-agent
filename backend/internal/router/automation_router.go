@@ -56,6 +56,9 @@ func RegisterAutomation(rg *gin.RouterGroup, c *controller.AutomationController)
 	radar.POST("/drafts/:id/approve", c.ApproveCommentTask)
 	radar.POST("/drafts/:id/reject", c.RejectCommentDraft)
 	radar.POST("/drafts/:id/handled", c.MarkCommentTaskHandled)
+	radar.GET("/manual-records", c.ListExposureRadarManualRecords)
+	radar.POST("/manual-records", c.UpsertExposureRadarManualRecord)
+	radar.GET("/people", c.ListExposureRadarPeople)
 
 	// Deprecated compatibility routes for legacy automations and historical queue links.
 	comment := rg.Group("/auto-comment")

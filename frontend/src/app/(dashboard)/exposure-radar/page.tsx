@@ -13,7 +13,7 @@ import { broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
-import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticIssueApi, type ExposureRadarDiagnosticsApi, type ExposureRadarItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion } from "@/services/exposure-radar.service";
+import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticIssueApi, type ExposureRadarDiagnosticsApi, type ExposureRadarItemApi, type ExposureRadarManualRecordApi, type ExposureRadarManualRecordPayload, type ExposureRadarPeopleItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion, type ExposureRadarSafetyCheckApi } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -32,6 +32,7 @@ type DailyActionPlanItem = {
   reason: DailyActionReason;
   priority: number;
 };
+type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
 type PeopleRadarStage = "priority" | "repeat" | "engaged" | "new";
 type PeopleRadarEntry = {
   key: string;
@@ -46,6 +47,8 @@ type PeopleRadarEntry = {
   followers?: number;
   stage: PeopleRadarStage;
   latestItem: ExposureRadarItemApi;
+  persisted?: boolean;
+  feedback?: number;
 };
 type OpportunityExplanation = {
   fit: string;
@@ -90,6 +93,11 @@ type ManualActionState = {
   outcome?: ManualOutcome;
   feedbackComment?: string;
   feedbackAt?: string;
+  taskStatus?: DailyTaskStatus;
+  safetyStatus?: SafetyReviewStatus;
+  safetySummary?: string;
+  replyAngleID?: string;
+  replyAngleTitle?: string;
   updatedAt?: string;
 };
 
@@ -158,6 +166,7 @@ export default function ExposureRadarPage() {
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
+  const [persistedPeople, setPersistedPeople] = useState<ExposureRadarPeopleItemApi[]>([]);
   const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
   const [selectedReplyAngleIDs, setSelectedReplyAngleIDs] = useState<Record<string, string>>({});
   const previousRanksRef = useRef<Map<string, number>>(new Map());
@@ -208,6 +217,44 @@ export default function ExposureRadarPage() {
     setSelectedReplyAngleIDs((current) => ({ ...current, [itemID]: angleID }));
   }, []);
 
+  const recordManualAction = useCallback((item: ExposureRadarItemApi, patch: Partial<ManualActionState>, replyAngle?: ReplyAngleSuggestion) => {
+    const selectedReplyAngle = replyAngle || selectedReplyAngleForItem(item, selectedReplyAngleIDs, t);
+    const safetyReview = buildSafetyReview(item, selectedReplyAngle, t);
+    const nextPatch: Partial<ManualActionState> = {
+      ...patch,
+      safetyStatus: safetyReview.status,
+      safetySummary: safetyReview.summary,
+      replyAngleID: selectedReplyAngle?.id,
+      replyAngleTitle: selectedReplyAngle?.title,
+    };
+    updateManualActionState(item.id, nextPatch);
+    void exposureRadarService.upsertManualRecord(buildManualRecordPayload(item, {
+      selectedAccountID,
+      selectedBotID,
+      patch: nextPatch,
+      safetyReview,
+      replyAngle: selectedReplyAngle,
+    })).then((record) => {
+      setManualActionStates((current) => mergeManualRecordStates(current, [record]));
+    }).catch(() => {
+      updateManualActionState(item.id, { persisted: false });
+      pushToast(t("exposureRadar.manualAction.persistFailed"));
+    });
+  }, [pushToast, selectedAccountID, selectedBotID, selectedReplyAngleIDs, t, updateManualActionState]);
+
+  const hydrateManualWorkspace = useCallback(async (nextItems: ExposureRadarItemApi[]) => {
+    try {
+      const [records, people] = await Promise.all([
+        exposureRadarService.listManualRecords(nextItems.map((item) => item.id)),
+        exposureRadarService.people({ region, days: 30, limit: 30 }),
+      ]);
+      setManualActionStates((current) => mergeManualRecordStates(current, records.items));
+      setPersistedPeople(people.items || []);
+    } catch {
+      setPersistedPeople([]);
+    }
+  }, [region]);
+
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
@@ -241,11 +288,12 @@ export default function ExposureRadarPage() {
       setArchive(dailyArchive);
       setLastRefreshedAt(new Date().toISOString());
       setLoadState("ready");
+      void hydrateManualWorkspace(next.items);
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.loadFailed") : t("exposureRadar.toast.loadFailed"));
       setLoadState("error");
     }
-  }, [hours, maxFans, minHotCount, pushToast, region, selectedAccountID, selectedBotID, t]);
+  }, [hours, hydrateManualWorkspace, maxFans, minHotCount, pushToast, region, selectedAccountID, selectedBotID, t]);
 
   useEffect(() => {
     void load();
@@ -299,7 +347,7 @@ export default function ExposureRadarPage() {
   const handlingQueue = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs, 12), [items, manualActionStates, savedMemoryIDs]);
   const todayMoves = useMemo(() => handlingQueue.slice(0, 10), [handlingQueue]);
   const workbenchStats = useMemo(() => buildWorkbenchStats(items, manualActionStates), [items, manualActionStates]);
-  const peopleRadar = useMemo(() => buildPeopleRadar(items, manualActionStates, savedMemoryIDs), [items, manualActionStates, savedMemoryIDs]);
+  const peopleRadar = useMemo(() => mergePeopleRadar(buildPeopleRadar(items, manualActionStates, savedMemoryIDs), persistedPeople), [items, manualActionStates, persistedPeople, savedMemoryIDs]);
 
   useEffect(() => {
     if (handlingQueue.length === 0) {
@@ -355,13 +403,22 @@ export default function ExposureRadarPage() {
           comment_url: task.comment_url,
         } : row),
       } : current);
+      recordManualAction({
+        ...item,
+        review_task_id: task.id,
+        review_status: task.status,
+        generated_comment: task.generated_comment,
+        manual_action_url: task.manual_action_url,
+        comment_tweet_id: task.comment_tweet_id,
+        comment_url: task.comment_url,
+      }, { taskStatus: "in_progress" }, replyAngle);
       pushToast(task.status === "pending_review" ? t("exposureRadar.toast.draftQueued") : t("exposureRadar.toast.draftCreated"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.draftFailed") : t("exposureRadar.toast.draftFailed"));
     } finally {
       setDraftingID(null);
     }
-  }, [pushToast, selectedAccountID, selectedBotID, t]);
+  }, [pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
   const saveRadarMemory = useCallback(async (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => {
     if (!selectedAccountID || !selectedBotID) {
@@ -376,39 +433,37 @@ export default function ExposureRadarPage() {
         items: current.items.map((row) => row.id === item.id ? { ...row, saved_memory_id: memory.id } : row),
       } : current);
       setSavedMemoryIDs((current) => new Set(current).add(item.id));
-      updateManualActionState(item.id, { saved: true });
+      recordManualAction({ ...item, saved_memory_id: memory.id }, { saved: true, taskStatus: "in_progress" }, replyAngle);
       pushToast(t("exposureRadar.toast.memorySaved"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.memoryFailed") : t("exposureRadar.toast.memoryFailed"));
     } finally {
       setSavingMemoryID(null);
     }
-  }, [pushToast, selectedAccountID, selectedBotID, t, updateManualActionState]);
+  }, [pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
   const markRadarHandled = useCallback(async (item: ExposureRadarItemApi, publishedURL: string) => {
     const normalizedPublishedURL = publishedURL.trim();
-    if (!item.review_task_id) {
-      updateManualActionState(item.id, { handled: true, persisted: false, publishedUrl: normalizedPublishedURL });
-      pushToast(t("exposureRadar.manualAction.localOnlyToast"));
-      return;
-    }
     setHandlingID(item.id);
     try {
-      const task = await exposureRadarService.markDraftHandled(item.review_task_id, {
-        published_url: normalizedPublishedURL || undefined,
-      });
-      const persistedURL = task.comment_url || normalizedPublishedURL;
-      setData((current) => current ? {
-        ...current,
-        items: current.items.map((row) => row.id === item.id ? {
-          ...row,
-          review_status: task.status,
-          manual_action_url: task.manual_action_url || row.manual_action_url,
-          comment_tweet_id: task.comment_tweet_id,
-          comment_url: task.comment_url,
-        } : row),
-      } : current);
-      updateManualActionState(item.id, { handled: true, persisted: true, publishedUrl: persistedURL });
+      let persistedURL = normalizedPublishedURL;
+      if (item.review_task_id) {
+        const task = await exposureRadarService.markDraftHandled(item.review_task_id, {
+          published_url: normalizedPublishedURL || undefined,
+        });
+        persistedURL = task.comment_url || normalizedPublishedURL;
+        setData((current) => current ? {
+          ...current,
+          items: current.items.map((row) => row.id === item.id ? {
+            ...row,
+            review_status: task.status,
+            manual_action_url: task.manual_action_url || row.manual_action_url,
+            comment_tweet_id: task.comment_tweet_id,
+            comment_url: task.comment_url,
+          } : row),
+        } : current);
+      }
+      recordManualAction({ ...item, comment_url: persistedURL || item.comment_url, review_status: item.review_task_id ? "handled" : item.review_status }, { handled: true, persisted: true, publishedUrl: persistedURL, taskStatus: "done" });
       void exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 })
         .then(setPerformance)
         .catch(() => undefined);
@@ -418,20 +473,19 @@ export default function ExposureRadarPage() {
     } finally {
       setHandlingID(null);
     }
-  }, [pushToast, region, selectedAccountID, selectedBotID, t, updateManualActionState]);
+  }, [pushToast, recordManualAction, region, selectedAccountID, selectedBotID, t]);
 
   const submitManualOutcome = useCallback(async (item: ExposureRadarItemApi, outcome: ManualOutcome, comment: string) => {
-    if (!item.review_task_id) {
-      pushToast(t("exposureRadar.manualFeedback.missingTask"));
-      return;
-    }
     setFeedbackSavingID(item.id);
     try {
-      await exposureRadarService.createDraftFeedback(item.review_task_id, buildManualOutcomePayload(outcome, comment, item));
-      updateManualActionState(item.id, {
+      if (item.review_task_id) {
+        await exposureRadarService.createDraftFeedback(item.review_task_id, buildManualOutcomePayload(outcome, comment, item));
+      }
+      recordManualAction(item, {
         outcome,
         feedbackComment: comment.trim(),
         feedbackAt: new Date().toISOString(),
+        taskStatus: isManualActionHandled(item, manualActionStates[item.id]) ? "done" : "in_progress",
       });
       pushToast(t("exposureRadar.manualFeedback.savedToast"));
     } catch (error) {
@@ -439,7 +493,7 @@ export default function ExposureRadarPage() {
     } finally {
       setFeedbackSavingID(null);
     }
-  }, [pushToast, t, updateManualActionState]);
+  }, [manualActionStates, pushToast, recordManualAction, t]);
 
   const focusRadarItem = useCallback((itemID: string) => {
     setRadarView("all");
@@ -547,6 +601,7 @@ export default function ExposureRadarPage() {
           setActiveWorkbenchID(itemID);
           focusRadarItem(itemID);
         }}
+        onTaskStatus={(item, taskStatus) => recordManualAction(item, taskStatus === "done" ? { taskStatus, handled: true } : { taskStatus })}
       />
 
       <PeopleRadarPanel
@@ -570,7 +625,7 @@ export default function ExposureRadarPage() {
         onCreateDraft={createDraft}
         onMarkHandled={markRadarHandled}
         onSaveMemory={saveRadarMemory}
-        onManualAction={(itemID, patch) => updateManualActionState(itemID, patch)}
+        onManualAction={recordManualAction}
         onSelectReplyAngle={updateSelectedReplyAngle}
         onActiveChange={setActiveWorkbenchID}
         onFocusItem={focusRadarItem}
@@ -619,7 +674,7 @@ export default function ExposureRadarPage() {
                 memoryAccountID={selectedAccountID}
                 onSaveMemory={saveRadarMemory}
                 manualState={manualActionStates[item.id]}
-                onManualAction={(patch) => updateManualActionState(item.id, patch)}
+                onManualAction={(patch) => recordManualAction(item, patch)}
                 feedbackSaving={feedbackSavingID === item.id}
                 onSubmitFeedback={submitManualOutcome}
               />
@@ -681,11 +736,13 @@ function TodayMovesPanel({
   stats,
   activeID,
   onFocus,
+  onTaskStatus,
 }: {
   moves: DailyActionPlanItem[];
   stats: { pending: number; actNow: number; handled: number };
   activeID: string;
   onFocus: (itemID: string) => void;
+  onTaskStatus: (item: ExposureRadarItemApi, taskStatus: DailyTaskStatus) => void;
 }) {
   const { t } = useT();
   const replyMoves = moves.filter((entry) => entry.action === "publish_reply" || entry.action === "generate_reply").length;
@@ -757,6 +814,20 @@ function TodayMovesPanel({
                     <span className="text-[11px] text-[#71767b]">{replyAngle.tone}</span>
                   </div>
                 ) : null}
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-[#2f3336] pt-3">
+                  <Button type="button" size="sm" variant="outline" onClick={() => onTaskStatus(item, "done")}>
+                    <CheckCircle2 className="size-3.5" />
+                    {t("exposureRadar.todayMoves.done")}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onTaskStatus(item, "later")}>
+                    <Clock3 className="size-3.5" />
+                    {t("exposureRadar.todayMoves.later")}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onTaskStatus(item, "skipped")}>
+                    <ShieldAlert className="size-3.5" />
+                    {t("exposureRadar.todayMoves.skip")}
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -798,6 +869,12 @@ function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onF
                   <Users className="size-3.5" />
                   {t(`exposureRadar.peopleRadar.stage.${person.stage}`)}
                 </span>
+                {person.persisted ? (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-2 py-1 text-[11px] font-semibold text-[#c4b5fd]">
+                    <Database className="size-3.5" />
+                    {t("exposureRadar.peopleRadar.history")}
+                  </span>
+                ) : null}
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <MiniStat icon={<Zap className="size-3.5" />} label={t("exposureRadar.peopleRadar.count")} value={String(person.count)} />
@@ -811,6 +888,7 @@ function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onF
                   <span>{person.drafted} {t("exposureRadar.peopleRadar.drafted")}</span>
                   <span>{person.saved} {t("exposureRadar.peopleRadar.saved")}</span>
                   <span>{person.handled} {t("exposureRadar.peopleRadar.handled")}</span>
+                  {person.feedback ? <span>{person.feedback} {t("exposureRadar.peopleRadar.feedback")}</span> : null}
                   {typeof person.followers === "number" && person.followers > 0 ? <span>{formatCompact(person.followers)} {t("exposureRadar.todayMoves.followers")}</span> : null}
                 </div>
               </div>
@@ -869,7 +947,7 @@ function HandlingWorkbenchPanel({
   onCreateDraft: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
   onSaveMemory: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
-  onManualAction: (itemID: string, patch: Partial<ManualActionState>) => void;
+  onManualAction: (item: ExposureRadarItemApi, patch: Partial<ManualActionState>, replyAngle?: ReplyAngleSuggestion) => void;
   onSelectReplyAngle: (itemID: string, angleID: string) => void;
   onActiveChange: (itemID: string) => void;
   onFocusItem: (itemID: string) => void;
@@ -888,7 +966,7 @@ function HandlingWorkbenchPanel({
     if (!activeItem?.generated_comment) return;
     try {
       await navigator.clipboard.writeText(activeItem.generated_comment);
-      onManualAction(activeItem.id, { copied: true });
+      onManualAction(activeItem, { copied: true, taskStatus: "in_progress" }, selectedReplyAngle);
       pushToast(t("exposureRadar.manualAction.copied"));
     } catch {
       pushToast(t("exposureRadar.manualAction.copyFailed"));
@@ -959,7 +1037,7 @@ function HandlingWorkbenchPanel({
                 </Button>
               ) : null}
               {activeItem.url ? (
-                <a href={activeItem.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(activeItem.id, { opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+                <a href={activeItem.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(activeItem, { opened: true, taskStatus: "in_progress" }, selectedReplyAngle)} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
                   {activeItem.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
                   <ExternalLink className="size-3.5" />
                 </a>
@@ -1771,7 +1849,7 @@ function RadarCard({
     if (!generatedComment) return;
     try {
       await navigator.clipboard.writeText(generatedComment);
-      onManualAction({ copied: true });
+      onManualAction({ copied: true, taskStatus: "in_progress" });
       pushToast(t("exposureRadar.manualAction.copied"));
     } catch {
       pushToast(t("exposureRadar.manualAction.copyFailed"));
@@ -1910,7 +1988,7 @@ function RadarCard({
                 {t("exposureRadar.manualAction.copy")}
               </Button>
               {item.url ? (
-                <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
+                <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true, taskStatus: "in_progress" })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
                   {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
                   <ExternalLink className="size-3.5" />
                 </a>
@@ -1934,7 +2012,7 @@ function RadarCard({
             </Button>
           )}
           {!generatedComment && item.url ? (
-            <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
+            <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction({ opened: true, taskStatus: "in_progress" })} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 font-semibold text-white hover:bg-[#1a8cd8]">
               {item.data_quality === "tweet_level" ? t("exposureRadar.card.openPost") : t("exposureRadar.card.openSearch")}
               <ExternalLink className="size-3.5" />
             </a>
@@ -2057,6 +2135,25 @@ function ManualHandlingRecord({
         <ManualRecordField label={t("exposureRadar.manualRecord.replyId")} value={replyID || t("exposureRadar.manualRecord.noReply")} />
         <ManualRecordField label={t("exposureRadar.manualRecord.updated")} value={updatedAt} />
       </div>
+      {manualState?.safetyStatus || manualState?.replyAngleTitle ? (
+        <div className="mt-3 rounded-lg border border-[#2f3336] bg-black p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualRecord.safetyTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{manualState.safetySummary || t("exposureRadar.manualRecord.safetyEmpty")}</p>
+            </div>
+            {manualState.safetyStatus ? (
+              <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${safetyReviewBadgeTone(manualState.safetyStatus)}`}>
+                <ShieldAlert className="size-3.5" />
+                {t(`exposureRadar.safetyReview.status.${manualState.safetyStatus}`)}
+              </span>
+            ) : null}
+          </div>
+          {manualState.replyAngleTitle ? (
+            <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.manualRecord.replyAngle", { angle: manualState.replyAngleTitle })}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 rounded-lg border border-[#2f3336] bg-black p-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
@@ -2535,7 +2632,7 @@ function replyPlanGenerationInstruction(angleID: ReplyAngleID) {
 
 function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>, limit = 6): DailyActionPlanItem[] {
   return items
-    .filter((item) => !isManualActionHandled(item, manualActionStates[item.id]))
+    .filter((item) => !isManualActionHandled(item, manualActionStates[item.id]) && !isDeferredManualTask(manualActionStates[item.id]))
     .map((item) => ({
       item,
       action: dailyActionType(item, manualActionStates[item.id], savedMemoryIDs),
@@ -2554,6 +2651,7 @@ function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates:
 function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>) {
   return items.reduce((acc, item) => {
     const handled = isManualActionHandled(item, manualActionStates[item.id]);
+    if (isDeferredManualTask(manualActionStates[item.id])) return acc;
     const qualityStage = normalizeQualityStage(item.quality_stage, item);
     const tier = normalizeOpportunityTier(item.opportunity_tier);
     if (handled) {
@@ -2791,7 +2889,11 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
 }
 
 function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
-  return Boolean(state?.handled) || item.status === "handled" || item.review_status === "handled";
+  return Boolean(state?.handled) || state?.taskStatus === "done" || item.status === "handled" || item.review_status === "handled";
+}
+
+function isDeferredManualTask(state?: ManualActionState) {
+  return state?.taskStatus === "skipped" || state?.taskStatus === "later";
 }
 
 function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState) {
@@ -2799,6 +2901,8 @@ function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState
 }
 
 function manualRecordStatus(item: ExposureRadarItemApi, state?: ManualActionState) {
+  if (state?.taskStatus === "skipped") return "skipped";
+  if (state?.taskStatus === "later") return "later";
   if (hasManualBackfill(item, state)) return "backfilled";
   if (isManualActionHandled(item, state)) return "handled";
   if (state?.copied || state?.opened || state?.saved) return "in_progress";
@@ -2823,6 +2927,219 @@ function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item
     outcome,
     comment: parts.join(" | "),
   };
+}
+
+function buildManualRecordPayload(
+  item: ExposureRadarItemApi,
+  options: {
+    selectedAccountID: number;
+    selectedBotID: number;
+    patch: Partial<ManualActionState>;
+    safetyReview: SafetyReview;
+    replyAngle?: ReplyAngleSuggestion;
+  },
+): ExposureRadarManualRecordPayload {
+  const patch = options.patch;
+  const taskStatus = patch.taskStatus || (patch.handled ? "done" : patch.copied || patch.opened || patch.saved || patch.outcome ? "in_progress" : undefined);
+  return {
+    bot_id: options.selectedBotID || undefined,
+    x_account_id: options.selectedAccountID || undefined,
+    signal_id: item.id,
+    region: item.region,
+    data_source: item.data_source,
+    data_quality: item.data_quality,
+    tweet_id: item.tweet_id || extractTweetID(item.url || item.id),
+    url: item.url,
+    title: item.title,
+    content: item.content,
+    author_id: item.author_id,
+    author_handle: item.author_handle,
+    author_name: item.author_name,
+    topic_name: item.topic_name,
+    score: item.score,
+    risk_level: item.risk_level,
+    opportunity_type: item.opportunity_type,
+    opportunity_tier: item.opportunity_tier,
+    quality_stage: item.quality_stage,
+    views_per_minute: item.views_per_min,
+    followers_count: item.followers_count,
+    heat_count: item.heat_count,
+    reply_count: item.reply_count,
+    retweet_count: item.retweet_count,
+    like_count: item.like_count,
+    quote_count: item.quote_count,
+    bookmark_count: item.bookmark_count,
+    impression_count: item.impression_count,
+    review_task_id: item.review_task_id,
+    saved_memory_id: item.saved_memory_id,
+    generated_comment: item.generated_comment,
+    task_status: taskStatus,
+    copied: patch.copied,
+    opened: patch.opened,
+    saved: patch.saved,
+    handled: patch.handled,
+    published_url: patch.publishedUrl || item.comment_url,
+    outcome: patch.outcome,
+    feedback_comment: patch.feedbackComment,
+    safety_status: patch.safetyStatus || options.safetyReview.status,
+    safety_summary: patch.safetySummary || options.safetyReview.summary,
+    safety_checks: options.safetyReview.checks.map(safetyCheckToApi),
+    reply_angle_id: patch.replyAngleID || options.replyAngle?.id,
+    reply_angle_title: patch.replyAngleTitle || options.replyAngle?.title,
+  };
+}
+
+function safetyCheckToApi(check: SafetyReviewCheck): ExposureRadarSafetyCheckApi {
+  return {
+    key: check.key,
+    status: check.status,
+    title: check.title,
+    detail: check.detail,
+  };
+}
+
+function mergeManualRecordStates(current: Record<string, ManualActionState>, records: ExposureRadarManualRecordApi[]) {
+  if (!records.length) return current;
+  const next = { ...current };
+  records.forEach((record) => {
+    const existing = next[record.signal_id] || {};
+    const taskStatus = normalizeManualTaskStatus(record.task_status) || existing.taskStatus;
+    const outcome = normalizeManualOutcome(record.outcome) || existing.outcome;
+    next[record.signal_id] = {
+      ...existing,
+      copied: existing.copied || Boolean(record.copied_at),
+      opened: existing.opened || Boolean(record.opened_at),
+      saved: existing.saved || Boolean(record.saved_at || record.saved_memory_id),
+      handled: existing.handled || Boolean(record.handled_at || taskStatus === "done"),
+      persisted: true,
+      publishedUrl: record.published_url || existing.publishedUrl,
+      outcome,
+      feedbackComment: record.feedback_comment || existing.feedbackComment,
+      feedbackAt: record.feedback_at || existing.feedbackAt,
+      taskStatus,
+      safetyStatus: normalizeSafetyReviewStatus(record.safety_status) || existing.safetyStatus,
+      safetySummary: record.safety_summary || existing.safetySummary,
+      replyAngleID: record.reply_angle_id || existing.replyAngleID,
+      replyAngleTitle: record.reply_angle_title || existing.replyAngleTitle,
+      updatedAt: record.updated_at || existing.updatedAt || new Date().toISOString(),
+    };
+  });
+  return next;
+}
+
+function mergePeopleRadar(current: PeopleRadarEntry[], persisted: ExposureRadarPeopleItemApi[]): PeopleRadarEntry[] {
+  if (!persisted.length) return current;
+  const people = new Map<string, PeopleRadarEntry>();
+  current.forEach((person) => people.set(person.key, person));
+  persisted.forEach((person) => {
+    const key = person.key || (person.handle || person.name).toLowerCase();
+    if (!key) return;
+    const latestItem = manualRecordToRadarItem(person.latest_record);
+    const existing = people.get(key);
+    if (!existing) {
+      people.set(key, {
+        key,
+        name: person.name,
+        handle: person.handle,
+        count: person.count,
+        handled: person.handled,
+        drafted: person.latest_record.review_task_id || person.latest_record.generated_comment ? 1 : 0,
+        saved: person.saved,
+        maxScore: person.max_score || person.latest_record.score || 0,
+        totalEngagement: person.total_engagement || publicEngagementCount(latestItem),
+        followers: person.followers || person.latest_record.followers_count,
+        stage: normalizePeopleRadarStage(person.stage),
+        latestItem,
+        persisted: true,
+        feedback: person.feedback,
+      });
+      return;
+    }
+    existing.count = Math.max(existing.count, person.count);
+    existing.handled = Math.max(existing.handled, person.handled);
+    existing.saved = Math.max(existing.saved, person.saved);
+    existing.maxScore = Math.max(existing.maxScore, person.max_score || 0);
+    existing.totalEngagement = Math.max(existing.totalEngagement, person.total_engagement || 0);
+    existing.followers = Math.max(existing.followers || 0, person.followers || 0) || existing.followers;
+    existing.feedback = Math.max(existing.feedback || 0, person.feedback || 0);
+    existing.persisted = true;
+    if (radarItemTimeValue(latestItem) > radarItemTimeValue(existing.latestItem)) {
+      existing.latestItem = latestItem;
+    }
+    existing.stage = peopleRadarStage(existing);
+  });
+  return Array.from(people.values()).sort((a, b) => {
+    const stageDelta = peopleRadarStageWeight(b.stage) - peopleRadarStageWeight(a.stage);
+    if (stageDelta !== 0) return stageDelta;
+    if (a.maxScore !== b.maxScore) return b.maxScore - a.maxScore;
+    if (a.count !== b.count) return b.count - a.count;
+    return b.totalEngagement - a.totalEngagement;
+  });
+}
+
+function manualRecordToRadarItem(record: ExposureRadarManualRecordApi): ExposureRadarItemApi {
+  return {
+    id: record.signal_id,
+    region: record.region === "zh" ? "zh" : "en",
+    data_source: record.data_source || "manual_record",
+    data_quality: record.data_quality || "tweet_level",
+    title: record.title || record.content || record.signal_id,
+    author_handle: record.author_handle,
+    author_name: record.author_name,
+    author_id: record.author_id,
+    content: record.content || record.title || "",
+    url: record.url,
+    tweet_id: record.tweet_id,
+    status: record.task_status || "manual_record",
+    signal_label: "Manual record",
+    topic_name: record.topic_name,
+    views_per_min: record.views_per_minute,
+    heat_count: record.heat_count,
+    followers_count: record.followers_count,
+    like_count: record.like_count,
+    reply_count: record.reply_count,
+    retweet_count: record.retweet_count,
+    quote_count: record.quote_count,
+    bookmark_count: record.bookmark_count,
+    impression_count: record.impression_count,
+    score: record.score || 0,
+    risk_level: record.risk_level || "low",
+    opportunity_type: record.opportunity_type || "manual_record",
+    opportunity_tier: record.opportunity_tier,
+    quality_stage: record.quality_stage,
+    recommended_use: "",
+    reason: "",
+    review_task_id: record.review_task_id,
+    generated_comment: record.generated_comment,
+    comment_url: record.published_url,
+    saved_memory_id: record.saved_memory_id,
+    updated_at: record.updated_at,
+  };
+}
+
+function selectedReplyAngleForItem(item: ExposureRadarItemApi, selectedReplyAngleIDs: Record<string, string>, t: (key: string, params?: Record<string, string | number>) => string) {
+  const suggestions = buildReplyAngleSuggestions(item, t);
+  return suggestions.find((angle) => angle.id === selectedReplyAngleIDs[item.id]) || suggestions[0];
+}
+
+function normalizeManualTaskStatus(value?: string): DailyTaskStatus | undefined {
+  if (value === "todo" || value === "in_progress" || value === "done" || value === "skipped" || value === "later") return value;
+  return undefined;
+}
+
+function normalizeManualOutcome(value?: string): ManualOutcome | undefined {
+  if (value === "effective" || value === "neutral" || value === "ineffective" || value === "not_suitable") return value;
+  return undefined;
+}
+
+function normalizeSafetyReviewStatus(value?: string): SafetyReviewStatus | undefined {
+  if (value === "pass" || value === "watch" || value === "block") return value;
+  return undefined;
+}
+
+function normalizePeopleRadarStage(value?: string): PeopleRadarStage {
+  if (value === "priority" || value === "repeat" || value === "engaged" || value === "new") return value;
+  return "new";
 }
 
 function normalizeOpportunityTier(value?: string) {
@@ -2974,7 +3291,7 @@ function writeManualActionStates(states: Record<string, ManualActionState>) {
       .slice(0, 200);
     window.localStorage.setItem(radarManualActionStorageKey, JSON.stringify(Object.fromEntries(entries)));
   } catch {
-    // Manual handling progress is a local UI aid only.
+    // Local cache keeps the UI responsive while backend records hydrate.
   }
 }
 

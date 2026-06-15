@@ -30,7 +30,7 @@ export function ContentDraftsSection() {
 
   return (
     <SectionShell
-      id="auto-post"
+      id="content-drafts"
       badge={t("marketing.contentDrafts.badge")}
       title={t("marketing.contentDrafts.title")}
       description={t("marketing.contentDrafts.description")}

@@ -212,6 +212,128 @@ export type ExposureRadarManualHandlePayload = {
   note?: string;
 };
 
+export type ExposureRadarSafetyCheckApi = {
+  key: string;
+  status: "pass" | "watch" | "block" | string;
+  title: string;
+  detail: string;
+};
+
+export type ExposureRadarManualRecordPayload = {
+  bot_id?: number;
+  x_account_id?: number;
+  signal_id: string;
+  region?: ExposureRadarRegion;
+  data_source?: string;
+  data_quality?: string;
+  tweet_id?: string;
+  url?: string;
+  title?: string;
+  content?: string;
+  author_id?: string;
+  author_handle?: string;
+  author_name?: string;
+  topic_name?: string;
+  score?: number;
+  risk_level?: string;
+  opportunity_type?: string;
+  opportunity_tier?: string;
+  quality_stage?: string;
+  views_per_minute?: number;
+  followers_count?: number;
+  heat_count?: number;
+  reply_count?: number;
+  retweet_count?: number;
+  like_count?: number;
+  quote_count?: number;
+  bookmark_count?: number;
+  impression_count?: number;
+  review_task_id?: number;
+  saved_memory_id?: number;
+  generated_comment?: string;
+  task_status?: "todo" | "in_progress" | "done" | "skipped" | "later" | string;
+  copied?: boolean;
+  opened?: boolean;
+  saved?: boolean;
+  handled?: boolean;
+  published_url?: string;
+  outcome?: "effective" | "neutral" | "ineffective" | "not_suitable" | string;
+  feedback_comment?: string;
+  safety_status?: string;
+  safety_summary?: string;
+  safety_checks?: ExposureRadarSafetyCheckApi[];
+  reply_angle_id?: string;
+  reply_angle_title?: string;
+};
+
+export type ExposureRadarManualRecordApi = {
+  id: number;
+  bot_id?: number;
+  x_account_id?: number;
+  signal_id: string;
+  region: ExposureRadarRegion | string;
+  data_source?: string;
+  data_quality?: string;
+  tweet_id?: string;
+  url?: string;
+  title?: string;
+  content?: string;
+  author_id?: string;
+  author_handle?: string;
+  author_name?: string;
+  topic_name?: string;
+  score: number;
+  risk_level?: string;
+  opportunity_type?: string;
+  opportunity_tier?: string;
+  quality_stage?: string;
+  views_per_minute?: number;
+  followers_count?: number;
+  heat_count?: number;
+  reply_count?: number;
+  retweet_count?: number;
+  like_count?: number;
+  quote_count?: number;
+  bookmark_count?: number;
+  impression_count?: number;
+  review_task_id?: number;
+  saved_memory_id?: number;
+  generated_comment?: string;
+  task_status?: string;
+  published_url?: string;
+  outcome?: string;
+  feedback_comment?: string;
+  safety_status?: string;
+  safety_summary?: string;
+  safety_checks?: ExposureRadarSafetyCheckApi[];
+  reply_angle_id?: string;
+  reply_angle_title?: string;
+  copied_at?: string;
+  opened_at?: string;
+  saved_at?: string;
+  handled_at?: string;
+  feedback_at?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ExposureRadarPeopleItemApi = {
+  key: string;
+  name: string;
+  handle?: string;
+  count: number;
+  handled: number;
+  copied: number;
+  opened: number;
+  saved: number;
+  feedback: number;
+  max_score: number;
+  total_engagement: number;
+  followers?: number;
+  stage: "priority" | "repeat" | "engaged" | "new" | string;
+  latest_record: ExposureRadarManualRecordApi;
+};
+
 export type ExposureRadarPerformanceData = {
   region: ExposureRadarRegion | "all" | string;
   bot_id?: number;
@@ -361,6 +483,26 @@ export const exposureRadarService = {
   },
   async createDraftFeedback(id: number, payload: ExposureRadarDraftFeedbackPayload) {
     const res = await request.post<ApiResponse<unknown>>(`/exposure-radar/drafts/${id}/feedback`, payload);
+    return res.data.data;
+  },
+  async upsertManualRecord(payload: ExposureRadarManualRecordPayload) {
+    const res = await request.post<ApiResponse<ExposureRadarManualRecordApi>>("/exposure-radar/manual-records", payload);
+    return res.data.data;
+  },
+  async listManualRecords(signalIds: string[]) {
+    const res = await request.get<ApiResponse<{ items: ExposureRadarManualRecordApi[] }>>("/exposure-radar/manual-records", {
+      params: { signal_ids: signalIds.join(",") },
+    });
+    return res.data.data;
+  },
+  async people(params: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {
+    const res = await request.get<ApiResponse<{ items: ExposureRadarPeopleItemApi[] }>>("/exposure-radar/people", {
+      params: {
+        region: params.region || "all",
+        days: params.days || 30,
+        limit: params.limit || 20,
+      },
+    });
     return res.data.data;
   },
   async performance(params: { region?: ExposureRadarRegion | "all"; botId?: number; xAccountId?: number; days?: number }) {

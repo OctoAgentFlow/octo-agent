@@ -961,6 +961,25 @@ func (ctl *AutomationController) ResolveExposureRadarPublishingResult(c *gin.Con
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) RefreshExposureRadarPublishingResults(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ExposureRadarResultRefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.exposureRadarManualService.RefreshPublishingResults(c.Request.Context(), userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ListExposureRadarManualRecords(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {

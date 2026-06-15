@@ -153,6 +153,149 @@ func (s *ExposureRadarManualService) ResolvePublishingResult(ctx context.Context
 	return resp, nil
 }
 
+func (s *ExposureRadarManualService) RefreshPublishingResults(ctx context.Context, userID uint, req dto.ExposureRadarResultRefreshRequest) (*dto.ExposureRadarResultRefreshResponse, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("exposure radar manual service unavailable")
+	}
+	days := req.Days
+	if days <= 0 {
+		days = 7
+	}
+	if days > 30 {
+		days = 30
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	region := firstNonEmpty(normalizeExposureRadarManualRegionForQuery(req.Region), "all")
+	rows, err := s.repo.ListRecent(userID, region, time.Now().UTC().AddDate(0, 0, -days), limit)
+	if err != nil {
+		return nil, err
+	}
+	resp := &dto.ExposureRadarResultRefreshResponse{
+		Region:          region,
+		Days:            days,
+		Limit:           limit,
+		TokenConfigured: strings.TrimSpace(s.xBearerToken) != "",
+		ScannedCount:    len(rows),
+		Items:           []dto.ExposureRadarResultRefreshItem{},
+	}
+	type candidate struct {
+		index     int
+		itemIndex int
+		tweetID   string
+	}
+	candidates := make([]candidate, 0, len(rows))
+	for index := range rows {
+		row := rows[index]
+		item := dto.ExposureRadarResultRefreshItem{
+			SignalID:     row.SignalID,
+			PublishedURL: row.PublishedURL,
+		}
+		if strings.TrimSpace(row.PublishedURL) == "" {
+			item.Status = "skipped"
+			item.Message = "No published reply URL stored for this manual record."
+			resp.SkippedCount++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+		tweetID := extractTweetID(row.PublishedURL)
+		if tweetID == "" {
+			item.Status = "skipped"
+			item.Message = "Published URL does not contain a valid X tweet id."
+			resp.SkippedCount++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+		item.CommentTweetID = tweetID
+		resp.EligibleCount++
+		candidates = append(candidates, candidate{index: index, itemIndex: len(resp.Items), tweetID: tweetID})
+		resp.Items = append(resp.Items, item)
+	}
+	if len(candidates) == 0 {
+		resp.Message = "No published reply URLs were eligible for metric refresh."
+		return resp, nil
+	}
+	if !resp.TokenConfigured {
+		resp.SkippedCount += len(candidates)
+		resp.Message = "X bearer token is not configured, so metrics were not refreshed."
+		for index := range resp.Items {
+			if resp.Items[index].CommentTweetID != "" && resp.Items[index].Status == "" {
+				resp.Items[index].Status = "token_missing"
+				resp.Items[index].Message = resp.Message
+			}
+		}
+		return resp, nil
+	}
+	ids := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		ids = append(ids, candidate.tweetID)
+	}
+	tweets, err := twitter.LookupTweetsByIDs(ctx, s.xBearerToken, ids)
+	if err != nil {
+		resp.FailedCount += len(candidates)
+		resp.Message = err.Error()
+		for index := range resp.Items {
+			if resp.Items[index].CommentTweetID != "" && resp.Items[index].Status == "" {
+				resp.Items[index].Status = "lookup_failed"
+				resp.Items[index].Message = err.Error()
+			}
+		}
+		return resp, nil
+	}
+	tweetByID := make(map[string]twitter.TweetSearchItem, len(tweets))
+	for _, tweet := range tweets {
+		tweetByID[tweet.ID] = tweet
+	}
+	now := time.Now().UTC()
+	for _, candidate := range candidates {
+		if candidate.itemIndex < 0 || candidate.itemIndex >= len(resp.Items) {
+			continue
+		}
+		tweet, ok := tweetByID[candidate.tweetID]
+		if !ok {
+			resp.FailedCount++
+			resp.Items[candidate.itemIndex].Status = "not_found"
+			resp.Items[candidate.itemIndex].Message = "X did not return metrics for this reply tweet."
+			continue
+		}
+		row := &rows[candidate.index]
+		row.ResultImpressionCount = tweet.ImpressionCount
+		row.ResultLikeCount = tweet.LikeCount
+		row.ResultReplyCount = tweet.ReplyCount
+		row.ResultRetweetCount = tweet.RetweetCount
+		row.ResultQuoteCount = tweet.QuoteCount
+		row.ResultBookmarkCount = tweet.BookmarkCount
+		row.ResultScore = exposureRadarResultScore(row)
+		row.ResultCheckedAt = &now
+		if err := s.repo.Save(row); err != nil {
+			resp.FailedCount++
+			resp.Items[candidate.itemIndex].Status = "save_failed"
+			resp.Items[candidate.itemIndex].Message = err.Error()
+			continue
+		}
+		resp.RefreshedCount++
+		resp.Items[candidate.itemIndex].Status = "refreshed"
+		resp.Items[candidate.itemIndex].Message = "Public metrics refreshed from X."
+		resp.Items[candidate.itemIndex].ResultImpressionCount = row.ResultImpressionCount
+		resp.Items[candidate.itemIndex].ResultLikeCount = row.ResultLikeCount
+		resp.Items[candidate.itemIndex].ResultReplyCount = row.ResultReplyCount
+		resp.Items[candidate.itemIndex].ResultRetweetCount = row.ResultRetweetCount
+		resp.Items[candidate.itemIndex].ResultQuoteCount = row.ResultQuoteCount
+		resp.Items[candidate.itemIndex].ResultBookmarkCount = row.ResultBookmarkCount
+		resp.Items[candidate.itemIndex].ResultScore = row.ResultScore
+		resp.Items[candidate.itemIndex].ResultCheckedAt = optionalTimeString(row.ResultCheckedAt)
+	}
+	if resp.Message == "" {
+		resp.Message = fmt.Sprintf("Refreshed %d published reply result(s).", resp.RefreshedCount)
+	}
+	return resp, nil
+}
+
 func (s *ExposureRadarManualService) GetGrowthStrategy(userID uint, region string, botID uint, xAccountID uint) (*dto.ExposureRadarGrowthStrategyItem, error) {
 	item := defaultExposureRadarGrowthStrategyDTO(region, botID, xAccountID)
 	if s == nil || s.strategyRepo == nil {

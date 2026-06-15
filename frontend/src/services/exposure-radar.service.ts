@@ -227,6 +227,34 @@ export type ExposureRadarResultLookupApi = {
   result_bookmark_count?: number;
 };
 
+export type ExposureRadarResultRefreshApi = {
+  region: ExposureRadarRegion | "all" | string;
+  days: number;
+  limit: number;
+  token_configured: boolean;
+  scanned_count: number;
+  eligible_count: number;
+  refreshed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  message?: string;
+  items: Array<{
+    signal_id: string;
+    published_url?: string;
+    comment_tweet_id?: string;
+    status: string;
+    message?: string;
+    result_impression_count?: number;
+    result_like_count?: number;
+    result_reply_count?: number;
+    result_retweet_count?: number;
+    result_quote_count?: number;
+    result_bookmark_count?: number;
+    result_score?: number;
+    result_checked_at?: string;
+  }>;
+};
+
 export type ExposureRadarSafetyCheckApi = {
   key: string;
   status: "pass" | "watch" | "block" | string;
@@ -620,6 +648,10 @@ export const exposureRadarService = {
   },
   async resolveManualResult(payload: { published_url?: string; comment_tweet_id?: string }) {
     const res = await request.post<ApiResponse<ExposureRadarResultLookupApi>>("/exposure-radar/manual-records/resolve-result", payload);
+    return res.data.data;
+  },
+  async refreshManualResults(payload: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {
+    const res = await request.post<ApiResponse<ExposureRadarResultRefreshApi>>("/exposure-radar/manual-records/refresh-results", payload);
     return res.data.data;
   },
   async recentManualRecords(params: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {

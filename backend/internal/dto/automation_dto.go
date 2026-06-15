@@ -676,6 +676,42 @@ type ExposureRadarResultLookupResponse struct {
 	ResultBookmarkCount   *int64 `json:"result_bookmark_count,omitempty"`
 }
 
+type ExposureRadarResultRefreshRequest struct {
+	Region string `json:"region"`
+	Days   int    `json:"days"`
+	Limit  int    `json:"limit"`
+}
+
+type ExposureRadarResultRefreshItem struct {
+	SignalID              string `json:"signal_id"`
+	PublishedURL          string `json:"published_url,omitempty"`
+	CommentTweetID        string `json:"comment_tweet_id,omitempty"`
+	Status                string `json:"status"`
+	Message               string `json:"message,omitempty"`
+	ResultImpressionCount int64  `json:"result_impression_count,omitempty"`
+	ResultLikeCount       int64  `json:"result_like_count,omitempty"`
+	ResultReplyCount      int64  `json:"result_reply_count,omitempty"`
+	ResultRetweetCount    int64  `json:"result_retweet_count,omitempty"`
+	ResultQuoteCount      int64  `json:"result_quote_count,omitempty"`
+	ResultBookmarkCount   int64  `json:"result_bookmark_count,omitempty"`
+	ResultScore           int    `json:"result_score,omitempty"`
+	ResultCheckedAt       string `json:"result_checked_at,omitempty"`
+}
+
+type ExposureRadarResultRefreshResponse struct {
+	Region          string                           `json:"region"`
+	Days            int                              `json:"days"`
+	Limit           int                              `json:"limit"`
+	TokenConfigured bool                             `json:"token_configured"`
+	ScannedCount    int                              `json:"scanned_count"`
+	EligibleCount   int                              `json:"eligible_count"`
+	RefreshedCount  int                              `json:"refreshed_count"`
+	SkippedCount    int                              `json:"skipped_count"`
+	FailedCount     int                              `json:"failed_count"`
+	Message         string                           `json:"message,omitempty"`
+	Items           []ExposureRadarResultRefreshItem `json:"items"`
+}
+
 type ExposureRadarGrowthStrategyRequest struct {
 	BotID          uint     `json:"bot_id"`
 	XAccountID     uint     `json:"x_account_id"`

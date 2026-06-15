@@ -962,6 +962,32 @@ func (ctl *AutomationController) ListExposureRadarManualRecords(c *gin.Context) 
 	response.OK(c, data)
 }
 
+func (ctl *AutomationController) ListRecentExposureRadarManualRecords(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days := 7
+	if raw := strings.TrimSpace(c.Query("days")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+	limit := 100
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	data, err := ctl.exposureRadarManualService.ListRecentRecords(userID, c.Query("region"), days, limit)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 func (ctl *AutomationController) ListExposureRadarPeople(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -986,6 +1012,111 @@ func (ctl *AutomationController) ListExposureRadarPeople(c *gin.Context) {
 		return
 	}
 	response.OK(c, data)
+}
+
+func (ctl *AutomationController) GetExposureRadarGrowthStrategy(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	botID := parseUintQuery(c.Query("bot_id"))
+	xAccountID := parseUintQuery(c.Query("x_account_id"))
+	data, err := ctl.exposureRadarManualService.GetGrowthStrategy(userID, c.Query("region"), botID, xAccountID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpsertExposureRadarGrowthStrategy(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ExposureRadarGrowthStrategyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	data, err := ctl.exposureRadarManualService.UpsertGrowthStrategy(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) UpsertExposureRadarPeopleNote(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req dto.ExposureRadarPeopleNoteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.AuthorHandle) == "" {
+		req.AuthorHandle = c.Param("handle")
+	}
+	data, err := ctl.exposureRadarManualService.UpsertPeopleNote(userID, req)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ExposureRadarWeeklyReview(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days := 7
+	if raw := strings.TrimSpace(c.Query("days")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+	data, err := ctl.exposureRadarManualService.WeeklyReview(userID, c.Query("region"), days)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func (ctl *AutomationController) ExposureRadarSafetyCenter(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	days := 7
+	if raw := strings.TrimSpace(c.Query("days")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+	data, err := ctl.exposureRadarManualService.SafetyCenter(userID, c.Query("region"), days)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
+func parseUintQuery(raw string) uint {
+	value, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return uint(value)
 }
 
 func (ctl *AutomationController) DeleteCommentDraft(c *gin.Context) {

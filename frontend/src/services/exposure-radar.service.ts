@@ -259,6 +259,13 @@ export type ExposureRadarManualRecordPayload = {
   published_url?: string;
   outcome?: "effective" | "neutral" | "ineffective" | "not_suitable" | string;
   feedback_comment?: string;
+  result_impression_count?: number;
+  result_like_count?: number;
+  result_reply_count?: number;
+  result_retweet_count?: number;
+  result_quote_count?: number;
+  result_bookmark_count?: number;
+  result_notes?: string;
   safety_status?: string;
   safety_summary?: string;
   safety_checks?: ExposureRadarSafetyCheckApi[];
@@ -303,6 +310,15 @@ export type ExposureRadarManualRecordApi = {
   published_url?: string;
   outcome?: string;
   feedback_comment?: string;
+  result_impression_count?: number;
+  result_like_count?: number;
+  result_reply_count?: number;
+  result_retweet_count?: number;
+  result_quote_count?: number;
+  result_bookmark_count?: number;
+  result_notes?: string;
+  result_score?: number;
+  result_checked_at?: string;
   safety_status?: string;
   safety_summary?: string;
   safety_checks?: ExposureRadarSafetyCheckApi[];
@@ -331,7 +347,99 @@ export type ExposureRadarPeopleItemApi = {
   total_engagement: number;
   followers?: number;
   stage: "priority" | "repeat" | "engaged" | "new" | string;
+  crm_stage?: string;
+  notes?: string;
+  tags?: string[];
+  last_interaction_at?: string;
+  crm_updated_at?: string;
   latest_record: ExposureRadarManualRecordApi;
+};
+
+export type ExposureRadarGrowthStrategyApi = {
+  id?: number;
+  bot_id?: number;
+  x_account_id?: number;
+  region: ExposureRadarRegion | string;
+  target_audience?: string;
+  primary_goal?: string;
+  core_topics: string[];
+  avoid_topics: string[];
+  competitors: string[];
+  reply_style: "operator_observation" | "light_question" | "peer_experience" | "caution_note" | string;
+  daily_move_limit: number;
+  safety_mode: "conservative" | "balanced" | "growth" | string;
+  operator_notes?: string;
+  last_reviewed_summary?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ExposureRadarGrowthStrategyPayload = {
+  bot_id?: number;
+  x_account_id?: number;
+  region: ExposureRadarRegion;
+  target_audience?: string;
+  primary_goal?: string;
+  core_topics?: string[];
+  avoid_topics?: string[];
+  competitors?: string[];
+  reply_style?: string;
+  daily_move_limit?: number;
+  safety_mode?: string;
+  operator_notes?: string;
+};
+
+export type ExposureRadarPeopleNotePayload = {
+  region?: ExposureRadarRegion | "all";
+  author_handle: string;
+  author_name?: string;
+  stage?: string;
+  tags?: string[];
+  notes?: string;
+  last_signal_id?: string;
+};
+
+export type ExposureRadarPeopleNoteApi = {
+  id?: number;
+  region: string;
+  author_handle: string;
+  author_name?: string;
+  stage?: string;
+  tags: string[];
+  notes?: string;
+  last_signal_id?: string;
+  last_interaction_at?: string;
+  updated_at?: string;
+};
+
+export type ExposureRadarWeeklyReviewData = {
+  region: string;
+  days: number;
+  generated_at: string;
+  total_records: number;
+  handled_count: number;
+  published_count: number;
+  effective_count: number;
+  negative_count: number;
+  completion_rate: number;
+  effective_rate: number;
+  average_result_score: number;
+  top_topics: Array<{ topic_name: string; count: number; effective: number }>;
+  top_people: Array<{ handle: string; name?: string; count: number }>;
+  recommendations: string[];
+};
+
+export type ExposureRadarSafetyCenterData = {
+  region: string;
+  days: number;
+  generated_at: string;
+  total_records: number;
+  pass_count: number;
+  watch_count: number;
+  block_count: number;
+  promotion_smell_count: number;
+  risky_claim_count: number;
+  warnings: string[];
 };
 
 export type ExposureRadarPerformanceData = {
@@ -495,6 +603,48 @@ export const exposureRadarService = {
     });
     return res.data.data;
   },
+  async recentManualRecords(params: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {
+    const res = await request.get<ApiResponse<{ items: ExposureRadarManualRecordApi[] }>>("/exposure-radar/manual-records/recent", {
+      params: {
+        region: params.region || "all",
+        days: params.days || 7,
+        limit: params.limit || 100,
+      },
+    });
+    return res.data.data;
+  },
+  async growthStrategy(params: { region: ExposureRadarRegion; botId?: number; xAccountId?: number }) {
+    const res = await request.get<ApiResponse<ExposureRadarGrowthStrategyApi>>("/exposure-radar/strategy", {
+      params: {
+        region: params.region,
+        bot_id: params.botId || undefined,
+        x_account_id: params.xAccountId || undefined,
+      },
+    });
+    return res.data.data;
+  },
+  async saveGrowthStrategy(payload: ExposureRadarGrowthStrategyPayload) {
+    const res = await request.put<ApiResponse<ExposureRadarGrowthStrategyApi>>("/exposure-radar/strategy", payload);
+    return res.data.data;
+  },
+  async weeklyReview(params: { region?: ExposureRadarRegion | "all"; days?: number }) {
+    const res = await request.get<ApiResponse<ExposureRadarWeeklyReviewData>>("/exposure-radar/weekly-review", {
+      params: {
+        region: params.region || "all",
+        days: params.days || 7,
+      },
+    });
+    return res.data.data;
+  },
+  async safetyCenter(params: { region?: ExposureRadarRegion | "all"; days?: number }) {
+    const res = await request.get<ApiResponse<ExposureRadarSafetyCenterData>>("/exposure-radar/safety-center", {
+      params: {
+        region: params.region || "all",
+        days: params.days || 7,
+      },
+    });
+    return res.data.data;
+  },
   async people(params: { region?: ExposureRadarRegion | "all"; days?: number; limit?: number }) {
     const res = await request.get<ApiResponse<{ items: ExposureRadarPeopleItemApi[] }>>("/exposure-radar/people", {
       params: {
@@ -503,6 +653,11 @@ export const exposureRadarService = {
         limit: params.limit || 20,
       },
     });
+    return res.data.data;
+  },
+  async savePeopleNote(payload: ExposureRadarPeopleNotePayload) {
+    const handle = payload.author_handle.replace(/^@/, "");
+    const res = await request.put<ApiResponse<ExposureRadarPeopleNoteApi>>(`/exposure-radar/people/${encodeURIComponent(handle)}/note`, payload);
     return res.data.data;
   },
   async performance(params: { region?: ExposureRadarRegion | "all"; botId?: number; xAccountId?: number; days?: number }) {

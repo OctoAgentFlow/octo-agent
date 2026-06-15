@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, Sparkles, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { broadcastPageRefreshComplete, subscribePageRefreshRequest } from "@/lib
 import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
-import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticIssueApi, type ExposureRadarDiagnosticsApi, type ExposureRadarItemApi, type ExposureRadarManualRecordApi, type ExposureRadarManualRecordPayload, type ExposureRadarPeopleItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion, type ExposureRadarSafetyCheckApi } from "@/services/exposure-radar.service";
+import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticIssueApi, type ExposureRadarDiagnosticsApi, type ExposureRadarGrowthStrategyApi, type ExposureRadarItemApi, type ExposureRadarManualRecordApi, type ExposureRadarManualRecordPayload, type ExposureRadarPeopleItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion, type ExposureRadarSafetyCenterData, type ExposureRadarSafetyCheckApi, type ExposureRadarWeeklyReviewData } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -33,7 +33,7 @@ type DailyActionPlanItem = {
   priority: number;
 };
 type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
-type PeopleRadarStage = "priority" | "repeat" | "engaged" | "new";
+type PeopleRadarStage = "priority" | "repeat" | "engaged" | "watch" | "avoid" | "new";
 type PeopleRadarEntry = {
   key: string;
   name: string;
@@ -49,6 +49,10 @@ type PeopleRadarEntry = {
   latestItem: ExposureRadarItemApi;
   persisted?: boolean;
   feedback?: number;
+  crmStage?: string;
+  notes?: string;
+  tags?: string[];
+  lastInteractionAt?: string;
 };
 type OpportunityExplanation = {
   fit: string;
@@ -98,7 +102,28 @@ type ManualActionState = {
   safetySummary?: string;
   replyAngleID?: string;
   replyAngleTitle?: string;
+  resultImpressionCount?: number;
+  resultLikeCount?: number;
+  resultReplyCount?: number;
+  resultRetweetCount?: number;
+  resultQuoteCount?: number;
+  resultBookmarkCount?: number;
+  resultNotes?: string;
+  resultScore?: number;
+  resultCheckedAt?: string;
   updatedAt?: string;
+};
+
+type StrategyFormState = {
+  targetAudience: string;
+  primaryGoal: string;
+  coreTopics: string;
+  avoidTopics: string;
+  competitors: string;
+  replyStyle: string;
+  dailyMoveLimit: number;
+  safetyMode: string;
+  operatorNotes: string;
 };
 
 const hourOptions = [1, 2, 4, 8];
@@ -154,6 +179,10 @@ export default function ExposureRadarPage() {
   const [data, setData] = useState<ExposureRadarData | null>(null);
   const [performance, setPerformance] = useState<ExposureRadarPerformanceData | null>(null);
   const [archive, setArchive] = useState<ExposureRadarArchiveData | null>(null);
+  const [growthStrategy, setGrowthStrategy] = useState<ExposureRadarGrowthStrategyApi | null>(null);
+  const [weeklyReview, setWeeklyReview] = useState<ExposureRadarWeeklyReviewData | null>(null);
+  const [safetyCenter, setSafetyCenter] = useState<ExposureRadarSafetyCenterData | null>(null);
+  const [recentManualRecords, setRecentManualRecords] = useState<ExposureRadarManualRecordApi[]>([]);
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [selectedAccountID, setSelectedAccountID] = useState(0);
@@ -169,6 +198,8 @@ export default function ExposureRadarPage() {
   const [persistedPeople, setPersistedPeople] = useState<ExposureRadarPeopleItemApi[]>([]);
   const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
   const [selectedReplyAngleIDs, setSelectedReplyAngleIDs] = useState<Record<string, string>>({});
+  const [strategySaving, setStrategySaving] = useState(false);
+  const [peopleNoteSavingKey, setPeopleNoteSavingKey] = useState("");
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
@@ -258,10 +289,14 @@ export default function ExposureRadarPage() {
   const load = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [next, perf, dailyArchive] = await Promise.all([
+      const [next, perf, dailyArchive, strategy, review, safety, recentRecords] = await Promise.all([
         exposureRadarService.list({ region, botId: selectedBotID, xAccountId: selectedAccountID, hours, maxFans, minHotCount, limit: 60 }),
         exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
         exposureRadarService.archive({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 }),
+        exposureRadarService.growthStrategy({ region, botId: selectedBotID, xAccountId: selectedAccountID }),
+        exposureRadarService.weeklyReview({ region, days: 7 }),
+        exposureRadarService.safetyCenter({ region, days: 7 }),
+        exposureRadarService.recentManualRecords({ region, days: 7, limit: 100 }),
       ]);
       const nextRanks = new Map(next.items.map((item, index) => [item.id, index + 1]));
       const rankStorageKey = radarRankStorageKey(region, hours, maxFans, minHotCount);
@@ -286,6 +321,10 @@ export default function ExposureRadarPage() {
       setData(next);
       setPerformance(perf);
       setArchive(dailyArchive);
+      setGrowthStrategy(strategy);
+      setWeeklyReview(review);
+      setSafetyCenter(safety);
+      setRecentManualRecords(recentRecords.items || []);
       setLastRefreshedAt(new Date().toISOString());
       setLoadState("ready");
       void hydrateManualWorkspace(next.items);
@@ -325,6 +364,54 @@ export default function ExposureRadarPage() {
       })();
     });
   }, [load]);
+
+  const saveGrowthStrategy = useCallback(async (form: StrategyFormState) => {
+    setStrategySaving(true);
+    try {
+      const saved = await exposureRadarService.saveGrowthStrategy({
+        bot_id: selectedBotID || undefined,
+        x_account_id: selectedAccountID || undefined,
+        region,
+        target_audience: form.targetAudience,
+        primary_goal: form.primaryGoal,
+        core_topics: parseCommaList(form.coreTopics),
+        avoid_topics: parseCommaList(form.avoidTopics),
+        competitors: parseCommaList(form.competitors).map((value) => value.replace(/^@/, "")),
+        reply_style: form.replyStyle,
+        daily_move_limit: form.dailyMoveLimit,
+        safety_mode: form.safetyMode,
+        operator_notes: form.operatorNotes,
+      });
+      setGrowthStrategy(saved);
+      pushToast(t("exposureRadar.strategy.saved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.strategy.saveFailed") : t("exposureRadar.strategy.saveFailed"));
+    } finally {
+      setStrategySaving(false);
+    }
+  }, [pushToast, region, selectedAccountID, selectedBotID, t]);
+
+  const savePeopleNote = useCallback(async (person: PeopleRadarEntry, stage: string, notes: string, tags: string) => {
+    if (!person.handle) return;
+    setPeopleNoteSavingKey(person.key);
+    try {
+      await exposureRadarService.savePeopleNote({
+        region,
+        author_handle: person.handle,
+        author_name: person.name,
+        stage,
+        tags: parseCommaList(tags),
+        notes,
+        last_signal_id: person.latestItem.id,
+      });
+      pushToast(t("exposureRadar.peopleRadar.noteSaved"));
+      void hydrateManualWorkspace(data?.items || []);
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.peopleRadar.noteSaveFailed") : t("exposureRadar.peopleRadar.noteSaveFailed"));
+    } finally {
+      setPeopleNoteSavingKey("");
+    }
+  }, [data?.items, hydrateManualWorkspace, pushToast, region, t]);
 
   const items = useMemo(() => data?.items || [], [data?.items]);
   const metrics = useMemo(() => {
@@ -495,6 +582,34 @@ export default function ExposureRadarPage() {
     }
   }, [manualActionStates, pushToast, recordManualAction, t]);
 
+  const submitManualResult = useCallback(async (item: ExposureRadarItemApi, result: {
+    impressions?: number;
+    likes?: number;
+    replies?: number;
+    reposts?: number;
+    quotes?: number;
+    bookmarks?: number;
+    notes?: string;
+  }) => {
+    const patch: Partial<ManualActionState> = {
+      resultImpressionCount: result.impressions,
+      resultLikeCount: result.likes,
+      resultReplyCount: result.replies,
+      resultRetweetCount: result.reposts,
+      resultQuoteCount: result.quotes,
+      resultBookmarkCount: result.bookmarks,
+      resultNotes: result.notes,
+      resultCheckedAt: new Date().toISOString(),
+      taskStatus: isManualActionHandled(item, manualActionStates[item.id]) ? "done" : "in_progress",
+    };
+    recordManualAction(item, patch);
+    pushToast(t("exposureRadar.resultTracking.savedToast"));
+    void Promise.all([
+      exposureRadarService.weeklyReview({ region, days: 7 }).then(setWeeklyReview),
+      exposureRadarService.recentManualRecords({ region, days: 7, limit: 100 }).then((records) => setRecentManualRecords(records.items || [])),
+    ]).catch(() => undefined);
+  }, [manualActionStates, pushToast, recordManualAction, region, t]);
+
   const focusRadarItem = useCallback((itemID: string) => {
     setRadarView("all");
     if (typeof window === "undefined") return;
@@ -593,6 +708,28 @@ export default function ExposureRadarPage() {
         </div>
       </Card>
 
+      <FirstDayLaunchPanel
+        selectedAccountID={selectedAccountID}
+        selectedBotID={selectedBotID}
+        strategy={growthStrategy}
+        moves={todayMoves}
+        recentRecords={recentManualRecords}
+      />
+
+      <StrategySetupPanel
+        strategy={growthStrategy}
+        region={region}
+        saving={strategySaving}
+        onSave={saveGrowthStrategy}
+      />
+
+      <GrowthReviewPanel
+        review={weeklyReview}
+        safety={safetyCenter}
+        recentRecords={recentManualRecords}
+        timeZone={timeZone}
+      />
+
       <TodayMovesPanel
         moves={todayMoves}
         stats={workbenchStats}
@@ -606,6 +743,8 @@ export default function ExposureRadarPage() {
 
       <PeopleRadarPanel
         people={peopleRadar}
+        savingKey={peopleNoteSavingKey}
+        onSaveNote={savePeopleNote}
         onFocus={(itemID) => {
           setActiveWorkbenchID(itemID);
           focusRadarItem(itemID);
@@ -677,6 +816,7 @@ export default function ExposureRadarPage() {
                 onManualAction={(patch) => recordManualAction(item, patch)}
                 feedbackSaving={feedbackSavingID === item.id}
                 onSubmitFeedback={submitManualOutcome}
+                onSubmitResult={submitManualResult}
               />
             ))}
           </div>
@@ -727,6 +867,183 @@ function NumberButtons({ label, values, value, suffix, formatter, onChange, disa
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FirstDayLaunchPanel({
+  selectedAccountID,
+  selectedBotID,
+  strategy,
+  moves,
+  recentRecords,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+}) {
+  const { t } = useT();
+  const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
+  const handledCount = recentRecords.filter((record) => record.handled_at || record.task_status === "done").length;
+  const resultCount = recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  const steps = [
+    { key: "account", done: selectedAccountID > 0 && selectedBotID > 0 },
+    { key: "strategy", done: strategyReady },
+    { key: "queue", done: moves.length > 0 },
+    { key: "result", done: resultCount > 0 || handledCount > 0 },
+  ];
+  const doneCount = steps.filter((step) => step.done).length;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.firstDay.title")} description={t("exposureRadar.firstDay.description")} className="mb-0" />
+        <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-right">
+          <p className="text-[11px] text-[#71767b]">{t("exposureRadar.firstDay.progress")}</p>
+          <p className="text-2xl font-semibold text-white">{doneCount}/4</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={step.key} className={`rounded-2xl border p-4 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#2f3336] text-xs font-semibold text-[#8b98a5]">{index + 1}</span>
+              {step.done ? <CheckCircle2 className="size-4 text-[#7ee0b5]" /> : <Clock3 className="size-4 text-[#71767b]" />}
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.${step.key}.title`)}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.${step.key}.description`)}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function StrategySetupPanel({ strategy, region, saving, onSave }: { strategy: ExposureRadarGrowthStrategyApi | null; region: ExposureRadarRegion; saving: boolean; onSave: (form: StrategyFormState) => void }) {
+  const { t } = useT();
+  const [form, setForm] = useState<StrategyFormState>(() => strategyFormFromApi(strategy));
+  useEffect(() => {
+    setForm(strategyFormFromApi(strategy));
+  }, [strategy]);
+  const setField = <K extends keyof StrategyFormState,>(key: K, value: StrategyFormState[K]) => setForm((current) => ({ ...current, [key]: value }));
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.strategy.title")} description={t("exposureRadar.strategy.description")} className="mb-0" />
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+          <SlidersHorizontal className="size-3.5" />
+          {t(`exposureRadar.region.${region}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <StrategyInput label={t("exposureRadar.strategy.targetAudience")} value={form.targetAudience} onChange={(value) => setField("targetAudience", value)} placeholder={t("exposureRadar.strategy.targetAudiencePlaceholder")} />
+        <label>
+          <span className="text-xs font-semibold text-[#8b98a5]">{t("exposureRadar.strategy.primaryGoal")}</span>
+          <select value={form.primaryGoal} onChange={(event) => setField("primaryGoal", event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]">
+            {["awareness", "relationships", "traffic", "community", "research"].map((option) => (
+              <option key={option} value={option}>{t(`exposureRadar.strategy.goal.${option}`)}</option>
+            ))}
+          </select>
+        </label>
+        <StrategyInput label={t("exposureRadar.strategy.coreTopics")} value={form.coreTopics} onChange={(value) => setField("coreTopics", value)} placeholder={t("exposureRadar.strategy.coreTopicsPlaceholder")} />
+        <StrategyInput label={t("exposureRadar.strategy.avoidTopics")} value={form.avoidTopics} onChange={(value) => setField("avoidTopics", value)} placeholder={t("exposureRadar.strategy.avoidTopicsPlaceholder")} />
+        <StrategyInput label={t("exposureRadar.strategy.competitors")} value={form.competitors} onChange={(value) => setField("competitors", value)} placeholder={t("exposureRadar.strategy.competitorsPlaceholder")} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label>
+            <span className="text-xs font-semibold text-[#8b98a5]">{t("exposureRadar.strategy.replyStyle")}</span>
+            <select value={form.replyStyle} onChange={(event) => setField("replyStyle", event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]">
+              {["operator_observation", "light_question", "peer_experience", "caution_note"].map((option) => (
+                <option key={option} value={option}>{t(`exposureRadar.strategy.replyStyle.${option}`)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#8b98a5]">{t("exposureRadar.strategy.dailyMoveLimit")}</span>
+            <input inputMode="numeric" value={String(form.dailyMoveLimit)} onChange={(event) => setField("dailyMoveLimit", Math.max(1, Math.min(50, Number(event.target.value.replace(/[^\d]/g, "")) || 1)))} className="mt-2 h-10 w-full rounded-xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]" />
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#8b98a5]">{t("exposureRadar.strategy.safetyMode")}</span>
+            <select value={form.safetyMode} onChange={(event) => setField("safetyMode", event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none focus:border-[#1d9bf0]">
+              {["conservative", "balanced", "growth"].map((option) => (
+                <option key={option} value={option}>{t(`exposureRadar.strategy.safetyMode.${option}`)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end">
+        <StrategyInput label={t("exposureRadar.strategy.operatorNotes")} value={form.operatorNotes} onChange={(value) => setField("operatorNotes", value)} placeholder={t("exposureRadar.strategy.operatorNotesPlaceholder")} />
+        <Button type="button" disabled={saving} onClick={() => onSave(form)} className="shrink-0">
+          {saving ? <RefreshCw className="size-4 animate-spin" /> : <Target className="size-4" />}
+          {t("exposureRadar.strategy.save")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function GrowthReviewPanel({ review, safety, recentRecords, timeZone }: { review: ExposureRadarWeeklyReviewData | null; safety: ExposureRadarSafetyCenterData | null; recentRecords: ExposureRadarManualRecordApi[]; timeZone: string }) {
+  const { t } = useT();
+  const latestResult = recentRecords.find((record) => record.result_checked_at || record.result_score);
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("exposureRadar.weeklyReview.title")} description={t("exposureRadar.weeklyReview.description")} />
+        <div className="grid gap-3 sm:grid-cols-4">
+          <ActionPlanMetric label={t("exposureRadar.weeklyReview.metric.handled")} value={review?.handled_count || 0} />
+          <ActionPlanMetric label={t("exposureRadar.weeklyReview.metric.published")} value={review?.published_count || 0} />
+          <ActionPlanMetric label={t("exposureRadar.weeklyReview.metric.effective")} value={review ? `${Math.round((review.effective_rate || 0) * 100)}%` : "0%"} />
+          <ActionPlanMetric label={t("exposureRadar.weeklyReview.metric.resultScore")} value={review ? Math.round(review.average_result_score || 0) : 0} />
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <ReviewList title={t("exposureRadar.weeklyReview.topTopics")} items={(review?.top_topics || []).map((topic) => `${topic.topic_name} · ${topic.count}/${topic.effective}`)} empty={t("exposureRadar.weeklyReview.empty")} />
+          <ReviewList title={t("exposureRadar.weeklyReview.recommendations")} items={review?.recommendations || []} empty={t("exposureRadar.weeklyReview.empty")} />
+        </div>
+      </Card>
+      <Card className="bg-[#0f1419]">
+        <CardHeader title={t("exposureRadar.safetyCenter.title")} description={t("exposureRadar.safetyCenter.description")} />
+        <div className="grid grid-cols-3 gap-2">
+          <ActionPlanMetric label={t("exposureRadar.safetyCenter.pass")} value={safety?.pass_count || 0} />
+          <ActionPlanMetric label={t("exposureRadar.safetyCenter.watch")} value={safety?.watch_count || 0} />
+          <ActionPlanMetric label={t("exposureRadar.safetyCenter.block")} value={safety?.block_count || 0} />
+        </div>
+        <ReviewList title={t("exposureRadar.safetyCenter.warnings")} items={safety?.warnings || []} empty={t("exposureRadar.safetyCenter.empty")} />
+        {latestResult ? (
+          <p className="mt-3 text-xs leading-5 text-[#71767b]">
+            {t("exposureRadar.weeklyReview.latestResult", { time: latestResult.result_checked_at ? formatDateTime(latestResult.result_checked_at, timeZone) : "-", score: latestResult.result_score || 0 })}
+          </p>
+        ) : null}
+      </Card>
+    </div>
+  );
+}
+
+function StrategyInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <label className="min-w-0 flex-1">
+      <span className="text-xs font-semibold text-[#8b98a5]">{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-2 h-10 w-full rounded-xl border border-[#2f3336] bg-black px-3 text-sm text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]" />
+    </label>
+  );
+}
+
+function ReviewList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs font-semibold text-[#e7e9ea]">{title}</p>
+      {items.length ? (
+        <ul className="mt-2 space-y-2">
+          {items.slice(0, 5).map((item, index) => (
+            <li key={`${item}-${index}`} className="flex gap-2 text-xs leading-5 text-[#8b98a5]">
+              <span className="mt-1 size-1.5 shrink-0 rounded-full bg-[#1d9bf0]" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-[#71767b]">{empty}</p>
+      )}
     </div>
   );
 }
@@ -837,7 +1154,17 @@ function TodayMovesPanel({
   );
 }
 
-function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onFocus: (itemID: string) => void }) {
+function PeopleRadarPanel({
+  people,
+  savingKey,
+  onSaveNote,
+  onFocus,
+}: {
+  people: PeopleRadarEntry[];
+  savingKey: string;
+  onSaveNote: (person: PeopleRadarEntry, stage: string, notes: string, tags: string) => void;
+  onFocus: (itemID: string) => void;
+}) {
   const { t } = useT();
   const priorityCount = people.filter((person) => person.stage === "priority").length;
   const repeatCount = people.filter((person) => person.stage === "repeat").length;
@@ -859,7 +1186,24 @@ function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onF
       ) : (
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
           {people.slice(0, 6).map((person) => (
-            <div key={person.key} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <PeopleRadarCard key={`${person.key}-${person.crmStage || person.stage}-${person.notes || ""}-${(person.tags || []).join("|")}`} person={person} saving={savingKey === person.key} onSaveNote={onSaveNote} onFocus={onFocus} />
+          ))}
+        </div>
+      )}
+      {repeatCount > 0 ? (
+        <p className="mt-3 text-xs leading-5 text-[#71767b]">{t("exposureRadar.peopleRadar.repeatHint", { count: repeatCount })}</p>
+      ) : null}
+    </Card>
+  );
+}
+
+function PeopleRadarCard({ person, saving, onSaveNote, onFocus }: { person: PeopleRadarEntry; saving: boolean; onSaveNote: (person: PeopleRadarEntry, stage: string, notes: string, tags: string) => void; onFocus: (itemID: string) => void }) {
+  const { t } = useT();
+  const [stage, setStage] = useState(person.crmStage || person.stage || "new");
+  const [notes, setNotes] = useState(person.notes || "");
+  const [tags, setTags] = useState((person.tags || []).join(", "));
+  return (
+    <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#e7e9ea]">{person.name}</p>
@@ -904,14 +1248,28 @@ function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onF
                   </a>
                 ) : null}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {repeatCount > 0 ? (
-        <p className="mt-3 text-xs leading-5 text-[#71767b]">{t("exposureRadar.peopleRadar.repeatHint", { count: repeatCount })}</p>
-      ) : null}
-    </Card>
+              <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label>
+                    <span className="text-[11px] text-[#71767b]">{t("exposureRadar.peopleRadar.crmStage")}</span>
+                    <select value={stage} onChange={(event) => setStage(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#2f3336] bg-black px-2 text-xs font-semibold text-[#e7e9ea] outline-none focus:border-[#1d9bf0]">
+                      {["priority", "watch", "engaged", "avoid", "new"].map((option) => (
+                        <option key={option} value={option}>{t(`exposureRadar.peopleRadar.crm.${option}`)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="text-[11px] text-[#71767b]">{t("exposureRadar.peopleRadar.tags")}</span>
+                    <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={t("exposureRadar.peopleRadar.tagsPlaceholder")} className="mt-1 h-9 w-full rounded-lg border border-[#2f3336] bg-black px-2 text-xs text-[#e7e9ea] outline-none focus:border-[#1d9bf0]" />
+                  </label>
+                </div>
+                <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t("exposureRadar.peopleRadar.notesPlaceholder")} className="mt-2 h-9 w-full rounded-lg border border-[#2f3336] bg-black px-2 text-xs text-[#e7e9ea] outline-none focus:border-[#1d9bf0]" />
+                <Button type="button" size="sm" variant="outline" disabled={saving || !person.handle} onClick={() => onSaveNote(person, stage, notes, tags)} className="mt-2">
+                  {saving ? <RefreshCw className="size-3.5 animate-spin" /> : <Database className="size-3.5" />}
+                  {t("exposureRadar.peopleRadar.saveNote")}
+                </Button>
+              </div>
+    </div>
   );
 }
 
@@ -1024,6 +1382,7 @@ function HandlingWorkbenchPanel({
             ) : null}
             {selectedReplyAngle ? <ReplyPlanCard item={activeItem} replyAngle={selectedReplyAngle} /> : null}
             <SafetyReviewPanel item={activeItem} replyAngle={selectedReplyAngle} />
+            <ReplyQualityPanel item={activeItem} replyAngle={selectedReplyAngle} generated={activeItem.generated_comment || ""} />
             <div className="mt-4 flex flex-wrap gap-2">
               {activeItem.generated_comment ? (
                 <Button type="button" size="sm" onClick={() => void copyWorkbenchReply()}>
@@ -1104,7 +1463,7 @@ function HandlingWorkbenchPanel({
   );
 }
 
-function ActionPlanMetric({ label, value }: { label: string; value: number }) {
+function ActionPlanMetric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="min-w-24 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
       <p className="text-[11px] text-[#71767b]">{label}</p>
@@ -1252,6 +1611,42 @@ function SafetyReviewPanel({ item, replyAngle }: { item: ExposureRadarItemApi; r
                 <p className="text-xs font-semibold text-[#e7e9ea]">{check.title}</p>
                 <p className="mt-1 text-[11px] leading-5 text-[#8b98a5]">{check.detail}</p>
               </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReplyQualityPanel({ item, replyAngle, generated }: { item: ExposureRadarItemApi; replyAngle?: ReplyAngleSuggestion; generated: string }) {
+  const { t } = useT();
+  const checks = [
+    { key: "context", pass: item.data_quality === "tweet_level" },
+    { key: "angle", pass: Boolean(replyAngle) },
+    { key: "length", pass: !generated || generated.length <= 240 },
+    { key: "noPitch", pass: !generated || !hasPromotionalSmell(generated) },
+  ];
+  const passed = checks.filter((check) => check.pass).length;
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.replyQuality.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.replyQuality.description")}</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-[11px] font-semibold text-[#8ecdf8]">
+          <Gauge className="size-3.5" />
+          {passed}/{checks.length}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {checks.map((check) => (
+          <div key={check.key} className="flex items-start gap-2 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+            {check.pass ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#7ee0b5]" /> : <Info className="mt-0.5 size-3.5 shrink-0 text-[#f6d96b]" />}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.replyQuality.${check.key}.title`)}</p>
+              <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.replyQuality.${check.key}.description`)}</p>
             </div>
           </div>
         ))}
@@ -1800,6 +2195,7 @@ function RadarCard({
   onManualAction,
   feedbackSaving,
   onSubmitFeedback,
+  onSubmitResult,
 }: {
   item: ExposureRadarItemApi;
   rank: number;
@@ -1819,6 +2215,7 @@ function RadarCard({
   onManualAction: (patch: Partial<ManualActionState>) => void;
   feedbackSaving: boolean;
   onSubmitFeedback: (item: ExposureRadarItemApi, outcome: ManualOutcome, comment: string) => void;
+  onSubmitResult: (item: ExposureRadarItemApi, result: { impressions?: number; likes?: number; replies?: number; reposts?: number; quotes?: number; bookmarks?: number; notes?: string }) => void;
 }) {
   const { t } = useT();
   const { pushToast } = useToast();
@@ -1972,6 +2369,7 @@ function RadarCard({
             timeZone={timeZone}
             feedbackSaving={feedbackSaving}
             onSubmitFeedback={(outcome, comment) => onSubmitFeedback(item, outcome, comment)}
+            onSubmitResult={(result) => onSubmitResult(item, result)}
           />
         </div>
       ) : null}
@@ -2094,12 +2492,14 @@ function ManualHandlingRecord({
   timeZone,
   feedbackSaving,
   onSubmitFeedback,
+  onSubmitResult,
 }: {
   item: ExposureRadarItemApi;
   manualState?: ManualActionState;
   timeZone: string;
   feedbackSaving: boolean;
   onSubmitFeedback: (outcome: ManualOutcome, comment: string) => void;
+  onSubmitResult: (result: { impressions?: number; likes?: number; replies?: number; reposts?: number; quotes?: number; bookmarks?: number; notes?: string }) => void;
 }) {
   const { t } = useT();
   const replyURL = item.comment_url || manualState?.publishedUrl || "";
@@ -2107,6 +2507,24 @@ function ManualHandlingRecord({
   const statusKey = manualRecordStatus(item, manualState);
   const updatedAt = manualState?.updatedAt ? formatDateTime(manualState.updatedAt, timeZone) : "-";
   const [feedbackComment, setFeedbackComment] = useState(manualState?.feedbackComment || "");
+  const [resultForm, setResultForm] = useState({
+    impressions: manualState?.resultImpressionCount ? String(manualState.resultImpressionCount) : "",
+    likes: manualState?.resultLikeCount ? String(manualState.resultLikeCount) : "",
+    replies: manualState?.resultReplyCount ? String(manualState.resultReplyCount) : "",
+    reposts: manualState?.resultRetweetCount ? String(manualState.resultRetweetCount) : "",
+    quotes: manualState?.resultQuoteCount ? String(manualState.resultQuoteCount) : "",
+    bookmarks: manualState?.resultBookmarkCount ? String(manualState.resultBookmarkCount) : "",
+    notes: manualState?.resultNotes || "",
+  });
+  const saveResult = () => onSubmitResult({
+    impressions: parseOptionalCount(resultForm.impressions),
+    likes: parseOptionalCount(resultForm.likes),
+    replies: parseOptionalCount(resultForm.replies),
+    reposts: parseOptionalCount(resultForm.reposts),
+    quotes: parseOptionalCount(resultForm.quotes),
+    bookmarks: parseOptionalCount(resultForm.bookmarks),
+    notes: resultForm.notes.trim(),
+  });
   return (
     <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -2157,6 +2575,39 @@ function ManualHandlingRecord({
       <div className="mt-3 rounded-lg border border-[#2f3336] bg-black p-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.resultTracking.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.resultTracking.description")}</p>
+          </div>
+          {manualState?.resultCheckedAt ? (
+            <span className="inline-flex h-7 items-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2.5 text-xs font-semibold text-[#7ee0b5]">
+              {t("exposureRadar.resultTracking.score", { score: manualState.resultScore || 0 })}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <ResultInput label={t("exposureRadar.resultTracking.impressions")} value={resultForm.impressions} onChange={(value) => setResultForm((current) => ({ ...current, impressions: value }))} />
+          <ResultInput label={t("exposureRadar.resultTracking.likes")} value={resultForm.likes} onChange={(value) => setResultForm((current) => ({ ...current, likes: value }))} />
+          <ResultInput label={t("exposureRadar.resultTracking.replies")} value={resultForm.replies} onChange={(value) => setResultForm((current) => ({ ...current, replies: value }))} />
+          <ResultInput label={t("exposureRadar.resultTracking.reposts")} value={resultForm.reposts} onChange={(value) => setResultForm((current) => ({ ...current, reposts: value }))} />
+          <ResultInput label={t("exposureRadar.resultTracking.quotes")} value={resultForm.quotes} onChange={(value) => setResultForm((current) => ({ ...current, quotes: value }))} />
+          <ResultInput label={t("exposureRadar.resultTracking.bookmarks")} value={resultForm.bookmarks} onChange={(value) => setResultForm((current) => ({ ...current, bookmarks: value }))} />
+        </div>
+        <div className="mt-3 flex flex-col gap-2 md:flex-row">
+          <input
+            value={resultForm.notes}
+            onChange={(event) => setResultForm((current) => ({ ...current, notes: event.target.value }))}
+            placeholder={t("exposureRadar.resultTracking.notesPlaceholder")}
+            className="h-9 min-w-0 flex-1 rounded-full border border-[#2f3336] bg-[#0f1419] px-3 text-xs text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]"
+          />
+          <Button type="button" size="sm" variant="outline" onClick={saveResult}>
+            <BarChart3 className="size-3.5" />
+            {t("exposureRadar.resultTracking.save")}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 rounded-lg border border-[#2f3336] bg-black p-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
             <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.manualFeedback.title")}</p>
             <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.manualFeedback.description")}</p>
           </div>
@@ -2192,6 +2643,20 @@ function ManualRecordField({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] text-[#71767b]">{label}</p>
       <p className="mt-1 truncate text-xs font-semibold text-[#e7e9ea]" title={value}>{value}</p>
     </div>
+  );
+}
+
+function ResultInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0">
+      <span className="text-[11px] text-[#71767b]">{label}</span>
+      <input
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => onChange(event.target.value.replace(/[^\d]/g, ""))}
+        className="mt-1 h-9 w-full rounded-lg border border-[#2f3336] bg-[#0f1419] px-3 text-xs font-semibold text-[#e7e9ea] outline-none transition focus:border-[#1d9bf0]"
+      />
+    </label>
   );
 }
 
@@ -2747,6 +3212,10 @@ function peopleRadarStageWeight(stage: PeopleRadarStage) {
       return 3;
     case "engaged":
       return 2;
+    case "watch":
+      return 2;
+    case "avoid":
+      return 0;
     default:
       return 1;
   }
@@ -2760,6 +3229,10 @@ function peopleRadarStageTone(stage: PeopleRadarStage) {
       return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
     case "engaged":
       return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "watch":
+      return "border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]";
+    case "avoid":
+      return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
     default:
       return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   }
@@ -2981,6 +3454,13 @@ function buildManualRecordPayload(
     published_url: patch.publishedUrl || item.comment_url,
     outcome: patch.outcome,
     feedback_comment: patch.feedbackComment,
+    result_impression_count: patch.resultImpressionCount,
+    result_like_count: patch.resultLikeCount,
+    result_reply_count: patch.resultReplyCount,
+    result_retweet_count: patch.resultRetweetCount,
+    result_quote_count: patch.resultQuoteCount,
+    result_bookmark_count: patch.resultBookmarkCount,
+    result_notes: patch.resultNotes,
     safety_status: patch.safetyStatus || options.safetyReview.status,
     safety_summary: patch.safetySummary || options.safetyReview.summary,
     safety_checks: options.safetyReview.checks.map(safetyCheckToApi),
@@ -2996,6 +3476,39 @@ function safetyCheckToApi(check: SafetyReviewCheck): ExposureRadarSafetyCheckApi
     title: check.title,
     detail: check.detail,
   };
+}
+
+function strategyFormFromApi(strategy: ExposureRadarGrowthStrategyApi | null): StrategyFormState {
+  return {
+    targetAudience: strategy?.target_audience || "",
+    primaryGoal: strategy?.primary_goal || "awareness",
+    coreTopics: (strategy?.core_topics || []).join(", "),
+    avoidTopics: (strategy?.avoid_topics || []).join(", "),
+    competitors: (strategy?.competitors || []).map((value) => value.startsWith("@") ? value : `@${value}`).join(", "),
+    replyStyle: strategy?.reply_style || "operator_observation",
+    dailyMoveLimit: strategy?.daily_move_limit || 10,
+    safetyMode: strategy?.safety_mode || "balanced",
+    operatorNotes: strategy?.operator_notes || "",
+  };
+}
+
+function parseCommaList(value: string): string[] {
+  return value
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function parseOptionalCount(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function mergeOptionalNumber(primary?: number, fallback?: number) {
+  return typeof primary === "number" ? primary : fallback;
 }
 
 function mergeManualRecordStates(current: Record<string, ManualActionState>, records: ExposureRadarManualRecordApi[]) {
@@ -3016,6 +3529,15 @@ function mergeManualRecordStates(current: Record<string, ManualActionState>, rec
       outcome,
       feedbackComment: record.feedback_comment || existing.feedbackComment,
       feedbackAt: record.feedback_at || existing.feedbackAt,
+      resultImpressionCount: mergeOptionalNumber(record.result_impression_count, existing.resultImpressionCount),
+      resultLikeCount: mergeOptionalNumber(record.result_like_count, existing.resultLikeCount),
+      resultReplyCount: mergeOptionalNumber(record.result_reply_count, existing.resultReplyCount),
+      resultRetweetCount: mergeOptionalNumber(record.result_retweet_count, existing.resultRetweetCount),
+      resultQuoteCount: mergeOptionalNumber(record.result_quote_count, existing.resultQuoteCount),
+      resultBookmarkCount: mergeOptionalNumber(record.result_bookmark_count, existing.resultBookmarkCount),
+      resultNotes: record.result_notes || existing.resultNotes,
+      resultScore: mergeOptionalNumber(record.result_score, existing.resultScore),
+      resultCheckedAt: record.result_checked_at || existing.resultCheckedAt,
       taskStatus,
       safetyStatus: normalizeSafetyReviewStatus(record.safety_status) || existing.safetyStatus,
       safetySummary: record.safety_summary || existing.safetySummary,
@@ -3052,6 +3574,10 @@ function mergePeopleRadar(current: PeopleRadarEntry[], persisted: ExposureRadarP
         latestItem,
         persisted: true,
         feedback: person.feedback,
+        crmStage: person.crm_stage,
+        notes: person.notes,
+        tags: person.tags,
+        lastInteractionAt: person.last_interaction_at,
       });
       return;
     }
@@ -3062,11 +3588,15 @@ function mergePeopleRadar(current: PeopleRadarEntry[], persisted: ExposureRadarP
     existing.totalEngagement = Math.max(existing.totalEngagement, person.total_engagement || 0);
     existing.followers = Math.max(existing.followers || 0, person.followers || 0) || existing.followers;
     existing.feedback = Math.max(existing.feedback || 0, person.feedback || 0);
+    existing.crmStage = person.crm_stage || existing.crmStage;
+    existing.notes = person.notes || existing.notes;
+    existing.tags = person.tags?.length ? person.tags : existing.tags;
+    existing.lastInteractionAt = person.last_interaction_at || existing.lastInteractionAt;
     existing.persisted = true;
     if (radarItemTimeValue(latestItem) > radarItemTimeValue(existing.latestItem)) {
       existing.latestItem = latestItem;
     }
-    existing.stage = peopleRadarStage(existing);
+    existing.stage = normalizePeopleRadarStage(existing.crmStage || person.stage || existing.stage || peopleRadarStage(existing));
   });
   return Array.from(people.values()).sort((a, b) => {
     const stageDelta = peopleRadarStageWeight(b.stage) - peopleRadarStageWeight(a.stage);
@@ -3138,7 +3668,7 @@ function normalizeSafetyReviewStatus(value?: string): SafetyReviewStatus | undef
 }
 
 function normalizePeopleRadarStage(value?: string): PeopleRadarStage {
-  if (value === "priority" || value === "repeat" || value === "engaged" || value === "new") return value;
+  if (value === "priority" || value === "repeat" || value === "engaged" || value === "watch" || value === "avoid" || value === "new") return value;
   return "new";
 }
 

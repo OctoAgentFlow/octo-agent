@@ -16,11 +16,23 @@ import (
 )
 
 type ExposureRadarManualService struct {
-	repo *repository.ExposureRadarManualRecordRepository
+	repo         *repository.ExposureRadarManualRecordRepository
+	strategyRepo *repository.ExposureRadarGrowthStrategyRepository
+	peopleRepo   *repository.ExposureRadarPeopleNoteRepository
 }
 
 func NewExposureRadarManualService(repo *repository.ExposureRadarManualRecordRepository) *ExposureRadarManualService {
 	return &ExposureRadarManualService{repo: repo}
+}
+
+func (s *ExposureRadarManualService) WithGrowthStrategyRepository(repo *repository.ExposureRadarGrowthStrategyRepository) *ExposureRadarManualService {
+	s.strategyRepo = repo
+	return s
+}
+
+func (s *ExposureRadarManualService) WithPeopleNoteRepository(repo *repository.ExposureRadarPeopleNoteRepository) *ExposureRadarManualService {
+	s.peopleRepo = repo
+	return s
 }
 
 func (s *ExposureRadarManualService) Upsert(userID uint, req dto.ExposureRadarManualRecordRequest) (*dto.ExposureRadarManualRecordItem, error) {
@@ -69,6 +81,105 @@ func (s *ExposureRadarManualService) ListBySignalIDs(userID uint, signalIDs []st
 	return &dto.ExposureRadarManualRecordsResponse{Items: items}, nil
 }
 
+func (s *ExposureRadarManualService) ListRecentRecords(userID uint, region string, days int, limit int) (*dto.ExposureRadarManualRecordsResponse, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 365 {
+		days = 365
+	}
+	rows, err := s.repo.ListRecent(userID, normalizeExposureRadarManualRegionForQuery(region), time.Now().UTC().AddDate(0, 0, -days), limit)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.ExposureRadarManualRecordItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, exposureRadarManualRecordToDTO(row))
+	}
+	return &dto.ExposureRadarManualRecordsResponse{Items: items}, nil
+}
+
+func (s *ExposureRadarManualService) GetGrowthStrategy(userID uint, region string, botID uint, xAccountID uint) (*dto.ExposureRadarGrowthStrategyItem, error) {
+	item := defaultExposureRadarGrowthStrategyDTO(region, botID, xAccountID)
+	if s == nil || s.strategyRepo == nil {
+		return &item, nil
+	}
+	row, err := s.strategyRepo.Get(userID, item.Region, botID, xAccountID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &item, nil
+		}
+		return nil, err
+	}
+	next := exposureRadarGrowthStrategyToDTO(*row)
+	return &next, nil
+}
+
+func (s *ExposureRadarManualService) UpsertGrowthStrategy(userID uint, req dto.ExposureRadarGrowthStrategyRequest) (*dto.ExposureRadarGrowthStrategyItem, error) {
+	if s == nil || s.strategyRepo == nil {
+		return nil, fmt.Errorf("exposure radar strategy service unavailable")
+	}
+	region := firstNonEmpty(normalizeExposureRadarManualRegion(req.Region), "en")
+	row, err := s.strategyRepo.Get(userID, region, req.BotID, req.XAccountID)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		row = &model.ExposureRadarGrowthStrategy{
+			UserID:         userID,
+			BotID:          req.BotID,
+			XAccountID:     req.XAccountID,
+			Region:         region,
+			DailyMoveLimit: 10,
+			SafetyMode:     "balanced",
+			ReplyStyle:     "operator_observation",
+		}
+	}
+	applyExposureRadarGrowthStrategyRequest(row, req)
+	if err := s.strategyRepo.Save(row); err != nil {
+		return nil, err
+	}
+	item := exposureRadarGrowthStrategyToDTO(*row)
+	return &item, nil
+}
+
+func (s *ExposureRadarManualService) UpsertPeopleNote(userID uint, req dto.ExposureRadarPeopleNoteRequest) (*dto.ExposureRadarPeopleNoteItem, error) {
+	if s == nil || s.peopleRepo == nil {
+		return nil, fmt.Errorf("exposure radar people note service unavailable")
+	}
+	handle := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(req.AuthorHandle), "@"))
+	if handle == "" {
+		return nil, fmt.Errorf("author_handle is required")
+	}
+	region := normalizeExposureRadarManualRegionForQuery(req.Region)
+	if region == "" {
+		region = "all"
+	}
+	row, err := s.peopleRepo.Get(userID, region, handle)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		row = &model.ExposureRadarPeopleNote{
+			UserID:       userID,
+			Region:       region,
+			AuthorHandle: handle,
+		}
+	}
+	row.AuthorName = limitManualString(req.AuthorName, 255)
+	row.Stage = normalizeExposureRadarPeopleCRMStage(req.Stage)
+	row.Notes = limitManualString(req.Notes, 512)
+	row.TagsJSON = encodeExposureRadarManualStringList(req.Tags, 12, 48)
+	row.LastSignalID = limitManualString(req.LastSignalID, 160)
+	now := time.Now().UTC()
+	row.LastInteractionAt = &now
+	if err := s.peopleRepo.Save(row); err != nil {
+		return nil, err
+	}
+	item := exposureRadarPeopleNoteToDTO(*row)
+	return &item, nil
+}
+
 func (s *ExposureRadarManualService) ListPeople(userID uint, region string, days int, limit int) (*dto.ExposureRadarPeopleResponse, error) {
 	if days <= 0 {
 		days = 30
@@ -85,6 +196,29 @@ func (s *ExposureRadarManualService) ListPeople(userID uint, region string, days
 	rows, err := s.repo.ListRecent(userID, normalizeExposureRadarManualRegionForQuery(region), time.Now().UTC().AddDate(0, 0, -days), 1000)
 	if err != nil {
 		return nil, err
+	}
+	notesByHandle := map[string]model.ExposureRadarPeopleNote{}
+	if s.peopleRepo != nil {
+		handles := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if strings.TrimSpace(row.AuthorHandle) != "" {
+				handles = append(handles, row.AuthorHandle)
+			}
+		}
+		notes, err := s.peopleRepo.ListByHandles(userID, normalizeExposureRadarManualRegionForQuery(region), handles)
+		if err != nil {
+			return nil, err
+		}
+		for _, note := range notes {
+			key := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(note.AuthorHandle), "@"))
+			if key == "" {
+				continue
+			}
+			existing, ok := notesByHandle[key]
+			if !ok || note.Region != "all" || existing.Region == "all" {
+				notesByHandle[key] = note
+			}
+		}
 	}
 	people := map[string]*dto.ExposureRadarPersonItem{}
 	for _, row := range rows {
@@ -138,6 +272,16 @@ func (s *ExposureRadarManualService) ListPeople(userID uint, region string, days
 	items := make([]dto.ExposureRadarPersonItem, 0, len(people))
 	for _, person := range people {
 		person.Stage = exposureRadarManualPersonStage(*person)
+		if note, ok := notesByHandle[person.Key]; ok {
+			person.CRMStage = note.Stage
+			if note.Stage != "" {
+				person.Stage = note.Stage
+			}
+			person.Notes = note.Notes
+			person.Tags = decodeExposureRadarManualStringList(note.TagsJSON)
+			person.LastInteractionAt = optionalTimeString(note.LastInteractionAt)
+			person.CRMUpdatedAt = note.UpdatedAt.UTC().Format(time.RFC3339)
+		}
 		items = append(items, *person)
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -156,6 +300,114 @@ func (s *ExposureRadarManualService) ListPeople(userID uint, region string, days
 		items = items[:limit]
 	}
 	return &dto.ExposureRadarPeopleResponse{Items: items}, nil
+}
+
+func (s *ExposureRadarManualService) WeeklyReview(userID uint, region string, days int) (*dto.ExposureRadarWeeklyReviewResponse, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+	rows, err := s.repo.ListRecent(userID, normalizeExposureRadarManualRegionForQuery(region), time.Now().UTC().AddDate(0, 0, -days), 1000)
+	if err != nil {
+		return nil, err
+	}
+	out := dto.ExposureRadarWeeklyReviewResponse{
+		Region:      firstNonEmpty(normalizeExposureRadarManualRegionForQuery(region), "all"),
+		Days:        days,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	topicStats := map[string]*dto.ExposureRadarWeeklyReviewTopic{}
+	peopleStats := map[string]*dto.ExposureRadarWeeklyReviewPerson{}
+	var resultScoreTotal int
+	var resultScoreCount int
+	for _, row := range rows {
+		out.TotalRecords++
+		if row.HandledAt != nil || row.TaskStatus == "done" {
+			out.HandledCount++
+		}
+		if strings.TrimSpace(row.PublishedURL) != "" || row.ResultCheckedAt != nil {
+			out.PublishedCount++
+		}
+		if row.Outcome == "effective" {
+			out.EffectiveCount++
+		}
+		if row.Outcome == "ineffective" || row.Outcome == "not_suitable" {
+			out.NegativeCount++
+		}
+		if row.ResultScore > 0 {
+			resultScoreTotal += row.ResultScore
+			resultScoreCount++
+		}
+		topicName := firstNonEmpty(row.TopicName, row.OpportunityType, row.DataQuality, "untagged")
+		if topicStats[topicName] == nil {
+			topicStats[topicName] = &dto.ExposureRadarWeeklyReviewTopic{TopicName: topicName}
+		}
+		topicStats[topicName].Count++
+		if row.Outcome == "effective" {
+			topicStats[topicName].Effective++
+		}
+		handle := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(row.AuthorHandle), "@"))
+		if handle != "" {
+			if peopleStats[handle] == nil {
+				peopleStats[handle] = &dto.ExposureRadarWeeklyReviewPerson{Handle: handle, Name: row.AuthorName}
+			}
+			peopleStats[handle].Count++
+		}
+	}
+	if out.TotalRecords > 0 {
+		out.CompletionRate = float64(out.HandledCount) / float64(out.TotalRecords)
+	}
+	if out.HandledCount > 0 {
+		out.EffectiveRate = float64(out.EffectiveCount) / float64(out.HandledCount)
+	}
+	if resultScoreCount > 0 {
+		out.AverageResultScore = float64(resultScoreTotal) / float64(resultScoreCount)
+	}
+	out.TopTopics = topWeeklyTopics(topicStats, 5)
+	out.TopPeople = topWeeklyPeople(peopleStats, 5)
+	out.Recommendations = buildWeeklyRecommendations(out)
+	return &out, nil
+}
+
+func (s *ExposureRadarManualService) SafetyCenter(userID uint, region string, days int) (*dto.ExposureRadarSafetyCenterResponse, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+	rows, err := s.repo.ListRecent(userID, normalizeExposureRadarManualRegionForQuery(region), time.Now().UTC().AddDate(0, 0, -days), 1000)
+	if err != nil {
+		return nil, err
+	}
+	out := dto.ExposureRadarSafetyCenterResponse{
+		Region:      firstNonEmpty(normalizeExposureRadarManualRegionForQuery(region), "all"),
+		Days:        days,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	for _, row := range rows {
+		out.TotalRecords++
+		switch strings.TrimSpace(row.SafetyStatus) {
+		case "block":
+			out.BlockCount++
+		case "watch":
+			out.WatchCount++
+		case "pass":
+			out.PassCount++
+		}
+		for _, check := range decodeExposureRadarSafetyChecks(row.SafetyChecksJSON) {
+			if check.Key == "promotion" && check.Status != "pass" {
+				out.PromotionSmell++
+			}
+			if check.Key == "claims" && check.Status != "pass" {
+				out.RiskyClaimCount++
+			}
+		}
+	}
+	out.Warnings = buildSafetyCenterWarnings(out)
+	return &out, nil
 }
 
 func applyExposureRadarManualRecordRequest(record *model.ExposureRadarManualRecord, req dto.ExposureRadarManualRecordRequest, now time.Time) {
@@ -229,6 +481,33 @@ func applyExposureRadarManualRecordRequest(record *model.ExposureRadarManualReco
 		record.FeedbackAt = &now
 	}
 	setIfNotEmpty(&record.FeedbackComment, req.FeedbackComment, 512)
+	resultUpdated := false
+	if req.ResultImpressionCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultImpressionCount, *req.ResultImpressionCount) || resultUpdated
+	}
+	if req.ResultLikeCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultLikeCount, *req.ResultLikeCount) || resultUpdated
+	}
+	if req.ResultReplyCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultReplyCount, *req.ResultReplyCount) || resultUpdated
+	}
+	if req.ResultRetweetCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultRetweetCount, *req.ResultRetweetCount) || resultUpdated
+	}
+	if req.ResultQuoteCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultQuoteCount, *req.ResultQuoteCount) || resultUpdated
+	}
+	if req.ResultBookmarkCount != nil {
+		resultUpdated = applyInt64IfNonNegative(&record.ResultBookmarkCount, *req.ResultBookmarkCount) || resultUpdated
+	}
+	setIfNotEmpty(&record.ResultNotes, req.ResultNotes, 512)
+	if strings.TrimSpace(req.ResultNotes) != "" {
+		resultUpdated = true
+	}
+	if resultUpdated {
+		record.ResultScore = exposureRadarResultScore(record)
+		record.ResultCheckedAt = &now
+	}
 	setIfNotEmpty(&record.SafetyStatus, req.SafetyStatus, 32)
 	setIfNotEmpty(&record.SafetySummary, req.SafetySummary, 512)
 	if len(req.SafetyChecks) > 0 {
@@ -245,54 +524,63 @@ func applyExposureRadarManualRecordRequest(record *model.ExposureRadarManualReco
 
 func exposureRadarManualRecordToDTO(row model.ExposureRadarManualRecord) dto.ExposureRadarManualRecordItem {
 	return dto.ExposureRadarManualRecordItem{
-		ID:               row.ID,
-		BotID:            row.BotID,
-		XAccountID:       row.XAccountID,
-		SignalID:         row.SignalID,
-		Region:           row.Region,
-		DataSource:       row.DataSource,
-		DataQuality:      row.DataQuality,
-		TweetID:          row.TweetID,
-		URL:              row.URL,
-		Title:            row.Title,
-		Content:          row.Content,
-		AuthorID:         row.AuthorID,
-		AuthorHandle:     row.AuthorHandle,
-		AuthorName:       row.AuthorName,
-		TopicName:        row.TopicName,
-		Score:            row.Score,
-		RiskLevel:        row.RiskLevel,
-		OpportunityType:  row.OpportunityType,
-		OpportunityTier:  row.OpportunityTier,
-		QualityStage:     row.QualityStage,
-		ViewsPerMinute:   row.ViewsPerMinute,
-		FollowersCount:   row.FollowersCount,
-		HeatCount:        row.HeatCount,
-		ReplyCount:       row.ReplyCount,
-		RetweetCount:     row.RetweetCount,
-		LikeCount:        row.LikeCount,
-		QuoteCount:       row.QuoteCount,
-		BookmarkCount:    row.BookmarkCount,
-		ImpressionCount:  row.ImpressionCount,
-		ReviewTaskID:     row.ReviewTaskID,
-		SavedMemoryID:    row.SavedMemoryID,
-		GeneratedComment: row.GeneratedComment,
-		TaskStatus:       row.TaskStatus,
-		PublishedURL:     row.PublishedURL,
-		Outcome:          row.Outcome,
-		FeedbackComment:  row.FeedbackComment,
-		SafetyStatus:     row.SafetyStatus,
-		SafetySummary:    row.SafetySummary,
-		SafetyChecks:     decodeExposureRadarSafetyChecks(row.SafetyChecksJSON),
-		ReplyAngleID:     row.ReplyAngleID,
-		ReplyAngleTitle:  row.ReplyAngleTitle,
-		CopiedAt:         optionalTimeString(row.CopiedAt),
-		OpenedAt:         optionalTimeString(row.OpenedAt),
-		SavedAt:          optionalTimeString(row.SavedAt),
-		HandledAt:        optionalTimeString(row.HandledAt),
-		FeedbackAt:       optionalTimeString(row.FeedbackAt),
-		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                    row.ID,
+		BotID:                 row.BotID,
+		XAccountID:            row.XAccountID,
+		SignalID:              row.SignalID,
+		Region:                row.Region,
+		DataSource:            row.DataSource,
+		DataQuality:           row.DataQuality,
+		TweetID:               row.TweetID,
+		URL:                   row.URL,
+		Title:                 row.Title,
+		Content:               row.Content,
+		AuthorID:              row.AuthorID,
+		AuthorHandle:          row.AuthorHandle,
+		AuthorName:            row.AuthorName,
+		TopicName:             row.TopicName,
+		Score:                 row.Score,
+		RiskLevel:             row.RiskLevel,
+		OpportunityType:       row.OpportunityType,
+		OpportunityTier:       row.OpportunityTier,
+		QualityStage:          row.QualityStage,
+		ViewsPerMinute:        row.ViewsPerMinute,
+		FollowersCount:        row.FollowersCount,
+		HeatCount:             row.HeatCount,
+		ReplyCount:            row.ReplyCount,
+		RetweetCount:          row.RetweetCount,
+		LikeCount:             row.LikeCount,
+		QuoteCount:            row.QuoteCount,
+		BookmarkCount:         row.BookmarkCount,
+		ImpressionCount:       row.ImpressionCount,
+		ReviewTaskID:          row.ReviewTaskID,
+		SavedMemoryID:         row.SavedMemoryID,
+		GeneratedComment:      row.GeneratedComment,
+		TaskStatus:            row.TaskStatus,
+		PublishedURL:          row.PublishedURL,
+		Outcome:               row.Outcome,
+		FeedbackComment:       row.FeedbackComment,
+		ResultImpressionCount: row.ResultImpressionCount,
+		ResultLikeCount:       row.ResultLikeCount,
+		ResultReplyCount:      row.ResultReplyCount,
+		ResultRetweetCount:    row.ResultRetweetCount,
+		ResultQuoteCount:      row.ResultQuoteCount,
+		ResultBookmarkCount:   row.ResultBookmarkCount,
+		ResultNotes:           row.ResultNotes,
+		ResultScore:           row.ResultScore,
+		ResultCheckedAt:       optionalTimeString(row.ResultCheckedAt),
+		SafetyStatus:          row.SafetyStatus,
+		SafetySummary:         row.SafetySummary,
+		SafetyChecks:          decodeExposureRadarSafetyChecks(row.SafetyChecksJSON),
+		ReplyAngleID:          row.ReplyAngleID,
+		ReplyAngleTitle:       row.ReplyAngleTitle,
+		CopiedAt:              optionalTimeString(row.CopiedAt),
+		OpenedAt:              optionalTimeString(row.OpenedAt),
+		SavedAt:               optionalTimeString(row.SavedAt),
+		HandledAt:             optionalTimeString(row.HandledAt),
+		FeedbackAt:            optionalTimeString(row.FeedbackAt),
+		CreatedAt:             row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -331,6 +619,14 @@ func applyInt64IfPositive(target *int64, value int64) {
 	if value > 0 {
 		*target = value
 	}
+}
+
+func applyInt64IfNonNegative(target *int64, value int64) bool {
+	if value < 0 || *target == value {
+		return false
+	}
+	*target = value
+	return true
 }
 
 func limitManualString(value string, max int) string {
@@ -404,4 +700,256 @@ func exposureRadarManualPersonStageWeight(stage string) int {
 	default:
 		return 1
 	}
+}
+
+func defaultExposureRadarGrowthStrategyDTO(region string, botID uint, xAccountID uint) dto.ExposureRadarGrowthStrategyItem {
+	return dto.ExposureRadarGrowthStrategyItem{
+		BotID:          botID,
+		XAccountID:     xAccountID,
+		Region:         firstNonEmpty(normalizeExposureRadarManualRegion(region), "en"),
+		CoreTopics:     []string{},
+		AvoidTopics:    []string{},
+		Competitors:    []string{},
+		ReplyStyle:     "operator_observation",
+		DailyMoveLimit: 10,
+		SafetyMode:     "balanced",
+	}
+}
+
+func applyExposureRadarGrowthStrategyRequest(record *model.ExposureRadarGrowthStrategy, req dto.ExposureRadarGrowthStrategyRequest) {
+	record.Region = firstNonEmpty(normalizeExposureRadarManualRegion(req.Region), record.Region, "en")
+	record.BotID = req.BotID
+	record.XAccountID = req.XAccountID
+	setIfNotEmpty(&record.TargetAudience, req.TargetAudience, 512)
+	setIfNotEmpty(&record.PrimaryGoal, normalizeExposureRadarPrimaryGoal(req.PrimaryGoal), 128)
+	record.CoreTopicsJSON = encodeExposureRadarManualStringList(req.CoreTopics, 20, 80)
+	record.AvoidTopicsJSON = encodeExposureRadarManualStringList(req.AvoidTopics, 20, 80)
+	record.CompetitorsJSON = encodeExposureRadarManualStringList(req.Competitors, 20, 80)
+	record.ReplyStyle = firstNonEmpty(normalizeExposureRadarReplyStyle(req.ReplyStyle), record.ReplyStyle, "operator_observation")
+	if req.DailyMoveLimit > 0 {
+		if req.DailyMoveLimit > 50 {
+			req.DailyMoveLimit = 50
+		}
+		record.DailyMoveLimit = req.DailyMoveLimit
+	}
+	record.SafetyMode = firstNonEmpty(normalizeExposureRadarSafetyMode(req.SafetyMode), record.SafetyMode, "balanced")
+	setIfNotEmpty(&record.OperatorNotes, req.OperatorNotes, 512)
+}
+
+func exposureRadarGrowthStrategyToDTO(row model.ExposureRadarGrowthStrategy) dto.ExposureRadarGrowthStrategyItem {
+	return dto.ExposureRadarGrowthStrategyItem{
+		ID:                  row.ID,
+		BotID:               row.BotID,
+		XAccountID:          row.XAccountID,
+		Region:              row.Region,
+		TargetAudience:      row.TargetAudience,
+		PrimaryGoal:         row.PrimaryGoal,
+		CoreTopics:          decodeExposureRadarManualStringList(row.CoreTopicsJSON),
+		AvoidTopics:         decodeExposureRadarManualStringList(row.AvoidTopicsJSON),
+		Competitors:         decodeExposureRadarManualStringList(row.CompetitorsJSON),
+		ReplyStyle:          firstNonEmpty(row.ReplyStyle, "operator_observation"),
+		DailyMoveLimit:      firstPositive(row.DailyMoveLimit, 10),
+		SafetyMode:          firstNonEmpty(row.SafetyMode, "balanced"),
+		OperatorNotes:       row.OperatorNotes,
+		LastReviewedSummary: row.LastReviewedSummary,
+		CreatedAt:           row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:           row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func exposureRadarPeopleNoteToDTO(row model.ExposureRadarPeopleNote) dto.ExposureRadarPeopleNoteItem {
+	return dto.ExposureRadarPeopleNoteItem{
+		ID:                row.ID,
+		Region:            row.Region,
+		AuthorHandle:      row.AuthorHandle,
+		AuthorName:        row.AuthorName,
+		Stage:             row.Stage,
+		Tags:              decodeExposureRadarManualStringList(row.TagsJSON),
+		Notes:             row.Notes,
+		LastSignalID:      row.LastSignalID,
+		LastInteractionAt: optionalTimeString(row.LastInteractionAt),
+		UpdatedAt:         row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func encodeExposureRadarManualStringList(values []string, limit int, maxLen int) string {
+	if limit <= 0 {
+		limit = len(values)
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = limitManualString(value, maxLen)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, value)
+		if len(out) >= limit {
+			break
+		}
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw)
+}
+
+func decodeExposureRadarManualStringList(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{}
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return []string{}
+	}
+	return values
+}
+
+func normalizeExposureRadarPrimaryGoal(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "awareness", "relationships", "traffic", "community", "research":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+func normalizeExposureRadarReplyStyle(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "operator_observation", "light_question", "peer_experience", "caution_note":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeExposureRadarSafetyMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "conservative", "balanced", "growth":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeExposureRadarPeopleCRMStage(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "priority", "watch", "engaged", "avoid", "new":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func exposureRadarResultScore(row *model.ExposureRadarManualRecord) int {
+	score := 0
+	if row.ResultImpressionCount >= 100 {
+		score += 30
+	}
+	if row.ResultImpressionCount >= 1000 {
+		score += 20
+	}
+	score += int(minExposureRadarManualInt64(row.ResultLikeCount*5, 25))
+	score += int(minExposureRadarManualInt64(row.ResultReplyCount*8, 25))
+	score += int(minExposureRadarManualInt64(row.ResultRetweetCount*10, 20))
+	score += int(minExposureRadarManualInt64(row.ResultQuoteCount*10, 20))
+	score += int(minExposureRadarManualInt64(row.ResultBookmarkCount*6, 15))
+	if row.Outcome == "effective" {
+		score += 20
+	}
+	if score > 100 {
+		return 100
+	}
+	return score
+}
+
+func topWeeklyTopics(stats map[string]*dto.ExposureRadarWeeklyReviewTopic, limit int) []dto.ExposureRadarWeeklyReviewTopic {
+	items := make([]dto.ExposureRadarWeeklyReviewTopic, 0, len(stats))
+	for _, item := range stats {
+		items = append(items, *item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Effective != items[j].Effective {
+			return items[i].Effective > items[j].Effective
+		}
+		return items[i].Count > items[j].Count
+	})
+	if len(items) > limit {
+		return items[:limit]
+	}
+	return items
+}
+
+func topWeeklyPeople(stats map[string]*dto.ExposureRadarWeeklyReviewPerson, limit int) []dto.ExposureRadarWeeklyReviewPerson {
+	items := make([]dto.ExposureRadarWeeklyReviewPerson, 0, len(stats))
+	for _, item := range stats {
+		items = append(items, *item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Count > items[j].Count
+	})
+	if len(items) > limit {
+		return items[:limit]
+	}
+	return items
+}
+
+func buildWeeklyRecommendations(review dto.ExposureRadarWeeklyReviewResponse) []string {
+	recommendations := []string{}
+	if review.TotalRecords == 0 {
+		return []string{"Start by handling 5-10 radar signals manually so the weekly review has enough evidence."}
+	}
+	if review.CompletionRate < 0.35 {
+		recommendations = append(recommendations, "Reduce the daily move target or focus only on act-now signals until completion improves.")
+	}
+	if review.EffectiveRate >= 0.3 {
+		recommendations = append(recommendations, "Keep the current topic mix and turn the top effective topics into Content Memory.")
+	}
+	if review.NegativeCount > review.EffectiveCount {
+		recommendations = append(recommendations, "Review negative outcomes before increasing volume; the reply angle or topic fit may be too broad.")
+	}
+	if len(review.TopPeople) > 0 {
+		recommendations = append(recommendations, "Move repeat authors into People Radar notes so future replies can be relationship-aware.")
+	}
+	if len(recommendations) == 0 {
+		recommendations = append(recommendations, "Keep the workflow stable and collect one more week of result data before changing thresholds.")
+	}
+	return recommendations
+}
+
+func buildSafetyCenterWarnings(summary dto.ExposureRadarSafetyCenterResponse) []string {
+	warnings := []string{}
+	if summary.BlockCount > 0 {
+		warnings = append(warnings, "Some drafts were blocked by safety checks. Keep manual review required for these topics.")
+	}
+	if summary.WatchCount > summary.PassCount && summary.TotalRecords > 0 {
+		warnings = append(warnings, "Watch-level drafts are higher than pass-level drafts. Tighten reply style or avoid sensitive topics.")
+	}
+	if summary.PromotionSmell > 0 {
+		warnings = append(warnings, "A few replies looked promotional. Prefer replying to the post context before mentioning your product.")
+	}
+	if summary.RiskyClaimCount > 0 {
+		warnings = append(warnings, "Risky growth or factual claims appeared in drafts. Keep claims verifiable and conservative.")
+	}
+	if len(warnings) == 0 {
+		warnings = append(warnings, "No major safety concentration detected in recent manual records.")
+	}
+	return warnings
+}
+
+func firstPositive(value int, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
+}
+
+func minExposureRadarManualInt64(a int64, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }

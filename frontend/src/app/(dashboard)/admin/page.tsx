@@ -116,9 +116,9 @@ function planLabel(plan: string, t: (key: string) => string) {
   if (p === "free_trial") return t("admin.plans.freeTrial");
   if (p === "basic_monthly") return t("admin.plans.basicMonthly");
   if (p === "basic") return t("admin.plans.basic");
-  if (p === "plus") return "Plus";
-  if (p === "pro") return "Pro";
-  if (p === "pro_plus") return "Pro+";
+  if (p === "plus") return "Growth";
+  if (p === "pro") return "Operator";
+  if (p === "pro_plus") return "Agency";
   return plan || t("admin.plans.none");
 }
 

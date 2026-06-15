@@ -32,6 +32,21 @@ type DailyActionPlanItem = {
   reason: DailyActionReason;
   priority: number;
 };
+type PeopleRadarStage = "priority" | "repeat" | "engaged" | "new";
+type PeopleRadarEntry = {
+  key: string;
+  name: string;
+  handle?: string;
+  count: number;
+  handled: number;
+  drafted: number;
+  saved: number;
+  maxScore: number;
+  totalEngagement: number;
+  followers?: number;
+  stage: PeopleRadarStage;
+  latestItem: ExposureRadarItemApi;
+};
 type OpportunityExplanation = {
   fit: string;
   reasons: string[];
@@ -45,6 +60,24 @@ type ReplyAngleSuggestion = {
   description: string;
   prompt: string;
   tone: string;
+};
+type ReplyPlan = {
+  bestFor: string;
+  steps: string[];
+  safety: string[];
+  readyNote: string;
+};
+type SafetyReviewStatus = "pass" | "watch" | "block";
+type SafetyReviewCheck = {
+  key: string;
+  status: SafetyReviewStatus;
+  title: string;
+  detail: string;
+};
+type SafetyReview = {
+  status: SafetyReviewStatus;
+  summary: string;
+  checks: SafetyReviewCheck[];
 };
 type ReplyAngleGenerationGuide = { label: string; tone: string; instruction: string };
 type ManualActionState = {
@@ -264,7 +297,9 @@ export default function ExposureRadarPage() {
     return radarView === "all" ? items : items.filter((item) => radarItemMatchesFilter(item, radarView, savedMemoryIDs, manualActionStates));
   }, [items, manualActionStates, radarView, savedMemoryIDs]);
   const handlingQueue = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs, 12), [items, manualActionStates, savedMemoryIDs]);
+  const todayMoves = useMemo(() => handlingQueue.slice(0, 10), [handlingQueue]);
   const workbenchStats = useMemo(() => buildWorkbenchStats(items, manualActionStates), [items, manualActionStates]);
+  const peopleRadar = useMemo(() => buildPeopleRadar(items, manualActionStates, savedMemoryIDs), [items, manualActionStates, savedMemoryIDs]);
 
   useEffect(() => {
     if (handlingQueue.length === 0) {
@@ -504,6 +539,24 @@ export default function ExposureRadarPage() {
         </div>
       </Card>
 
+      <TodayMovesPanel
+        moves={todayMoves}
+        stats={workbenchStats}
+        activeID={activeWorkbenchID}
+        onFocus={(itemID) => {
+          setActiveWorkbenchID(itemID);
+          focusRadarItem(itemID);
+        }}
+      />
+
+      <PeopleRadarPanel
+        people={peopleRadar}
+        onFocus={(itemID) => {
+          setActiveWorkbenchID(itemID);
+          focusRadarItem(itemID);
+        }}
+      />
+
       <HandlingWorkbenchPanel
         queue={handlingQueue}
         activeID={activeWorkbenchID}
@@ -575,6 +628,8 @@ export default function ExposureRadarPage() {
         ) : null}
       </Card>
 
+      <LearningInsightsPanel data={performance} items={items} manualActionStates={manualActionStates} />
+
       <PerformancePanel data={performance} timeZone={timeZone} />
 
       <TopicHistoryPanel data={archive} timeZone={timeZone} />
@@ -618,6 +673,167 @@ function NumberButtons({ label, values, value, suffix, formatter, onChange, disa
         ))}
       </div>
     </div>
+  );
+}
+
+function TodayMovesPanel({
+  moves,
+  stats,
+  activeID,
+  onFocus,
+}: {
+  moves: DailyActionPlanItem[];
+  stats: { pending: number; actNow: number; handled: number };
+  activeID: string;
+  onFocus: (itemID: string) => void;
+}) {
+  const { t } = useT();
+  const replyMoves = moves.filter((entry) => entry.action === "publish_reply" || entry.action === "generate_reply").length;
+  const memoryMoves = moves.filter((entry) => entry.action === "save_memory").length;
+  const inspectMoves = moves.length - replyMoves - memoryMoves;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.todayMoves.title")} description={t("exposureRadar.todayMoves.description")} className="mb-0" />
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+          <ActionPlanMetric label={t("exposureRadar.todayMoves.metric.moves")} value={moves.length} />
+          <ActionPlanMetric label={t("exposureRadar.todayMoves.metric.actNow")} value={stats.actNow} />
+          <ActionPlanMetric label={t("exposureRadar.todayMoves.metric.handled")} value={stats.handled} />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <LeaderboardPill label={t("exposureRadar.actionPlan.metric.reply")} value={replyMoves} tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]" />
+        <LeaderboardPill label={t("exposureRadar.actionPlan.metric.save")} value={memoryMoves} tone="border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]" />
+        <LeaderboardPill label={t("exposureRadar.actionPlan.metric.inspect")} value={inspectMoves} tone="border-[#2f3336] bg-[#16181c] text-[#8b98a5]" />
+      </div>
+      {moves.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
+          {t("exposureRadar.todayMoves.empty")}
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {moves.map((entry, index) => {
+            const item = entry.item;
+            const replyAngle = buildReplyAngleSuggestions(item, t)[0];
+            const qualityStage = normalizeQualityStage(item.quality_stage, item);
+            const selected = activeID === item.id;
+            return (
+              <div key={item.id} className={`rounded-2xl border p-4 transition ${selected ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-xs font-bold text-[#8ecdf8]">{index + 1}</span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${actionPlanTone(entry.action)}`}>
+                        {actionPlanIcon(entry.action)}
+                        {t(`exposureRadar.actionPlan.action.${entry.action}`)}
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${qualityStageClass(qualityStage)}`}>
+                        <Zap className="size-3.5" />
+                        {t(`exposureRadar.qualityStage.${qualityStage}`)}
+                      </span>
+                    </div>
+                    <h2 className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-[#e7e9ea]">{item.title}</h2>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#71767b]">
+                      {item.author_handle ? <span>@{item.author_handle}</span> : null}
+                      <span>{item.score} {t("exposureRadar.card.score")}</span>
+                      <span>{formatVelocityLabel(item.views_per_min, t("exposureRadar.card.velocitySampling"))}</span>
+                      {typeof item.followers_count === "number" && item.followers_count > 0 ? <span>{formatCompact(item.followers_count)} {t("exposureRadar.todayMoves.followers")}</span> : null}
+                    </div>
+                  </div>
+                  <Button type="button" size="sm" variant={selected ? "default" : "outline"} onClick={() => onFocus(item.id)}>
+                    <Search className="size-3.5" />
+                    {t("exposureRadar.todayMoves.focus")}
+                  </Button>
+                </div>
+                <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#71767b]">{t("exposureRadar.todayMoves.why")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#c9d1d9]">{t(`exposureRadar.actionPlan.reason.${entry.reason}`)}</p>
+                </div>
+                {replyAngle ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#1d9bf0]/20 bg-[#08131f] px-3 py-2">
+                    <MessageCircle className="size-3.5 text-[#8ecdf8]" />
+                    <span className="text-[11px] font-semibold text-[#8ecdf8]">{t("exposureRadar.todayMoves.replyAngle")}</span>
+                    <span className="text-xs text-[#e7e9ea]">{replyAngle.title}</span>
+                    <span className="text-[11px] text-[#71767b]">{replyAngle.tone}</span>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PeopleRadarPanel({ people, onFocus }: { people: PeopleRadarEntry[]; onFocus: (itemID: string) => void }) {
+  const { t } = useT();
+  const priorityCount = people.filter((person) => person.stage === "priority").length;
+  const repeatCount = people.filter((person) => person.stage === "repeat").length;
+  const engagedCount = people.filter((person) => person.stage === "engaged").length;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.peopleRadar.title")} description={t("exposureRadar.peopleRadar.description")} className="mb-0" />
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+          <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.people")} value={people.length} />
+          <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.priority")} value={priorityCount} />
+          <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.engaged")} value={engagedCount} />
+        </div>
+      </div>
+      {people.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
+          {t("exposureRadar.peopleRadar.empty")}
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+          {people.slice(0, 6).map((person) => (
+            <div key={person.key} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#e7e9ea]">{person.name}</p>
+                  {person.handle ? <p className="mt-0.5 text-xs text-[#71767b]">@{person.handle}</p> : null}
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold ${peopleRadarStageTone(person.stage)}`}>
+                  <Users className="size-3.5" />
+                  {t(`exposureRadar.peopleRadar.stage.${person.stage}`)}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <MiniStat icon={<Zap className="size-3.5" />} label={t("exposureRadar.peopleRadar.count")} value={String(person.count)} />
+                <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.peopleRadar.score")} value={String(person.maxScore)} />
+                <MiniStat icon={<Heart className="size-3.5" />} label={t("exposureRadar.peopleRadar.engagement")} value={formatCompact(person.totalEngagement)} />
+              </div>
+              <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#71767b]">{t("exposureRadar.peopleRadar.latest")}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#c9d1d9]">{person.latestItem.title}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#71767b]">
+                  <span>{person.drafted} {t("exposureRadar.peopleRadar.drafted")}</span>
+                  <span>{person.saved} {t("exposureRadar.peopleRadar.saved")}</span>
+                  <span>{person.handled} {t("exposureRadar.peopleRadar.handled")}</span>
+                  {typeof person.followers === "number" && person.followers > 0 ? <span>{formatCompact(person.followers)} {t("exposureRadar.todayMoves.followers")}</span> : null}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={() => onFocus(person.latestItem.id)}>
+                  <Search className="size-3.5" />
+                  {t("exposureRadar.peopleRadar.focus")}
+                </Button>
+                {person.handle ? (
+                  <a href={`https://x.com/${person.handle}`} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-full border border-[#2f3336] px-2.5 text-[0.8rem] font-semibold text-white hover:bg-[#16181c]">
+                    {t("exposureRadar.peopleRadar.openProfile")}
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {repeatCount > 0 ? (
+        <p className="mt-3 text-xs leading-5 text-[#71767b]">{t("exposureRadar.peopleRadar.repeatHint", { count: repeatCount })}</p>
+      ) : null}
+    </Card>
   );
 }
 
@@ -728,6 +944,8 @@ function HandlingWorkbenchPanel({
                 onSelect={(angleID) => onSelectReplyAngle(activeItem.id, angleID)}
               />
             ) : null}
+            {selectedReplyAngle ? <ReplyPlanCard item={activeItem} replyAngle={selectedReplyAngle} /> : null}
+            <SafetyReviewPanel item={activeItem} replyAngle={selectedReplyAngle} />
             <div className="mt-4 flex flex-wrap gap-2">
               {activeItem.generated_comment ? (
                 <Button type="button" size="sm" onClick={() => void copyWorkbenchReply()}>
@@ -887,6 +1105,94 @@ function ReplyAngleSuggestionsPanel({ suggestions, selectedID, onSelect }: { sug
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function ReplyPlanCard({ item, replyAngle }: { item: ExposureRadarItemApi; replyAngle: ReplyAngleSuggestion }) {
+  const { t } = useT();
+  const plan = buildReplyPlan(item, replyAngle, t);
+  return (
+    <div className="mt-4 rounded-2xl border border-[#00ba7c]/20 bg-[#061a14] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.replyPlan.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.replyPlan.description")}</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-2 py-1 text-[11px] font-semibold text-[#7ee0b5]">
+          <CheckCircle2 className="size-3.5" />
+          {replyAngle.title}
+        </span>
+      </div>
+      <div className="mt-3 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#71767b]">{t("exposureRadar.replyPlan.bestFor")}</p>
+        <p className="mt-1 text-xs leading-5 text-[#c9d1d9]">{plan.bestFor}</p>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <ReplyPlanColumn
+          icon={<MessageCircle className="size-3.5" />}
+          title={t("exposureRadar.replyPlan.structure")}
+          items={plan.steps}
+          tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]"
+        />
+        <ReplyPlanColumn
+          icon={<ShieldAlert className="size-3.5" />}
+          title={t("exposureRadar.replyPlan.safety")}
+          items={plan.safety}
+          tone="border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"
+        />
+      </div>
+      <div className="mt-3 rounded-xl border border-[#00ba7c]/20 bg-[#00ba7c]/10 px-3 py-2 text-xs leading-5 text-[#7ee0b5]">
+        {plan.readyNote}
+      </div>
+    </div>
+  );
+}
+
+function SafetyReviewPanel({ item, replyAngle }: { item: ExposureRadarItemApi; replyAngle?: ReplyAngleSuggestion }) {
+  const { t } = useT();
+  const review = buildSafetyReview(item, replyAngle, t);
+  return (
+    <div className={`mt-4 rounded-2xl border p-3 ${safetyReviewTone(review.status)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.safetyReview.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{review.summary}</p>
+        </div>
+        <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${safetyReviewBadgeTone(review.status)}`}>
+          <ShieldAlert className="size-3.5" />
+          {t(`exposureRadar.safetyReview.status.${review.status}`)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {review.checks.map((check) => (
+          <div key={check.key} className="rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+            <div className="flex items-start gap-2">
+              <span className={`mt-1 size-2 shrink-0 rounded-full ${safetyReviewDot(check.status)}`} />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#e7e9ea]">{check.title}</p>
+                <p className="mt-1 text-[11px] leading-5 text-[#8b98a5]">{check.detail}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReplyPlanColumn({ icon, title, items, tone }: { icon: ReactNode; title: string; items: string[]; tone: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold ${tone}`}>
+        {icon}
+        {title}
+      </div>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <p key={item} className="text-xs leading-5 text-[#8b98a5]">{item}</p>
+        ))}
       </div>
     </div>
   );
@@ -1135,6 +1441,79 @@ function SourceMetaItem({ icon, label, value, valueClassName }: { icon: ReactNod
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-normal text-[#71767b]">{icon}{label}</p>
       <p className={`mt-1 truncate text-sm font-semibold text-[#e7e9ea] ${valueClassName || ""}`}>{value}</p>
     </div>
+  );
+}
+
+function LearningInsightsPanel({ data, items, manualActionStates }: { data: ExposureRadarPerformanceData | null; items: ExposureRadarItemApi[]; manualActionStates: Record<string, ManualActionState> }) {
+  const { t } = useT();
+  const controls = data?.learning_controls;
+  const outcomes = Object.values(manualActionStates).filter((state) => state.outcome);
+  const effectiveCount = outcomes.filter((state) => state.outcome === "effective").length;
+  const negativeCount = outcomes.filter((state) => state.outcome === "ineffective" || state.outcome === "not_suitable").length;
+  const boosted = items.filter((item) => (item.ranking_delta || 0) > 0).slice(0, 4);
+  const riskyCount = items.filter((item) => item.risk_level === "medium" || item.risk_level === "high").length;
+  const topTopics = data?.top_topics?.slice(0, 4) || [];
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.learningPanel.title")} description={t("exposureRadar.learningPanel.description")} className="mb-0" />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.feedback")} value={formatCompact(outcomes.length)} detail={t("exposureRadar.learningPanel.metric.feedbackDetail")} />
+          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.effective")} value={formatCompact(effectiveCount)} detail={t("exposureRadar.learningPanel.metric.effectiveDetail")} />
+          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.boosted")} value={formatCompact(boosted.length)} detail={t("exposureRadar.learningPanel.metric.boostedDetail")} />
+          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.risky")} value={formatCompact(riskyCount)} detail={t("exposureRadar.learningPanel.metric.riskyDetail")} />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-3">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.feedbackTitle")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{negativeCount > 0 ? t("exposureRadar.learningPanel.feedbackMixed", { count: negativeCount }) : t("exposureRadar.learningPanel.feedbackHealthy")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.effective")} value={effectiveCount} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
+            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.neutral")} value={outcomes.filter((state) => state.outcome === "neutral").length} tone="border-[#2f3336] bg-[#16181c] text-[#8b98a5]" />
+            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.negative")} value={negativeCount} tone="border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.boostedTitle")}</p>
+          <div className="mt-3 space-y-2">
+            {boosted.length ? boosted.map((item) => (
+              <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+                <p className="line-clamp-1 text-xs font-semibold text-[#e7e9ea]">{item.title}</p>
+                <p className="mt-1 text-[11px] text-[#71767b]">{t("exposureRadar.learningPanel.boostedReason", { delta: item.ranking_delta || 0 })}</p>
+              </div>
+            )) : (
+              <p className="rounded-xl border border-dashed border-[#2f3336] px-3 py-6 text-center text-xs text-[#71767b]">{t("exposureRadar.learningPanel.boostedEmpty")}</p>
+            )}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.controlsTitle")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <LearningBadge label={t("exposureRadar.learning.ranking")} value={controls?.ranking_enabled ? t("exposureRadar.learning.on") : t("exposureRadar.learning.off")} active={Boolean(controls?.ranking_enabled)} />
+            <LearningBadge label={t("exposureRadar.learning.collector")} value={controls?.collector_enabled ? t("exposureRadar.learning.on") : t("exposureRadar.learning.off")} active={Boolean(controls?.collector_enabled)} />
+            <LearningBadge label={t("exposureRadar.learning.mode")} value={t(`exposureRadar.learningMode.${normalizeLearningMode(controls?.mode)}`)} />
+            <LearningBadge label={t("exposureRadar.learning.window")} value={t("exposureRadar.learning.days", { days: controls?.window_days || 30 })} />
+          </div>
+          <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-[#08131f] px-3 py-2">
+            <p className="text-xs leading-5 text-[#8ecdf8]">
+              {controls?.ranking_enabled ? t("exposureRadar.learningPanel.rankingEnabled") : t("exposureRadar.learningPanel.rankingDisabled")}
+            </p>
+          </div>
+          {topTopics.length ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.topicTitle")}</p>
+              {topTopics.map((topic) => (
+                <div key={`${topic.region}:${topic.topic_name}`} className="flex items-center justify-between gap-2 rounded-lg border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs">
+                  <span className="truncate text-[#c9d1d9]">{topic.topic_name}</span>
+                  <span className="shrink-0 text-[#71767b]">{topic.success_count}/{topic.signal_count}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -1946,6 +2325,142 @@ function buildReplyAngleSuggestions(item: ExposureRadarItemApi, t: (key: string,
   return buildReplyAngleIDs(item).map((id) => replyAngle(id, t));
 }
 
+function buildReplyPlan(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion, t: (key: string, params?: Record<string, string | number>) => string): ReplyPlan {
+  const risky = item.risk_level === "medium" || item.risk_level === "high";
+  const topic = item.topic_name || item.title || t("exposureRadar.replyPlan.topicFallback");
+  const baseSafety = uniqueList([
+    t("exposureRadar.replyPlan.safety.noPitch"),
+    t("exposureRadar.replyPlan.safety.noClaims"),
+    item.data_quality === "topic_level" ? t("exposureRadar.replyPlan.safety.topicResearch") : "",
+    risky ? t("exposureRadar.replyPlan.safety.riskCheck") : "",
+    normalizeQualityStage(item.quality_stage, item) === "expired" ? t("exposureRadar.replyPlan.safety.windowCheck") : "",
+  ]).slice(0, 3);
+  const angleSteps: Record<ReplyAngleID, string[]> = {
+    operatorObservation: [
+      t("exposureRadar.replyPlan.step.anchorSpecific"),
+      t("exposureRadar.replyPlan.step.addObservation"),
+      t("exposureRadar.replyPlan.step.keepShort"),
+    ],
+    lightQuestion: [
+      t("exposureRadar.replyPlan.step.anchorSpecific"),
+      t("exposureRadar.replyPlan.step.askQuestion"),
+      t("exposureRadar.replyPlan.step.keepShort"),
+    ],
+    peerExperience: [
+      t("exposureRadar.replyPlan.step.respondFirst"),
+      t("exposureRadar.replyPlan.step.shareExperience"),
+      t("exposureRadar.replyPlan.step.closeSoftly"),
+    ],
+    cautionNote: [
+      t("exposureRadar.replyPlan.step.acknowledgeContext"),
+      t("exposureRadar.replyPlan.step.addBoundary"),
+      t("exposureRadar.replyPlan.step.noStrongJudgment"),
+    ],
+    topicResearch: [
+      t("exposureRadar.replyPlan.step.findSpecificPost"),
+      t("exposureRadar.replyPlan.step.anchorSpecific"),
+      t("exposureRadar.replyPlan.step.keepShort"),
+    ],
+  };
+  return {
+    bestFor: t(`exposureRadar.replyPlan.bestFor.${replyAngle.id}`, { topic }),
+    steps: angleSteps[replyAngle.id],
+    safety: baseSafety.length ? baseSafety : [t("exposureRadar.replyPlan.safety.noPitch")],
+    readyNote: item.generated_comment ? t("exposureRadar.replyPlan.ready.copy") : item.data_quality === "tweet_level" ? t("exposureRadar.replyPlan.ready.generate") : t("exposureRadar.replyPlan.ready.research"),
+  };
+}
+
+function buildSafetyReview(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion | undefined, t: (key: string, params?: Record<string, string | number>) => string): SafetyReview {
+  const generated = item.generated_comment || "";
+  const checks: SafetyReviewCheck[] = [
+    {
+      key: "context",
+      status: item.data_quality === "tweet_level" ? "pass" : "block",
+      title: t("exposureRadar.safetyReview.check.context.title"),
+      detail: item.data_quality === "tweet_level" ? t("exposureRadar.safetyReview.check.context.pass") : t("exposureRadar.safetyReview.check.context.block"),
+    },
+    {
+      key: "risk",
+      status: item.risk_level === "high" ? "block" : item.risk_level === "medium" ? "watch" : "pass",
+      title: t("exposureRadar.safetyReview.check.risk.title"),
+      detail: item.risk_level === "high" ? t("exposureRadar.safetyReview.check.risk.high") : item.risk_level === "medium" ? t("exposureRadar.safetyReview.check.risk.medium") : t("exposureRadar.safetyReview.check.risk.pass"),
+    },
+    {
+      key: "window",
+      status: normalizeQualityStage(item.quality_stage, item) === "expired" ? "watch" : "pass",
+      title: t("exposureRadar.safetyReview.check.window.title"),
+      detail: normalizeQualityStage(item.quality_stage, item) === "expired" ? t("exposureRadar.safetyReview.check.window.watch") : t("exposureRadar.safetyReview.check.window.pass"),
+    },
+    {
+      key: "angle",
+      status: replyAngle?.id === "cautionNote" || replyAngle?.id === "topicResearch" ? "watch" : "pass",
+      title: t("exposureRadar.safetyReview.check.angle.title"),
+      detail: replyAngle ? t(`exposureRadar.safetyReview.check.angle.${replyAngle.id}`) : t("exposureRadar.safetyReview.check.angle.none"),
+    },
+    {
+      key: "promotion",
+      status: hasPromotionalSmell(generated) ? "watch" : "pass",
+      title: t("exposureRadar.safetyReview.check.promotion.title"),
+      detail: hasPromotionalSmell(generated) ? t("exposureRadar.safetyReview.check.promotion.watch") : t("exposureRadar.safetyReview.check.promotion.pass"),
+    },
+    {
+      key: "claims",
+      status: hasRiskyGrowthClaim(generated) ? "block" : "pass",
+      title: t("exposureRadar.safetyReview.check.claims.title"),
+      detail: hasRiskyGrowthClaim(generated) ? t("exposureRadar.safetyReview.check.claims.block") : t("exposureRadar.safetyReview.check.claims.pass"),
+    },
+  ];
+  const status = checks.some((check) => check.status === "block") ? "block" : checks.some((check) => check.status === "watch") ? "watch" : "pass";
+  return {
+    status,
+    summary: t(`exposureRadar.safetyReview.summary.${status}`),
+    checks,
+  };
+}
+
+function hasPromotionalSmell(value: string) {
+  if (!value) return false;
+  return /octoagent|octo agent|oaf bot|try our|sign up|join us|https?:\/\//i.test(value);
+}
+
+function hasRiskyGrowthClaim(value: string) {
+  if (!value) return false;
+  return /guarantee|guaranteed|5m|5M|fully automated|passive income|spam at scale/i.test(value);
+}
+
+function safetyReviewTone(status: SafetyReviewStatus) {
+  switch (status) {
+    case "block":
+      return "border-[#f4212e]/25 bg-[#1f0709]";
+    case "watch":
+      return "border-[#ffd400]/25 bg-[#1f1a07]";
+    default:
+      return "border-[#00ba7c]/20 bg-[#061a14]";
+  }
+}
+
+function safetyReviewBadgeTone(status: SafetyReviewStatus) {
+  switch (status) {
+    case "block":
+      return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+    case "watch":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    default:
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  }
+}
+
+function safetyReviewDot(status: SafetyReviewStatus) {
+  switch (status) {
+    case "block":
+      return "bg-[#f4212e]";
+    case "watch":
+      return "bg-[#ffd400]";
+    default:
+      return "bg-[#00ba7c]";
+  }
+}
+
 function buildReplyAngleIDs(item: ExposureRadarItemApi): ReplyAngleID[] {
   const qualityStage = normalizeQualityStage(item.quality_stage, item);
   const tier = normalizeOpportunityTier(item.opportunity_tier);
@@ -1990,6 +2505,7 @@ function buildDraftRecommendedUse(item: ExposureRadarItemApi, replyAngle?: Reply
     `Selected reply angle: ${generationGuide.label}`,
     `Angle tone: ${generationGuide.tone}`,
     `Angle instruction: ${generationGuide.instruction}`,
+    `Reply plan: ${replyPlanGenerationInstruction(replyAngle.id)}`,
   ].filter(Boolean).join("\n\n");
 }
 
@@ -2000,6 +2516,21 @@ function buildDraftReason(item: ExposureRadarItemApi, replyAngle?: ReplyAngleSug
     item.reason,
     `Operator selected reply angle: ${generationGuide.label} - ${generationGuide.instruction}`,
   ].filter(Boolean).join("\n\n");
+}
+
+function replyPlanGenerationInstruction(angleID: ReplyAngleID) {
+  switch (angleID) {
+    case "lightQuestion":
+      return "Anchor on one concrete post detail, ask one low-pressure question, and stop.";
+    case "peerExperience":
+      return "Respond to the author's point first, add one short peer experience, and avoid centering the product.";
+    case "cautionNote":
+      return "Acknowledge the context, add one conservative boundary or condition, and avoid strong judgments.";
+    case "topicResearch":
+      return "Treat this as research-only until a specific post is found; do not reply from topic context alone.";
+    default:
+      return "Anchor on one concrete post detail, add one practical operator observation, and avoid product promotion.";
+  }
 }
 
 function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>, limit = 6): DailyActionPlanItem[] {
@@ -2035,6 +2566,105 @@ function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: 
     }
     return acc;
   }, { pending: 0, actNow: 0, handled: 0 });
+}
+
+function buildPeopleRadar(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): PeopleRadarEntry[] {
+  const people = new Map<string, PeopleRadarEntry>();
+  for (const item of items) {
+    if (item.data_quality !== "tweet_level") continue;
+    const handle = (item.author_handle || "").replace(/^@/, "").trim();
+    const name = item.author_name || handle || item.author_id || "";
+    if (!handle && !name) continue;
+    const key = (handle || item.author_id || name).toLowerCase();
+    const existing = people.get(key);
+    const state = manualActionStates[item.id];
+    const handled = isManualActionHandled(item, state) ? 1 : 0;
+    const drafted = item.generated_comment || item.review_task_id ? 1 : 0;
+    const saved = isRadarItemSaved(item, savedMemoryIDs) ? 1 : 0;
+    const engagement = publicEngagementCount(item);
+    if (!existing) {
+      people.set(key, {
+        key,
+        name,
+        handle: handle || undefined,
+        count: 1,
+        handled,
+        drafted,
+        saved,
+        maxScore: item.score || 0,
+        totalEngagement: engagement,
+        followers: item.followers_count,
+        stage: "new",
+        latestItem: item,
+      });
+      continue;
+    }
+    existing.count += 1;
+    existing.handled += handled;
+    existing.drafted += drafted;
+    existing.saved += saved;
+    existing.maxScore = Math.max(existing.maxScore, item.score || 0);
+    existing.totalEngagement += engagement;
+    if (typeof item.followers_count === "number" && item.followers_count > 0) {
+      existing.followers = typeof existing.followers === "number" && existing.followers > 0 ? Math.max(existing.followers, item.followers_count) : item.followers_count;
+    }
+    if (radarItemTimeValue(item) > radarItemTimeValue(existing.latestItem)) {
+      existing.latestItem = item;
+    }
+  }
+  return Array.from(people.values())
+    .map((person) => ({ ...person, stage: peopleRadarStage(person) }))
+    .sort((a, b) => {
+      const stageDelta = peopleRadarStageWeight(b.stage) - peopleRadarStageWeight(a.stage);
+      if (stageDelta !== 0) return stageDelta;
+      if (a.maxScore !== b.maxScore) return b.maxScore - a.maxScore;
+      if (a.count !== b.count) return b.count - a.count;
+      return b.totalEngagement - a.totalEngagement;
+    });
+}
+
+function publicEngagementCount(item: ExposureRadarItemApi) {
+  return (item.reply_count || 0) + (item.retweet_count || 0) + (item.like_count || 0) + (item.quote_count || 0) + (item.bookmark_count || 0);
+}
+
+function radarItemTimeValue(item: ExposureRadarItemApi) {
+  const raw = item.published_at || item.updated_at || "";
+  const value = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(value) ? value : 0;
+}
+
+function peopleRadarStage(person: PeopleRadarEntry): PeopleRadarStage {
+  const unhandled = Math.max(0, person.count - person.handled);
+  if (unhandled > 0 && person.maxScore >= 75) return "priority";
+  if (person.count >= 2) return "repeat";
+  if (person.handled > 0 || person.drafted > 0 || person.saved > 0) return "engaged";
+  return "new";
+}
+
+function peopleRadarStageWeight(stage: PeopleRadarStage) {
+  switch (stage) {
+    case "priority":
+      return 4;
+    case "repeat":
+      return 3;
+    case "engaged":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function peopleRadarStageTone(stage: PeopleRadarStage) {
+  switch (stage) {
+    case "priority":
+      return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
+    case "repeat":
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    case "engaged":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    default:
+      return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
+  }
 }
 
 function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>) {

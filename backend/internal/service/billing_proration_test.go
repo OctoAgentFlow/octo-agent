@@ -29,17 +29,17 @@ func TestCalculateBillingQuoteAppliesUnusedSubscriptionCredit(t *testing.T) {
 	if !quote.dto.IsUpgrade || quote.dto.OrderType != "upgrade" {
 		t.Fatalf("expected upgrade quote, got %#v", quote.dto)
 	}
-	if quote.dto.OriginalAmount != "29" {
-		t.Fatalf("expected original amount 29, got %s", quote.dto.OriginalAmount)
+	if quote.dto.OriginalAmount != "39" {
+		t.Fatalf("expected original amount 39, got %s", quote.dto.OriginalAmount)
 	}
 	if quote.dto.CreditAmount == "0" || quote.creditCents <= 0 {
 		t.Fatalf("expected unused credit, got %#v", quote.dto)
 	}
-	if quote.dto.PayableAmount == "29" || quote.payableCents >= quote.originalCents {
+	if quote.dto.PayableAmount == "39" || quote.payableCents >= quote.originalCents {
 		t.Fatalf("expected payable below full price, got %#v", quote.dto)
 	}
-	if quote.dto.PayableAmount != "23.58" {
-		t.Fatalf("expected prorated payable 23.58, got %s", quote.dto.PayableAmount)
+	if quote.dto.PayableAmount != "30.87" {
+		t.Fatalf("expected prorated payable 30.87, got %s", quote.dto.PayableAmount)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestCalculateBillingQuoteDoesNotCreditFreeTrial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calculateBillingQuote returned error: %v", err)
 	}
-	if quote.dto.OrderType != "new" || quote.dto.CreditAmount != "0" || quote.dto.PayableAmount != "8" {
+	if quote.dto.OrderType != "new" || quote.dto.CreditAmount != "0" || quote.dto.PayableAmount != "12" {
 		t.Fatalf("free trial should not produce cash credit: %#v", quote.dto)
 	}
 }

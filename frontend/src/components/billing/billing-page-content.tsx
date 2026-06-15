@@ -104,10 +104,10 @@ function nextUpgradePlan(plan: string) {
 
 function displayPlanName(plan: string, fallback: string, t: (key: string, params?: Record<string, string | number>) => string) {
   if (plan === "free_trial") return t("billing.plan.freeTrial");
-  if (plan === "pro_plus") return "Pro+";
-  if (plan === "plus") return "Plus";
-  if (plan === "pro") return "Pro";
-  if (plan === "basic" || plan === "basic_monthly") return "Basic";
+  if (plan === "pro_plus") return "Agency";
+  if (plan === "plus") return "Growth";
+  if (plan === "pro") return "Operator";
+  if (plan === "basic" || plan === "basic_monthly") return "Starter";
   return fallback;
 }
 

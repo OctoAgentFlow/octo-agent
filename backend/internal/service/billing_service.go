@@ -160,7 +160,7 @@ func (s *BillingService) Subscription(userID uint) (*dto.BillingSubscriptionData
 	if st == "expired" {
 		hint = "Renew your subscription to restore automation and posting."
 	} else if strings.EqualFold(normPlan, subscription.PlanFreeTrial) {
-		hint = "Basic plan starts at 8 USDT / month"
+		hint = "Starter plan starts at 12 USDT / month"
 	}
 	limits := subscription.LimitsForUser(user)
 	usage := s.subscriptionUsage(userID)
@@ -188,16 +188,16 @@ func (s *BillingService) Plans() *dto.BillingPlansResponse {
 		YearlyPrice:  0,
 		Currency:     "USDT",
 		Audience:     "14-day trial for new users",
-		Description:  "Try core social operations with lower trial capacity before upgrading to Basic.",
+		Description:  "Try the manual social operations workflow before upgrading to Starter.",
 		Features: []string{
 			"14-day free trial",
 			"1 OAF Bot",
 			"1 X account",
 			"100 AI generations / month",
-			"10 real X publishes / month",
-			"Opportunity drafts 90 / month",
-			"Review capacity 150 / month",
-			"Content memory basics",
+			"50 opportunity drafts / month",
+			"50 review actions / month",
+			"50 content memory items",
+			"20 radar refreshes / month",
 		},
 		FeatureFlags: []dto.PlanFeatureData{},
 		Limits:       planLimitsToDTO(subscription.FreeTrialLimits()),

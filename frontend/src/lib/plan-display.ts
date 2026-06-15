@@ -49,15 +49,18 @@ export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Languag
   const replyDrafts = limits.monthlyReplyDrafts ?? limits.monthlyAutoReplies;
   const opportunityDrafts = limits.monthlyOpportunityDrafts ?? limits.monthlyAutoComments;
   const reviewCapacity = limits.monthlyReviewCapacity ?? limits.monthlyAutoDMs;
+  const contentMemory = limits.contentMemorySources ?? limits.autoCommentTargets;
+  const radarRefreshes = limits.monthlyRadarRefreshes ?? limits.monthlyAutoCommentScans;
   const benefits = [
     t("planBenefits.oafBots", { count: count(limits.maxBots) }),
     t("planBenefits.xAccounts", { count: count(limits.maxTwitterAccounts) }),
-    t("planBenefits.aiGenerationsMonthly", { count: count(limits.aiGenerationsMonthly) }),
-    t("planBenefits.monthlyXWrites", { count: count(limits.monthlyXWrites) }),
-    t("planBenefits.monthlyContentDraft", { count: count(contentDrafts) }),
-    t("planBenefits.monthlyReplyDraft", { count: count(replyDrafts) }),
     t("planBenefits.monthlyOpportunityDraft", { count: count(opportunityDrafts) }),
+    t("planBenefits.contentMemory", { count: count(contentMemory) }),
+    t("planBenefits.monthlyReplyDraft", { count: count(replyDrafts) }),
+    t("planBenefits.monthlyContentDraft", { count: count(contentDrafts) }),
     t("planBenefits.reviewCapacity", { count: count(reviewCapacity) }),
+    t("planBenefits.monthlyRadarRefreshes", { count: count(radarRefreshes) }),
+    t("planBenefits.aiGenerationsMonthly", { count: count(limits.aiGenerationsMonthly) }),
     t("planBenefits.analyticsDays", { days: count(limits.analyticsDays) }),
   ];
 

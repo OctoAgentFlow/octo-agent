@@ -18,10 +18,8 @@ export function DashboardPreviewSection() {
     }
     return dashboardPreviewData.kpis.map((item) => ({
       ...item,
-      value: item.value.endsWith("%")
-        ? `${Math.min(99, Math.round(Number(item.value.replace("%", "")) + 2))}%`
-        : `${Math.round(Number(item.value) * 4.2)}`,
-      delta: `+${Math.max(8, Number(item.delta.replace(/[+%]/g, "")) + 6)}%`,
+      value: weeklyPreviewValue(item.value),
+      delta: weeklyPreviewDelta(item.delta),
     }));
   }, [activeRange]);
 
@@ -101,4 +99,18 @@ export function DashboardPreviewSection() {
       </div>
     </SectionShell>
   );
+}
+
+function weeklyPreviewValue(value: string) {
+  const normalized = value.trim();
+  const numeric = Number(normalized.replace("%", ""));
+  if (!Number.isFinite(numeric)) return value;
+  if (normalized.endsWith("%")) return `${Math.min(99, Math.round(numeric + 2))}%`;
+  return String(Math.round(numeric * 4.2));
+}
+
+function weeklyPreviewDelta(delta: string) {
+  const numeric = Number(delta.replace(/[+%]/g, ""));
+  if (!Number.isFinite(numeric)) return delta;
+  return `+${Math.max(8, numeric + 6)}%`;
 }

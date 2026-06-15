@@ -313,15 +313,15 @@ func TestAutoCommentScanIntervalUsesPlanAndPriority(t *testing.T) {
 
 func TestAutoCommentPlanLimitsExposeTargetsAndScans(t *testing.T) {
 	trial := subscription.FreeTrialLimits()
-	if trial.AutoCommentTargets != 2 || trial.MonthlyAutoCommentScans != 20 {
+	if trial.AutoCommentTargets != 50 || trial.MonthlyAutoCommentScans != 20 {
 		t.Fatalf("unexpected free trial auto comment limits: targets=%d scans=%d", trial.AutoCommentTargets, trial.MonthlyAutoCommentScans)
 	}
 	basic := subscription.LimitsForPlan(subscription.PlanBasic)
-	if basic.AutoCommentTargets != 3 || basic.MonthlyAutoCommentScans != 30 {
+	if basic.AutoCommentTargets != 200 || basic.MonthlyAutoCommentScans != 30 {
 		t.Fatalf("unexpected basic auto comment limits: targets=%d scans=%d", basic.AutoCommentTargets, basic.MonthlyAutoCommentScans)
 	}
 	proPlus := subscription.LimitsForPlan(subscription.PlanProPlus)
-	if proPlus.AutoCommentTargets != 80 || proPlus.MonthlyAutoCommentScans != 2400 {
+	if proPlus.AutoCommentTargets != 20000 || proPlus.MonthlyAutoCommentScans != 2400 {
 		t.Fatalf("unexpected pro+ auto comment limits: targets=%d scans=%d", proPlus.AutoCommentTargets, proPlus.MonthlyAutoCommentScans)
 	}
 }

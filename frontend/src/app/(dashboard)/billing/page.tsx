@@ -36,19 +36,19 @@ type LoadState = "loading" | "ready" | "error";
 function mapPlanKey(code: string) {
   if (code === "free_trial") return "billing.plan.freeTrial";
   if (code === "basic_monthly" || code === "basic") return "billing.plan.basic";
-  if (code === "plus") return "Plus";
-  if (code === "pro") return "Pro";
-  if (code === "pro_plus") return "Pro+";
+  if (code === "plus") return "Growth";
+  if (code === "pro") return "Operator";
+  if (code === "pro_plus") return "Agency";
   return "billing.plan.basic";
 }
 
 function mapPlanName(code: string) {
   if (code === "free_trial") return "Free Trial";
-  if (code === "basic_monthly" || code === "basic") return "Basic";
-  if (code === "plus") return "Plus";
-  if (code === "pro") return "Pro";
-  if (code === "pro_plus") return "Pro+";
-  return code || "Basic";
+  if (code === "basic_monthly" || code === "basic") return "Starter";
+  if (code === "plus") return "Growth";
+  if (code === "pro") return "Operator";
+  if (code === "pro_plus") return "Agency";
+  return code || "Starter";
 }
 
 function mapSubscriptionStatusKey(status: string) {

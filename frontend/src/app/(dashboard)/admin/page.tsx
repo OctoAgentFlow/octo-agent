@@ -8,7 +8,9 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  CalendarClock,
   CheckCircle2,
+  FileText,
   LayoutDashboard,
   Languages,
   Radar,
@@ -2091,6 +2093,29 @@ function SystemSection({ overview }: { overview: AdminOverviewApi }) {
           <Metric label={t("admin.metrics.scheduledPosts")} value={overview.content.scheduled_posts} icon={Activity} />
           <Metric label={t("admin.metrics.failedPosts")} value={overview.content.failed_posts} icon={AlertTriangle} tone={overview.content.failed_posts > 0 ? "danger" : "default"} />
           <Metric label={t("admin.metrics.enabledAutomations")} value={overview.content.enabled_automations} icon={Settings} />
+        </div>
+      </Card>
+      <Card className="bg-[#0f1419] xl:col-span-2">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <CardHeader title={t("admin.system.legacyBoundary.title")} description={t("admin.system.legacyBoundary.description")} className="mb-0" />
+          <span className="inline-flex h-9 w-fit items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 text-xs font-semibold text-[#7ee0b5]">
+            <ShieldCheck className="size-3.5" />
+            {t("admin.system.legacyBoundary.badge")}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <Metric label={t("admin.system.legacyBoundary.metric.contentDrafts")} value={contentDraftEnabledPlans(overview)} icon={FileText} />
+          <Metric label={t("admin.system.legacyBoundary.metric.dueNow")} value={contentDraftDueNow(overview)} icon={CalendarClock} tone={contentDraftDueNow(overview) > 0 ? "warn" : "default"} />
+          <Metric label={t("admin.system.legacyBoundary.metric.skipped")} value={contentDraftSkipped24h(overview)} icon={Activity} />
+          <Metric label={t("admin.system.legacyBoundary.metric.failed")} value={contentDraftFailed24h(overview)} icon={AlertTriangle} tone={contentDraftFailed24h(overview) > 0 ? "danger" : "default"} />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {["routes", "storage", "removal"].map((key) => (
+            <div key={key} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t(`admin.system.legacyBoundary.${key}.title`)}</p>
+              <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`admin.system.legacyBoundary.${key}.description`)}</p>
+            </div>
+          ))}
         </div>
       </Card>
     </div>

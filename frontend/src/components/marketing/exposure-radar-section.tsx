@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Database, FileText, Languages, ListChecks, Radar, Sparkles } from "lucide-react";
+import { ArrowRight, Database, FileText, Languages, ListChecks, Radar, ShieldCheck, Sparkles, Users } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
@@ -17,6 +17,13 @@ const playbookItems = [
 ];
 
 const releaseItems = ["drafts", "brief", "library", "strategy"];
+
+const deskItems = [
+  { icon: Radar, key: "scan" },
+  { icon: ShieldCheck, key: "decide" },
+  { icon: Users, key: "handoff" },
+  { icon: Database, key: "learn" },
+];
 
 const signalRows = [
   { topicKey: "marketing.exposureRadar.preview.rows.ai.topic", metaKey: "marketing.exposureRadar.preview.rows.ai.meta", actionKey: "marketing.exposureRadar.preview.rows.ai.action", tone: "border-cyan-300/20 bg-cyan-400/10 text-cyan-100" },
@@ -66,6 +73,26 @@ export function ExposureRadarSection() {
                 <div key={item} className="flex items-start gap-2 text-sm leading-6 text-white/64">
                   <FileText className="mt-1 size-3.5 shrink-0 text-cyan-100" />
                   <span>{t(`marketing.exposureRadar.release.${item}`)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-cyan-300/15 bg-cyan-400/[0.065] p-4">
+            <p className="text-sm font-semibold text-white">{t("marketing.exposureRadar.dailyDesk.title")}</p>
+            <p className="mt-1.5 text-sm leading-6 text-white/60">{t("marketing.exposureRadar.dailyDesk.description")}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {deskItems.map((item) => (
+                <div key={item.key} className="rounded-lg border border-white/10 bg-black/18 p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                      <item.icon className="size-3.5" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold text-white">{t(`marketing.exposureRadar.dailyDesk.${item.key}.title`)}</p>
+                      <p className="mt-1 text-xs leading-5 text-white/52">{t(`marketing.exposureRadar.dailyDesk.${item.key}.desc`)}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

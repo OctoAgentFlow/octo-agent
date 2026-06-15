@@ -22,7 +22,10 @@ import {
   CalendarClock,
   CheckCircle2,
   Crown,
+  Database,
+  Gauge,
   ListChecks,
+  ShieldCheck,
   type LucideIcon,
   Sparkles,
   Users,
@@ -65,6 +68,7 @@ export function BillingPageContent({
         onUpgrade={() => openUpgrade()}
       />
       <PlanUsagePanel subscription={subscription} onUpgrade={() => openUpgrade()} />
+      <PlanValueMapPanel subscription={subscription} onUpgrade={() => openUpgrade()} />
       <PlanComparison
         plans={plans}
         billingCycle={billingCycle}
@@ -415,6 +419,79 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
         <p className="mt-4 rounded-2xl border border-[#2f3336] bg-black/60 p-3 text-xs leading-relaxed text-[#71767b]">
           {t("billing.usage.capabilities.hint")}
         </p>
+      </div>
+    </section>
+  );
+}
+
+function PlanValueMapPanel({ subscription, onUpgrade }: { subscription: CurrentSubscription | null; onUpgrade: () => void }) {
+  const { t } = useT();
+  if (!subscription) return null;
+
+  const metric = (primary: number | undefined, fallback: number) => primary ?? fallback;
+  const valueItems: Array<{ key: string; value: string; icon: LucideIcon }> = [
+    {
+      key: "radar",
+      value: formatUsage(metric(subscription.limits.monthlyOpportunityDrafts, subscription.limits.monthlyAutoComments)),
+      icon: Gauge,
+    },
+    {
+      key: "review",
+      value: formatUsage(metric(subscription.limits.monthlyReviewCapacity, subscription.limits.monthlyAutoDMs)),
+      icon: ListChecks,
+    },
+    {
+      key: "memory",
+      value: formatUsage(metric(subscription.limits.contentMemorySources, subscription.limits.autoCommentTargets)),
+      icon: Database,
+    },
+    {
+      key: "team",
+      value: t("billing.valueMap.card.team.value", { count: subscription.limits.teamSeats }),
+      icon: Users,
+    },
+  ];
+
+  return (
+    <section className="surface-card bg-[#0f1419] p-5 md:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+            <ShieldCheck className="size-3.5" />
+            {t("billing.valueMap.badge")}
+          </span>
+          <h3 className="mt-3 text-base font-semibold text-white md:text-lg">{t("billing.valueMap.title")}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#71767b]">{t("billing.valueMap.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onUpgrade}>
+          {t("billing.valueMap.cta")}
+          <ArrowUpRight className="size-4" />
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {valueItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.key} className="rounded-2xl border border-[#2f3336] bg-black p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[#e7e9ea]">{t(`billing.valueMap.card.${item.key}.title`)}</p>
+                <span className="flex size-9 items-center justify-center rounded-full bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                  <Icon className="size-4" />
+                </span>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-white">{item.value}</p>
+              <p className="mt-2 text-xs leading-5 text-[#71767b]">{t(`billing.valueMap.card.${item.key}.description`)}</p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {["safe", "learn", "scale"].map((key) => (
+          <div key={key} className="rounded-2xl border border-[#2f3336] bg-black/60 p-4">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t(`billing.valueMap.workflow.${key}.title`)}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`billing.valueMap.workflow.${key}.description`)}</p>
+          </div>
+        ))}
       </div>
     </section>
   );

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, ArrowRight, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, FileText, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, FileText, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -814,6 +814,14 @@ export default function ExposureRadarPage() {
         timeZone={timeZone}
       />
 
+      <TeamHandoffPanel
+        moves={todayMoves}
+        people={peopleRadar}
+        recentRecords={recentManualRecords}
+        safety={safetyCenter}
+        timeZone={timeZone}
+      />
+
       <ContentDraftOperatingPanel
         bridge={contentDraftBridge}
         loading={contentDraftBridgeLoading}
@@ -850,6 +858,11 @@ export default function ExposureRadarPage() {
         timeZone={timeZone}
         onRefreshResults={() => void refreshManualResults()}
       />
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <AccountSafetyCenterPanel safety={safetyCenter} recentRecords={recentManualRecords} strategy={growthStrategy} />
+        <RadarDataHealthMonitorPanel data={data} loadState={loadState} timeZone={timeZone} />
+      </div>
 
       {shouldShowSignalRecovery(data, loadState, workbenchStats) ? (
         <SignalRecoveryPanel
@@ -1346,6 +1359,192 @@ function DailyReviewReportPanel({
               </div>
             </div>
           ) : null}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TeamHandoffPanel({
+  moves,
+  people,
+  recentRecords,
+  safety,
+  timeZone,
+}: {
+  moves: DailyActionPlanItem[];
+  people: PeopleRadarEntry[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  safety: ExposureRadarSafetyCenterData | null;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const readyMoves = moves.slice(0, 3);
+  const priorityPeople = people.filter((person) => person.stage === "priority" || person.stage === "repeat").slice(0, 3);
+  const handledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
+  const pendingBackfill = recentRecords.filter((record) => isRecentManualRecord(record, 72) && (record.handled_at || record.task_status === "done") && !record.result_checked_at && !record.result_score).length;
+  const warnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const report = [
+    t("exposureRadar.handoff.report.heading"),
+    t("exposureRadar.handoff.report.summary", { moves: readyMoves.length, handled: handledToday, backfill: pendingBackfill, warnings }),
+    readyMoves.length ? t("exposureRadar.handoff.report.queue") : t("exposureRadar.handoff.report.queueEmpty"),
+    ...readyMoves.map((entry, index) => t("exposureRadar.handoff.report.queueItem", {
+      index: index + 1,
+      title: entry.item.title,
+      action: t(`exposureRadar.dailyAction.${entry.action}`),
+      score: entry.item.score,
+    })),
+    priorityPeople.length ? t("exposureRadar.handoff.report.people") : t("exposureRadar.handoff.report.peopleEmpty"),
+    ...priorityPeople.map((person) => t("exposureRadar.handoff.report.peopleItem", {
+      name: person.name,
+      handle: person.handle ? `@${person.handle}` : "-",
+      count: person.count,
+    })),
+    t("exposureRadar.handoff.report.generatedAt", { time: formatDateTime(new Date().toISOString(), timeZone) }),
+  ].join("\n");
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(report);
+      pushToast(t("exposureRadar.handoff.copied"));
+    } catch {
+      pushToast(t("exposureRadar.handoff.copyFailed"));
+    }
+  };
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.handoff.title")} description={t("exposureRadar.handoff.description")} className="mb-0" />
+        <Button type="button" variant="outline" onClick={() => void copyReport()}>
+          <Clipboard className="size-4" />
+          {t("exposureRadar.handoff.copy")}
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <GrowthDeskMetric icon={<MessageCircle className="size-3.5" />} label={t("exposureRadar.handoff.metric.ready")} value={String(readyMoves.length)} detail={t("exposureRadar.handoff.metric.readyDetail")} />
+        <GrowthDeskMetric icon={<CheckCircle2 className="size-3.5" />} label={t("exposureRadar.handoff.metric.handled")} value={String(handledToday)} detail={t("exposureRadar.handoff.metric.handledDetail")} />
+        <GrowthDeskMetric icon={<BarChart3 className="size-3.5" />} label={t("exposureRadar.handoff.metric.backfill")} value={String(pendingBackfill)} detail={t("exposureRadar.handoff.metric.backfillDetail")} />
+        <GrowthDeskMetric icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.handoff.metric.safety")} value={String(warnings)} detail={t("exposureRadar.handoff.metric.safetyDetail")} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.handoff.queueTitle")}</p>
+          <div className="mt-3 space-y-2">
+            {readyMoves.length ? readyMoves.map((entry, index) => (
+              <div key={entry.item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="line-clamp-2 text-xs font-semibold text-[#e7e9ea]">{index + 1}. {entry.item.title}</p>
+                  <span className="shrink-0 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-0.5 text-[11px] font-semibold text-[#8ecdf8]">{entry.item.score}</span>
+                </div>
+                <p className="mt-1 text-[11px] leading-4 text-[#71767b]">{t(`exposureRadar.dailyAction.${entry.action}`)} · {t(`exposureRadar.dailyActionReason.${entry.reason}`)}</p>
+              </div>
+            )) : (
+              <p className="rounded-xl border border-dashed border-[#2f3336] px-3 py-6 text-center text-xs text-[#71767b]">{t("exposureRadar.handoff.queueEmpty")}</p>
+            )}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.handoff.rolesTitle")}</p>
+          <div className="mt-3 space-y-2">
+            {["reviewer", "handler", "analyst"].map((key) => (
+              <div key={key} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+                <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.handoff.role.${key}.title`)}</p>
+                <p className="mt-1 text-[11px] leading-4 text-[#71767b]">{t(`exposureRadar.handoff.role.${key}.description`)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AccountSafetyCenterPanel({
+  safety,
+  recentRecords,
+  strategy,
+}: {
+  safety: ExposureRadarSafetyCenterData | null;
+  recentRecords: ExposureRadarManualRecordApi[];
+  strategy: ExposureRadarGrowthStrategyApi | null;
+}) {
+  const { t } = useT();
+  const watch = safety?.watch_count || 0;
+  const blocked = safety?.block_count || 0;
+  const riskyRecords = recentRecords.filter((record) => record.safety_status === "watch" || record.safety_status === "block" || record.risk_level === "medium" || record.risk_level === "high").length;
+  const posture = blocked > 0 ? "pause" : watch > 0 || riskyRecords > 0 ? "review" : "steady";
+  const dailyLimit = Math.max(1, strategy?.daily_move_limit || 10);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.accountSafety.title")} description={t("exposureRadar.accountSafety.description")} className="mb-0" />
+        <span className={`inline-flex h-9 w-fit items-center gap-2 rounded-full border px-3 text-xs font-semibold ${posture === "steady" ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : posture === "review" ? "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" : "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]"}`}>
+          {posture === "steady" ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+          {t(`exposureRadar.accountSafety.posture.${posture}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <DiagnosticMetric label={t("exposureRadar.accountSafety.metric.dailyLimit")} value={String(dailyLimit)} detail={t("exposureRadar.accountSafety.metric.dailyLimitDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.accountSafety.metric.review")} value={String(watch)} detail={t("exposureRadar.accountSafety.metric.reviewDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.accountSafety.metric.blocked")} value={String(blocked)} detail={t("exposureRadar.accountSafety.metric.blockedDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.accountSafety.metric.risky")} value={String(riskyRecords)} detail={t("exposureRadar.accountSafety.metric.riskyDetail")} />
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.accountSafety.rulesTitle")}</p>
+        <div className="mt-3 space-y-2">
+          {(safety?.warnings?.length ? safety.warnings.slice(0, 3) : ["manual", "context", "pace"]).map((item) => (
+            <div key={item} className="flex gap-2 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs leading-5 text-[#8b98a5]">
+              <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[#7ee0b5]" />
+              <span>{["manual", "context", "pace"].includes(item) ? t(`exposureRadar.accountSafety.rule.${item}`) : item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function RadarDataHealthMonitorPanel({ data, loadState, timeZone }: { data: ExposureRadarData | null; loadState: LoadState; timeZone: string }) {
+  const { t } = useT();
+  const diagnostics = data?.diagnostics || null;
+  const status = normalizeDiagnosticStatus(diagnostics?.status || (loadState === "loading" ? "warming" : data?.source_status));
+  const suggestions = diagnostics ? diagnosticSuggestions(diagnostics, t).slice(0, 3) : [t("exposureRadar.dataHealth.suggestion.loading")];
+  const sourceType = normalizeSourceType(data?.source_type);
+  const sourceStatus = normalizeSourceStatus(data?.source_status);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.dataHealth.title")} description={t("exposureRadar.dataHealth.description")} className="mb-0" />
+        <span className={`inline-flex h-9 w-fit items-center gap-2 rounded-full border px-3 text-xs font-semibold ${diagnosticStatusClass(status)}`}>
+          <Activity className="size-3.5" />
+          {t(`exposureRadar.diagnostics.status.${status}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <DiagnosticMetric label={t("exposureRadar.dataHealth.metric.source")} value={t(`exposureRadar.sourceType.${sourceType}`)} detail={t(`exposureRadar.sourceStatus.${sourceStatus}`)} />
+        <DiagnosticMetric label={t("exposureRadar.dataHealth.metric.coverage")} value={formatPercent(diagnostics?.real_view_coverage || 0)} detail={t("exposureRadar.dataHealth.metric.coverageDetail", { count: diagnostics?.window_real_view_count || 0 })} />
+        <DiagnosticMetric label={t("exposureRadar.dataHealth.metric.sampling")} value={formatPercent(diagnostics?.sampling_coverage || 0)} detail={t("exposureRadar.dataHealth.metric.samplingDetail", { count: diagnostics?.window_prior_sample_count || 0 })} />
+        <DiagnosticMetric label={t("exposureRadar.dataHealth.metric.updated")} value={data?.last_collected_at ? formatDateTime(data.last_collected_at, timeZone) : "-"} detail={data?.updated_at ? formatDateTime(data.updated_at, timeZone) : t("exposureRadar.dataHealth.metric.updatedEmpty")} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dataHealth.gapTitle")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MiniStat icon={<Eye className="size-3.5" />} label={t("exposureRadar.diagnostics.gap.maxViews")} value={formatCompact(diagnostics?.max_impression_count || 0)} />
+            <MiniStat icon={<Gauge className="size-3.5" />} label={t("exposureRadar.diagnostics.gap.maxSpeed")} value={`${formatOneDecimal(diagnostics?.max_views_per_minute || 0)}/min`} />
+            <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.diagnostics.metric.hot")} value={formatCompact(diagnostics?.hot_opportunity_count || 0)} />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dataHealth.nextTitle")}</p>
+          <div className="mt-3 space-y-2">
+            {suggestions.map((suggestion) => (
+              <div key={suggestion} className="flex gap-2 text-xs leading-5 text-[#8b98a5]">
+                <Info className="mt-0.5 size-3.5 shrink-0 text-[#8ecdf8]" />
+                <span>{suggestion}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </Card>

@@ -1,38 +1,57 @@
 # Page List
 
-本文档按当前 `frontend/src/app` 页面和后端 API 对齐，用于继续开发和调试时快速定位入口。
+This document maps the current product pages to their backend API areas. It is written around the current manual, safe X growth workflow.
 
-| 路径 | 用途 | 与后端 API 关系 |
+## Public And Auth
+
+| Path | Purpose | Backend/API |
 | --- | --- | --- |
-| `/` | 官网首页，介绍 OAF Bot、自动化能力、Pricing、FAQ | 读取 `/public/site-links` 展示官方 X / TG 链接；Pricing 文案前端本地化，套餐数字来自 Billing |
-| `/login` | 用户登录/注册，邮箱验证码 | `POST /auth/email-code/send`、`POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`GET /users/me` |
-| `/dashboard` | 用户控制台概览、套餐额度、上线检查、近期活动 | `GET /dashboard/overview`、`GET /billing/subscription`、`GET /activities`、`GET /automations/runtime-status` |
-| `/accounts` | X 账号绑定、列表、解绑 | `GET /accounts`、`POST /accounts/oauth/x/start`、`DELETE /accounts/:id`、OAuth callback |
-| `/oaf-bots` | OAF Bot 创建/编辑、语言配置、示例生成、本月 AI 用量 | `GET/POST/PUT /oaf-bots`、`POST /oaf-bots/:id/test-generate`、`GET /oaf-bots/:id/generation-usages` |
-| `/automations` | 自动化总览和入口 | `GET /automations`、`GET /automations/runtime-status`，并跳转 Auto Post / Reply / Comment / DM 子页面 |
-| `/auto-post` | Auto Post Planner、Content Library、手动生成、run-now、运行记录 | `/auto-post/*`、`/content-library/items`、Execution Queue / Publishing Pipeline |
-| `/auto-replies` | Auto Reply 最小闭环：录入评论、生成回复草稿、执行模式 | `/auto-replies/drafts*`、`PATCH /automations/reply/execution-mode` |
-| `/auto-comments` | Auto Comment 最小闭环：目标推文、生成评论草稿、执行模式 | `/auto-comments/targets*`、`/auto-comments/drafts*`、`PATCH /automations/comment/execution-mode` |
-| `/auto-dms` | Auto DM 任务、收件人规则、导入、重试、退订/黑名单管理 | `/auto-dm/tasks`、`/auto-dm/recipients`、`/auto-dm/recipient-rules/*`、`/auto-dm/recipients/imports` |
-| `/execution-queue` | 统一执行队列：待审核、待发布、失败、发布任务状态 | `GET /review-queue`、Auto Post/Reply/Comment approve/reject/update、`/publishing/jobs/*` |
-| `/review-queue` | 兼容入口，当前语义同 Execution Queue | `GET /review-queue` |
-| `/posts` | 传统 Posts 列表、详情、创建、手动发布 | `GET/POST/PUT/DELETE /posts`、`POST /posts/:id/execute`、`POST /posts/generate` |
-| `/activity` | 活动日志和失败排查 | `GET /activities`，支持类型、状态、时间范围、账号、失败原因筛选 |
-| `/analytics` | 分析概览 | `GET /analytics/overview?range=7d|30d&account_id=...` |
-| `/billing` | 套餐、订阅、AI 用量、下单、订单历史 | `/billing/subscription`、`/billing/plans`、`/billing/payment-methods`、`/billing/orders*` |
-| `/settings` | 当前用户资料、密码、通知偏好、语言偏好 | `GET/PATCH /users/me`、`PATCH /users/me/password`、`GET/PATCH /users/me/notification-settings` |
-| `/profile` | 当前用户资料 | `GET /users/me` |
-| `/admin` | 管理后台首页和用户管理 | Admin API：`/admin/overview`、`/admin/users`、`PATCH /admin/users/:id`；仅 `owner/admin` |
-| `/unsubscribe/[token]` | Auto DM 公开退订页 | `GET/POST /auto-dm/unsubscribe/:token`，无需登录 |
+| `/` | Marketing site for AI social operations, Exposure Radar, OAF Bot, Content Memory, and manual workflows. | `GET /public/site-links`; pricing copy is localized in the frontend and plan data comes from Billing. |
+| `/login` | Login and registration with email codes. | `POST /auth/email-code/send`, `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /users/me`. |
+| `/unsubscribe/[token]` | Public historical DM unsubscribe page. | `GET/POST /auto-dm/unsubscribe/:token`; no login required. |
 
-## 当前信息架构
+## Operator App
 
-- OAF Bot 是人设层：决定账号“怎么说”，包含身份、语气、话题、边界、增长目标和语言策略。
-- Auto Post / Reply / Comment / DM 是执行层：决定生成什么场景的内容。
-- Execution Queue 是审核与待发布层：统一处理 `draft`、`pending_review`、`ready_to_publish`、`published`、`failed`。
-- Publishing Pipeline 是发布层：统一创建 `publish_jobs`，scheduler 只 simulated publish，真实 X 发布必须由用户手动触发。
+| Path | Purpose | Backend/API |
+| --- | --- | --- |
+| `/dashboard` | Operator overview: subscription, readiness, recent activity, account status, and workflow health. | `GET /dashboard/overview`, `GET /billing/subscription`, `GET /activities`, `GET /automations/runtime-status`. |
+| `/accounts` | Bind, inspect, and disconnect X accounts; show readiness and account intelligence entry points. | `GET /accounts`, `POST /accounts/oauth/x/start`, OAuth callback, `DELETE /accounts/:id`. |
+| `/oaf-bots` | Configure account persona, voice, topics, boundaries, language style, and learning preferences. | `GET/POST/PUT /oaf-bots`, `POST /oaf-bots/:id/test-generate`, `GET /oaf-bots/:id/generation-usages`. |
+| `/exposure-radar` | Daily Growth Desk: opportunity signals, hot/rising filters, diagnostics, strategy, reply angles, people radar, manual records, and learning loop. | `/trends/exposure-radar*`, `/exposure-radar/drafts*`, `/exposure-radar/manual-records*`, `/exposure-radar/strategy`, `/exposure-radar/people*`. |
+| `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
+| `/daily-x-queue` | Daily content material and draft preparation workflow. | `/daily-x-queue*`, content memory, OAF Bot, and draft generation APIs. |
+| `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
+| `/review-queue` | Compatibility redirect to Handling List. | Redirects to `/handling-list`. |
+| `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |
+| `/activity` | Activity log and failure investigation. | `GET /activities` with type, status, time range, account, and failure filters. |
+| `/analytics` | Internal performance analytics and available public X metrics. | `GET /analytics/overview?range=7d|30d&account_id=...`. |
+| `/billing` | Plans, subscription, AI generation usage, opportunity draft capacity, orders, and payment methods. | `/billing/subscription`, `/billing/plans`, `/billing/payment-methods`, `/billing/orders*`. |
+| `/settings` | User profile, password, notification settings, and language preference. | `GET/PATCH /users/me`, `PATCH /users/me/password`, `GET/PATCH /users/me/notification-settings`. |
+| `/profile` | Current user profile. | `GET /users/me`. |
 
-## 说明
+## Admin App
 
-- `/agents` 仍有兼容页面/接口，但当前主导航应以 `/oaf-bots` 和 `/automations` 为准。
-- Auto Post 新工作流优先使用 `/auto-post`；`/posts/create?source=auto_post` 仍可作为传统内容准备入口。
+| Path | Purpose | Backend/API |
+| --- | --- | --- |
+| `/admin` | Admin overview, users, billing operations, execution metrics, system status, and diagnostics. | Admin API: `/admin/overview`, `/admin/users`, `PATCH /admin/users/:id`, billing/admin endpoints. |
+
+## Legacy And Compatibility
+
+| Legacy Path/API | Current Status | Replacement |
+| --- | --- | --- |
+| `/auto-post` page/API | Deprecated compatibility for Content Drafts. API access is logged with deprecation headers. | `/content-drafts` and `/api/v1/content-drafts`. |
+| `/execution-queue` page | Compatibility implementation behind Handling List. | `/handling-list`. |
+| `/auto-replies` API | Protected legacy automation API; blocked by default. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |
+| Authenticated `/auto-dm` API | Protected legacy automation API; blocked by default except public unsubscribe. | Manual growth workflows and account operations; no direct replacement for automated DM outreach. |
+| `/auto-comment` and `/auto-comments` APIs | Protected legacy automation APIs; blocked by default. | `/api/v1/exposure-radar/drafts` and manual handling records. |
+
+Emergency rollback for protected legacy automation APIs requires setting `OCTO_ALLOW_LEGACY_AUTOMATION_ROUTES=true` in the server environment. This should only be used temporarily while investigating historical data or old clients.
+
+## Information Architecture
+
+- OAF Bot is the persona layer: it defines how the account should sound and what boundaries it should respect.
+- Exposure Radar is the discovery layer: it finds and explains timely X opportunities.
+- Content Memory is the context layer: it stores reusable product, signal, and feedback knowledge.
+- Content Drafts are the creation layer: they produce copy-ready suggestions.
+- Handling List is the human decision layer: operators review, copy, publish manually where appropriate, and record outcomes.
+- Analytics and Admin are the observability layers: they show usage, results, costs, and operational health.

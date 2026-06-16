@@ -10,7 +10,9 @@ import (
 // RegisterAutoPost keeps the legacy /auto-post API available for old clients
 // and rollback safety. New clients should use RegisterContentDrafts.
 func RegisterAutoPost(rg *gin.RouterGroup, c *controller.ContentDraftController) {
-	registerAutoPostRoutes(rg.Group("/auto-post"), c)
+	group := rg.Group("/auto-post")
+	group.Use(middleware.DeprecatedRoute("auto-post", "/api/v1/content-drafts"))
+	registerAutoPostRoutes(group, c)
 }
 
 func RegisterContentDrafts(rg *gin.RouterGroup, c *controller.ContentDraftController) {

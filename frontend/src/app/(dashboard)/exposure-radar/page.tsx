@@ -55,6 +55,7 @@ type SessionFocusKey = "relationships" | "research" | "traffic" | "memory";
 type FirstDayStepKey = "account" | "strategy" | "queue" | "result";
 type FirstDayActivationMode = "setup" | "strategy" | "signals" | "handle" | "result" | "complete";
 type FirstDayActivationAction = { key: string; href?: string; icon: ReactNode; onClick?: () => void; disabled?: boolean; primary?: boolean };
+type ExposureRadarWorkspaceTab = "today" | "signals" | "people" | "strategy" | "diagnostics";
 type PeopleRadarStage = "priority" | "repeat" | "engaged" | "watch" | "avoid" | "new";
 type PeopleRadarEntry = {
   key: string;
@@ -206,6 +207,7 @@ type StarterStrategyTemplate = {
 const hourOptions = [1, 2, 4, 8];
 const fanOptions = [5000, 10000, 20000, 50000, 100000];
 const hotCountOptions = [0, 2, 3, 5, 10];
+const exposureRadarWorkspaceTabs: ExposureRadarWorkspaceTab[] = ["today", "signals", "people", "strategy", "diagnostics"];
 const radarViewFilters: RadarViewFilter[] = ["priority", "all", "act_now", "watch", "expired", "hot", "rising", "sampling", "topic", "tweet", "high_score", "needs_review", "saved", "drafted", "pending_handling", "handled", "backfilled"];
 const manualOutcomeOptions: ManualOutcome[] = ["effective", "neutral", "ineffective", "not_suitable"];
 const manualOutcomeFeedbackMeta: Record<ManualOutcome, { rating: "positive" | "negative"; issueTags: string[] }> = {
@@ -281,6 +283,7 @@ export default function ExposureRadarPage() {
   const [savingSeedID, setSavingSeedID] = useState<string | null>(null);
   const [generatingSeedDraftID, setGeneratingSeedDraftID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("priority");
+  const [workspaceTab, setWorkspaceTab] = useState<ExposureRadarWorkspaceTab>("today");
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
@@ -309,6 +312,8 @@ export default function ExposureRadarPage() {
     setMinHotCount((current) => getNonNegativeParam(params, "min_hot_count", getNonNegativeParam(params, "minHotCount", current)));
     setSelectedAccountID((current) => getPositiveParam(params, "x_account_id", getPositiveParam(params, "account_id", current)));
     setSelectedBotID((current) => getPositiveParam(params, "bot_id", current));
+    const nextTab = params.get("tab");
+    if (isExposureRadarWorkspaceTab(nextTab)) setWorkspaceTab(nextTab);
   }, []);
 
   useEffect(() => {
@@ -318,8 +323,9 @@ export default function ExposureRadarPage() {
     params.set("hours", String(hours));
     params.set("max_fans", String(maxFans));
     params.set("min_hot_count", String(minHotCount));
+    params.set("tab", workspaceTab);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [hours, maxFans, minHotCount, region]);
+  }, [hours, maxFans, minHotCount, region, workspaceTab]);
 
   useEffect(() => {
     setManualActionStates(readManualActionStates());
@@ -626,6 +632,13 @@ export default function ExposureRadarPage() {
   const firstLoopDone = Boolean(firstLoopCompletedAt) || recentManualRecords.some((record) => Boolean(record.result_checked_at || record.result_score || record.handled_at || record.task_status === "done"));
   const workbenchStats = useMemo(() => buildWorkbenchStats(items, manualActionStates), [items, manualActionStates]);
   const peopleRadar = useMemo(() => mergePeopleRadar(buildPeopleRadar(items, manualActionStates, savedMemoryIDs), persistedPeople), [items, manualActionStates, persistedPeople, savedMemoryIDs]);
+  const workspaceTabCounts = useMemo<Record<ExposureRadarWorkspaceTab, number>>(() => ({
+    today: handlingQueue.length,
+    signals: items.length,
+    people: peopleRadar.length,
+    strategy: recentManualRecords.length,
+    diagnostics: (data?.diagnostics?.issues?.length || 0) + (safetyCenter?.watch_count || 0) + (safetyCenter?.block_count || 0),
+  }), [data?.diagnostics?.issues?.length, handlingQueue.length, items.length, peopleRadar.length, recentManualRecords.length, safetyCenter?.block_count, safetyCenter?.watch_count]);
 
   useEffect(() => {
     if (handlingQueue.length === 0) {
@@ -937,6 +950,7 @@ export default function ExposureRadarPage() {
 
   const focusRadarItem = useCallback((itemID: string) => {
     setRadarView("all");
+    setWorkspaceTab("signals");
     if (typeof window === "undefined") return;
     window.setTimeout(() => {
       document.getElementById(radarCardAnchorID(itemID))?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -986,63 +1000,76 @@ export default function ExposureRadarPage() {
         </div>
       </section>
 
-      <DailyGrowthDeskPanel
-        selectedAccountID={selectedAccountID}
-        selectedBotID={selectedBotID}
-        strategy={growthStrategy}
-        moves={todayMoves}
-        stats={workbenchStats}
-        people={peopleRadar}
-        recentRecords={recentManualRecords}
-        weeklyReview={weeklyReview}
-        safety={safetyCenter}
-        lastRefreshedAt={lastRefreshedAt}
-        timeZone={timeZone}
-        loadState={loadState}
-        onRefresh={() => void load()}
-      />
+      <ExposureRadarWorkspaceNav value={workspaceTab} counts={workspaceTabCounts} onChange={setWorkspaceTab} />
 
-      <TenMinuteActivationPanel
-        selectedAccountID={selectedAccountID}
-        selectedBotID={selectedBotID}
-        strategy={growthStrategy}
-        moves={todayMoves}
-        recentRecords={recentManualRecords}
-        itemsCount={items.length}
-        onRefresh={() => void load()}
-        onStartSample={() => setSampleMode(true)}
-      />
+      {workspaceTab === "today" ? (
+        <div className="space-y-5">
+          <DailyGrowthDeskPanel
+            selectedAccountID={selectedAccountID}
+            selectedBotID={selectedBotID}
+            strategy={growthStrategy}
+            moves={todayMoves}
+            stats={workbenchStats}
+            people={peopleRadar}
+            recentRecords={recentManualRecords}
+            weeklyReview={weeklyReview}
+            safety={safetyCenter}
+            lastRefreshedAt={lastRefreshedAt}
+            timeZone={timeZone}
+            loadState={loadState}
+            onRefresh={() => void load()}
+          />
 
-      <DailySessionProgressPanel
-        strategy={growthStrategy}
-        moves={todayMoves}
-        stats={workbenchStats}
-        recentRecords={recentManualRecords}
-        timeZone={timeZone}
-      />
+          <TenMinuteActivationPanel
+            selectedAccountID={selectedAccountID}
+            selectedBotID={selectedBotID}
+            strategy={growthStrategy}
+            moves={todayMoves}
+            recentRecords={recentManualRecords}
+            itemsCount={items.length}
+            onRefresh={() => void load()}
+            onStartSample={() => setSampleMode(true)}
+          />
 
-      <DailyReviewReportPanel
-        data={data}
-        strategy={growthStrategy}
-        moves={todayMoves}
-        recentRecords={recentManualRecords}
-        weeklyReview={weeklyReview}
-        safety={safetyCenter}
-        learningProfile={exposureLearningProfile}
-        timeZone={timeZone}
-      />
+          <DailySessionProgressPanel
+            strategy={growthStrategy}
+            moves={todayMoves}
+            stats={workbenchStats}
+            recentRecords={recentManualRecords}
+            timeZone={timeZone}
+          />
+        </div>
+      ) : null}
 
-      <ResultLearningLoopPanel
-        data={data}
-        moves={todayMoves}
-        recentRecords={recentManualRecords}
-        weeklyReview={weeklyReview}
-        safety={safetyCenter}
-        learningProfile={exposureLearningProfile}
-      />
+      {workspaceTab === "strategy" ? (
+        <div className="space-y-5">
+          <DailyReviewReportPanel
+            data={data}
+            strategy={growthStrategy}
+            moves={todayMoves}
+            recentRecords={recentManualRecords}
+            weeklyReview={weeklyReview}
+            safety={safetyCenter}
+            learningProfile={exposureLearningProfile}
+            timeZone={timeZone}
+          />
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <ResultLearningLoopPanel
+            data={data}
+            moves={todayMoves}
+            recentRecords={recentManualRecords}
+            weeklyReview={weeklyReview}
+            safety={safetyCenter}
+            learningProfile={exposureLearningProfile}
+          />
+        </div>
+      ) : null}
+
+      {workspaceTab === "signals" ? (
         <OpportunityEvidenceDeskPanel items={items} moves={todayMoves} data={data} loadState={loadState} />
+      ) : null}
+
+      {workspaceTab === "strategy" ? (
         <GrowthExperimentPanel
           items={items}
           moves={todayMoves}
@@ -1050,87 +1077,101 @@ export default function ExposureRadarPage() {
           learningProfile={exposureLearningProfile}
           safety={safetyCenter}
         />
-      </div>
+      ) : null}
 
-      <TeamHandoffPanel
-        moves={todayMoves}
-        people={peopleRadar}
-        recentRecords={recentManualRecords}
-        safety={safetyCenter}
-        timeZone={timeZone}
-      />
-
-      <WeeklyOperatorReviewPanel
-        weeklyReview={weeklyReview}
-        recentRecords={recentManualRecords}
-        moves={todayMoves}
-        learningProfile={exposureLearningProfile}
-        safety={safetyCenter}
-        timeZone={timeZone}
-      />
-
-      <ContentDraftOperatingPanel
-        bridge={contentDraftBridge}
-        loading={contentDraftBridgeLoading}
-        exposureMoves={todayMoves}
-        recentRecords={recentManualRecords}
-        onRefresh={() => void loadContentDraftBridge()}
-      />
-
-      <MemoryAssetDeskPanel
-        bridge={contentDraftBridge}
-        items={items}
-        recentRecords={recentManualRecords}
-        savedMemoryIDs={savedMemoryIDs}
-        manualActionStates={manualActionStates}
-      />
-
-      <GrowthDeskCommandPanel
-        data={data}
-        strategy={growthStrategy}
-        moves={todayMoves}
-        people={peopleRadar}
-        recentRecords={recentManualRecords}
-        weeklyReview={weeklyReview}
-        safety={safetyCenter}
-        timeZone={timeZone}
-        loadState={loadState}
-        manualActionStates={manualActionStates}
-        resultRefreshing={resultRefreshing}
-        resultRefreshSummary={resultRefreshSummary}
-        onRefreshResults={() => void refreshManualResults()}
-        onFocusItem={(itemID) => {
-          setActiveWorkbenchID(itemID);
-          focusRadarItem(itemID);
-        }}
-      />
-
-      <XApiBudgetPanel
-        data={data}
-        diagnostics={data?.diagnostics || null}
-        resultRefreshSummary={resultRefreshSummary}
-        resultRefreshing={resultRefreshing}
-        timeZone={timeZone}
-        onRefreshResults={() => void refreshManualResults()}
-      />
-
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <AccountHealthScorePanel
-          selectedAccountID={selectedAccountID}
-          selectedBotID={selectedBotID}
-          strategy={growthStrategy}
-          data={data}
-          items={items}
+      {workspaceTab === "today" ? (
+        <TeamHandoffPanel
+          moves={todayMoves}
+          people={peopleRadar}
           recentRecords={recentManualRecords}
           safety={safetyCenter}
-          stats={workbenchStats}
-          loadState={loadState}
+          timeZone={timeZone}
         />
-        <AccountSafetyCenterPanel safety={safetyCenter} recentRecords={recentManualRecords} strategy={growthStrategy} />
-        <RadarDataHealthMonitorPanel data={data} loadState={loadState} timeZone={timeZone} />
-      </div>
+      ) : null}
 
-      {shouldShowSignalRecovery(data, loadState, workbenchStats) ? (
+      {workspaceTab === "strategy" ? (
+        <WeeklyOperatorReviewPanel
+          weeklyReview={weeklyReview}
+          recentRecords={recentManualRecords}
+          moves={todayMoves}
+          learningProfile={exposureLearningProfile}
+          safety={safetyCenter}
+          timeZone={timeZone}
+        />
+      ) : null}
+
+      {workspaceTab === "strategy" ? (
+        <ContentDraftOperatingPanel
+          bridge={contentDraftBridge}
+          loading={contentDraftBridgeLoading}
+          exposureMoves={todayMoves}
+          recentRecords={recentManualRecords}
+          onRefresh={() => void loadContentDraftBridge()}
+        />
+      ) : null}
+
+      {workspaceTab === "people" ? (
+        <MemoryAssetDeskPanel
+          bridge={contentDraftBridge}
+          items={items}
+          recentRecords={recentManualRecords}
+          savedMemoryIDs={savedMemoryIDs}
+          manualActionStates={manualActionStates}
+        />
+      ) : null}
+
+      {workspaceTab === "today" ? (
+        <GrowthDeskCommandPanel
+          data={data}
+          strategy={growthStrategy}
+          moves={todayMoves}
+          people={peopleRadar}
+          recentRecords={recentManualRecords}
+          weeklyReview={weeklyReview}
+          safety={safetyCenter}
+          timeZone={timeZone}
+          loadState={loadState}
+          manualActionStates={manualActionStates}
+          resultRefreshing={resultRefreshing}
+          resultRefreshSummary={resultRefreshSummary}
+          onRefreshResults={() => void refreshManualResults()}
+          onFocusItem={(itemID) => {
+            setActiveWorkbenchID(itemID);
+            focusRadarItem(itemID);
+          }}
+        />
+      ) : null}
+
+      {workspaceTab === "diagnostics" ? (
+        <div className="space-y-5">
+          <XApiBudgetPanel
+            data={data}
+            diagnostics={data?.diagnostics || null}
+            resultRefreshSummary={resultRefreshSummary}
+            resultRefreshing={resultRefreshing}
+            timeZone={timeZone}
+            onRefreshResults={() => void refreshManualResults()}
+          />
+
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <AccountHealthScorePanel
+              selectedAccountID={selectedAccountID}
+              selectedBotID={selectedBotID}
+              strategy={growthStrategy}
+              data={data}
+              items={items}
+              recentRecords={recentManualRecords}
+              safety={safetyCenter}
+              stats={workbenchStats}
+              loadState={loadState}
+            />
+            <AccountSafetyCenterPanel safety={safetyCenter} recentRecords={recentManualRecords} strategy={growthStrategy} />
+            <RadarDataHealthMonitorPanel data={data} loadState={loadState} timeZone={timeZone} />
+          </div>
+        </div>
+      ) : null}
+
+      {workspaceTab === "diagnostics" && shouldShowSignalRecovery(data, loadState, workbenchStats) ? (
         <SignalRecoveryPanel
           data={data}
           loadState={loadState}
@@ -1142,236 +1183,253 @@ export default function ExposureRadarPage() {
         />
       ) : null}
 
-      <div id="radar-setup" className="scroll-mt-24">
-        <Card className="bg-[#0f1419]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <CardHeader title={t("exposureRadar.filters.title")} description={t("exposureRadar.filters.description")} className="mb-0" />
-            <Button type="button" variant="outline" onClick={() => void load()} disabled={loadState === "loading"}>
-              <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
-              {t("common.refresh")}
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-4">
-            <SegmentedControl
-              label={t("exposureRadar.filters.region")}
-              options={[
-                { value: "zh", label: t("exposureRadar.region.zh") },
-                { value: "en", label: t("exposureRadar.region.en") },
-              ]}
-              value={region}
-              onChange={(value) => setRegion(value as ExposureRadarRegion)}
-            />
-            <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} />
-            <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} />
-            <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
-          </div>
-          {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
-          {data?.diagnostics ? <CollectionDiagnosticsPanel diagnostics={data.diagnostics} timeZone={timeZone} /> : null}
-          <div className="mt-4 border-t border-[#2f3336] pt-4">
-            <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
-            <div className="grid gap-3 md:grid-cols-2 md:items-end">
-              <SelectField
-                icon={<Users className="size-4" />}
-                label={t("exposureRadar.draft.account")}
-                value={selectedAccountID}
-                onChange={setSelectedAccountID}
-                emptyLabel={t("exposureRadar.draft.noAccounts")}
-                options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
-              />
-              <SelectField
-                icon={<Bot className="size-4" />}
-                label={t("exposureRadar.draft.bot")}
-                value={selectedBotID}
-                onChange={setSelectedBotID}
-                emptyLabel={t("exposureRadar.draft.noBots")}
-                options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
-              />
+      {workspaceTab === "signals" ? (
+        <div id="radar-setup" className="scroll-mt-24">
+          <Card className="bg-[#0f1419]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <CardHeader title={t("exposureRadar.filters.title")} description={t("exposureRadar.filters.description")} className="mb-0" />
+              <Button type="button" variant="outline" onClick={() => void load()} disabled={loadState === "loading"}>
+                <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+                {t("common.refresh")}
+              </Button>
             </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-4">
+              <SegmentedControl
+                label={t("exposureRadar.filters.region")}
+                options={[
+                  { value: "zh", label: t("exposureRadar.region.zh") },
+                  { value: "en", label: t("exposureRadar.region.en") },
+                ]}
+                value={region}
+                onChange={(value) => setRegion(value as ExposureRadarRegion)}
+              />
+              <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={setHours} />
+              <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={setMaxFans} />
+              <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={setMinHotCount} disabled={region === "en"} />
+            </div>
+            {data ? <SourceHealthPanel data={data} timeZone={timeZone} /> : null}
+            {data?.diagnostics ? <CollectionDiagnosticsPanel diagnostics={data.diagnostics} timeZone={timeZone} /> : null}
+            <div className="mt-4 border-t border-[#2f3336] pt-4">
+              <CardHeader title={t("exposureRadar.draft.title")} description={t("exposureRadar.draft.description")} className="mb-3" />
+              <div className="grid gap-3 md:grid-cols-2 md:items-end">
+                <SelectField
+                  icon={<Users className="size-4" />}
+                  label={t("exposureRadar.draft.account")}
+                  value={selectedAccountID}
+                  onChange={setSelectedAccountID}
+                  emptyLabel={t("exposureRadar.draft.noAccounts")}
+                  options={accounts.map((account) => ({ value: account.id, label: `@${account.username}` }))}
+                />
+                <SelectField
+                  icon={<Bot className="size-4" />}
+                  label={t("exposureRadar.draft.bot")}
+                  value={selectedBotID}
+                  onChange={setSelectedBotID}
+                  emptyLabel={t("exposureRadar.draft.noBots")}
+                  options={bots.map((bot) => ({ value: bot.id, label: bot.name || t("oafBots.botNumber", { id: bot.id }) }))}
+                />
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {workspaceTab === "today" ? (
+        <div className="space-y-5">
+          <FirstDayLaunchPanel
+            selectedAccountID={selectedAccountID}
+            selectedBotID={selectedBotID}
+            accounts={accounts}
+            bots={bots}
+            strategy={growthStrategy}
+            moves={todayMoves}
+            recentRecords={recentManualRecords}
+            contentDraftBridge={contentDraftBridge}
+            itemsCount={items.length}
+            usingSampleMode={usingSampleMode}
+            loadState={loadState}
+            onRefresh={() => void load()}
+            onStartSample={() => setSampleMode(true)}
+            onExitSample={() => {
+              setSampleMode(false);
+              setSampleItemOverrides({});
+            }}
+          />
+
+          <PreflightSafetyPanel
+            selectedAccountID={selectedAccountID}
+            selectedBotID={selectedBotID}
+            strategy={growthStrategy}
+            data={data}
+            items={items}
+            stats={workbenchStats}
+            recentRecords={recentManualRecords}
+            usingSampleMode={usingSampleMode}
+          />
+
+          <SessionFocusPanel focus={sessionFocus} onChange={updateSessionFocus} strategy={growthStrategy} firstItem={firstLoopItem} usingSampleMode={usingSampleMode} />
+
+          <DailyOperatingGoalsPanel
+            strategy={growthStrategy}
+            stats={workbenchStats}
+            items={items}
+            manualActionStates={manualActionStates}
+            savedMemoryIDs={savedMemoryIDs}
+            recentRecords={recentManualRecords}
+            usingSampleMode={usingSampleMode}
+            onStartSample={() => setSampleMode(true)}
+          />
+
+          {usingSampleMode ? (
+            <SampleModeBanner
+              onExit={() => {
+                setSampleMode(false);
+                setSampleItemOverrides({});
+              }}
+            />
+          ) : null}
+
+          <FirstLoopPanel
+            item={firstLoopItem}
+            manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined}
+            savedMemoryID={firstLoopItem ? radarItemSavedMemoryID(firstLoopItem, savedMemoryIDs) : 0}
+            drafting={firstLoopItem ? draftingID === firstLoopItem.id : false}
+            draftDisabled={!selectedAccountID || !selectedBotID}
+            handling={firstLoopItem ? handlingID === firstLoopItem.id : false}
+            usingSampleMode={usingSampleMode}
+            firstLoopDone={firstLoopDone}
+            publishGateState={firstLoopItem ? publishGateStates[firstLoopItem.id] : undefined}
+            onStartSample={() => setSampleMode(true)}
+            onCreateDraft={createDraft}
+            onMarkHandled={markRadarHandled}
+            onManualAction={(item, patch, replyAngle) => recordManualAction(item, patch, replyAngle)}
+            onTogglePublishGate={updatePublishGate}
+            onFocusWorkbench={(itemID) => {
+              if (itemID) setActiveWorkbenchID(itemID);
+              if (itemID) focusRadarItem(itemID);
+            }}
+          />
+
+          {firstLoopDone ? (
+            <FirstLoopCompletionPanel completedAt={firstLoopCompletedAt} recentRecords={recentManualRecords} timeZone={timeZone} />
+          ) : null}
+
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <OperatorScratchpadPanel note={operatorNote} onChange={updateOperatorNote} item={firstLoopItem} manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined} />
+            <DailyRecapPanel
+              items={items}
+              stats={workbenchStats}
+              manualActionStates={manualActionStates}
+              recentRecords={recentManualRecords}
+              operatorNote={operatorNote}
+              usingSampleMode={usingSampleMode}
+              timeZone={timeZone}
+            />
           </div>
-        </Card>
-      </div>
 
-      <FirstDayLaunchPanel
-        selectedAccountID={selectedAccountID}
-        selectedBotID={selectedBotID}
-        accounts={accounts}
-        bots={bots}
-        strategy={growthStrategy}
-        moves={todayMoves}
-        recentRecords={recentManualRecords}
-        contentDraftBridge={contentDraftBridge}
-        itemsCount={items.length}
-        usingSampleMode={usingSampleMode}
-        loadState={loadState}
-        onRefresh={() => void load()}
-        onStartSample={() => setSampleMode(true)}
-        onExitSample={() => {
-          setSampleMode(false);
-          setSampleItemOverrides({});
-        }}
-      />
-
-      <PreflightSafetyPanel
-        selectedAccountID={selectedAccountID}
-        selectedBotID={selectedBotID}
-        strategy={growthStrategy}
-        data={data}
-        items={items}
-        stats={workbenchStats}
-        recentRecords={recentManualRecords}
-        usingSampleMode={usingSampleMode}
-      />
-
-      <SessionFocusPanel focus={sessionFocus} onChange={updateSessionFocus} strategy={growthStrategy} firstItem={firstLoopItem} usingSampleMode={usingSampleMode} />
-
-      <DailyOperatingGoalsPanel
-        strategy={growthStrategy}
-        stats={workbenchStats}
-        items={items}
-        manualActionStates={manualActionStates}
-        savedMemoryIDs={savedMemoryIDs}
-        recentRecords={recentManualRecords}
-        usingSampleMode={usingSampleMode}
-        onStartSample={() => setSampleMode(true)}
-      />
-
-      {usingSampleMode ? (
-        <SampleModeBanner
-          onExit={() => {
-            setSampleMode(false);
-            setSampleItemOverrides({});
-          }}
-        />
+          <NextSessionCarryoverPanel
+            items={items}
+            manualActionStates={manualActionStates}
+            sessionFocus={sessionFocus}
+            operatorNote={operatorNote}
+            onFocus={(itemID) => {
+              setActiveWorkbenchID(itemID);
+              focusRadarItem(itemID);
+            }}
+          />
+        </div>
       ) : null}
 
-      <FirstLoopPanel
-        item={firstLoopItem}
-        manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined}
-        savedMemoryID={firstLoopItem ? radarItemSavedMemoryID(firstLoopItem, savedMemoryIDs) : 0}
-        drafting={firstLoopItem ? draftingID === firstLoopItem.id : false}
-        draftDisabled={!selectedAccountID || !selectedBotID}
-        handling={firstLoopItem ? handlingID === firstLoopItem.id : false}
-        usingSampleMode={usingSampleMode}
-        firstLoopDone={firstLoopDone}
-        publishGateState={firstLoopItem ? publishGateStates[firstLoopItem.id] : undefined}
-        onStartSample={() => setSampleMode(true)}
-        onCreateDraft={createDraft}
-        onMarkHandled={markRadarHandled}
-        onManualAction={(item, patch, replyAngle) => recordManualAction(item, patch, replyAngle)}
-        onTogglePublishGate={updatePublishGate}
-        onFocusWorkbench={(itemID) => {
-          if (itemID) setActiveWorkbenchID(itemID);
-          if (itemID) focusRadarItem(itemID);
-        }}
-      />
+      {workspaceTab === "strategy" ? (
+        <div className="space-y-5">
+          <div id="radar-strategy" className="scroll-mt-24">
+            <StrategySetupPanel
+              strategy={growthStrategy}
+              region={region}
+              saving={strategySaving}
+              onSave={saveGrowthStrategy}
+            />
+          </div>
 
-      {firstLoopDone ? (
-        <FirstLoopCompletionPanel completedAt={firstLoopCompletedAt} recentRecords={recentManualRecords} timeZone={timeZone} />
+          <div id="radar-results" className="scroll-mt-24">
+            <GrowthReviewPanel
+              review={weeklyReview}
+              safety={safetyCenter}
+              recentRecords={recentManualRecords}
+              timeZone={timeZone}
+            />
+          </div>
+        </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <OperatorScratchpadPanel note={operatorNote} onChange={updateOperatorNote} item={firstLoopItem} manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined} />
-        <DailyRecapPanel
-          items={items}
-          stats={workbenchStats}
-          manualActionStates={manualActionStates}
-          recentRecords={recentManualRecords}
-          operatorNote={operatorNote}
-          usingSampleMode={usingSampleMode}
-          timeZone={timeZone}
-        />
-      </div>
+      {workspaceTab === "today" ? (
+        <div className="space-y-5">
+          <TodayMovesPanel
+            moves={todayMoves}
+            stats={workbenchStats}
+            activeID={activeWorkbenchID}
+            onFocus={(itemID) => {
+              setActiveWorkbenchID(itemID);
+              focusRadarItem(itemID);
+            }}
+            onTaskStatus={(item, taskStatus) => recordManualAction(item, taskStatus === "done" ? { taskStatus, handled: true } : { taskStatus })}
+          />
 
-      <NextSessionCarryoverPanel
-        items={items}
-        manualActionStates={manualActionStates}
-        sessionFocus={sessionFocus}
-        operatorNote={operatorNote}
-        onFocus={(itemID) => {
-          setActiveWorkbenchID(itemID);
-          focusRadarItem(itemID);
-        }}
-      />
+          <div id="radar-workbench" className="scroll-mt-24">
+            <HandlingWorkbenchPanel
+              queue={handlingQueue}
+              activeID={activeWorkbenchID}
+              stats={workbenchStats}
+              draftingID={draftingID}
+              draftDisabled={!selectedAccountID || !selectedBotID}
+              handlingID={handlingID}
+              savingMemoryID={savingMemoryID}
+              memoryDisabled={!selectedAccountID || !selectedBotID}
+              strategy={growthStrategy}
+              recentRecords={recentManualRecords}
+              learningProfile={exposureLearningProfile}
+              selectedReplyAngleIDs={selectedReplyAngleIDs}
+              onCreateDraft={createDraft}
+              onMarkHandled={markRadarHandled}
+              onSaveMemory={saveRadarMemory}
+              onSaveContentSeed={saveRadarContentSeed}
+              onGenerateContentDraft={generateContentDraftFromRadarSeed}
+              onManualAction={recordManualAction}
+              onSelectReplyAngle={updateSelectedReplyAngle}
+              onActiveChange={setActiveWorkbenchID}
+              onFocusItem={focusRadarItem}
+              savedMemoryIDs={savedMemoryIDs}
+              savingSeedID={savingSeedID}
+              generatingSeedDraftID={generatingSeedDraftID}
+            />
+          </div>
+        </div>
+      ) : null}
 
-      <div id="radar-strategy" className="scroll-mt-24">
-        <StrategySetupPanel
-          strategy={growthStrategy}
-          region={region}
-          saving={strategySaving}
-          onSave={saveGrowthStrategy}
-        />
-      </div>
+      {workspaceTab === "people" ? (
+        <div id="radar-people" className="space-y-5 scroll-mt-24">
+          <PeopleRelationshipDeskPanel
+            people={peopleRadar}
+            recentRecords={recentManualRecords}
+            onFocus={(itemID) => {
+              setActiveWorkbenchID(itemID);
+              focusRadarItem(itemID);
+            }}
+          />
+          <PeopleRadarPanel
+            people={peopleRadar}
+            savingKey={peopleNoteSavingKey}
+            onSaveNote={savePeopleNote}
+            onFocus={(itemID) => {
+              setActiveWorkbenchID(itemID);
+              focusRadarItem(itemID);
+            }}
+          />
+        </div>
+      ) : null}
 
-      <div id="radar-results" className="scroll-mt-24">
-        <GrowthReviewPanel
-          review={weeklyReview}
-          safety={safetyCenter}
-          recentRecords={recentManualRecords}
-          timeZone={timeZone}
-        />
-      </div>
-
-      <TodayMovesPanel
-        moves={todayMoves}
-        stats={workbenchStats}
-        activeID={activeWorkbenchID}
-        onFocus={(itemID) => {
-          setActiveWorkbenchID(itemID);
-          focusRadarItem(itemID);
-        }}
-        onTaskStatus={(item, taskStatus) => recordManualAction(item, taskStatus === "done" ? { taskStatus, handled: true } : { taskStatus })}
-      />
-
-      <div id="radar-people" className="scroll-mt-24">
-        <PeopleRelationshipDeskPanel
-          people={peopleRadar}
-          recentRecords={recentManualRecords}
-          onFocus={(itemID) => {
-            setActiveWorkbenchID(itemID);
-            focusRadarItem(itemID);
-          }}
-        />
-        <PeopleRadarPanel
-          people={peopleRadar}
-          savingKey={peopleNoteSavingKey}
-          onSaveNote={savePeopleNote}
-          onFocus={(itemID) => {
-            setActiveWorkbenchID(itemID);
-            focusRadarItem(itemID);
-          }}
-        />
-      </div>
-
-      <div id="radar-workbench" className="scroll-mt-24">
-        <HandlingWorkbenchPanel
-          queue={handlingQueue}
-          activeID={activeWorkbenchID}
-          stats={workbenchStats}
-          draftingID={draftingID}
-          draftDisabled={!selectedAccountID || !selectedBotID}
-          handlingID={handlingID}
-          savingMemoryID={savingMemoryID}
-          memoryDisabled={!selectedAccountID || !selectedBotID}
-          strategy={growthStrategy}
-          recentRecords={recentManualRecords}
-          learningProfile={exposureLearningProfile}
-          selectedReplyAngleIDs={selectedReplyAngleIDs}
-          onCreateDraft={createDraft}
-          onMarkHandled={markRadarHandled}
-          onSaveMemory={saveRadarMemory}
-          onSaveContentSeed={saveRadarContentSeed}
-          onGenerateContentDraft={generateContentDraftFromRadarSeed}
-          onManualAction={recordManualAction}
-          onSelectReplyAngle={updateSelectedReplyAngle}
-          onActiveChange={setActiveWorkbenchID}
-          onFocusItem={focusRadarItem}
-          savedMemoryIDs={savedMemoryIDs}
-          savingSeedID={savingSeedID}
-          generatingSeedDraftID={generatingSeedDraftID}
-        />
-      </div>
-
-      <Card className="bg-[#0f1419]">
+      {workspaceTab === "signals" ? (
+        <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <CardHeader title={t("exposureRadar.list.title")} description={t(region === "zh" ? "exposureRadar.list.descriptionZh" : "exposureRadar.list.descriptionEn")} />
           <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
@@ -1432,13 +1490,18 @@ export default function ExposureRadarPage() {
             ))}
           </div>
         ) : null}
-      </Card>
+        </Card>
+      ) : null}
 
-      <LearningInsightsPanel data={performance} items={items} manualActionStates={manualActionStates} recentRecords={recentManualRecords} learningProfile={exposureLearningProfile} />
+      {workspaceTab === "strategy" ? (
+        <div className="space-y-5">
+          <LearningInsightsPanel data={performance} items={items} manualActionStates={manualActionStates} recentRecords={recentManualRecords} learningProfile={exposureLearningProfile} />
 
-      <PerformancePanel data={performance} timeZone={timeZone} />
+          <PerformancePanel data={performance} timeZone={timeZone} />
 
-      <TopicHistoryPanel data={archive} timeZone={timeZone} />
+          <TopicHistoryPanel data={archive} timeZone={timeZone} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1448,6 +1511,65 @@ function LightMetric({ icon, label, value }: { icon: ReactNode; label: string; v
     <div className="rounded-xl border border-[#2f3336] bg-black p-3">
       <div className="flex items-center gap-2 text-xs font-medium text-[#71767b]">{icon}{label}</div>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</p>
+    </div>
+  );
+}
+
+function ExposureRadarWorkspaceNav({
+  value,
+  counts,
+  onChange,
+}: {
+  value: ExposureRadarWorkspaceTab;
+  counts: Record<ExposureRadarWorkspaceTab, number>;
+  onChange: (tab: ExposureRadarWorkspaceTab) => void;
+}) {
+  const { t } = useT();
+  const icons: Record<ExposureRadarWorkspaceTab, ReactNode> = {
+    today: <Zap className="size-4" />,
+    signals: <Search className="size-4" />,
+    people: <Users className="size-4" />,
+    strategy: <Target className="size-4" />,
+    diagnostics: <Gauge className="size-4" />,
+  };
+
+  return (
+    <div className="sticky top-3 z-20 rounded-2xl border border-[#2f3336] bg-black/85 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="px-2">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.workspace.title")}</p>
+          <p className="mt-0.5 text-xs text-[#71767b]">{t("exposureRadar.workspace.description")}</p>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+          {exposureRadarWorkspaceTabs.map((tab) => {
+            const active = value === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onChange(tab)}
+                className={`min-w-[160px] rounded-xl border px-3 py-2 text-left transition ${
+                  active
+                    ? "border-[#1d9bf0]/60 bg-[#1d9bf0]/15 text-white"
+                    : "border-[#2f3336] bg-[#0f1419] text-[#8b98a5] hover:border-[#1d9bf0]/35 hover:text-[#e7e9ea]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                    {icons[tab]}
+                    {t(`exposureRadar.workspace.tab.${tab}.title`)}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${active ? "bg-[#1d9bf0] text-white" : "bg-black text-[#71767b]"}`}>
+                    {formatCompact(counts[tab] || 0)}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-1 text-xs opacity-75">{t(`exposureRadar.workspace.tab.${tab}.description`)}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -8768,6 +8890,10 @@ function writePublishGateStates(states: Record<string, PublishGateState>) {
 function getPositiveParam(params: URLSearchParams, key: string, fallback: number) {
   const value = Number(params.get(key));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function isExposureRadarWorkspaceTab(value: string | null): value is ExposureRadarWorkspaceTab {
+  return Boolean(value && exposureRadarWorkspaceTabs.includes(value as ExposureRadarWorkspaceTab));
 }
 
 function getNonNegativeParam(params: URLSearchParams, key: string, fallback: number) {

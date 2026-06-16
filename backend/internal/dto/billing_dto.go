@@ -110,30 +110,40 @@ func (d *PlanLimitsData) ApplySemanticAliases() {
 	if d == nil {
 		return
 	}
-	d.MonthlyContentDrafts = d.MonthlyAutoPosts
-	d.MonthlyReplyDrafts = d.MonthlyAutoReplies
-	d.MonthlyOpportunityDrafts = d.MonthlyAutoComments
-	d.MonthlyReviewCapacity = d.MonthlyAutoDMs
-	d.ContentMemorySources = d.AutoCommentTargets
-	d.MonthlyRadarRefreshes = d.MonthlyAutoCommentScans
-	d.DailyContentDrafts = d.DailyAutoPosts
-	d.DailyReplyDrafts = d.DailyAutoReplies
-	d.DailyOpportunityDrafts = d.DailyAutoComments
-	d.DailyReviewCapacity = d.DailyAutoDMs
+	d.MonthlyContentDrafts, d.MonthlyAutoPosts = semanticQuotaPair(d.MonthlyContentDrafts, d.MonthlyAutoPosts)
+	d.MonthlyReplyDrafts, d.MonthlyAutoReplies = semanticQuotaPair(d.MonthlyReplyDrafts, d.MonthlyAutoReplies)
+	d.MonthlyOpportunityDrafts, d.MonthlyAutoComments = semanticQuotaPair(d.MonthlyOpportunityDrafts, d.MonthlyAutoComments)
+	d.MonthlyReviewCapacity, d.MonthlyAutoDMs = semanticQuotaPair(d.MonthlyReviewCapacity, d.MonthlyAutoDMs)
+	d.ContentMemorySources, d.AutoCommentTargets = semanticQuotaPair(d.ContentMemorySources, d.AutoCommentTargets)
+	d.MonthlyRadarRefreshes, d.MonthlyAutoCommentScans = semanticQuotaPair(d.MonthlyRadarRefreshes, d.MonthlyAutoCommentScans)
+	d.DailyContentDrafts, d.DailyAutoPosts = semanticQuotaPair(d.DailyContentDrafts, d.DailyAutoPosts)
+	d.DailyReplyDrafts, d.DailyAutoReplies = semanticQuotaPair(d.DailyReplyDrafts, d.DailyAutoReplies)
+	d.DailyOpportunityDrafts, d.DailyAutoComments = semanticQuotaPair(d.DailyOpportunityDrafts, d.DailyAutoComments)
+	d.DailyReviewCapacity, d.DailyAutoDMs = semanticQuotaPair(d.DailyReviewCapacity, d.DailyAutoDMs)
 }
 
 func (d *PlanUsageData) ApplySemanticAliases() {
 	if d == nil {
 		return
 	}
-	d.ContentDraftsMonth = d.AutoPostsMonth
-	d.ReplyDraftsMonth = d.AutoRepliesMonth
-	d.OpportunityDraftsMonth = d.AutoCommentsMonth
-	d.ReviewCapacityMonth = d.AutoDMsMonth
-	d.ContentDraftsToday = d.AutoPostsToday
-	d.ReplyDraftsToday = d.AutoRepliesToday
-	d.OpportunityDraftsToday = d.AutoCommentsToday
-	d.ReviewCapacityToday = d.AutoDMsToday
+	d.ContentDraftsMonth, d.AutoPostsMonth = semanticQuotaPair(d.ContentDraftsMonth, d.AutoPostsMonth)
+	d.ReplyDraftsMonth, d.AutoRepliesMonth = semanticQuotaPair(d.ReplyDraftsMonth, d.AutoRepliesMonth)
+	d.OpportunityDraftsMonth, d.AutoCommentsMonth = semanticQuotaPair(d.OpportunityDraftsMonth, d.AutoCommentsMonth)
+	d.ReviewCapacityMonth, d.AutoDMsMonth = semanticQuotaPair(d.ReviewCapacityMonth, d.AutoDMsMonth)
+	d.ContentDraftsToday, d.AutoPostsToday = semanticQuotaPair(d.ContentDraftsToday, d.AutoPostsToday)
+	d.ReplyDraftsToday, d.AutoRepliesToday = semanticQuotaPair(d.ReplyDraftsToday, d.AutoRepliesToday)
+	d.OpportunityDraftsToday, d.AutoCommentsToday = semanticQuotaPair(d.OpportunityDraftsToday, d.AutoCommentsToday)
+	d.ReviewCapacityToday, d.AutoDMsToday = semanticQuotaPair(d.ReviewCapacityToday, d.AutoDMsToday)
+}
+
+func semanticQuotaPair(semanticValue int64, legacyValue int64) (int64, int64) {
+	if semanticValue == 0 && legacyValue != 0 {
+		semanticValue = legacyValue
+	}
+	if semanticValue != 0 {
+		legacyValue = semanticValue
+	}
+	return semanticValue, legacyValue
 }
 
 // BillingPaymentMethodItem is one USDT route (multi-chain).

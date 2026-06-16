@@ -317,7 +317,7 @@ function PlanUsagePanel({ subscription, onUpgrade }: { subscription: CurrentSubs
   const { t } = useT();
   if (!subscription) return null;
 
-  const metric = (primary: number | undefined, fallback: number) => primary ?? fallback;
+  const metric = (primary: number | undefined, fallback?: number) => primary ?? fallback ?? 0;
   const contentMemoryEnabled = metric(subscription.limits.contentMemorySources, subscription.limits.autoCommentTargets) > 0 || subscription.limits.autoDMImport;
   const monthlyItems: Array<[string, number, number, LucideIcon]> = [
     ["billing.usage.items.aiGenerations", subscription.usage.aiGenerationsMonth, subscription.limits.aiGenerationsMonthly, Sparkles],
@@ -429,7 +429,7 @@ function PlanValueMapPanel({ subscription, onUpgrade }: { subscription: CurrentS
   const { t } = useT();
   if (!subscription) return null;
 
-  const metric = (primary: number | undefined, fallback: number) => primary ?? fallback;
+  const metric = (primary: number | undefined, fallback?: number) => primary ?? fallback ?? 0;
   const valueItems: Array<{ key: string; value: string; icon: LucideIcon }> = [
     {
       key: "radar",

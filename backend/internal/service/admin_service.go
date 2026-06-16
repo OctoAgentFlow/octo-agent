@@ -1383,7 +1383,8 @@ func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
 	since24h := now.Add(-24 * time.Hour)
 	promptGuard := s.promptGuardSummary(now.AddDate(0, 0, -7), 7)
 	monthlyCostCents, monthlyAIGenerations := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "openai", monthStart, monthEnd)
-	xCostCents, monthlyXPublishes := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "x", monthStart, monthEnd)
+	xCostCents, _ := s.mustCostUsage("provider = ? AND occurred_at >= ? AND occurred_at < ?", "x", monthStart, monthEnd)
+	_, monthlyXPublishes := s.mustCostUsage("provider = ? AND metric = ? AND occurred_at >= ? AND occurred_at < ?", "x", "write_post", monthStart, monthEnd)
 	monthlyCostCents += xCostCents
 	contentDraftEnabledPlans := s.mustCount(&model.AutoPostPlan{}, "enabled = ?", true)
 	contentDraftDueNow := s.mustCount(&model.AutoPostPlan{}, "enabled = ? AND next_run_at IS NOT NULL AND next_run_at <= ?", true, now)
@@ -1408,7 +1409,137 @@ func (s *AdminService) executionSummary() dto.AdminExecutionSummary {
 		MonthlyCostCents:         monthlyCostCents,
 		MonthlyCostAmount:        adminCentsAmountString(monthlyCostCents),
 		PromptGuard:              promptGuard,
+		CostScheduler:            s.costSchedulerSummary(now),
 	}
+}
+
+func (s *AdminService) costSchedulerSummary(now time.Time) dto.AdminCostSchedulerSummary {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	since := now.Add(-24 * time.Hour)
+	openAICostCents, openAIGenerations := s.mustCostUsage("provider = ? AND source_type = ? AND occurred_at >= ?", "openai", "ai_generation", since)
+	xCostCents, xAPICalls := s.mustCostUsage("provider = ? AND occurred_at >= ?", "x", since)
+	_, xRecentSearchCalls := s.mustCostUsage("provider = ? AND metric = ? AND occurred_at >= ?", "x", "recent_search", since)
+	_, xTweetLookupCalls := s.mustCostUsage("provider = ? AND metric = ? AND occurred_at >= ?", "x", "tweet_lookup", since)
+	_, xTrendLookupCalls := s.mustCostUsage("provider = ? AND metric = ? AND occurred_at >= ?", "x", "trends_lookup", since)
+	_, xWriteCalls := s.mustCostUsage("provider = ? AND metric = ? AND occurred_at >= ?", "x", "write_post", since)
+
+	out := dto.AdminCostSchedulerSummary{
+		WindowHours:                    24,
+		OpenAIGenerations:              openAIGenerations,
+		OpenAICostCents:                openAICostCents,
+		OpenAICostAmount:               adminCentsAmountString(openAICostCents),
+		XAPICalls:                      xAPICalls,
+		XRecentSearchCalls:             xRecentSearchCalls,
+		XTweetLookupCalls:              xTweetLookupCalls,
+		XTrendLookupCalls:              xTrendLookupCalls,
+		XWriteCalls:                    xWriteCalls,
+		XCostCents:                     xCostCents,
+		XCostAmount:                    adminCentsAmountString(xCostCents),
+		XTrendsEnabled:                 s.cfg != nil && s.cfg.XTrends.Enabled,
+		BearerTokenConfigured:          s.cfg != nil && strings.TrimSpace(s.cfg.XTrends.BearerToken) != "",
+		TrendSyncIntervalHours:         12,
+		ExposureRefreshIntervalMinutes: 15,
+		SchedulerStatus:                "healthy",
+		FailureReasons:                 s.schedulerFailureReasons(since, 5),
+	}
+	if s.cfg != nil {
+		if s.cfg.XTrends.IntervalHours > 0 {
+			out.TrendSyncIntervalHours = s.cfg.XTrends.IntervalHours
+		}
+		if s.cfg.XTrends.ExposureRefreshMinutes > 0 {
+			out.ExposureRefreshIntervalMinutes = s.cfg.XTrends.ExposureRefreshMinutes
+		}
+	}
+
+	trendStatus, trendErr := repository.NewTrendTopicRepository(s.db).CacheStatus()
+	if trendErr == nil && trendStatus != nil && trendStatus.LatestFetchedAt != nil {
+		out.TrendLatestFetchedAt = trendStatus.LatestFetchedAt.UTC().Format(time.RFC3339)
+	}
+	exposureRepo := repository.NewExposureTweetSignalRepository(s.db)
+	if latest, err := exposureRepo.LatestSeenAt(""); err == nil && latest != nil {
+		out.ExposureLatestSeenAt = latest.UTC().Format(time.RFC3339)
+	}
+	if rows, err := exposureRepo.CountByRegionSince("all", since); err == nil {
+		out.ExposureRegions = make([]dto.AdminExposureRegionRuntimeItem, 0, len(rows))
+		for _, row := range rows {
+			out.ExposureSignals += row.SignalCount
+			item := dto.AdminExposureRegionRuntimeItem{
+				Region:      strings.TrimSpace(row.Region),
+				SignalCount: row.SignalCount,
+			}
+			if !row.LatestSeenAt.IsZero() {
+				item.LatestSeenAt = row.LatestSeenAt.UTC().Format(time.RFC3339)
+			}
+			out.ExposureRegions = append(out.ExposureRegions, item)
+		}
+	}
+	out.SkipReason = adminSchedulerSkipReason(out, now)
+	if out.SkipReason != "" {
+		out.SchedulerStatus = "attention"
+	}
+	if len(out.FailureReasons) > 0 {
+		out.SchedulerStatus = "attention"
+	}
+	return out
+}
+
+func (s *AdminService) schedulerFailureReasons(since time.Time, limit int) []dto.AdminSchedulerFailureReason {
+	if limit <= 0 {
+		limit = 5
+	}
+	type row struct {
+		Reason     string
+		Count      int64
+		LastSeenAt time.Time
+	}
+	var rows []row
+	if err := s.db.Model(&model.ActivityLog{}).
+		Select("COALESCE(NULLIF(error_message, ''), 'unknown') AS reason, COUNT(*) AS count, MAX(executed_at) AS last_seen_at").
+		Where("status = ? AND executed_at >= ?", "failed", since.UTC()).
+		Group("COALESCE(NULLIF(error_message, ''), 'unknown')").
+		Order("count DESC, last_seen_at DESC").
+		Limit(limit).
+		Scan(&rows).Error; err != nil {
+		return []dto.AdminSchedulerFailureReason{}
+	}
+	out := make([]dto.AdminSchedulerFailureReason, 0, len(rows))
+	for _, row := range rows {
+		item := dto.AdminSchedulerFailureReason{
+			Reason: strings.TrimSpace(row.Reason),
+			Count:  row.Count,
+		}
+		if !row.LastSeenAt.IsZero() {
+			item.LastSeenAt = row.LastSeenAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func adminSchedulerSkipReason(summary dto.AdminCostSchedulerSummary, now time.Time) string {
+	if !summary.XTrendsEnabled {
+		return "x_trends_disabled"
+	}
+	if !summary.BearerTokenConfigured {
+		return "bearer_token_missing"
+	}
+	if strings.TrimSpace(summary.ExposureLatestSeenAt) == "" {
+		return "exposure_not_sampled_yet"
+	}
+	latest, err := time.Parse(time.RFC3339, summary.ExposureLatestSeenAt)
+	if err != nil {
+		return "exposure_timestamp_invalid"
+	}
+	staleAfter := time.Duration(summary.ExposureRefreshIntervalMinutes*2) * time.Minute
+	if staleAfter <= 0 {
+		staleAfter = 30 * time.Minute
+	}
+	if now.Sub(latest.UTC()) > staleAfter {
+		return "exposure_refresh_stale"
+	}
+	return ""
 }
 
 func (s *AdminService) promptGuardSummary(since time.Time, windowDays int) dto.AdminPromptGuardSummary {

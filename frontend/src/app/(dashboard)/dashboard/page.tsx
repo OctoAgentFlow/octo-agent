@@ -154,8 +154,8 @@ function isBotReady(bot: OAFBot) {
   return Boolean(bot.twitter_account_id) && botPersonaScore(bot) >= 60;
 }
 
-function quotaMetric(primary: number | undefined, fallback: number) {
-  return primary ?? fallback;
+function quotaMetric(primary: number | undefined, fallback?: number) {
+  return primary ?? fallback ?? 0;
 }
 
 function automationMonthlyUsage(data: OAFBotDashboardData | null): Partial<Record<AutomationModule["type"], { used: number; limit: number }>> {

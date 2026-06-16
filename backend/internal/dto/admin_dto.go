@@ -54,20 +54,21 @@ type AdminExecutionSummary struct {
 	PublishedThisMonth int64 `json:"published_this_month"`
 	// Legacy admin metric keys remain for dashboard/API compatibility. Add
 	// semantic aliases before changing or removing these fields.
-	ContentDraftEnabledPlans int64                   `json:"content_draft_enabled_plans"`
-	ContentDraftDueNow       int64                   `json:"content_draft_due_now"`
-	ContentDraftSkipped24h   int64                   `json:"content_draft_skipped_24h"`
-	ContentDraftFailed24h    int64                   `json:"content_draft_failed_24h"`
-	AutoPostEnabledPlans     int64                   `json:"auto_post_enabled_plans"`
-	AutoPostDueNow           int64                   `json:"auto_post_due_now"`
-	AutoPostSkipped24h       int64                   `json:"auto_post_skipped_24h"`
-	AutoPostFailed24h        int64                   `json:"auto_post_failed_24h"`
-	NeedsReauthAccounts      int64                   `json:"needs_reauth_accounts"`
-	MonthlyAIGenerations     int64                   `json:"monthly_ai_generations"`
-	MonthlyXPublishes        int64                   `json:"monthly_x_publishes"`
-	MonthlyCostCents         int64                   `json:"monthly_cost_cents"`
-	MonthlyCostAmount        string                  `json:"monthly_cost_amount"`
-	PromptGuard              AdminPromptGuardSummary `json:"prompt_guard"`
+	ContentDraftEnabledPlans int64                     `json:"content_draft_enabled_plans"`
+	ContentDraftDueNow       int64                     `json:"content_draft_due_now"`
+	ContentDraftSkipped24h   int64                     `json:"content_draft_skipped_24h"`
+	ContentDraftFailed24h    int64                     `json:"content_draft_failed_24h"`
+	AutoPostEnabledPlans     int64                     `json:"auto_post_enabled_plans"`
+	AutoPostDueNow           int64                     `json:"auto_post_due_now"`
+	AutoPostSkipped24h       int64                     `json:"auto_post_skipped_24h"`
+	AutoPostFailed24h        int64                     `json:"auto_post_failed_24h"`
+	NeedsReauthAccounts      int64                     `json:"needs_reauth_accounts"`
+	MonthlyAIGenerations     int64                     `json:"monthly_ai_generations"`
+	MonthlyXPublishes        int64                     `json:"monthly_x_publishes"`
+	MonthlyCostCents         int64                     `json:"monthly_cost_cents"`
+	MonthlyCostAmount        string                    `json:"monthly_cost_amount"`
+	PromptGuard              AdminPromptGuardSummary   `json:"prompt_guard"`
+	CostScheduler            AdminCostSchedulerSummary `json:"cost_scheduler"`
 }
 
 type AdminPromptGuardSummary struct {
@@ -85,6 +86,43 @@ type AdminPromptGuardSceneItem struct {
 	Total              int64  `json:"total"`
 	LanguageMismatches int64  `json:"language_mismatches"`
 	RetryCount         int64  `json:"retry_count"`
+}
+
+type AdminCostSchedulerSummary struct {
+	WindowHours                    int                              `json:"window_hours"`
+	OpenAIGenerations              int64                            `json:"openai_generations"`
+	OpenAICostCents                int64                            `json:"openai_cost_cents"`
+	OpenAICostAmount               string                           `json:"openai_cost_amount"`
+	XAPICalls                      int64                            `json:"x_api_calls"`
+	XRecentSearchCalls             int64                            `json:"x_recent_search_calls"`
+	XTweetLookupCalls              int64                            `json:"x_tweet_lookup_calls"`
+	XTrendLookupCalls              int64                            `json:"x_trend_lookup_calls"`
+	XWriteCalls                    int64                            `json:"x_write_calls"`
+	XCostCents                     int64                            `json:"x_cost_cents"`
+	XCostAmount                    string                           `json:"x_cost_amount"`
+	XTrendsEnabled                 bool                             `json:"x_trends_enabled"`
+	BearerTokenConfigured          bool                             `json:"bearer_token_configured"`
+	TrendSyncIntervalHours         int                              `json:"trend_sync_interval_hours"`
+	TrendLatestFetchedAt           string                           `json:"trend_latest_fetched_at,omitempty"`
+	ExposureRefreshIntervalMinutes int                              `json:"exposure_refresh_interval_minutes"`
+	ExposureLatestSeenAt           string                           `json:"exposure_latest_seen_at,omitempty"`
+	ExposureSignals                int64                            `json:"exposure_signals"`
+	ExposureRegions                []AdminExposureRegionRuntimeItem `json:"exposure_regions"`
+	SchedulerStatus                string                           `json:"scheduler_status"`
+	SkipReason                     string                           `json:"skip_reason,omitempty"`
+	FailureReasons                 []AdminSchedulerFailureReason    `json:"failure_reasons"`
+}
+
+type AdminExposureRegionRuntimeItem struct {
+	Region       string `json:"region"`
+	SignalCount  int64  `json:"signal_count"`
+	LatestSeenAt string `json:"latest_seen_at,omitempty"`
+}
+
+type AdminSchedulerFailureReason struct {
+	Reason     string `json:"reason"`
+	Count      int64  `json:"count"`
+	LastSeenAt string `json:"last_seen_at,omitempty"`
 }
 
 type AdminConfigSummary struct {

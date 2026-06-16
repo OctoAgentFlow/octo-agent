@@ -277,6 +277,15 @@ func (s *TrendService) runTick(ctx context.Context, now time.Time, force bool) (
 			continue
 		}
 		topics, err := twitter.ListTrendsByWOEID(ctx, s.cfg.BearerToken, woeid, s.cfg.MaxTrends)
+		status := "success"
+		if err != nil {
+			status = "failed"
+		}
+		s.recordXAPICall("trends_lookup", "trend_sync", 1, now, map[string]any{
+			"woeid":       woeid,
+			"region_name": trendRegionName(region),
+			"status":      status,
+		})
 		if err != nil {
 			zap.L().Warn("x trends sync failed", zap.String("woeid", woeid), zap.Error(err))
 			alert.Notify(ctx, alert.Event{

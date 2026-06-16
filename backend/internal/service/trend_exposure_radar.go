@@ -23,6 +23,46 @@ import (
 
 const tl1TrendingEndpoint = "https://www.tl1.com/api/trending"
 
+func (s *TrendService) recordXAPICall(metric string, sourceType string, quantity int64, occurredAt time.Time, details map[string]any) {
+	if s == nil {
+		return
+	}
+	if quantity <= 0 {
+		quantity = 1
+	}
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+	detailsJSON, _ := json.Marshal(details)
+	row := model.CostUsageLedger{
+		UserID:     0,
+		SourceType: strings.TrimSpace(sourceType),
+		Provider:   "x",
+		Metric:     strings.TrimSpace(metric),
+		Quantity:   quantity,
+		Currency:   "USD",
+		OccurredAt: occurredAt.UTC(),
+		Details:    string(detailsJSON),
+	}
+	if row.SourceType == "" {
+		row.SourceType = "x_api"
+	}
+	if row.Metric == "" {
+		row.Metric = "api_call"
+	}
+	if s.exposure != nil && s.exposure.DB != nil {
+		if err := s.exposure.DB.Create(&row).Error; err != nil {
+			zap.L().Debug("record x api usage failed", zap.String("metric", row.Metric), zap.Error(err))
+		}
+		return
+	}
+	if s.repo != nil && s.repo.DB != nil {
+		if err := s.repo.DB.Create(&row).Error; err != nil {
+			zap.L().Debug("record x api usage failed", zap.String("metric", row.Metric), zap.Error(err))
+		}
+	}
+}
+
 type tl1TrendingResponse struct {
 	UpdatedAt string        `json:"updatedAt"`
 	Items     []tl1PostItem `json:"items"`
@@ -1444,6 +1484,16 @@ func (s *TrendService) refreshExposureSignals(ctx context.Context, region string
 		}
 		query := buildRecentSearchQuery(name, region)
 		tweets, err := twitter.SearchRecentTweets(ctx, s.cfg.BearerToken, query, s.englishExposureSearchResults())
+		status := "success"
+		if err != nil {
+			status = "failed"
+		}
+		s.recordXAPICall("recent_search", "exposure_refresh", 1, now, map[string]any{
+			"region": region,
+			"topic":  name,
+			"query":  query,
+			"status": status,
+		})
 		if err != nil {
 			zap.L().Warn("exposure recent search failed", zap.String("region", region), zap.String("topic", name), zap.Error(err))
 			continue
@@ -1500,6 +1550,15 @@ func (s *TrendService) refreshExistingExposureSignals(ctx context.Context, regio
 		return resampledIDs, 0, nil
 	}
 	tweets, err := twitter.LookupTweetsByIDs(ctx, s.cfg.BearerToken, ids)
+	status := "success"
+	if err != nil {
+		status = "failed"
+	}
+	s.recordXAPICall("tweet_lookup", "exposure_refresh", 1, now, map[string]any{
+		"region":   region,
+		"id_count": len(ids),
+		"status":   status,
+	})
 	if err != nil {
 		return resampledIDs, 0, err
 	}

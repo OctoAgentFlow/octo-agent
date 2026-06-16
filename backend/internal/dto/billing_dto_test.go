@@ -45,6 +45,50 @@ func TestPlanUsageDataAppliesSemanticAliases(t *testing.T) {
 	}
 }
 
+func TestPlanUsageDataPrefersSemanticAliases(t *testing.T) {
+	usage := PlanUsageData{
+		AutoCommentsMonth:      3,
+		OpportunityDraftsMonth: 12,
+		AutoDMsToday:           1,
+		ReviewCapacityToday:    9,
+	}
+
+	usage.ApplySemanticAliases()
+
+	if usage.OpportunityDraftsMonth != 12 {
+		t.Fatalf("opportunity drafts month = %d, want semantic value 12", usage.OpportunityDraftsMonth)
+	}
+	if usage.AutoCommentsMonth != 12 {
+		t.Fatalf("legacy auto comments month = %d, want semantic value 12", usage.AutoCommentsMonth)
+	}
+	if usage.ReviewCapacityToday != 9 {
+		t.Fatalf("review capacity today = %d, want semantic value 9", usage.ReviewCapacityToday)
+	}
+	if usage.AutoDMsToday != 9 {
+		t.Fatalf("legacy auto dms today = %d, want semantic value 9", usage.AutoDMsToday)
+	}
+}
+
+func TestPlanLimitsDataBackfillsLegacyFromSemanticAliases(t *testing.T) {
+	limits := PlanLimitsData{
+		MonthlyOpportunityDrafts: 88,
+		ContentMemorySources:     144,
+		MonthlyRadarRefreshes:    233,
+	}
+
+	limits.ApplySemanticAliases()
+
+	if limits.MonthlyAutoComments != limits.MonthlyOpportunityDrafts {
+		t.Fatalf("monthly auto comments = %d, want %d", limits.MonthlyAutoComments, limits.MonthlyOpportunityDrafts)
+	}
+	if limits.AutoCommentTargets != limits.ContentMemorySources {
+		t.Fatalf("auto comment targets = %d, want %d", limits.AutoCommentTargets, limits.ContentMemorySources)
+	}
+	if limits.MonthlyAutoCommentScans != limits.MonthlyRadarRefreshes {
+		t.Fatalf("monthly auto comment scans = %d, want %d", limits.MonthlyAutoCommentScans, limits.MonthlyRadarRefreshes)
+	}
+}
+
 func TestBillingSubscriptionJSONKeepsSemanticAndLegacyQuotaFields(t *testing.T) {
 	limits := PlanLimitsData{
 		MonthlyAutoPosts:        10,

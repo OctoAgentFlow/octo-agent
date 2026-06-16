@@ -113,6 +113,20 @@ function contentDraftFailed24h(overview: AdminOverviewApi) {
   return overview.execution.content_draft_failed_24h ?? overview.execution.auto_post_failed_24h;
 }
 
+function adminCostSchedulerSkipReasonLabel(reason: string | undefined, t: (key: string) => string) {
+  const normalized = (reason || "").trim();
+  if (!normalized) return t("admin.common.none");
+  const keys: Record<string, string> = {
+    x_trends_disabled: "admin.costScheduler.skip.xTrendsDisabled",
+    bearer_token_missing: "admin.costScheduler.skip.bearerTokenMissing",
+    exposure_not_sampled_yet: "admin.costScheduler.skip.exposureNotSampledYet",
+    exposure_timestamp_invalid: "admin.costScheduler.skip.exposureTimestampInvalid",
+    exposure_refresh_stale: "admin.costScheduler.skip.exposureRefreshStale",
+  };
+  const key = keys[normalized];
+  return key ? t(key) : normalized;
+}
+
 function planLabel(plan: string, t: (key: string) => string) {
   const p = plan.toLowerCase();
   if (p === "free_trial") return t("admin.plans.freeTrial");
@@ -798,7 +812,84 @@ function OverviewSection({ overview, onNavigate }: { overview: AdminOverviewApi;
       </section>
 
       <PromptGuardCard overview={overview} />
+      <CostSchedulerCard overview={overview} />
     </div>
+  );
+}
+
+function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
+  const { t } = useT();
+  const timeZone = usePreferredTimeZone();
+  const runtime = overview.execution.cost_scheduler;
+  if (!runtime) return null;
+  const isHealthy = runtime.scheduler_status === "healthy";
+  const failureReasons = runtime.failure_reasons || [];
+  const exposureRegions = runtime.exposure_regions || [];
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader
+        title={t("admin.costScheduler.title")}
+        description={t("admin.costScheduler.description", { hours: runtime.window_hours || 24 })}
+        right={<Badge variant={isHealthy ? "success" : "warning"}>{isHealthy ? t("admin.costScheduler.status.healthy") : t("admin.costScheduler.status.attention")}</Badge>}
+      />
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label={t("admin.costScheduler.openaiGenerations")} value={runtime.openai_generations} icon={Activity} />
+        <Metric label={t("admin.costScheduler.xApiCalls")} value={runtime.x_api_calls} icon={Radar} tone={runtime.x_api_calls > 0 ? "warn" : "default"} />
+        <Metric label={t("admin.costScheduler.exposureSignals")} value={runtime.exposure_signals} icon={TrendingUp} tone={runtime.exposure_signals > 0 ? "good" : "warn"} />
+        <Metric label={t("admin.costScheduler.totalCost")} value={`${runtime.openai_cost_amount || "0.00"} + ${runtime.x_cost_amount || "0.00"} USDT`} icon={Coins} tone={runtime.openai_cost_cents + runtime.x_cost_cents > 0 ? "warn" : "default"} />
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <div className="rounded-2xl border border-[#2f3336] bg-black/30 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.xBreakdown")}</p>
+          <div className="mt-3 grid gap-2 text-sm text-[#cfd9de] sm:grid-cols-2">
+            <span>{t("admin.costScheduler.recentSearch")}: <strong className="text-white">{runtime.x_recent_search_calls}</strong></span>
+            <span>{t("admin.costScheduler.tweetLookup")}: <strong className="text-white">{runtime.x_tweet_lookup_calls}</strong></span>
+            <span>{t("admin.costScheduler.trendsLookup")}: <strong className="text-white">{runtime.x_trend_lookup_calls}</strong></span>
+            <span>{t("admin.costScheduler.writeCalls")}: <strong className="text-white">{runtime.x_write_calls}</strong></span>
+          </div>
+          <div className="mt-4 grid gap-2 text-xs text-[#71767b] sm:grid-cols-2">
+            <span>{t("admin.costScheduler.trendInterval")}: {runtime.trend_sync_interval_hours}h</span>
+            <span>{t("admin.costScheduler.exposureInterval")}: {runtime.exposure_refresh_interval_minutes}m</span>
+            <span>{t("admin.costScheduler.trendLatest")}: {runtime.trend_latest_fetched_at ? formatDate(runtime.trend_latest_fetched_at, timeZone) : t("admin.common.none")}</span>
+            <span>{t("admin.costScheduler.exposureLatest")}: {runtime.exposure_latest_seen_at ? formatDate(runtime.exposure_latest_seen_at, timeZone) : t("admin.common.none")}</span>
+          </div>
+          <p className={`mt-4 rounded-xl border px-3 py-2 text-xs ${runtime.skip_reason ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>
+            {t("admin.costScheduler.skipReason")}: {adminCostSchedulerSkipReasonLabel(runtime.skip_reason, t)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black/30 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.exposureRegions")}</p>
+          <div className="mt-3 grid gap-2">
+            {exposureRegions.length > 0 ? (
+              exposureRegions.map((item) => (
+                <div key={item.region || "unknown"} className="flex items-center justify-between gap-3 rounded-xl border border-[#2f3336] px-3 py-2 text-sm">
+                  <span className="font-medium text-white">{item.region || t("admin.common.none")}</span>
+                  <span className="text-[#cfd9de]">{item.signal_count}</span>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-xl border border-[#2f3336] px-3 py-2 text-sm text-[#71767b]">{t("admin.costScheduler.noExposureRegions")}</p>
+            )}
+          </div>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.failureReasons")}</p>
+          <div className="mt-3 grid gap-2">
+            {failureReasons.length > 0 ? (
+              failureReasons.map((item) => (
+                <div key={`${item.reason}-${item.last_seen_at || ""}`} className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate">{item.reason}</span>
+                    <strong>{item.count}</strong>
+                  </div>
+                  {item.last_seen_at ? <p className="mt-1 text-xs text-rose-200/70">{formatDate(item.last_seen_at, timeZone)}</p> : null}
+                </div>
+              ))
+            ) : (
+              <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">{t("admin.costScheduler.noFailures")}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 

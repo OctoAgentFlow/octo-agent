@@ -45,12 +45,12 @@ export function formatPlanNumber(value: number, locale: Language) {
 export function getPlanBenefits(plan: DisplayPlan, t: TranslateFn, lang: Language, options?: { includeTeamSeats?: boolean }) {
   const limits = plan.limits;
   const count = (value: number) => formatPlanNumber(value, lang);
-  const contentDrafts = limits.monthlyContentDrafts ?? limits.monthlyAutoPosts;
-  const replyDrafts = limits.monthlyReplyDrafts ?? limits.monthlyAutoReplies;
-  const opportunityDrafts = limits.monthlyOpportunityDrafts ?? limits.monthlyAutoComments;
-  const reviewCapacity = limits.monthlyReviewCapacity ?? limits.monthlyAutoDMs;
-  const contentMemory = limits.contentMemorySources ?? limits.autoCommentTargets;
-  const radarRefreshes = limits.monthlyRadarRefreshes ?? limits.monthlyAutoCommentScans;
+  const contentDrafts = limits.monthlyContentDrafts ?? limits.monthlyAutoPosts ?? 0;
+  const replyDrafts = limits.monthlyReplyDrafts ?? limits.monthlyAutoReplies ?? 0;
+  const opportunityDrafts = limits.monthlyOpportunityDrafts ?? limits.monthlyAutoComments ?? 0;
+  const reviewCapacity = limits.monthlyReviewCapacity ?? limits.monthlyAutoDMs ?? 0;
+  const contentMemory = limits.contentMemorySources ?? limits.autoCommentTargets ?? 0;
+  const radarRefreshes = limits.monthlyRadarRefreshes ?? limits.monthlyAutoCommentScans ?? 0;
   const benefits = [
     t("planBenefits.oafBots", { count: count(limits.maxBots) }),
     t("planBenefits.xAccounts", { count: count(limits.maxTwitterAccounts) }),

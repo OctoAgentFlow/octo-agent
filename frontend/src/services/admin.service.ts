@@ -67,6 +67,44 @@ export type AdminExecutionSummaryApi = {
   monthly_cost_cents: number;
   monthly_cost_amount: string;
   prompt_guard: AdminPromptGuardSummaryApi;
+  cost_scheduler: AdminCostSchedulerSummaryApi;
+};
+
+export type AdminExposureRegionRuntimeApi = {
+  region: string;
+  signal_count: number;
+  latest_seen_at?: string;
+};
+
+export type AdminSchedulerFailureReasonApi = {
+  reason: string;
+  count: number;
+  last_seen_at?: string;
+};
+
+export type AdminCostSchedulerSummaryApi = {
+  window_hours: number;
+  openai_generations: number;
+  openai_cost_cents: number;
+  openai_cost_amount: string;
+  x_api_calls: number;
+  x_recent_search_calls: number;
+  x_tweet_lookup_calls: number;
+  x_trend_lookup_calls: number;
+  x_write_calls: number;
+  x_cost_cents: number;
+  x_cost_amount: string;
+  x_trends_enabled: boolean;
+  bearer_token_configured: boolean;
+  trend_sync_interval_hours: number;
+  trend_latest_fetched_at?: string;
+  exposure_refresh_interval_minutes: number;
+  exposure_latest_seen_at?: string;
+  exposure_signals: number;
+  exposure_regions: AdminExposureRegionRuntimeApi[];
+  scheduler_status: "healthy" | "attention" | string;
+  skip_reason?: string;
+  failure_reasons: AdminSchedulerFailureReasonApi[];
 };
 
 export type AdminPromptGuardSceneApi = {

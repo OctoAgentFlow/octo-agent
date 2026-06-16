@@ -1036,6 +1036,17 @@ export default function ExposureRadarPage() {
         }}
       />
 
+      <DailyOperatingGoalsPanel
+        strategy={growthStrategy}
+        stats={workbenchStats}
+        items={items}
+        manualActionStates={manualActionStates}
+        savedMemoryIDs={savedMemoryIDs}
+        recentRecords={recentManualRecords}
+        usingSampleMode={usingSampleMode}
+        onStartSample={() => setSampleMode(true)}
+      />
+
       {usingSampleMode ? (
         <SampleModeBanner
           onExit={() => {
@@ -2567,7 +2578,134 @@ function RadarEmptyStatePanel({
           </a>
         </div>
       </div>
+      <EmptyStatePlaybook onRefresh={onRefresh} onWidenWindow={onWidenWindow} onStartSample={onStartSample} loadState={loadState} />
     </div>
+  );
+}
+
+function EmptyStatePlaybook({
+  onRefresh,
+  onWidenWindow,
+  onStartSample,
+  loadState,
+}: {
+  onRefresh: () => void;
+  onWidenWindow: () => void;
+  onStartSample: () => void;
+  loadState: LoadState;
+}) {
+  const { t } = useT();
+  const actions = [
+    { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading" },
+    { key: "window", icon: <Clock3 className="size-4" />, onClick: onWidenWindow },
+    { key: "sample", icon: <Sparkles className="size-4" />, onClick: onStartSample },
+  ];
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyPlaybook.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.emptyPlaybook.description")}</p>
+        </div>
+        <a href="#radar-strategy" className="inline-flex h-8 w-fit items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          {t("exposureRadar.emptyPlaybook.strategy")}
+          <ArrowRight className="size-3.5" />
+        </a>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {actions.map((action) => (
+          <button
+            key={action.key}
+            type="button"
+            disabled={action.disabled}
+            onClick={action.onClick}
+            className="rounded-xl border border-[#2f3336] bg-black p-3 text-left transition hover:border-[#1d9bf0]/45 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="inline-flex size-8 items-center justify-center rounded-lg border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]">{action.icon}</span>
+            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.emptyPlaybook.${action.key}.title`)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.emptyPlaybook.${action.key}.description`)}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DailyOperatingGoalsPanel({
+  strategy,
+  stats,
+  items,
+  manualActionStates,
+  savedMemoryIDs,
+  recentRecords,
+  usingSampleMode,
+  onStartSample,
+}: {
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  stats: WorkbenchStats;
+  items: ExposureRadarItemApi[];
+  manualActionStates: Record<string, ManualActionState>;
+  savedMemoryIDs: Set<string>;
+  recentRecords: ExposureRadarManualRecordApi[];
+  usingSampleMode: boolean;
+  onStartSample: () => void;
+}) {
+  const { t } = useT();
+  const goals = buildDailyOperatingGoals(strategy, stats, items, manualActionStates, savedMemoryIDs, recentRecords, t);
+  const completed = goals.filter((goal) => goal.done >= goal.target).length;
+  const overall = goals.length ? Math.round((goals.reduce((sum, goal) => sum + Math.min(1, goal.done / goal.target), 0) / goals.length) * 100) : 0;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+            <Gauge className="size-3.5" />
+            {t("exposureRadar.dailyGoals.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.dailyGoals.title")} description={t("exposureRadar.dailyGoals.description")} className="mt-3 mb-0" />
+        </div>
+        <div className="rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-56">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] text-[#71767b]">{t("exposureRadar.dailyGoals.progress")}</p>
+              <p className="text-2xl font-semibold text-white">{completed}/{goals.length}</p>
+            </div>
+            <span className="inline-flex size-12 items-center justify-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 text-sm font-semibold text-[#7ee0b5]">{overall}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#202327]">
+            <div className="h-full rounded-full bg-[#00ba7c]" style={{ width: `${overall}%` }} />
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {goals.map((goal) => (
+          <div key={goal.key} className={`rounded-2xl border p-4 ${goal.done >= goal.target ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span className={`inline-flex size-9 items-center justify-center rounded-xl border ${goal.done >= goal.target ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]"}`}>
+                {goal.icon}
+              </span>
+              <span className="text-sm font-semibold text-[#e7e9ea]">{goal.done}/{goal.target}</span>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{goal.title}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{goal.description}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 md:flex-row md:items-center md:justify-between">
+        <p className="text-xs leading-5 text-[#8b98a5]">{usingSampleMode ? t("exposureRadar.dailyGoals.sampleNote") : t("exposureRadar.dailyGoals.note")}</p>
+        {items.length === 0 ? (
+          <Button type="button" size="sm" onClick={onStartSample}>
+            <Sparkles className="size-3.5" />
+            {t("exposureRadar.sample.start")}
+          </Button>
+        ) : (
+          <a href="#radar-workbench" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("exposureRadar.dailyGoals.openWorkbench")}
+            <ArrowRight className="size-3.5" />
+          </a>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -2629,6 +2767,7 @@ function FirstLoopPanel({
   const generatedComment = item?.generated_comment?.trim() || "";
   const handled = item ? isManualActionHandled(item, manualState) : false;
   const stepKey = firstLoopStepKey(item, manualState, firstLoopDone);
+  const priorityReasons = item ? buildPriorityReasonChips(item, t) : [];
   const copyReply = async () => {
     if (!item || !generatedComment) return;
     try {
@@ -2686,6 +2825,19 @@ function FirstLoopPanel({
             <h3 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{item.title}</h3>
             {item.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{item.author_handle}</p> : null}
             <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{item.content}</p>
+            {priorityReasons.length ? (
+              <div className="mt-4 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.firstLoop.why.title")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {priorityReasons.map((reason) => (
+                    <span key={reason} className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-[11px] font-semibold text-[#8ecdf8]">
+                      <Info className="size-3" />
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {replyAngles.length ? (
               <div className="mt-4 grid gap-2 md:grid-cols-2">
                 {replyAngles.slice(0, 2).map((angle) => (
@@ -2763,6 +2915,14 @@ function FirstLoopCompletionPanel({ completedAt, recentRecords, timeZone }: { co
   const { t } = useT();
   const latestRecord = recentRecords.find((record) => record.result_checked_at || record.handled_at || record.task_status === "done");
   const completedLabel = completedAt ? formatDateTime(completedAt, timeZone) : latestRecord?.result_checked_at ? formatDateTime(latestRecord.result_checked_at, timeZone) : latestRecord?.handled_at ? formatDateTime(latestRecord.handled_at, timeZone) : "";
+  const reviewCards = ["result", "angle", "memory"].map((key) => ({
+    key,
+    value: key === "result"
+      ? latestRecord?.result_score ? String(latestRecord.result_score) : t("exposureRadar.firstLoopComplete.review.pending")
+      : key === "angle"
+        ? latestRecord?.reply_angle_title || t("exposureRadar.firstLoopComplete.review.pending")
+        : latestRecord?.saved_memory_id ? `#${latestRecord.saved_memory_id}` : t("exposureRadar.firstLoopComplete.review.pending"),
+  }));
   return (
     <div className="rounded-2xl border border-[#00ba7c]/25 bg-[#061a13] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2785,6 +2945,15 @@ function FirstLoopCompletionPanel({ completedAt, recentRecords, timeZone }: { co
             <Target className="size-4" />
           </a>
         </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {reviewCards.map((card) => (
+          <div key={card.key} className="rounded-xl border border-[#2f3336] bg-black/40 p-3">
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstLoopComplete.review.${card.key}.title`)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstLoopComplete.review.${card.key}.description`)}</p>
+            <p className="mt-2 truncate text-sm font-semibold text-[#7ee0b5]">{card.value}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -5388,6 +5557,77 @@ function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () =
         refreshAction,
       ];
   }
+}
+
+function buildDailyOperatingGoals(
+  strategy: ExposureRadarGrowthStrategyApi | null,
+  stats: WorkbenchStats,
+  items: ExposureRadarItemApi[],
+  manualActionStates: Record<string, ManualActionState>,
+  savedMemoryIDs: Set<string>,
+  recentRecords: ExposureRadarManualRecordApi[],
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  const dailyLimit = Math.max(4, Math.min(20, strategy?.daily_move_limit || 8));
+  const reviewTarget = Math.max(3, Math.min(6, Math.ceil(dailyLimit / 2)));
+  const handleTarget = Math.max(1, Math.min(3, Math.ceil(dailyLimit / 4)));
+  const saveTarget = 1;
+  const backfillTarget = 1;
+  const reviewedCount = items.filter((item) => {
+    const state = manualActionStates[item.id];
+    return Boolean(state?.opened || state?.copied || state?.saved || state?.handled || item.generated_comment || item.review_task_id);
+  }).length;
+  const handledCount = Math.max(stats.handled, items.filter((item) => isManualActionHandled(item, manualActionStates[item.id])).length);
+  const savedCount = items.filter((item) => isRadarItemSaved(item, savedMemoryIDs) || manualActionStates[item.id]?.saved).length;
+  const backfilledCount = items.filter((item) => manualActionStates[item.id]?.resultCheckedAt).length + recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  return [
+    {
+      key: "review",
+      icon: <Search className="size-4" />,
+      title: t("exposureRadar.dailyGoals.review.title"),
+      description: t("exposureRadar.dailyGoals.review.description"),
+      done: Math.min(reviewedCount, reviewTarget),
+      target: reviewTarget,
+    },
+    {
+      key: "handle",
+      icon: <MessageCircle className="size-4" />,
+      title: t("exposureRadar.dailyGoals.handle.title"),
+      description: t("exposureRadar.dailyGoals.handle.description"),
+      done: Math.min(handledCount, handleTarget),
+      target: handleTarget,
+    },
+    {
+      key: "save",
+      icon: <BookmarkPlus className="size-4" />,
+      title: t("exposureRadar.dailyGoals.save.title"),
+      description: t("exposureRadar.dailyGoals.save.description"),
+      done: Math.min(savedCount, saveTarget),
+      target: saveTarget,
+    },
+    {
+      key: "backfill",
+      icon: <BarChart3 className="size-4" />,
+      title: t("exposureRadar.dailyGoals.backfill.title"),
+      description: t("exposureRadar.dailyGoals.backfill.description"),
+      done: Math.min(backfilledCount, backfillTarget),
+      target: backfillTarget,
+    },
+  ];
+}
+
+function buildPriorityReasonChips(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string) {
+  const qualityStage = normalizeQualityStage(item.quality_stage, item);
+  const tier = normalizeOpportunityTier(item.opportunity_tier);
+  return [
+    item.score >= 80 ? t("exposureRadar.firstLoop.why.highScore", { score: item.score }) : "",
+    qualityStage === "act_now" ? t("exposureRadar.firstLoop.why.actNow") : "",
+    tier === "hot_opportunity" || tier === "rising_opportunity" ? t(`exposureRadar.firstLoop.why.${tier}`) : "",
+    typeof item.views_per_min === "number" && item.views_per_min > 0 ? t("exposureRadar.firstLoop.why.velocity", { speed: formatOneDecimal(item.views_per_min) }) : "",
+    typeof item.impression_count === "number" && item.impression_count > 0 ? t("exposureRadar.firstLoop.why.views", { views: formatCompact(item.impression_count) }) : "",
+    typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? t("exposureRadar.firstLoop.why.smallAuthor", { fans: formatCompact(item.followers_count) }) : "",
+    item.risk_level === "low" ? t("exposureRadar.firstLoop.why.lowRisk") : "",
+  ].filter(Boolean).slice(0, 4);
 }
 
 function isSampleRadarItem(item: ExposureRadarItemApi) {

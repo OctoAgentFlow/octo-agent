@@ -799,8 +799,8 @@ function DailyXQueueStartCard({
           <h2 className="mt-2 max-w-3xl text-2xl font-semibold tracking-normal text-[#e7e9ea] md:text-3xl">{t("dashboard.dailyXQueueHero.title")}</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5] md:text-base">{t("dashboard.dailyXQueueHero.description")}</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link href="/daily-x-queue" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
-              <Sparkles className="size-4" />
+            <Link href="/exposure-radar" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+              <MessageCircle className="size-4" />
               {t("dashboard.dailyXQueueHero.primaryCta")}
             </Link>
             <Link href="/oaf-bots" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">

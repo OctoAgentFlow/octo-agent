@@ -88,6 +88,26 @@ type SignalDecisionSummary = {
   detail: string;
   proof: string[];
 };
+type SignalCredibilityStatus = "strong" | "usable" | "thin" | "weak";
+type SignalCredibility = {
+  status: SignalCredibilityStatus;
+  score: number;
+  proof: string[];
+  missing: string[];
+  nextStep: string;
+};
+type MemoryReplyCue = {
+  key: string;
+  title: string;
+  detail: string;
+  tone: "blue" | "green" | "amber" | "neutral";
+};
+type ResultLearningMove = {
+  key: string;
+  title: string;
+  detail: string;
+  tone: "positive" | "warning" | "neutral";
+};
 type ReplyAngleID = "operatorObservation" | "lightQuestion" | "peerExperience" | "cautionNote" | "topicResearch";
 type ReplyAngleSuggestion = {
   id: ReplyAngleID;
@@ -980,6 +1000,15 @@ export default function ExposureRadarPage() {
         timeZone={timeZone}
       />
 
+      <ResultLearningLoopPanel
+        data={data}
+        moves={todayMoves}
+        recentRecords={recentManualRecords}
+        weeklyReview={weeklyReview}
+        safety={safetyCenter}
+        learningProfile={exposureLearningProfile}
+      />
+
       <TeamHandoffPanel
         moves={todayMoves}
         people={peopleRadar}
@@ -1244,6 +1273,9 @@ export default function ExposureRadarPage() {
           handlingID={handlingID}
           savingMemoryID={savingMemoryID}
           memoryDisabled={!selectedAccountID || !selectedBotID}
+          strategy={growthStrategy}
+          recentRecords={recentManualRecords}
+          learningProfile={exposureLearningProfile}
           selectedReplyAngleIDs={selectedReplyAngleIDs}
           onCreateDraft={createDraft}
           onMarkHandled={markRadarHandled}
@@ -1624,6 +1656,53 @@ function DailyReviewReportPanel({
             </div>
           ) : null}
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function ResultLearningLoopPanel({
+  data,
+  moves,
+  recentRecords,
+  weeklyReview,
+  safety,
+  learningProfile,
+}: {
+  data: ExposureRadarData | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+}) {
+  const { t } = useT();
+  const actions = buildResultLearningMoves({ data, moves, recentRecords, weeklyReview, safety, learningProfile, t });
+  const resultRecords = recentRecords.filter((record) => record.result_checked_at || record.result_score || record.outcome);
+  const effectiveRecords = resultRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60);
+  const pendingBackfill = recentRecords.filter((record) => (record.handled_at || record.task_status === "done" || record.published_url) && !record.result_checked_at && !record.result_score).length;
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("exposureRadar.learningLoop.title")} description={t("exposureRadar.learningLoop.description")} className="mb-0" />
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+          <BarChart3 className="size-3.5" />
+          {t("exposureRadar.learningLoop.badge")}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <GrowthDeskMetric icon={<Database className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.results")} value={String(resultRecords.length)} detail={t("exposureRadar.learningLoop.metric.resultsDetail")} />
+        <GrowthDeskMetric icon={<TrendingUp className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.effective")} value={String(effectiveRecords.length)} detail={weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : t("exposureRadar.learningLoop.metric.effectiveDetail")} />
+        <GrowthDeskMetric icon={<Clock3 className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.pending")} value={String(pendingBackfill)} detail={t("exposureRadar.learningLoop.metric.pendingDetail")} />
+        <GrowthDeskMetric icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.safety")} value={String((safety?.watch_count || 0) + (safety?.block_count || 0))} detail={t("exposureRadar.learningLoop.metric.safetyDetail")} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {actions.map((action) => (
+          <div key={action.key} className={`rounded-2xl border p-4 ${resultLearningTone(action.tone)}`}>
+            <p className="text-sm font-semibold">{action.title}</p>
+            <p className="mt-2 text-xs leading-5 opacity-85">{action.detail}</p>
+          </div>
+        ))}
       </div>
     </Card>
   );
@@ -3785,6 +3864,9 @@ function HandlingWorkbenchPanel({
   savingSeedID,
   generatingSeedDraftID,
   memoryDisabled,
+  strategy,
+  recentRecords,
+  learningProfile,
   savedMemoryIDs,
   selectedReplyAngleIDs,
   onCreateDraft,
@@ -3807,6 +3889,9 @@ function HandlingWorkbenchPanel({
   savingSeedID: string | null;
   generatingSeedDraftID: string | null;
   memoryDisabled: boolean;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  recentRecords: ExposureRadarManualRecordApi[];
+  learningProfile: ExposureLearningProfile;
   savedMemoryIDs: Set<string>;
   selectedReplyAngleIDs: Record<string, string>;
   onCreateDraft: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
@@ -3882,6 +3967,7 @@ function HandlingWorkbenchPanel({
             {activeItem.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{activeItem.author_handle}</p> : null}
             <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{activeItem.content}</p>
             <SignalDecisionCard summary={buildSignalDecisionSummary(activeItem, t)} />
+            <SignalCredibilityPanel credibility={buildSignalCredibility(activeItem, t)} />
             {activeExplanation ? <OpportunityExplanationPanel explanation={activeExplanation} /> : null}
             {replyAngles.length ? (
               <ReplyAngleSuggestionsPanel
@@ -3890,6 +3976,13 @@ function HandlingWorkbenchPanel({
                 onSelect={(angleID) => onSelectReplyAngle(activeItem.id, angleID)}
               />
             ) : null}
+            <MemoryDrivenReplyPanel
+              item={activeItem}
+              strategy={strategy}
+              learningProfile={learningProfile}
+              recentRecords={recentRecords}
+              selectedReplyAngle={selectedReplyAngle}
+            />
             {selectedReplyAngle ? <ReplyPlanCard item={activeItem} replyAngle={selectedReplyAngle} /> : null}
             <SafetyReviewPanel item={activeItem} replyAngle={selectedReplyAngle} />
             <ReplyQualityPanel item={activeItem} replyAngle={selectedReplyAngle} generated={activeItem.generated_comment || ""} />
@@ -4065,6 +4158,45 @@ function ReplyAngleSuggestionsPanel({ suggestions, selectedID, onSelect }: { sug
   );
 }
 
+function MemoryDrivenReplyPanel({
+  item,
+  strategy,
+  learningProfile,
+  recentRecords,
+  selectedReplyAngle,
+}: {
+  item: ExposureRadarItemApi;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  learningProfile: ExposureLearningProfile;
+  recentRecords: ExposureRadarManualRecordApi[];
+  selectedReplyAngle?: ReplyAngleSuggestion;
+}) {
+  const { t } = useT();
+  const cues = buildMemoryReplyCues(item, strategy, learningProfile, recentRecords, selectedReplyAngle, t);
+  return (
+    <div className="mt-4 rounded-2xl border border-[#7856ff]/20 bg-[#120d24] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.memoryReply.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.memoryReply.description")}</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-2 py-1 text-[11px] font-semibold text-[#c4b5fd]">
+          <Database className="size-3.5" />
+          {t("exposureRadar.memoryReply.badge")}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {cues.map((cue) => (
+          <div key={cue.key} className={`rounded-xl border p-3 ${memoryReplyCueTone(cue.tone)}`}>
+            <p className="text-xs font-semibold">{cue.title}</p>
+            <p className="mt-1 text-[11px] leading-5 opacity-85">{cue.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ReplyPlanCard({ item, replyAngle }: { item: ExposureRadarItemApi; replyAngle: ReplyAngleSuggestion }) {
   const { t } = useT();
   const plan = buildReplyPlan(item, replyAngle, t);
@@ -4209,6 +4341,52 @@ function SignalDecisionCard({ summary }: { summary: SignalDecisionSummary }) {
           <div key={proof} className="rounded-xl border border-current/15 bg-black/20 px-3 py-2 text-[11px] leading-4 opacity-90">
             {proof}
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SignalCredibilityPanel({ credibility, compact = false }: { credibility: SignalCredibility; compact?: boolean }) {
+  const { t } = useT();
+  return (
+    <div className={`mt-4 rounded-2xl border p-3 ${signalCredibilityTone(credibility.status)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold opacity-80">{t("exposureRadar.credibility.title")}</p>
+          <p className="mt-1 text-sm font-semibold">{t(`exposureRadar.credibility.status.${credibility.status}`)}</p>
+          <p className="mt-1 text-xs leading-5 opacity-85">{credibility.nextStep}</p>
+        </div>
+        <span className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border border-current/20 bg-black/20 px-2.5 py-1 text-[11px] font-semibold">
+          <Gauge className="size-3.5" />
+          {credibility.score}/100
+        </span>
+      </div>
+      <div className={`mt-3 grid gap-2 ${compact ? "sm:grid-cols-2" : "lg:grid-cols-2"}`}>
+        <CredibilityColumn
+          title={t("exposureRadar.credibility.proof")}
+          items={credibility.proof}
+          empty={t("exposureRadar.credibility.proofEmpty")}
+          icon={<CheckCircle2 className="size-3.5" />}
+        />
+        <CredibilityColumn
+          title={t("exposureRadar.credibility.missing")}
+          items={credibility.missing}
+          empty={t("exposureRadar.credibility.missingEmpty")}
+          icon={<Info className="size-3.5" />}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CredibilityColumn({ title, items, empty, icon }: { title: string; items: string[]; empty: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-current/15 bg-black/20 p-3">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold opacity-85">{icon}{title}</p>
+      <div className="mt-2 space-y-1.5">
+        {(items.length ? items : [empty]).map((item) => (
+          <p key={item} className="text-[11px] leading-5 opacity-85">{item}</p>
         ))}
       </div>
     </div>
@@ -4985,6 +5163,7 @@ function RadarCard({
         <VelocitySparkline values={item.velocity_history} />
       ) : null}
       <SignalDecisionCard summary={buildSignalDecisionSummary(item, t)} />
+      <SignalCredibilityPanel credibility={buildSignalCredibility(item, t)} compact />
       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
         <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.card.recommended")}</p>
         <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{item.recommended_use}</p>
@@ -5515,6 +5694,225 @@ function buildSignalDecisionSummary(item: ExposureRadarItemApi, t: (key: string,
     detail: t(riskMedium ? "exposureRadar.decision.watchRisk.detail" : "exposureRadar.decision.watch.detail"),
     proof: proof.length ? proof : [t("exposureRadar.decision.proof.watch")],
   };
+}
+
+function buildSignalCredibility(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string): SignalCredibility {
+  const hasViews = typeof item.impression_count === "number" && item.impression_count > 0;
+  const hasVelocity = typeof item.views_per_min === "number" && item.views_per_min > 0;
+  const hasAuthor = typeof item.followers_count === "number" && item.followers_count > 0;
+  const hasEngagement = publicEngagementCount(item) > 0;
+  const hasSecondSample = (item.velocity_history || []).filter((value) => Number.isFinite(value)).length >= 2;
+  const realImpressions = normalizeDataConfidence(item.data_confidence, item.data_quality) === "real_impressions";
+  let score = 0;
+  if (item.data_quality === "tweet_level") score += 24;
+  if (realImpressions || hasViews) score += 22;
+  if (hasVelocity) score += 18;
+  if (hasSecondSample) score += 12;
+  if (hasAuthor) score += 10;
+  if (hasEngagement) score += 8;
+  if (item.quality_reason || item.ranking_reason) score += 6;
+  if (item.data_quality === "topic_level") score = Math.min(score, 38);
+  score = Math.max(0, Math.min(100, score));
+  const status: SignalCredibilityStatus = score >= 78 ? "strong" : score >= 58 ? "usable" : score >= 38 ? "thin" : "weak";
+  const proof = [
+    item.data_quality === "tweet_level" ? t("exposureRadar.credibility.proof.tweet") : "",
+    hasViews ? t("exposureRadar.credibility.proof.views", { views: formatCompact(item.impression_count || 0) }) : "",
+    hasVelocity ? t("exposureRadar.credibility.proof.velocity", { speed: formatVelocityLabel(item.views_per_min, "0/min") }) : "",
+    hasSecondSample ? t("exposureRadar.credibility.proof.resampled") : "",
+    hasAuthor ? t("exposureRadar.credibility.proof.author", { followers: formatCompact(item.followers_count || 0) }) : "",
+    hasEngagement ? t("exposureRadar.credibility.proof.engagement", { count: formatCompact(publicEngagementCount(item)) }) : "",
+  ].filter(Boolean).slice(0, 4);
+  const missing = [
+    item.data_quality !== "tweet_level" ? t("exposureRadar.credibility.missing.tweet") : "",
+    !hasViews ? t("exposureRadar.credibility.missing.views") : "",
+    !hasVelocity ? t("exposureRadar.credibility.missing.velocity") : "",
+    !hasSecondSample ? t("exposureRadar.credibility.missing.resample") : "",
+    !hasAuthor ? t("exposureRadar.credibility.missing.author") : "",
+  ].filter(Boolean).slice(0, 4);
+  return {
+    status,
+    score,
+    proof,
+    missing,
+    nextStep: t(`exposureRadar.credibility.next.${status}`),
+  };
+}
+
+function signalCredibilityTone(status: SignalCredibilityStatus) {
+  switch (status) {
+    case "strong":
+      return "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]";
+    case "usable":
+      return "border-[#1d9bf0]/25 bg-[#08131f] text-[#8ecdf8]";
+    case "thin":
+      return "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]";
+    default:
+      return "border-[#64748b]/30 bg-[#0b0f14] text-[#94a3b8]";
+  }
+}
+
+function buildMemoryReplyCues(
+  item: ExposureRadarItemApi,
+  strategy: ExposureRadarGrowthStrategyApi | null,
+  learningProfile: ExposureLearningProfile,
+  recentRecords: ExposureRadarManualRecordApi[],
+  selectedReplyAngle: ReplyAngleSuggestion | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): MemoryReplyCue[] {
+  const topicKey = exposureLearningTopicKey(item.topic_name || item.title);
+  const coreTopics = (strategy?.core_topics || []).slice(0, 3);
+  const avoidTopics = (strategy?.avoid_topics || []).slice(0, 3);
+  const learnedAngle = selectedReplyAngle && learningProfile.preferredAngles.has(selectedReplyAngle.id);
+  const similarRecord = recentRecords.find((record) => exposureLearningTopicKey(record.topic_name || record.title) === topicKey && (record.result_score || 0) >= 40);
+  return [
+    {
+      key: "persona",
+      title: t("exposureRadar.memoryReply.cue.persona.title"),
+      detail: strategy?.target_audience
+        ? t("exposureRadar.memoryReply.cue.persona.detail", { audience: strategy.target_audience })
+        : t("exposureRadar.memoryReply.cue.persona.empty"),
+      tone: strategy?.target_audience ? "blue" : "amber",
+    },
+    {
+      key: "topics",
+      title: t("exposureRadar.memoryReply.cue.topics.title"),
+      detail: coreTopics.length
+        ? t("exposureRadar.memoryReply.cue.topics.detail", { topics: coreTopics.join(", ") })
+        : t("exposureRadar.memoryReply.cue.topics.empty"),
+      tone: coreTopics.length ? "green" : "neutral",
+    },
+    {
+      key: "angle",
+      title: t("exposureRadar.memoryReply.cue.angle.title"),
+      detail: selectedReplyAngle
+        ? t(learnedAngle ? "exposureRadar.memoryReply.cue.angle.learned" : "exposureRadar.memoryReply.cue.angle.detail", { angle: selectedReplyAngle.title })
+        : t("exposureRadar.memoryReply.cue.angle.empty"),
+      tone: learnedAngle ? "green" : "blue",
+    },
+    {
+      key: "boundary",
+      title: t("exposureRadar.memoryReply.cue.boundary.title"),
+      detail: avoidTopics.length
+        ? t("exposureRadar.memoryReply.cue.boundary.detail", { topics: avoidTopics.join(", ") })
+        : t("exposureRadar.memoryReply.cue.boundary.empty"),
+      tone: avoidTopics.length || item.risk_level === "medium" || item.risk_level === "high" ? "amber" : "neutral",
+    },
+    {
+      key: "history",
+      title: t("exposureRadar.memoryReply.cue.history.title"),
+      detail: similarRecord
+        ? t("exposureRadar.memoryReply.cue.history.detail", { score: similarRecord.result_score || 0, views: formatCompact(similarRecord.result_impression_count || 0) })
+        : t("exposureRadar.memoryReply.cue.history.empty"),
+      tone: similarRecord ? "green" : "neutral",
+    },
+  ];
+}
+
+function memoryReplyCueTone(tone: MemoryReplyCue["tone"]) {
+  switch (tone) {
+    case "green":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "amber":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    case "blue":
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    default:
+      return "border-[#2f3336] bg-black text-[#8b98a5]";
+  }
+}
+
+function buildResultLearningMoves({
+  data,
+  moves,
+  recentRecords,
+  weeklyReview,
+  safety,
+  learningProfile,
+  t,
+}: {
+  data: ExposureRadarData | null;
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}): ResultLearningMove[] {
+  const pendingBackfill = recentRecords.filter((record) => (record.handled_at || record.task_status === "done" || record.published_url) && !record.result_checked_at && !record.result_score).length;
+  const best = bestExposureResultRecord(recentRecords);
+  const boostedTopic = Array.from(learningProfile.boostedTopics)[0];
+  const cautiousTopic = Array.from(learningProfile.cautiousTopics)[0];
+  const warnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const nextMove = moves[0]?.item;
+  const actions: ResultLearningMove[] = [];
+  if (pendingBackfill > 0) {
+    actions.push({
+      key: "backfill",
+      title: t("exposureRadar.learningLoop.action.backfill.title"),
+      detail: t("exposureRadar.learningLoop.action.backfill.detail", { count: pendingBackfill }),
+      tone: "warning",
+    });
+  }
+  if (best) {
+    actions.push({
+      key: "best",
+      title: t("exposureRadar.learningLoop.action.best.title"),
+      detail: t("exposureRadar.learningLoop.action.best.detail", { title: compactTitle(best.title || best.topic_name || best.signal_id), score: best.result_score || 0, views: formatCompact(best.result_impression_count || 0) }),
+      tone: "positive",
+    });
+  }
+  if (boostedTopic) {
+    actions.push({
+      key: "boosted",
+      title: t("exposureRadar.learningLoop.action.boosted.title"),
+      detail: t("exposureRadar.learningLoop.action.boosted.detail", { topic: boostedTopic }),
+      tone: "positive",
+    });
+  }
+  if (cautiousTopic || warnings > 0) {
+    actions.push({
+      key: "caution",
+      title: t("exposureRadar.learningLoop.action.caution.title"),
+      detail: cautiousTopic ? t("exposureRadar.learningLoop.action.caution.topic", { topic: cautiousTopic }) : t("exposureRadar.learningLoop.action.caution.safety", { count: warnings }),
+      tone: "warning",
+    });
+  }
+  if (nextMove) {
+    actions.push({
+      key: "next",
+      title: t("exposureRadar.learningLoop.action.next.title"),
+      detail: t("exposureRadar.learningLoop.action.next.detail", { title: compactTitle(nextMove.title), score: nextMove.score }),
+      tone: "neutral",
+    });
+  }
+  if (data?.diagnostics?.top_missing_reason && actions.length < 3) {
+    actions.push({
+      key: "diagnostic",
+      title: t("exposureRadar.learningLoop.action.diagnostic.title"),
+      detail: t("exposureRadar.learningLoop.action.diagnostic.detail", { reason: data.diagnostics.top_missing_reason }),
+      tone: "neutral",
+    });
+  }
+  if (!actions.length) {
+    actions.push({
+      key: "default",
+      title: t("exposureRadar.learningLoop.action.default.title"),
+      detail: weeklyReview ? t("exposureRadar.learningLoop.action.default.review", { rate: Math.round((weeklyReview.effective_rate || 0) * 100) }) : t("exposureRadar.learningLoop.action.default.detail"),
+      tone: "neutral",
+    });
+  }
+  return actions.slice(0, 3);
+}
+
+function resultLearningTone(tone: ResultLearningMove["tone"]) {
+  switch (tone) {
+    case "positive":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "warning":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    default:
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  }
 }
 
 function buildMemoryOpportunityExplanation(item: ExposureRadarItemApi): OpportunityExplanation {

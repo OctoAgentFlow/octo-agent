@@ -140,6 +140,10 @@ type ManualActionState = {
   resultCheckedAt?: string;
   updatedAt?: string;
 };
+type OperatorSessionNote = {
+  text: string;
+  updatedAt: string;
+};
 
 type StrategyFormState = {
   targetAudience: string;
@@ -197,6 +201,7 @@ const replyAngleGenerationGuides: Record<ReplyAngleID, ReplyAngleGenerationGuide
 };
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
+const radarOperatorNotesStorageKey = "oaf:exposure-radar:operator-notes:v1";
 
 export default function ExposureRadarPage() {
   const { t } = useT();
@@ -235,6 +240,8 @@ export default function ExposureRadarPage() {
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
+  const [operatorNotes, setOperatorNotes] = useState<Record<string, OperatorSessionNote>>({});
+  const [operatorNotesHydrated, setOperatorNotesHydrated] = useState(false);
   const [persistedPeople, setPersistedPeople] = useState<ExposureRadarPeopleItemApi[]>([]);
   const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
   const [selectedReplyAngleIDs, setSelectedReplyAngleIDs] = useState<Record<string, string>>({});
@@ -273,6 +280,28 @@ export default function ExposureRadarPage() {
     if (!manualActionsHydrated) return;
     writeManualActionStates(manualActionStates);
   }, [manualActionStates, manualActionsHydrated]);
+
+  useEffect(() => {
+    setOperatorNotes(readOperatorNotes());
+    setOperatorNotesHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!operatorNotesHydrated) return;
+    writeOperatorNotes(operatorNotes);
+  }, [operatorNotes, operatorNotesHydrated]);
+
+  const operatorNoteKey = useMemo(() => radarOperatorNoteKey(region, selectedAccountID, selectedBotID), [region, selectedAccountID, selectedBotID]);
+  const operatorNote = operatorNotes[operatorNoteKey]?.text || "";
+  const updateOperatorNote = useCallback((text: string) => {
+    setOperatorNotes((current) => ({
+      ...current,
+      [operatorNoteKey]: {
+        text,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+  }, [operatorNoteKey]);
 
   const updateManualActionState = useCallback((itemID: string, patch: Partial<ManualActionState>) => {
     setManualActionStates((current) => ({
@@ -1036,6 +1065,17 @@ export default function ExposureRadarPage() {
         }}
       />
 
+      <PreflightSafetyPanel
+        selectedAccountID={selectedAccountID}
+        selectedBotID={selectedBotID}
+        strategy={growthStrategy}
+        data={data}
+        items={items}
+        stats={workbenchStats}
+        recentRecords={recentManualRecords}
+        usingSampleMode={usingSampleMode}
+      />
+
       <DailyOperatingGoalsPanel
         strategy={growthStrategy}
         stats={workbenchStats}
@@ -1078,6 +1118,19 @@ export default function ExposureRadarPage() {
       {firstLoopDone ? (
         <FirstLoopCompletionPanel completedAt={firstLoopCompletedAt} recentRecords={recentManualRecords} timeZone={timeZone} />
       ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <OperatorScratchpadPanel note={operatorNote} onChange={updateOperatorNote} item={firstLoopItem} manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined} />
+        <DailyRecapPanel
+          items={items}
+          stats={workbenchStats}
+          manualActionStates={manualActionStates}
+          recentRecords={recentManualRecords}
+          operatorNote={operatorNote}
+          usingSampleMode={usingSampleMode}
+          timeZone={timeZone}
+        />
+      </div>
 
       <div id="radar-strategy" className="scroll-mt-24">
         <StrategySetupPanel
@@ -2631,6 +2684,70 @@ function EmptyStatePlaybook({
   );
 }
 
+function PreflightSafetyPanel({
+  selectedAccountID,
+  selectedBotID,
+  strategy,
+  data,
+  items,
+  stats,
+  recentRecords,
+  usingSampleMode,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  data: ExposureRadarData | null;
+  items: ExposureRadarItemApi[];
+  stats: WorkbenchStats;
+  recentRecords: ExposureRadarManualRecordApi[];
+  usingSampleMode: boolean;
+}) {
+  const { t } = useT();
+  const checks = buildPreflightChecks({
+    selectedAccountID,
+    selectedBotID,
+    strategy,
+    data,
+    items,
+    stats,
+    recentRecords,
+    usingSampleMode,
+    t,
+  });
+  const blocked = checks.filter((check) => check.status === "block").length;
+  const watch = checks.filter((check) => check.status === "watch").length;
+  const status = blocked > 0 ? "block" : watch > 0 ? "watch" : "pass";
+  return (
+    <Card className={safetyReviewTone(status)}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${safetyReviewBadgeTone(status)}`}>
+            <ShieldCheck className="size-3.5" />
+            {t("exposureRadar.preflight.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.preflight.title")} description={t(`exposureRadar.preflight.description.${status}`)} className="mt-3 mb-0" />
+        </div>
+        <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${safetyReviewBadgeTone(status)}`}>
+          {t(`exposureRadar.preflight.status.${status}`)}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {checks.map((check) => (
+          <div key={check.key} className="rounded-xl border border-[#2f3336] bg-black/35 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className={`inline-flex size-8 items-center justify-center rounded-lg border ${safetyReviewBadgeTone(check.status)}`}>{check.icon}</span>
+              <span className={`size-2 rounded-full ${safetyReviewDot(check.status)}`} />
+            </div>
+            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{check.title}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{check.detail}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function DailyOperatingGoalsPanel({
   strategy,
   stats,
@@ -2705,6 +2822,100 @@ function DailyOperatingGoalsPanel({
           </a>
         )}
       </div>
+    </Card>
+  );
+}
+
+function OperatorScratchpadPanel({
+  note,
+  onChange,
+  item,
+  manualState,
+}: {
+  note: string;
+  onChange: (value: string) => void;
+  item?: ExposureRadarItemApi;
+  manualState?: ManualActionState;
+}) {
+  const { t } = useT();
+  const suggestions = buildOperatorScratchpadSuggestions(item, manualState, t);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+            <FileText className="size-3.5" />
+            {t("exposureRadar.scratchpad.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.scratchpad.title")} description={t("exposureRadar.scratchpad.description")} className="mt-3 mb-0" />
+        </div>
+      </div>
+      <textarea
+        value={note}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={t("exposureRadar.scratchpad.placeholder")}
+        className="mt-4 min-h-32 w-full resize-y rounded-2xl border border-[#2f3336] bg-black p-3 text-sm leading-6 text-[#e7e9ea] outline-none transition placeholder:text-[#71767b] focus:border-[#1d9bf0]"
+      />
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {suggestions.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => onChange(appendOperatorNote(note, suggestion))}
+            className="rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-left text-xs leading-5 text-[#8b98a5] transition hover:border-[#1d9bf0]/45 hover:text-[#e7e9ea]"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function DailyRecapPanel({
+  items,
+  stats,
+  manualActionStates,
+  recentRecords,
+  operatorNote,
+  usingSampleMode,
+  timeZone,
+}: {
+  items: ExposureRadarItemApi[];
+  stats: WorkbenchStats;
+  manualActionStates: Record<string, ManualActionState>;
+  recentRecords: ExposureRadarManualRecordApi[];
+  operatorNote: string;
+  usingSampleMode: boolean;
+  timeZone: string;
+}) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const recap = buildDailyRecapText({ items, stats, manualActionStates, recentRecords, operatorNote, usingSampleMode, timeZone, t });
+  const copyRecap = async () => {
+    try {
+      await navigator.clipboard.writeText(recap);
+      pushToast(t("exposureRadar.dailyRecap.copied"));
+    } catch {
+      pushToast(t("exposureRadar.dailyRecap.copyFailed"));
+    }
+  };
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-3 py-1 text-xs font-semibold text-[#c4b5fd]">
+            <Clipboard className="size-3.5" />
+            {t("exposureRadar.dailyRecap.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.dailyRecap.title")} description={t("exposureRadar.dailyRecap.description")} className="mt-3 mb-0" />
+        </div>
+        <Button type="button" size="sm" onClick={() => void copyRecap()}>
+          <Clipboard className="size-3.5" />
+          {t("exposureRadar.dailyRecap.copy")}
+        </Button>
+      </div>
+      <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-2xl border border-[#2f3336] bg-black p-4 text-xs leading-6 text-[#c9d1d9]">{recap}</pre>
     </Card>
   );
 }
@@ -5630,6 +5841,141 @@ function buildPriorityReasonChips(item: ExposureRadarItemApi, t: (key: string, p
   ].filter(Boolean).slice(0, 4);
 }
 
+function buildPreflightChecks({
+  selectedAccountID,
+  selectedBotID,
+  strategy,
+  data,
+  items,
+  stats,
+  recentRecords,
+  usingSampleMode,
+  t,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  data: ExposureRadarData | null;
+  items: ExposureRadarItemApi[];
+  stats: WorkbenchStats;
+  recentRecords: ExposureRadarManualRecordApi[];
+  usingSampleMode: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
+  const dailyLimit = Math.max(4, Math.min(20, strategy?.daily_move_limit || 8));
+  const handledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
+  const dataStatus = data?.diagnostics?.status || data?.source_status || "";
+  const accountStatus: SafetyReviewStatus = selectedAccountID && selectedBotID ? "pass" : "block";
+  const strategyStatus: SafetyReviewStatus = strategyReady ? "pass" : "watch";
+  const signalStatus: SafetyReviewStatus = usingSampleMode || items.length > 0 ? "pass" : dataStatus === "blocked" ? "block" : "watch";
+  const volumeStatus: SafetyReviewStatus = handledToday > dailyLimit ? "block" : stats.pending > dailyLimit * 2 ? "watch" : "pass";
+  return [
+    {
+      key: "context",
+      status: accountStatus,
+      icon: <Users className="size-4" />,
+      title: t("exposureRadar.preflight.context.title"),
+      detail: t(`exposureRadar.preflight.context.${accountStatus}`),
+    },
+    {
+      key: "strategy",
+      status: strategyStatus,
+      icon: <Target className="size-4" />,
+      title: t("exposureRadar.preflight.strategy.title"),
+      detail: t(`exposureRadar.preflight.strategy.${strategyStatus}`),
+    },
+    {
+      key: "signals",
+      status: signalStatus,
+      icon: <Search className="size-4" />,
+      title: t("exposureRadar.preflight.signals.title"),
+      detail: usingSampleMode ? t("exposureRadar.preflight.signals.sample") : t(`exposureRadar.preflight.signals.${signalStatus}`, { count: items.length }),
+    },
+    {
+      key: "volume",
+      status: volumeStatus,
+      icon: <Gauge className="size-4" />,
+      title: t("exposureRadar.preflight.volume.title"),
+      detail: t(`exposureRadar.preflight.volume.${volumeStatus}`, { handled: handledToday, limit: dailyLimit }),
+    },
+  ];
+}
+
+function buildOperatorScratchpadSuggestions(
+  item: ExposureRadarItemApi | undefined,
+  manualState: ManualActionState | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (!item) {
+    return [
+      t("exposureRadar.scratchpad.suggestion.strategy"),
+      t("exposureRadar.scratchpad.suggestion.sample"),
+      t("exposureRadar.scratchpad.suggestion.refresh"),
+    ];
+  }
+  const topic = compactTitle(item.topic_name || item.title);
+  return [
+    item.generated_comment ? t("exposureRadar.scratchpad.suggestion.copy", { topic }) : t("exposureRadar.scratchpad.suggestion.inspect", { topic }),
+    manualState?.handled ? t("exposureRadar.scratchpad.suggestion.backfill", { topic }) : t("exposureRadar.scratchpad.suggestion.handle", { topic }),
+    t("exposureRadar.scratchpad.suggestion.memory", { topic }),
+  ];
+}
+
+function appendOperatorNote(current: string, addition: string) {
+  const trimmed = current.trim();
+  return trimmed ? `${trimmed}\n- ${addition}` : `- ${addition}`;
+}
+
+function buildDailyRecapText({
+  items,
+  stats,
+  manualActionStates,
+  recentRecords,
+  operatorNote,
+  usingSampleMode,
+  timeZone,
+  t,
+}: {
+  items: ExposureRadarItemApi[];
+  stats: WorkbenchStats;
+  manualActionStates: Record<string, ManualActionState>;
+  recentRecords: ExposureRadarManualRecordApi[];
+  operatorNote: string;
+  usingSampleMode: boolean;
+  timeZone: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const reviewed = items.filter((item) => {
+    const state = manualActionStates[item.id];
+    return Boolean(state?.opened || state?.copied || state?.saved || state?.handled || item.generated_comment || item.review_task_id);
+  }).length;
+  const saved = items.filter((item) => isRadarItemSaved(item, new Set()) || manualActionStates[item.id]?.saved).length;
+  const backfilled = items.filter((item) => manualActionStates[item.id]?.resultCheckedAt).length + recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
+  const topSignals = items.slice(0, 3).map((item, index) => `${index + 1}. ${compactTitle(item.title)} (${item.score})`);
+  return [
+    t("exposureRadar.dailyRecap.text.title"),
+    t("exposureRadar.dailyRecap.text.generatedAt", { time: formatDateTime(new Date().toISOString(), timeZone) }),
+    t("exposureRadar.dailyRecap.text.mode", { mode: usingSampleMode ? t("exposureRadar.sample.badge") : t("exposureRadar.dailyRecap.text.realMode") }),
+    "",
+    t("exposureRadar.dailyRecap.text.metrics"),
+    `- ${t("exposureRadar.dailyRecap.text.signals", { count: items.length })}`,
+    `- ${t("exposureRadar.dailyRecap.text.reviewed", { count: reviewed })}`,
+    `- ${t("exposureRadar.dailyRecap.text.pending", { count: stats.pending })}`,
+    `- ${t("exposureRadar.dailyRecap.text.handled", { count: stats.handled })}`,
+    `- ${t("exposureRadar.dailyRecap.text.saved", { count: saved })}`,
+    `- ${t("exposureRadar.dailyRecap.text.backfilled", { count: backfilled })}`,
+    "",
+    t("exposureRadar.dailyRecap.text.topSignals"),
+    ...(topSignals.length ? topSignals : [`- ${t("exposureRadar.dailyRecap.text.noSignals")}`]),
+    "",
+    t("exposureRadar.dailyRecap.text.operatorNotes"),
+    operatorNote.trim() || t("exposureRadar.dailyRecap.text.noNotes"),
+    "",
+    t("exposureRadar.dailyRecap.text.next"),
+  ].join("\n");
+}
+
 function isSampleRadarItem(item: ExposureRadarItemApi) {
   return item.id.startsWith("sample-") || item.data_source === "sample_mode";
 }
@@ -6946,6 +7292,42 @@ function writeManualActionStates(states: Record<string, ManualActionState>) {
     window.localStorage.setItem(radarManualActionStorageKey, JSON.stringify(Object.fromEntries(entries)));
   } catch {
     // Local cache keeps the UI responsive while backend records hydrate.
+  }
+}
+
+function radarOperatorNoteKey(region: ExposureRadarRegion, accountID: number, botID: number) {
+  return `${region}:${accountID || "account"}:${botID || "bot"}`;
+}
+
+function readOperatorNotes(): Record<string, OperatorSessionNote> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(radarOperatorNotesStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, OperatorSessionNote>;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([key, note]) => (
+      typeof key === "string" &&
+      note &&
+      typeof note === "object" &&
+      typeof note.text === "string" &&
+      typeof note.updatedAt === "string"
+    )));
+  } catch {
+    return {};
+  }
+}
+
+function writeOperatorNotes(notes: Record<string, OperatorSessionNote>) {
+  if (typeof window === "undefined") return;
+  try {
+    const entries = Object.entries(notes)
+      .filter(([, note]) => note.text.trim())
+      .sort(([, a], [, b]) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 50);
+    window.localStorage.setItem(radarOperatorNotesStorageKey, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // Scratchpad notes are local convenience only.
   }
 }
 

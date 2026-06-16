@@ -69,6 +69,7 @@ export function BillingPageContent({
       />
       <PlanUsagePanel subscription={subscription} onUpgrade={() => openUpgrade()} />
       <PlanValueMapPanel subscription={subscription} onUpgrade={() => openUpgrade()} />
+      <PlanPackagingPanel subscription={subscription} onUpgrade={() => openUpgrade()} />
       <PlanComparison
         plans={plans}
         billingCycle={billingCycle}
@@ -492,6 +493,62 @@ function PlanValueMapPanel({ subscription, onUpgrade }: { subscription: CurrentS
             <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`billing.valueMap.workflow.${key}.description`)}</p>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function PlanPackagingPanel({ subscription, onUpgrade }: { subscription: CurrentSubscription | null; onUpgrade: () => void }) {
+  const { t } = useT();
+  if (!subscription) return null;
+
+  const packages = [
+    { key: "starter", planCode: "basic", icon: ShieldCheck },
+    { key: "growth", planCode: "plus", icon: Gauge },
+    { key: "operator", planCode: "pro", icon: ListChecks },
+    { key: "agency", planCode: "pro_plus", icon: Users },
+  ];
+  return (
+    <section className="surface-card bg-[#0f1419] p-5 md:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Database className="size-3.5" />
+            {t("billing.packaging.badge")}
+          </span>
+          <h3 className="mt-3 text-base font-semibold text-white md:text-lg">{t("billing.packaging.title")}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#71767b]">{t("billing.packaging.description")}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onUpgrade}>
+          {t("billing.packaging.cta")}
+          <ArrowUpRight className="size-4" />
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-4">
+        {packages.map((item) => {
+          const Icon = item.icon;
+          const active = subscription.plan === item.planCode || (subscription.plan === "basic_monthly" && item.planCode === "basic");
+          return (
+            <div key={item.key} className={`rounded-2xl border p-4 ${active ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#1d9bf0]/10 text-[#1d9bf0]">
+                  <Icon className="size-4" />
+                </span>
+                {active ? <span className="rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2 py-1 text-[11px] font-semibold text-[#8ecdf8]">{t("billing.packaging.current")}</span> : null}
+              </div>
+              <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t(`billing.packaging.${item.key}.title`)}</p>
+              <p className="mt-1 min-h-12 text-xs leading-5 text-[#71767b]">{t(`billing.packaging.${item.key}.description`)}</p>
+              <div className="mt-3 space-y-2">
+                {["fit", "capacity", "proof"].map((point) => (
+                  <div key={point} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+                    <p className="text-[11px] font-semibold text-[#8ecdf8]">{t(`billing.packaging.point.${point}`)}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`billing.packaging.${item.key}.${point}`)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

@@ -15,6 +15,12 @@ import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot, OAFBotPayload } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
+type AccountDiagnosisStatus = "ready" | "needs_lane" | "needs_data";
+type AccountDiagnosis = {
+  score: number;
+  status: AccountDiagnosisStatus;
+  checks: Array<{ key: string; pass: boolean; value: string }>;
+};
 
 export default function AccountDetailPage() {
   const { t } = useT();
@@ -32,6 +38,7 @@ export default function AccountDetailPage() {
     const query = new URLSearchParams({
       x_account_id: String(accountID || data?.account.id || 0),
       region: data?.positioning.primary_language?.startsWith("zh") ? "zh" : "en",
+      tab: "today",
     });
     if (boundBot?.id) query.set("bot_id", String(boundBot.id));
     return `/exposure-radar?${query.toString()}`;
@@ -111,6 +118,7 @@ export default function AccountDetailPage() {
 
   const accountLabel = `@${data.account.username}`;
   const sourceStatus = normalizeSourceStatus(data.source_status);
+  const diagnosis = buildAccountDiagnosis(data, Boolean(boundBot), sourceStatus, t);
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -142,6 +150,49 @@ export default function AccountDetailPage() {
               {t("accounts.intelligence.openRadar")}
             </Link>
           </div>
+        </div>
+      </Card>
+
+      <Card className="bg-[#0f1419]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <CardHeader
+            title={t("accounts.intelligence.diagnosis.title")}
+            description={t("accounts.intelligence.diagnosis.description")}
+            className="mb-0"
+          />
+          <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${diagnosisStatusTone(diagnosis.status)}`}>
+            <Gauge className="size-3.5" />
+            {t(`accounts.intelligence.diagnosis.status.${diagnosis.status}`)}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-[#1d9bf0]/25 bg-[#07111a] p-4">
+            <p className="text-xs font-semibold text-[#8ecdf8]">{t("accounts.intelligence.diagnosis.score")}</p>
+            <p className="mt-2 text-4xl font-semibold text-white">{diagnosis.score}</p>
+            <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t("accounts.intelligence.diagnosis.scoreHint")}</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {diagnosis.checks.map((check) => (
+              <DiagnosisCheck key={check.key} title={t(`accounts.intelligence.diagnosis.check.${check.key}.title`)} detail={t(`accounts.intelligence.diagnosis.check.${check.key}.description`)} value={check.value} pass={check.pass} />
+            ))}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("accounts.intelligence.diagnosis.plan.title")}</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {["one", "two", "three"].map((step, index) => (
+                <div key={step} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                  <span className="inline-flex size-6 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[11px] font-semibold text-[#8ecdf8]">{index + 1}</span>
+                  <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{t(`accounts.intelligence.diagnosis.plan.${step}`)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Link href={radarHref} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+            {t("accounts.intelligence.diagnosis.cta")}
+            <ArrowRight className="size-4" />
+          </Link>
         </div>
       </Card>
 
@@ -242,6 +293,19 @@ function MetricTile({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4">
       <p className="text-xs text-[#71767b]">{label}</p>
       <p className="mt-2 break-words text-lg font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function DiagnosisCheck({ title, detail, value, pass }: { title: string; detail: string; value: string; pass: boolean }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${pass ? "border-[#00ba7c]/25 bg-[#061a14]" : "border-[#ffd400]/25 bg-[#1f1a07]"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-[#e7e9ea]">{title}</p>
+        {pass ? <CheckCircle2 className="size-4 text-[#7ee0b5]" /> : <ShieldAlert className="size-4 text-[#f6d96b]" />}
+      </div>
+      <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{detail}</p>
+      <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{value}</p>
     </div>
   );
 }
@@ -353,6 +417,68 @@ function sourceStatusTone(value: string) {
   if (value === "ready") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   if (value === "needs_reauth" || value === "empty") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
   return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+}
+
+function buildAccountDiagnosis(
+  data: AccountIntelligenceApi,
+  hasBoundBot: boolean,
+  sourceStatus: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): AccountDiagnosis {
+  const confidence = Math.max(0, Math.min(100, data.positioning.confidence || 0));
+  const postCount = data.metrics.post_count || data.recent_posts.length || 0;
+  const hasPosts = postCount >= 3;
+  const hasViews = (data.metrics.total_impressions || 0) > 0;
+  const hasTopics = (data.positioning.detected_topics || []).length > 0;
+  const ruleCount = (data.radar_guidance.opportunity_fit_rules || []).length;
+  const hasRules = ruleCount > 0;
+  const score = Math.round(
+    confidence * 0.4
+    + (hasBoundBot ? 18 : 0)
+    + (hasPosts ? 14 : 0)
+    + (hasViews ? 10 : 0)
+    + (hasTopics ? 8 : 0)
+    + (hasRules ? 10 : 0),
+  );
+  const status: AccountDiagnosisStatus =
+    sourceStatus === "empty" || sourceStatus === "needs_reauth" || !hasPosts
+      ? "needs_data"
+      : !hasBoundBot || !hasRules || confidence < 50
+        ? "needs_lane"
+        : "ready";
+
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    status,
+    checks: [
+      {
+        key: "positioning",
+        pass: confidence >= 50 && hasTopics,
+        value: t("accounts.intelligence.diagnosis.value.confidence", { score: confidence }),
+      },
+      {
+        key: "bot",
+        pass: hasBoundBot,
+        value: t(hasBoundBot ? "accounts.intelligence.diagnosis.value.ready" : "accounts.intelligence.diagnosis.value.missing"),
+      },
+      {
+        key: "content",
+        pass: hasPosts && hasViews,
+        value: t("accounts.intelligence.diagnosis.value.posts", { count: postCount }),
+      },
+      {
+        key: "radar",
+        pass: hasRules,
+        value: t("accounts.intelligence.diagnosis.value.rules", { count: ruleCount }),
+      },
+    ],
+  };
+}
+
+function diagnosisStatusTone(status: AccountDiagnosisStatus) {
+  if (status === "ready") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (status === "needs_lane") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+  return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
 }
 
 function normalizeStage(value?: string) {

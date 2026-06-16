@@ -37,18 +37,49 @@ export function UserOnboardingCard({
   oafBotCreated,
   contentDraftConfigured,
   executionQueueChecked,
+  onConnectAccount,
 }: UserOnboardingCardProps) {
   const { t } = useT();
   const hasOAFBot = oafBotCreated ?? postCreated;
   const hasContentDraftConfigured = contentDraftConfigured ?? postCreated;
   const hasCheckedQueue = executionQueueChecked ?? activityObserved;
+  const hasDailyDeskReady = automationEnabled || (accountConnected && hasOAFBot);
   const steps: Step[] = [
     {
-      done: accountConnected && hasOAFBot && hasContentDraftConfigured && automationEnabled && hasCheckedQueue,
+      done: accountConnected,
+      titleKey: "onboarding.step.account.title",
+      descriptionKey: "onboarding.step.account.description",
+      ctaKey: "onboarding.step.account.cta",
+      href: "/accounts",
+      onClick: accountConnected ? undefined : onConnectAccount,
+    },
+    {
+      done: hasOAFBot,
+      titleKey: "onboarding.step.oafBot.title",
+      descriptionKey: "onboarding.step.oafBot.description",
+      ctaKey: "onboarding.step.oafBot.cta",
+      href: "/agents",
+    },
+    {
+      done: hasDailyDeskReady,
       titleKey: "onboarding.step.dailyXQueue.title",
       descriptionKey: "onboarding.step.dailyXQueue.description",
       ctaKey: "onboarding.step.dailyXQueue.cta",
-      href: "/daily-x-queue",
+      href: "/exposure-radar?tab=today",
+    },
+    {
+      done: hasContentDraftConfigured,
+      titleKey: "onboarding.step.autoPost.title",
+      descriptionKey: "onboarding.step.autoPost.description",
+      ctaKey: "onboarding.step.autoPost.cta",
+      href: "/content-library",
+    },
+    {
+      done: hasCheckedQueue,
+      titleKey: "onboarding.step.executionQueue.title",
+      descriptionKey: "onboarding.step.executionQueue.description",
+      ctaKey: "onboarding.step.executionQueue.cta",
+      href: "/exposure-radar?tab=strategy#radar-results",
     },
   ];
   const completed = steps.filter((step) => step.done).length;

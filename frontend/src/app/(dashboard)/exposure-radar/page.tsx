@@ -109,6 +109,7 @@ type ResultLearningMove = {
   detail: string;
   tone: "positive" | "warning" | "neutral";
 };
+type ResultLearningSummary = ResultLearningMove;
 type AccountHealthStatus = "healthy" | "watch" | "risk";
 type AccountHealthScore = {
   score: number;
@@ -2015,6 +2016,7 @@ function DailyGrowthDeskPanel({
   const refreshedLabel = lastRefreshedAt ? formatDateTime(lastRefreshedAt, timeZone) : "-";
   const effectiveRate = weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-";
   const rhythmSteps = ["scan", "reply", "save", "review"];
+  const topTasks = moves.slice(0, 5);
 
   return (
     <Card className="bg-[#0f1419]">
@@ -2078,6 +2080,43 @@ function DailyGrowthDeskPanel({
           </div>
           <p className="mt-3 text-xs leading-5 text-[#71767b]">{t("exposureRadar.dailyDesk.pulse.hint")}</p>
         </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.dailyDesk.topFive.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.dailyDesk.topFive.description")}</p>
+          </div>
+          <a href="#radar-workbench" className="inline-flex h-8 w-fit items-center gap-1 rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 px-3 text-xs font-semibold text-[#8ecdf8] hover:bg-[#1d9bf0]/15">
+            {t("exposureRadar.dailyDesk.topFive.open")}
+            <ArrowRight className="size-3.5" />
+          </a>
+        </div>
+        {topTasks.length ? (
+          <div className="mt-3 grid gap-2 xl:grid-cols-5">
+            {topTasks.map((task, index) => (
+              <a key={task.item.id} href="#radar-workbench" className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 transition hover:border-[#1d9bf0]/45 hover:bg-[#1d9bf0]/10">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex size-6 items-center justify-center rounded-full border border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[11px] font-semibold text-[#8ecdf8]">{index + 1}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${actionPlanTone(task.action)}`}>
+                    {t(`exposureRadar.actionPlan.action.${task.action}`)}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-[#e7e9ea]">{task.item.title}</p>
+                <p className="mt-2 text-[11px] leading-4 text-[#71767b]">{t(`exposureRadar.actionPlan.reason.${task.reason}`)}</p>
+                <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-[#8b98a5]">
+                  <span>{task.item.score} {t("exposureRadar.card.score")}</span>
+                  <span>{formatVelocityLabel(task.item.views_per_min, t("exposureRadar.card.velocitySampling"))}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl border border-dashed border-[#2f3336] px-3 py-6 text-center text-xs text-[#71767b]">
+            {t("exposureRadar.dailyDesk.topFive.empty")}
+          </div>
+        )}
       </div>
 
       <div className="mt-4 grid gap-2 md:grid-cols-4">
@@ -2281,6 +2320,7 @@ function ResultLearningLoopPanel({
   const resultRecords = recentRecords.filter((record) => record.result_checked_at || record.result_score || record.outcome);
   const effectiveRecords = resultRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60);
   const pendingBackfill = recentRecords.filter((record) => (record.handled_at || record.task_status === "done" || record.published_url) && !record.result_checked_at && !record.result_score).length;
+  const summary = buildResultLearningSummary({ moves, recentRecords, weeklyReview, safety, learningProfile, pendingBackfill, t });
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2295,6 +2335,13 @@ function ResultLearningLoopPanel({
         <GrowthDeskMetric icon={<TrendingUp className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.effective")} value={String(effectiveRecords.length)} detail={weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : t("exposureRadar.learningLoop.metric.effectiveDetail")} />
         <GrowthDeskMetric icon={<Clock3 className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.pending")} value={String(pendingBackfill)} detail={t("exposureRadar.learningLoop.metric.pendingDetail")} />
         <GrowthDeskMetric icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.learningLoop.metric.safety")} value={String((safety?.watch_count || 0) + (safety?.block_count || 0))} detail={t("exposureRadar.learningLoop.metric.safetyDetail")} />
+      </div>
+      <div className={`mt-4 rounded-2xl border p-4 ${resultLearningTone(summary.tone)}`}>
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <BrainCircuit className="size-4" />
+          {summary.title}
+        </p>
+        <p className="mt-2 text-xs leading-5 opacity-85">{summary.detail}</p>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {actions.map((action) => (
@@ -4349,15 +4396,25 @@ function PeopleRadarPanel({
   const priorityCount = people.filter((person) => person.stage === "priority").length;
   const repeatCount = people.filter((person) => person.stage === "repeat").length;
   const engagedCount = people.filter((person) => person.stage === "engaged").length;
+  const avoidCount = people.filter((person) => person.stage === "avoid" || person.crmStage === "avoid").length;
+  const playbook = buildPeopleRadarPlaybook(people, t);
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <CardHeader title={t("exposureRadar.peopleRadar.title")} description={t("exposureRadar.peopleRadar.description")} className="mb-0" />
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+        <div className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap">
           <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.people")} value={people.length} />
           <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.priority")} value={priorityCount} />
           <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.engaged")} value={engagedCount} />
+          <ActionPlanMetric label={t("exposureRadar.peopleRadar.metric.avoid")} value={avoidCount} />
         </div>
+      </div>
+      <div className={`mt-4 rounded-2xl border p-4 ${peopleRadarPlaybookTone(playbook.tone)}`}>
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <Target className="size-4" />
+          {playbook.title}
+        </p>
+        <p className="mt-2 text-xs leading-5 opacity-85">{playbook.detail}</p>
       </div>
       {people.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-8 text-center text-sm text-[#71767b]">
@@ -4382,6 +4439,7 @@ function PeopleRadarCard({ person, saving, onSaveNote, onFocus }: { person: Peop
   const [stage, setStage] = useState(person.crmStage || person.stage || "new");
   const [notes, setNotes] = useState(person.notes || "");
   const [tags, setTags] = useState((person.tags || []).join(", "));
+  const nextTouch = buildPeopleRadarNextTouch(person, t);
   return (
     <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
               <div className="flex items-start justify-between gap-3">
@@ -4405,18 +4463,22 @@ function PeopleRadarCard({ person, saving, onSaveNote, onFocus }: { person: Peop
                 <MiniStat icon={<Flame className="size-3.5" />} label={t("exposureRadar.peopleRadar.score")} value={String(person.maxScore)} />
                 <MiniStat icon={<Heart className="size-3.5" />} label={t("exposureRadar.peopleRadar.engagement")} value={formatCompact(person.totalEngagement)} />
               </div>
-              <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#71767b]">{t("exposureRadar.peopleRadar.latest")}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#c9d1d9]">{person.latestItem.title}</p>
+	              <div className="mt-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+	                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#71767b]">{t("exposureRadar.peopleRadar.latest")}</p>
+	                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#c9d1d9]">{person.latestItem.title}</p>
                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#71767b]">
                   <span>{person.drafted} {t("exposureRadar.peopleRadar.drafted")}</span>
                   <span>{person.saved} {t("exposureRadar.peopleRadar.saved")}</span>
                   <span>{person.handled} {t("exposureRadar.peopleRadar.handled")}</span>
                   {person.feedback ? <span>{person.feedback} {t("exposureRadar.peopleRadar.feedback")}</span> : null}
-                  {typeof person.followers === "number" && person.followers > 0 ? <span>{formatCompact(person.followers)} {t("exposureRadar.todayMoves.followers")}</span> : null}
-                </div>
+	                  {typeof person.followers === "number" && person.followers > 0 ? <span>{formatCompact(person.followers)} {t("exposureRadar.todayMoves.followers")}</span> : null}
+	                </div>
+	              </div>
+              <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-[#07111a] p-3">
+                <p className="text-[11px] font-semibold text-[#8ecdf8]">{t("exposureRadar.peopleRadar.nextTouch")}</p>
+                <p className="mt-1 text-xs leading-5 text-[#c9d1d9]">{nextTouch}</p>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+	              <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" size="sm" onClick={() => onFocus(person.latestItem.id)}>
                   <Search className="size-3.5" />
                   {t("exposureRadar.peopleRadar.focus")}
@@ -4512,6 +4574,8 @@ function HandlingWorkbenchPanel({
   const nextEntry = queue[activeIndex + 1] || queue.find((entry) => entry.item.id !== activeItem?.id);
   const previousEntry = activeIndex > 0 ? queue[activeIndex - 1] : undefined;
   const activeExplanation = activeItem ? buildOpportunityExplanation(activeItem, t) : null;
+  const activeDecision = activeItem ? buildSignalDecisionSummary(activeItem, t) : null;
+  const activeCredibility = activeItem ? buildSignalCredibility(activeItem, t) : null;
   const replyAngles = activeItem ? buildReplyAngleSuggestions(activeItem, t) : [];
   const selectedReplyAngle = replyAngles.find((angle) => angle.id === selectedReplyAngleIDs[activeItem?.id || ""]) || replyAngles[0];
   const copyWorkbenchReply = async () => {
@@ -4566,8 +4630,9 @@ function HandlingWorkbenchPanel({
             <h2 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{activeItem.title}</h2>
             {activeItem.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{activeItem.author_handle}</p> : null}
             <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{activeItem.content}</p>
-            <SignalDecisionCard summary={buildSignalDecisionSummary(activeItem, t)} />
-            <SignalCredibilityPanel credibility={buildSignalCredibility(activeItem, t)} />
+            {activeDecision && activeCredibility ? <OpportunityDecisionBrief item={activeItem} summary={activeDecision} credibility={activeCredibility} replyAngle={selectedReplyAngle} /> : null}
+            {activeDecision ? <SignalDecisionCard summary={activeDecision} /> : null}
+            {activeCredibility ? <SignalCredibilityPanel credibility={activeCredibility} /> : null}
             {activeExplanation ? <OpportunityExplanationPanel explanation={activeExplanation} /> : null}
             {replyAngles.length ? (
               <ReplyAngleSuggestionsPanel
@@ -4681,6 +4746,78 @@ function ActionPlanMetric({ label, value }: { label: string; value: number | str
       <p className="mt-1 text-lg font-semibold text-white">{value}</p>
     </div>
   );
+}
+
+function OpportunityDecisionBrief({
+  item,
+  summary,
+  credibility,
+  replyAngle,
+}: {
+  item: ExposureRadarItemApi;
+  summary: SignalDecisionSummary;
+  credibility: SignalCredibility;
+  replyAngle?: ReplyAngleSuggestion;
+}) {
+  const { t } = useT();
+  const risk = item.risk_level === "medium" || item.risk_level === "high" ? item.risk_level : "low";
+  return (
+    <div className="mt-4 rounded-2xl border border-[#1d9bf0]/20 bg-[#06111c] p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.decisionBrief.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.decisionBrief.description")}</p>
+        </div>
+        <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold ${decisionModeTone(summary.mode)}`}>
+          <Target className="size-3.5" />
+          {t(`exposureRadar.decision.mode.${summary.mode}`)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        <DecisionBriefColumn
+          icon={<TrendingUp className="size-3.5" />}
+          title={t("exposureRadar.decisionBrief.why")}
+          primary={summary.title}
+          detail={summary.proof[0] || summary.detail}
+        />
+        <DecisionBriefColumn
+          icon={<MessageCircle className="size-3.5" />}
+          title={t("exposureRadar.decisionBrief.angle")}
+          primary={replyAngle?.title || t("exposureRadar.decisionBrief.angleMissing")}
+          detail={replyAngle?.description || t("exposureRadar.decisionBrief.angleMissingDetail")}
+        />
+        <DecisionBriefColumn
+          icon={<ShieldAlert className="size-3.5" />}
+          title={t("exposureRadar.decisionBrief.risk")}
+          primary={t(`exposureRadar.risk.${risk}`)}
+          detail={credibility.nextStep}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DecisionBriefColumn({ icon, title, primary, detail }: { icon: ReactNode; title: string; primary: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-[#8ecdf8]">{icon}{title}</p>
+      <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-[#e7e9ea]">{primary}</p>
+      <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-[#71767b]">{detail}</p>
+    </div>
+  );
+}
+
+function decisionModeTone(mode: SignalDecisionSummary["mode"]) {
+  switch (mode) {
+    case "act_now":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "watch":
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    case "research":
+      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+    default:
+      return "border-[#ef4444]/25 bg-[#ef4444]/10 text-[#fecaca]";
+  }
 }
 
 function OpportunityExplanationPanel({ explanation }: { explanation: OpportunityExplanation }) {
@@ -6708,6 +6845,67 @@ function buildResultLearningMoves({
   return actions.slice(0, 3);
 }
 
+function buildResultLearningSummary({
+  moves,
+  recentRecords,
+  weeklyReview,
+  safety,
+  learningProfile,
+  pendingBackfill,
+  t,
+}: {
+  moves: DailyActionPlanItem[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  weeklyReview: ExposureRadarWeeklyReviewData | null;
+  safety: ExposureRadarSafetyCenterData | null;
+  learningProfile: ExposureLearningProfile;
+  pendingBackfill: number;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}): ResultLearningSummary {
+  const best = bestExposureResultRecord(recentRecords);
+  const boostedTopic = Array.from(learningProfile.boostedTopics)[0];
+  const cautiousTopic = Array.from(learningProfile.cautiousTopics)[0];
+  const warnings = (safety?.watch_count || 0) + (safety?.block_count || 0);
+  const effectiveRate = weeklyReview ? Math.round((weeklyReview.effective_rate || 0) * 100) : 0;
+
+  if (pendingBackfill > 0) {
+    return {
+      key: "summary-backfill",
+      title: t("exposureRadar.learningLoop.summary.backfill.title"),
+      detail: t("exposureRadar.learningLoop.summary.backfill.detail", { count: pendingBackfill }),
+      tone: "warning",
+    };
+  }
+  if (best || boostedTopic) {
+    return {
+      key: "summary-repeat",
+      title: t("exposureRadar.learningLoop.summary.repeat.title"),
+      detail: best
+        ? t("exposureRadar.learningLoop.summary.repeat.best", { title: compactTitle(best.title || best.topic_name || best.signal_id), score: best.result_score || 0 })
+        : t("exposureRadar.learningLoop.summary.repeat.topic", { topic: boostedTopic || "" }),
+      tone: "positive",
+    };
+  }
+  if (cautiousTopic || warnings > 0) {
+    return {
+      key: "summary-caution",
+      title: t("exposureRadar.learningLoop.summary.caution.title"),
+      detail: cautiousTopic
+        ? t("exposureRadar.learningLoop.summary.caution.topic", { topic: cautiousTopic })
+        : t("exposureRadar.learningLoop.summary.caution.safety", { count: warnings }),
+      tone: "warning",
+    };
+  }
+  return {
+    key: "summary-default",
+    title: t("exposureRadar.learningLoop.summary.default.title"),
+    detail: weeklyReview
+      ? t("exposureRadar.learningLoop.summary.default.rate", { rate: effectiveRate, count: moves.length })
+      : t("exposureRadar.learningLoop.summary.default.detail", { count: moves.length }),
+    tone: "neutral",
+  };
+}
+
 function resultLearningTone(tone: ResultLearningMove["tone"]) {
   switch (tone) {
     case "positive":
@@ -8001,6 +8199,62 @@ function peopleRadarStage(person: PeopleRadarEntry): PeopleRadarStage {
   if (person.count >= 2) return "repeat";
   if (person.handled > 0 || person.drafted > 0 || person.saved > 0) return "engaged";
   return "new";
+}
+
+function buildPeopleRadarPlaybook(people: PeopleRadarEntry[], t: (key: string, params?: Record<string, string | number>) => string) {
+  const priority = people.filter((person) => person.stage === "priority").length;
+  const repeat = people.filter((person) => person.stage === "repeat").length;
+  const engaged = people.filter((person) => person.stage === "engaged").length;
+  const avoid = people.filter((person) => person.stage === "avoid" || person.crmStage === "avoid").length;
+  if (priority > 0) {
+    return {
+      title: t("exposureRadar.peopleRadar.playbook.priority.title"),
+      detail: t("exposureRadar.peopleRadar.playbook.priority.detail", { count: priority }),
+      tone: "positive" as const,
+    };
+  }
+  if (repeat > 0) {
+    return {
+      title: t("exposureRadar.peopleRadar.playbook.repeat.title"),
+      detail: t("exposureRadar.peopleRadar.playbook.repeat.detail", { count: repeat }),
+      tone: "neutral" as const,
+    };
+  }
+  if (engaged > 0) {
+    return {
+      title: t("exposureRadar.peopleRadar.playbook.engaged.title"),
+      detail: t("exposureRadar.peopleRadar.playbook.engaged.detail", { count: engaged }),
+      tone: "positive" as const,
+    };
+  }
+  if (avoid > 0) {
+    return {
+      title: t("exposureRadar.peopleRadar.playbook.avoid.title"),
+      detail: t("exposureRadar.peopleRadar.playbook.avoid.detail", { count: avoid }),
+      tone: "warning" as const,
+    };
+  }
+  return {
+    title: t("exposureRadar.peopleRadar.playbook.default.title"),
+    detail: t("exposureRadar.peopleRadar.playbook.default.detail"),
+    tone: "neutral" as const,
+  };
+}
+
+function peopleRadarPlaybookTone(tone: "positive" | "warning" | "neutral") {
+  if (tone === "positive") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+  if (tone === "warning") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
+  return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+}
+
+function buildPeopleRadarNextTouch(person: PeopleRadarEntry, t: (key: string, params?: Record<string, string | number>) => string) {
+  const stage = person.crmStage || person.stage;
+  if (stage === "avoid") return t("exposureRadar.peopleRadar.nextTouch.avoid");
+  if (stage === "priority") return t("exposureRadar.peopleRadar.nextTouch.priority", { title: compactTitle(person.latestItem.title) });
+  if (stage === "repeat") return t("exposureRadar.peopleRadar.nextTouch.repeat", { count: person.count });
+  if (stage === "engaged") return t("exposureRadar.peopleRadar.nextTouch.engaged");
+  if (person.saved > 0) return t("exposureRadar.peopleRadar.nextTouch.saved");
+  return t("exposureRadar.peopleRadar.nextTouch.default");
 }
 
 function peopleRadarStageWeight(stage: PeopleRadarStage) {

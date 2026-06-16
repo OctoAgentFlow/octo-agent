@@ -208,6 +208,9 @@ export default function ExposureRadarPage() {
   const [minHotCount, setMinHotCount] = useState(0);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [data, setData] = useState<ExposureRadarData | null>(null);
+  const [sampleMode, setSampleMode] = useState(false);
+  const [sampleItemOverrides, setSampleItemOverrides] = useState<Record<string, Partial<ExposureRadarItemApi>>>({});
+  const [firstLoopCompletedAt, setFirstLoopCompletedAt] = useState("");
   const [performance, setPerformance] = useState<ExposureRadarPerformanceData | null>(null);
   const [archive, setArchive] = useState<ExposureRadarArchiveData | null>(null);
   const [growthStrategy, setGrowthStrategy] = useState<ExposureRadarGrowthStrategyApi | null>(null);
@@ -296,6 +299,9 @@ export default function ExposureRadarPage() {
       replyAngleTitle: selectedReplyAngle?.title,
     };
     updateManualActionState(item.id, nextPatch);
+    if (isSampleRadarItem(item)) {
+      return;
+    }
     void exposureRadarService.upsertManualRecord(buildManualRecordPayload(item, {
       selectedAccountID,
       selectedBotID,
@@ -362,6 +368,10 @@ export default function ExposureRadarPage() {
       setWeeklyReview(review);
       setSafetyCenter(safety);
       setRecentManualRecords(recentRecords.items || []);
+      if (next.items.length > 0) {
+        setSampleMode(false);
+        setSampleItemOverrides({});
+      }
       setLastRefreshedAt(new Date().toISOString());
       setLoadState("ready");
       void hydrateManualWorkspace(next.items);
@@ -469,7 +479,13 @@ export default function ExposureRadarPage() {
     }
   }, [data?.items, hydrateManualWorkspace, pushToast, region, t]);
 
-  const items = useMemo(() => data?.items || [], [data?.items]);
+  const realItems = useMemo(() => data?.items || [], [data?.items]);
+  const sampleItems = useMemo(() => {
+    if (!sampleMode || realItems.length > 0) return [];
+    return buildSampleExposureItems(region, t).map((item) => ({ ...item, ...(sampleItemOverrides[item.id] || {}) }));
+  }, [realItems.length, region, sampleItemOverrides, sampleMode, t]);
+  const usingSampleMode = sampleMode && realItems.length === 0;
+  const items = useMemo(() => (realItems.length > 0 ? realItems : sampleItems), [realItems, sampleItems]);
   const metrics = useMemo(() => {
     const tweetLevel = items.filter((item) => item.data_quality === "tweet_level").length;
     const highScore = items.filter((item) => item.score >= 75).length;
@@ -490,6 +506,8 @@ export default function ExposureRadarPage() {
   const exposureLearningProfile = useMemo(() => buildExposureLearningProfile(recentManualRecords, manualActionStates), [manualActionStates, recentManualRecords]);
   const handlingQueue = useMemo(() => buildDailyActionPlan(items, manualActionStates, savedMemoryIDs, exposureLearningProfile, 12), [exposureLearningProfile, items, manualActionStates, savedMemoryIDs]);
   const todayMoves = useMemo(() => handlingQueue.slice(0, 10), [handlingQueue]);
+  const firstLoopItem = useMemo(() => handlingQueue[0]?.item || items.find((item) => !isManualActionHandled(item, manualActionStates[item.id])) || items[0], [handlingQueue, items, manualActionStates]);
+  const firstLoopDone = Boolean(firstLoopCompletedAt) || recentManualRecords.some((record) => Boolean(record.result_checked_at || record.result_score || record.handled_at || record.task_status === "done"));
   const workbenchStats = useMemo(() => buildWorkbenchStats(items, manualActionStates), [items, manualActionStates]);
   const peopleRadar = useMemo(() => mergePeopleRadar(buildPeopleRadar(items, manualActionStates, savedMemoryIDs), persistedPeople), [items, manualActionStates, persistedPeople, savedMemoryIDs]);
 
@@ -504,6 +522,30 @@ export default function ExposureRadarPage() {
   }, [activeWorkbenchID, handlingQueue]);
 
   const createDraft = useCallback(async (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => {
+    if (isSampleRadarItem(item)) {
+      setDraftingID(item.id);
+      try {
+        const generatedComment = buildSampleReplyDraft(item, replyAngle, t);
+        const nextItem = {
+          ...item,
+          review_status: "draft",
+          generated_comment: generatedComment,
+        };
+        setSampleItemOverrides((current) => ({
+          ...current,
+          [item.id]: {
+            ...(current[item.id] || {}),
+            review_status: "draft",
+            generated_comment: generatedComment,
+          },
+        }));
+        recordManualAction(nextItem, { taskStatus: "in_progress" }, replyAngle);
+        pushToast(t("exposureRadar.sample.toast.draftCreated"));
+      } finally {
+        setDraftingID(null);
+      }
+      return;
+    }
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccount"));
       return;
@@ -565,6 +607,19 @@ export default function ExposureRadarPage() {
   }, [pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
   const saveRadarMemory = useCallback(async (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => {
+    if (isSampleRadarItem(item)) {
+      setSavedMemoryIDs((current) => new Set(current).add(item.id));
+      setSampleItemOverrides((current) => ({
+        ...current,
+        [item.id]: {
+          ...(current[item.id] || {}),
+          saved_memory_id: -1,
+        },
+      }));
+      recordManualAction({ ...item, saved_memory_id: -1 }, { saved: true, taskStatus: "in_progress" }, replyAngle);
+      pushToast(t("exposureRadar.sample.toast.memorySaved"));
+      return;
+    }
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
       return;
@@ -587,6 +642,11 @@ export default function ExposureRadarPage() {
   }, [pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
   const saveRadarContentSeed = useCallback(async (item: ExposureRadarItemApi) => {
+    if (isSampleRadarItem(item)) {
+      recordManualAction(item, { saved: true, taskStatus: "in_progress" });
+      pushToast(t("exposureRadar.sample.toast.seedSaved"));
+      return;
+    }
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
       return;
@@ -605,6 +665,11 @@ export default function ExposureRadarPage() {
   }, [loadContentDraftBridge, pushToast, recordManualAction, selectedAccountID, selectedBotID, t]);
 
   const generateContentDraftFromRadarSeed = useCallback(async (item: ExposureRadarItemApi) => {
+    if (isSampleRadarItem(item)) {
+      recordManualAction(item, { saved: true, taskStatus: "in_progress" });
+      pushToast(t("exposureRadar.sample.toast.seedDraftGenerated"));
+      return;
+    }
     if (!selectedAccountID || !selectedBotID) {
       pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
       return;
@@ -631,6 +696,13 @@ export default function ExposureRadarPage() {
 
   const markRadarHandled = useCallback(async (item: ExposureRadarItemApi, publishedURL: string) => {
     const normalizedPublishedURL = publishedURL.trim();
+    if (isSampleRadarItem(item)) {
+      const sampleURL = normalizedPublishedURL || item.url || "";
+      recordManualAction({ ...item, comment_url: sampleURL, review_status: "handled" }, { handled: true, persisted: false, publishedUrl: sampleURL, taskStatus: "done" });
+      setFirstLoopCompletedAt((current) => current || new Date().toISOString());
+      pushToast(t("exposureRadar.sample.toast.handled"));
+      return;
+    }
     setHandlingID(item.id);
     try {
       let persistedURL = normalizedPublishedURL;
@@ -651,6 +723,7 @@ export default function ExposureRadarPage() {
         } : current);
       }
       recordManualAction({ ...item, comment_url: persistedURL || item.comment_url, review_status: item.review_task_id ? "handled" : item.review_status }, { handled: true, persisted: true, publishedUrl: persistedURL, taskStatus: "done" });
+      setFirstLoopCompletedAt((current) => current || new Date().toISOString());
       void exposureRadarService.performance({ region, botId: selectedBotID, xAccountId: selectedAccountID, days: 7 })
         .then(setPerformance)
         .catch(() => undefined);
@@ -663,6 +736,16 @@ export default function ExposureRadarPage() {
   }, [pushToast, recordManualAction, region, selectedAccountID, selectedBotID, t]);
 
   const submitManualOutcome = useCallback(async (item: ExposureRadarItemApi, outcome: ManualOutcome, comment: string) => {
+    if (isSampleRadarItem(item)) {
+      recordManualAction(item, {
+        outcome,
+        feedbackComment: comment.trim(),
+        feedbackAt: new Date().toISOString(),
+        taskStatus: isManualActionHandled(item, manualActionStates[item.id]) ? "done" : "in_progress",
+      });
+      pushToast(t("exposureRadar.sample.toast.feedbackSaved"));
+      return;
+    }
     setFeedbackSavingID(item.id);
     try {
       if (item.review_task_id) {
@@ -691,6 +774,7 @@ export default function ExposureRadarPage() {
     bookmarks?: number;
     notes?: string;
   }) => {
+    const resultScore = scoreManualResult(result);
     const patch: Partial<ManualActionState> = {
       resultImpressionCount: result.impressions,
       resultLikeCount: result.likes,
@@ -699,11 +783,16 @@ export default function ExposureRadarPage() {
       resultQuoteCount: result.quotes,
       resultBookmarkCount: result.bookmarks,
       resultNotes: result.notes,
+      resultScore,
       resultCheckedAt: new Date().toISOString(),
       taskStatus: isManualActionHandled(item, manualActionStates[item.id]) ? "done" : "in_progress",
     };
     recordManualAction(item, patch);
+    setFirstLoopCompletedAt((current) => current || new Date().toISOString());
     pushToast(t("exposureRadar.resultTracking.savedToast"));
+    if (isSampleRadarItem(item)) {
+      return;
+    }
     void Promise.all([
       exposureRadarService.weeklyReview({ region, days: 7 }).then(setWeeklyReview),
       exposureRadarService.recentManualRecords({ region, days: 7, limit: 100 }).then((records) => setRecentManualRecords(records.items || [])),
@@ -937,9 +1026,47 @@ export default function ExposureRadarPage() {
         recentRecords={recentManualRecords}
         contentDraftBridge={contentDraftBridge}
         itemsCount={items.length}
+        usingSampleMode={usingSampleMode}
         loadState={loadState}
         onRefresh={() => void load()}
+        onStartSample={() => setSampleMode(true)}
+        onExitSample={() => {
+          setSampleMode(false);
+          setSampleItemOverrides({});
+        }}
       />
+
+      {usingSampleMode ? (
+        <SampleModeBanner
+          onExit={() => {
+            setSampleMode(false);
+            setSampleItemOverrides({});
+          }}
+        />
+      ) : null}
+
+      <FirstLoopPanel
+        item={firstLoopItem}
+        manualState={firstLoopItem ? manualActionStates[firstLoopItem.id] : undefined}
+        savedMemoryID={firstLoopItem ? radarItemSavedMemoryID(firstLoopItem, savedMemoryIDs) : 0}
+        drafting={firstLoopItem ? draftingID === firstLoopItem.id : false}
+        draftDisabled={!selectedAccountID || !selectedBotID}
+        handling={firstLoopItem ? handlingID === firstLoopItem.id : false}
+        usingSampleMode={usingSampleMode}
+        firstLoopDone={firstLoopDone}
+        onStartSample={() => setSampleMode(true)}
+        onCreateDraft={createDraft}
+        onMarkHandled={markRadarHandled}
+        onManualAction={(item, patch, replyAngle) => recordManualAction(item, patch, replyAngle)}
+        onFocusWorkbench={(itemID) => {
+          if (itemID) setActiveWorkbenchID(itemID);
+          if (itemID) focusRadarItem(itemID);
+        }}
+      />
+
+      {firstLoopDone ? (
+        <FirstLoopCompletionPanel completedAt={firstLoopCompletedAt} recentRecords={recentManualRecords} timeZone={timeZone} />
+      ) : null}
 
       <div id="radar-strategy" className="scroll-mt-24">
         <StrategySetupPanel
@@ -1024,13 +1151,14 @@ export default function ExposureRadarPage() {
         {loadState === "error" ? (
           <div className="rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">{t("exposureRadar.toast.loadFailed")}</div>
         ) : null}
-        {loadState === "ready" && items.length === 0 ? (
+        {loadState === "ready" && realItems.length === 0 && !usingSampleMode ? (
           <RadarEmptyStatePanel
             data={data}
             loadState={loadState}
             onRefresh={() => void load()}
             onWidenWindow={() => setHours(8)}
             onRaiseFans={() => setMaxFans((current) => Math.max(current, 50000))}
+            onStartSample={() => setSampleMode(true)}
           />
         ) : null}
         {loadState === "ready" && items.length > 0 && displayedItems.length === 0 ? (
@@ -2091,8 +2219,11 @@ function FirstDayLaunchPanel({
   recentRecords,
   contentDraftBridge,
   itemsCount,
+  usingSampleMode,
   loadState,
   onRefresh,
+  onStartSample,
+  onExitSample,
 }: {
   selectedAccountID: number;
   selectedBotID: number;
@@ -2103,8 +2234,11 @@ function FirstDayLaunchPanel({
   recentRecords: ExposureRadarManualRecordApi[];
   contentDraftBridge: ContentDraftBridgeData;
   itemsCount: number;
+  usingSampleMode: boolean;
   loadState: LoadState;
   onRefresh: () => void;
+  onStartSample: () => void;
+  onExitSample: () => void;
 }) {
   const { t } = useT();
   const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
@@ -2142,6 +2276,13 @@ function FirstDayLaunchPanel({
     handledCount,
     resultCount,
   });
+  const wizardSteps = [
+    { key: "account", done: selectedAccountID > 0, href: "/accounts", icon: <Users className="size-4" /> },
+    { key: "bot", done: selectedBotID > 0, href: "/oaf-bots", icon: <Bot className="size-4" /> },
+    { key: "strategy", done: strategyReady, href: "#radar-strategy", icon: <Target className="size-4" /> },
+    { key: "signals", done: itemsCount > 0, href: "#radar-workbench", icon: <Search className="size-4" /> },
+    { key: "result", done: resultCount > 0 || handledCount > 0, href: "#radar-results", icon: <BarChart3 className="size-4" /> },
+  ];
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2174,7 +2315,8 @@ function FirstDayLaunchPanel({
         <FirstDaySetupChip icon={<Bot className="size-3.5" />} label={t("exposureRadar.firstDay.selected.bot")} value={selectedBot?.name || (selectedBotID ? t("oafBots.botNumber", { id: selectedBotID }) : t("exposureRadar.firstDay.selected.missing"))} />
         <FirstDaySetupChip icon={<Target className="size-3.5" />} label={t("exposureRadar.firstDay.selected.lane")} value={strategy?.target_audience || t("exposureRadar.firstDay.selected.missing")} />
       </div>
-      <FirstDayActivationCard mode={activationMode} loadState={loadState} onRefresh={onRefresh} />
+      <SetupWizardPanel steps={wizardSteps} usingSampleMode={usingSampleMode} onStartSample={onStartSample} onExitSample={onExitSample} />
+      <FirstDayActivationCard mode={activationMode} loadState={loadState} onRefresh={onRefresh} onStartSample={onStartSample} />
       <div className="mt-4 grid gap-3 md:grid-cols-4">
         {steps.map((step, index) => (
           <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
@@ -2245,9 +2387,73 @@ function FirstDaySetupChip({ icon, label, value }: { icon: ReactNode; label: str
   );
 }
 
-function FirstDayActivationCard({ mode, loadState, onRefresh }: { mode: FirstDayActivationMode; loadState: LoadState; onRefresh: () => void }) {
+function SetupWizardPanel({
+  steps,
+  usingSampleMode,
+  onStartSample,
+  onExitSample,
+}: {
+  steps: Array<{ key: string; done: boolean; href: string; icon: ReactNode }>;
+  usingSampleMode: boolean;
+  onStartSample: () => void;
+  onExitSample: () => void;
+}) {
   const { t } = useT();
-  const actions = firstDayActivationActions(mode, onRefresh, loadState);
+  const doneCount = steps.filter((step) => step.done).length;
+  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-3 py-1 text-xs font-semibold text-[#c4b5fd]">
+            <ShieldCheck className="size-3.5" />
+            {t("exposureRadar.setupWizard.badge")}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("exposureRadar.setupWizard.title")}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.setupWizard.description")}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <a href={nextStep.href} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+            {t(nextStep.done ? "exposureRadar.setupWizard.action.review" : `exposureRadar.setupWizard.action.${nextStep.key}`)}
+            <ArrowRight className="size-3.5" />
+          </a>
+          {usingSampleMode ? (
+            <Button type="button" variant="outline" onClick={onExitSample}>
+              <RefreshCw className="size-4" />
+              {t("exposureRadar.sample.exit")}
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" onClick={onStartSample}>
+              <Sparkles className="size-4" />
+              {t("exposureRadar.sample.start")}
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-5">
+        {steps.map((step, index) => (
+          <a key={step.key} href={step.href} className={`rounded-xl border p-3 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`inline-flex size-8 items-center justify-center rounded-full border ${step.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-black text-[#8b98a5]"}`}>
+                {step.done ? <CheckCircle2 className="size-4" /> : step.icon}
+              </span>
+              <span className="text-[11px] font-semibold text-[#71767b]">{String(index + 1).padStart(2, "0")}</span>
+            </div>
+            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.setupWizard.${step.key}.title`)}</p>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.setupWizard.${step.key}.description`)}</p>
+          </a>
+        ))}
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#202327]">
+        <div className="h-full rounded-full bg-[#00ba7c]" style={{ width: `${Math.round((doneCount / steps.length) * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function FirstDayActivationCard({ mode, loadState, onRefresh, onStartSample }: { mode: FirstDayActivationMode; loadState: LoadState; onRefresh: () => void; onStartSample: () => void }) {
+  const { t } = useT();
+  const actions = firstDayActivationActions(mode, onRefresh, loadState, onStartSample);
   return (
     <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -2291,12 +2497,14 @@ function RadarEmptyStatePanel({
   onRefresh,
   onWidenWindow,
   onRaiseFans,
+  onStartSample,
 }: {
   data: ExposureRadarData | null;
   loadState: LoadState;
   onRefresh: () => void;
   onWidenWindow: () => void;
   onRaiseFans: () => void;
+  onStartSample: () => void;
 }) {
   const { t } = useT();
   const diagnostics = data?.diagnostics || null;
@@ -2326,6 +2534,10 @@ function RadarEmptyStatePanel({
             <Users className="size-4" />
             {t("exposureRadar.emptyState.action.raiseFans")}
           </Button>
+          <Button type="button" variant="outline" onClick={onStartSample}>
+            <Sparkles className="size-4" />
+            {t("exposureRadar.sample.start")}
+          </Button>
         </div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -2352,6 +2564,225 @@ function RadarEmptyStatePanel({
           <a href="#radar-strategy" className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
             {t("exposureRadar.emptyState.action.strategy")}
             <ArrowRight className="size-4" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SampleModeBanner({ onExit }: { onExit: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="rounded-2xl border border-[#7856ff]/25 bg-[#140f24] p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#7856ff]/30 bg-black/30 px-3 py-1 text-xs font-semibold text-[#c4b5fd]">
+            <Sparkles className="size-3.5" />
+            {t("exposureRadar.sample.badge")}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("exposureRadar.sample.title")}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.sample.description")}</p>
+        </div>
+        <Button type="button" variant="outline" onClick={onExit}>
+          <RefreshCw className="size-4" />
+          {t("exposureRadar.sample.exit")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FirstLoopPanel({
+  item,
+  manualState,
+  savedMemoryID,
+  drafting,
+  draftDisabled,
+  handling,
+  usingSampleMode,
+  firstLoopDone,
+  onStartSample,
+  onCreateDraft,
+  onMarkHandled,
+  onManualAction,
+  onFocusWorkbench,
+}: {
+  item?: ExposureRadarItemApi;
+  manualState?: ManualActionState;
+  savedMemoryID: number;
+  drafting: boolean;
+  draftDisabled: boolean;
+  handling: boolean;
+  usingSampleMode: boolean;
+  firstLoopDone: boolean;
+  onStartSample: () => void;
+  onCreateDraft: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
+  onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
+  onManualAction: (item: ExposureRadarItemApi, patch: Partial<ManualActionState>, replyAngle?: ReplyAngleSuggestion) => void;
+  onFocusWorkbench: (itemID: string) => void;
+}) {
+  const { t } = useT();
+  const { pushToast } = useToast();
+  const replyAngles = item ? buildReplyAngleSuggestions(item, t) : [];
+  const selectedReplyAngle = item ? selectedReplyAngleForItem(item, {}, t) : undefined;
+  const generatedComment = item?.generated_comment?.trim() || "";
+  const handled = item ? isManualActionHandled(item, manualState) : false;
+  const stepKey = firstLoopStepKey(item, manualState, firstLoopDone);
+  const copyReply = async () => {
+    if (!item || !generatedComment) return;
+    try {
+      await navigator.clipboard.writeText(generatedComment);
+      onManualAction(item, { copied: true, taskStatus: "in_progress" }, selectedReplyAngle);
+      pushToast(t("exposureRadar.manualAction.copied"));
+    } catch {
+      pushToast(t("exposureRadar.manualAction.copyFailed"));
+    }
+  };
+  return (
+    <Card className="border-[#1d9bf0]/20 bg-[#07111a]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-black/30 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Target className="size-3.5" />
+            {t("exposureRadar.firstLoop.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.firstLoop.title")} description={t("exposureRadar.firstLoop.description")} className="mt-3 mb-0" />
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+          <Clock3 className="size-3.5" />
+          {t(`exposureRadar.firstLoop.step.${stepKey}`)}
+        </span>
+      </div>
+      {!item ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-[#2f3336] bg-black p-5">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstLoop.empty.title")}</p>
+          <p className="mt-1 text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.firstLoop.empty.description")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" onClick={onStartSample}>
+              <Sparkles className="size-4" />
+              {t("exposureRadar.sample.start")}
+            </Button>
+            <a href="#radar-setup" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+              {t("exposureRadar.firstLoop.empty.filters")}
+              <ArrowRight className="size-4" />
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {usingSampleMode ? (
+                <span className="rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-2 py-1 text-xs font-semibold text-[#c4b5fd]">{t("exposureRadar.sample.badge")}</span>
+              ) : null}
+              <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${qualityStageClass(normalizeQualityStage(item.quality_stage, item))}`}>
+                {t(`exposureRadar.qualityStage.${normalizeQualityStage(item.quality_stage, item)}`)}
+              </span>
+              <span className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-xs font-semibold text-[#8b98a5]">
+                {item.score} {t("exposureRadar.card.score")}
+              </span>
+            </div>
+            <h3 className="mt-3 line-clamp-2 text-lg font-semibold text-[#e7e9ea]">{item.title}</h3>
+            {item.author_handle ? <p className="mt-1 text-xs text-[#71767b]">@{item.author_handle}</p> : null}
+            <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#c9d1d9]">{item.content}</p>
+            {replyAngles.length ? (
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {replyAngles.slice(0, 2).map((angle) => (
+                  <div key={angle.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
+                    <p className="text-xs font-semibold text-[#e7e9ea]">{angle.title}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{angle.description}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {generatedComment ? (
+              <div className="mt-4 rounded-xl border border-[#1d9bf0]/30 bg-[#07111a] p-3">
+                <p className="text-xs font-semibold text-[#8ecdf8]">{t("exposureRadar.card.generatedComment")}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#e7e9ea]">{generatedComment}</p>
+              </div>
+            ) : null}
+          </div>
+          <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstLoop.actions.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.firstLoop.actions.description")}</p>
+            <div className="mt-4 space-y-2">
+              <FirstLoopActionRow done={Boolean(generatedComment)} label={t("exposureRadar.firstLoop.actions.generate")} />
+              <FirstLoopActionRow done={Boolean(manualState?.copied)} label={t("exposureRadar.firstLoop.actions.copy")} />
+              <FirstLoopActionRow done={Boolean(manualState?.opened)} label={t("exposureRadar.firstLoop.actions.open")} />
+              <FirstLoopActionRow done={handled} label={t("exposureRadar.firstLoop.actions.handle")} />
+              <FirstLoopActionRow done={Boolean(manualState?.resultCheckedAt)} label={t("exposureRadar.firstLoop.actions.backfill")} />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {generatedComment ? (
+                <Button type="button" size="sm" onClick={() => void copyReply()}>
+                  <Clipboard className="size-3.5" />
+                  {t("exposureRadar.workbench.copyReply")}
+                </Button>
+              ) : (
+                <Button type="button" size="sm" disabled={(!usingSampleMode && draftDisabled) || drafting || item.data_quality !== "tweet_level"} onClick={() => onCreateDraft(item, selectedReplyAngle)}>
+                  {drafting ? <RefreshCw className="size-3.5 animate-spin" /> : <MessageSquarePlus className="size-3.5" />}
+                  {drafting ? t("exposureRadar.card.drafting") : t("exposureRadar.card.createDraft")}
+                </Button>
+              )}
+              {item.url ? (
+                <a href={item.url} target="_blank" rel="noreferrer" onClick={() => onManualAction(item, { opened: true, taskStatus: "in_progress" }, selectedReplyAngle)} className="inline-flex h-8 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
+                  {t("exposureRadar.card.openPost")}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+              <Button type="button" size="sm" variant="outline" disabled={handling || handled} onClick={() => void onMarkHandled(item, manualState?.publishedUrl || item.comment_url || "")}>
+                {handling ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                {handled ? t("exposureRadar.manualAction.handled") : t("exposureRadar.manualAction.markHandled")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => onFocusWorkbench(item.id)}>
+                <Search className="size-3.5" />
+                {t("exposureRadar.firstLoop.openFull")}
+              </Button>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#71767b]">
+              {savedMemoryID !== 0 || manualState?.saved ? t("exposureRadar.firstLoop.memorySaved") : t("exposureRadar.firstLoop.memoryHint")}
+            </p>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FirstLoopActionRow({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-[#0f1419] text-[#8b98a5]"}`}>
+      {done ? <CheckCircle2 className="size-3.5" /> : <Clock3 className="size-3.5" />}
+      <span className="font-semibold">{label}</span>
+    </div>
+  );
+}
+
+function FirstLoopCompletionPanel({ completedAt, recentRecords, timeZone }: { completedAt: string; recentRecords: ExposureRadarManualRecordApi[]; timeZone: string }) {
+  const { t } = useT();
+  const latestRecord = recentRecords.find((record) => record.result_checked_at || record.handled_at || record.task_status === "done");
+  const completedLabel = completedAt ? formatDateTime(completedAt, timeZone) : latestRecord?.result_checked_at ? formatDateTime(latestRecord.result_checked_at, timeZone) : latestRecord?.handled_at ? formatDateTime(latestRecord.handled_at, timeZone) : "";
+  return (
+    <div className="rounded-2xl border border-[#00ba7c]/25 bg-[#061a13] p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#00ba7c]/30 bg-black/30 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
+            <CheckCircle2 className="size-3.5" />
+            {t("exposureRadar.firstLoopComplete.badge")}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("exposureRadar.firstLoopComplete.title")}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.firstLoopComplete.description")}</p>
+          {completedLabel ? <p className="mt-2 text-xs text-[#71767b]">{t("exposureRadar.firstLoopComplete.completedAt", { time: completedLabel })}</p> : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <a href="#radar-results" className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+            {t("exposureRadar.firstLoopComplete.action.review")}
+            <ArrowRight className="size-4" />
+          </a>
+          <a href="#radar-workbench" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("exposureRadar.firstLoopComplete.action.next")}
+            <Target className="size-4" />
           </a>
         </div>
       </div>
@@ -3812,6 +4243,23 @@ function RadarCard({
   const resolvePublishedResult = async () => {
     const nextURL = publishedURL.trim();
     const commentTweetID = item.comment_tweet_id || extractTweetID(nextURL);
+    if (isSampleRadarItem(item)) {
+      const resolvedURL = nextURL || item.url || "";
+      if (resolvedURL) setPublishedURL(resolvedURL);
+      onManualAction({
+        publishedUrl: resolvedURL,
+        resultImpressionCount: 1280,
+        resultLikeCount: 24,
+        resultReplyCount: 3,
+        resultRetweetCount: 2,
+        resultBookmarkCount: 5,
+        resultScore: 74,
+        resultCheckedAt: new Date().toISOString(),
+        taskStatus: handledDone ? "done" : "in_progress",
+      });
+      pushToast(t("exposureRadar.sample.toast.resultSaved"));
+      return;
+    }
     if (!nextURL && !commentTweetID) {
       pushToast(t("exposureRadar.resultLookup.missing"));
       return;
@@ -4902,8 +5350,9 @@ function firstDayActivationMode({
   return "complete";
 }
 
-function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () => void, loadState: LoadState): FirstDayActivationAction[] {
+function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () => void, loadState: LoadState, onStartSample: () => void): FirstDayActivationAction[] {
   const refreshAction = { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading", primary: true };
+  const sampleAction = { key: "sample", icon: <Sparkles className="size-4" />, onClick: onStartSample };
   switch (mode) {
     case "setup":
       return [
@@ -4919,6 +5368,7 @@ function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () =
     case "signals":
       return [
         refreshAction,
+        sampleAction,
         { key: "filters", href: "#radar-setup", icon: <SlidersHorizontal className="size-4" /> },
         { key: "strategy", href: "#radar-strategy", icon: <Target className="size-4" /> },
       ];
@@ -4938,6 +5388,148 @@ function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () =
         refreshAction,
       ];
   }
+}
+
+function isSampleRadarItem(item: ExposureRadarItemApi) {
+  return item.id.startsWith("sample-") || item.data_source === "sample_mode";
+}
+
+function firstLoopStepKey(item?: ExposureRadarItemApi, manualState?: ManualActionState, firstLoopDone?: boolean) {
+  if (firstLoopDone || manualState?.resultCheckedAt) return "done";
+  if (!item) return "recover";
+  if (!item.generated_comment) return "generate";
+  if (!manualState?.copied) return "copy";
+  if (!manualState?.opened) return "open";
+  if (!isManualActionHandled(item, manualState)) return "handle";
+  return "backfill";
+}
+
+function scoreManualResult(result: {
+  impressions?: number;
+  likes?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  bookmarks?: number;
+}) {
+  const impressions = result.impressions || 0;
+  const engagement = (result.likes || 0) + (result.replies || 0) * 3 + (result.reposts || 0) * 4 + (result.quotes || 0) * 4 + (result.bookmarks || 0) * 2;
+  const impressionScore = impressions > 0 ? Math.min(60, Math.round(Math.log10(impressions + 1) * 18)) : 0;
+  const engagementScore = Math.min(40, engagement * 3);
+  return Math.max(0, Math.min(100, impressionScore + engagementScore));
+}
+
+function buildSampleExposureItems(region: ExposureRadarRegion, t: (key: string, params?: Record<string, string | number>) => string): ExposureRadarItemApi[] {
+  const now = Date.now();
+  const sampleSearchURL = region === "zh"
+    ? "https://x.com/search?q=AI%20Agent%20%E5%B7%A5%E4%BD%9C%E6%B5%81&src=typed_query"
+    : "https://x.com/search?q=AI%20agent%20workflow%20human-in-the-loop&src=typed_query";
+  return [
+    {
+      id: `sample-${region}-workflow-proof`,
+      region,
+      data_source: "TODO_MYSQL_DSN",
+      data_quality: "tweet_level",
+      data_confidence: "real_impressions",
+      data_confidence_reason: t("exposureRadar.sample.item.one.confidence"),
+      title: t("exposureRadar.sample.item.one.title"),
+      author_handle: region === "zh" ? "sample_builder_cn" : "sample_builder",
+      author_name: t("exposureRadar.sample.item.one.author"),
+      author_id: `sample-${region}-author-1`,
+      content: t("exposureRadar.sample.item.one.content"),
+      url: sampleSearchURL,
+      tweet_id: `sample-${region}-tweet-1`,
+      status: "sample",
+      signal_label: t("exposureRadar.sample.signalLabel"),
+      topic_name: region === "zh" ? "AI Agent workflow" : "AI agent workflow",
+      published_at: new Date(now - 42 * 60 * 1000).toISOString(),
+      views_per_min: 38,
+      heat_count: 1680,
+      followers_count: 6200,
+      like_count: 84,
+      reply_count: 18,
+      retweet_count: 11,
+      quote_count: 5,
+      bookmark_count: 23,
+      impression_count: 9800,
+      hot_count: 3,
+      age_label: t("exposureRadar.sample.item.one.age"),
+      velocity_state: "rising",
+      opportunity_tier: "hot_opportunity",
+      tier_reason: t("exposureRadar.sample.item.one.tierReason"),
+      quality_stage: "act_now",
+      quality_reason: t("exposureRadar.sample.item.one.qualityReason"),
+      velocity_history: [9, 14, 19, 28, 35, 38],
+      score: 86,
+      risk_level: "low",
+      opportunity_type: "sample_manual_reply",
+      recommended_use: t("exposureRadar.sample.item.one.recommended"),
+      reason: t("exposureRadar.sample.item.one.reason"),
+      ranking_delta: 8,
+      ranking_reason: t("exposureRadar.sample.item.one.rankingReason"),
+      guardrails: [
+        t("exposureRadar.sample.guardrail.noPitch"),
+        t("exposureRadar.sample.guardrail.context"),
+      ],
+      updated_at: new Date(now).toISOString(),
+    },
+    {
+      id: `sample-${region}-operator-question`,
+      region,
+      data_source: "TODO_MYSQL_DSN",
+      data_quality: "tweet_level",
+      data_confidence: "engagement_estimate",
+      data_confidence_reason: t("exposureRadar.sample.item.two.confidence"),
+      title: t("exposureRadar.sample.item.two.title"),
+      author_handle: region === "zh" ? "sample_operator_cn" : "sample_operator",
+      author_name: t("exposureRadar.sample.item.two.author"),
+      author_id: `sample-${region}-author-2`,
+      content: t("exposureRadar.sample.item.two.content"),
+      url: sampleSearchURL,
+      tweet_id: `sample-${region}-tweet-2`,
+      status: "sample",
+      signal_label: t("exposureRadar.sample.signalLabel"),
+      topic_name: region === "zh" ? "Founder-led growth" : "Founder-led growth",
+      published_at: new Date(now - 93 * 60 * 1000).toISOString(),
+      views_per_min: 16,
+      heat_count: 790,
+      followers_count: 3400,
+      like_count: 42,
+      reply_count: 9,
+      retweet_count: 4,
+      quote_count: 2,
+      bookmark_count: 12,
+      impression_count: 4100,
+      hot_count: 2,
+      age_label: t("exposureRadar.sample.item.two.age"),
+      velocity_state: "steady",
+      opportunity_tier: "rising_opportunity",
+      tier_reason: t("exposureRadar.sample.item.two.tierReason"),
+      quality_stage: "watch",
+      quality_reason: t("exposureRadar.sample.item.two.qualityReason"),
+      velocity_history: [11, 13, 15, 16, 15, 16],
+      score: 73,
+      risk_level: "low",
+      opportunity_type: "sample_manual_reply",
+      recommended_use: t("exposureRadar.sample.item.two.recommended"),
+      reason: t("exposureRadar.sample.item.two.reason"),
+      ranking_delta: 3,
+      ranking_reason: t("exposureRadar.sample.item.two.rankingReason"),
+      guardrails: [
+        t("exposureRadar.sample.guardrail.noPitch"),
+        t("exposureRadar.sample.guardrail.context"),
+      ],
+      updated_at: new Date(now).toISOString(),
+    },
+  ];
+}
+
+function buildSampleReplyDraft(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion | undefined, t: (key: string, params?: Record<string, string | number>) => string) {
+  const angleTitle = replyAngle?.title || t("exposureRadar.replyAngles.operatorObservation.title");
+  if (item.region === "zh") {
+    return t("exposureRadar.sample.reply.zh", { angle: angleTitle });
+  }
+  return t("exposureRadar.sample.reply.en", { angle: angleTitle });
 }
 
 function isRecentManualRecord(record: ExposureRadarManualRecordApi, hours: number) {

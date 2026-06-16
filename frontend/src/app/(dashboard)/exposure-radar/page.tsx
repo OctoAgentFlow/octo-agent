@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { Activity, ArrowRight, BarChart3, Bookmark, BookmarkPlus, Bot, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, FileText, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Bookmark, BookmarkPlus, Bot, BrainCircuit, CalendarClock, CheckCircle2, Clipboard, Clock3, Database, ExternalLink, Eye, FileText, Flame, Gauge, Heart, Info, MessageCircle, MessageSquarePlus, Quote, RefreshCw, Repeat2, Search, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Target, TrendingUp, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -307,6 +307,8 @@ export default function ExposureRadarPage() {
     setHours((current) => getPositiveParam(params, "hours", current));
     setMaxFans((current) => getPositiveParam(params, "max_fans", getPositiveParam(params, "maxFans", current)));
     setMinHotCount((current) => getNonNegativeParam(params, "min_hot_count", getNonNegativeParam(params, "minHotCount", current)));
+    setSelectedAccountID((current) => getPositiveParam(params, "x_account_id", getPositiveParam(params, "account_id", current)));
+    setSelectedBotID((current) => getPositiveParam(params, "bot_id", current));
   }, []);
 
   useEffect(() => {
@@ -5597,6 +5599,12 @@ function RadarCard({
           <Database className="size-3.5" />
           {t(`exposureRadar.confidence.${dataConfidence}`)}
         </span>
+        {item.account_fit_score ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold ${accountFitClass(item.account_fit_label)}`} title={item.account_fit_reason || undefined}>
+            <BrainCircuit className="size-3.5" />
+            {t(`exposureRadar.accountFit.${normalizeAccountFitLabel(item.account_fit_label)}`, { score: item.account_fit_score })}
+          </span>
+        ) : null}
         {item.ranking_delta ? (
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${item.ranking_delta > 0 ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"}`}>
             {item.ranking_delta > 0 ? `+${item.ranking_delta}` : item.ranking_delta}
@@ -8856,6 +8864,24 @@ function dataConfidenceClass(confidence: string) {
   if (confidence === "engagement_estimate") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
   if (confidence === "topic_level") return "border-[#8b5cf6]/25 bg-[#8b5cf6]/10 text-[#c4b5fd]";
   return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
+}
+
+function normalizeAccountFitLabel(value?: string) {
+  if (value === "strong" || value === "good" || value === "weak" || value === "avoid") return value;
+  return "weak";
+}
+
+function accountFitClass(value?: string) {
+  switch (normalizeAccountFitLabel(value)) {
+    case "strong":
+      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
+    case "good":
+      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
+    case "avoid":
+      return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
+    default:
+      return "border-[#64748b]/35 bg-[#64748b]/10 text-[#94a3b8]";
+  }
 }
 
 function sourceStatusClass(status: string) {

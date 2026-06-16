@@ -34,10 +34,16 @@ type XUser struct {
 }
 
 type UserTweet struct {
-	ID        string
-	AuthorID  string
-	Text      string
-	CreatedAt time.Time
+	ID              string
+	AuthorID        string
+	Text            string
+	CreatedAt       time.Time
+	LikeCount       int64
+	ReplyCount      int64
+	RetweetCount    int64
+	QuoteCount      int64
+	BookmarkCount   int64
+	ImpressionCount int64
 }
 
 type userLookupAPIResp struct {
@@ -50,10 +56,18 @@ type userLookupAPIResp struct {
 
 type userTweetsAPIResp struct {
 	Data []struct {
-		ID        string `json:"id"`
-		AuthorID  string `json:"author_id"`
-		Text      string `json:"text"`
-		CreatedAt string `json:"created_at"`
+		ID            string `json:"id"`
+		AuthorID      string `json:"author_id"`
+		Text          string `json:"text"`
+		CreatedAt     string `json:"created_at"`
+		PublicMetrics struct {
+			RetweetCount    int64 `json:"retweet_count"`
+			ReplyCount      int64 `json:"reply_count"`
+			LikeCount       int64 `json:"like_count"`
+			QuoteCount      int64 `json:"quote_count"`
+			BookmarkCount   int64 `json:"bookmark_count"`
+			ImpressionCount int64 `json:"impression_count"`
+		} `json:"public_metrics"`
 	} `json:"data"`
 }
 
@@ -148,8 +162,11 @@ func ListUserRootTweets(ctx context.Context, client *http.Client, accessToken, t
 	if maxResults <= 0 {
 		maxResults = 5
 	}
-	if maxResults > 20 {
-		maxResults = 20
+	if maxResults < 5 {
+		maxResults = 5
+	}
+	if maxResults > 50 {
+		maxResults = 50
 	}
 	if client == nil {
 		client = defaultHTTP
@@ -166,7 +183,7 @@ func ListUserRootTweets(ctx context.Context, client *http.Client, accessToken, t
 	q := u.Query()
 	q.Set("max_results", strconv.Itoa(maxResults))
 	q.Set("exclude", "retweets,replies")
-	q.Set("tweet.fields", "author_id,created_at,text")
+	q.Set("tweet.fields", "author_id,created_at,text,public_metrics")
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -201,10 +218,16 @@ func ListUserRootTweets(ctx context.Context, client *http.Client, accessToken, t
 			}
 		}
 		tweets = append(tweets, UserTweet{
-			ID:        id,
-			AuthorID:  strings.TrimSpace(row.AuthorID),
-			Text:      strings.TrimSpace(row.Text),
-			CreatedAt: at,
+			ID:              id,
+			AuthorID:        strings.TrimSpace(row.AuthorID),
+			Text:            strings.TrimSpace(row.Text),
+			CreatedAt:       at,
+			LikeCount:       row.PublicMetrics.LikeCount,
+			ReplyCount:      row.PublicMetrics.ReplyCount,
+			RetweetCount:    row.PublicMetrics.RetweetCount,
+			QuoteCount:      row.PublicMetrics.QuoteCount,
+			BookmarkCount:   row.PublicMetrics.BookmarkCount,
+			ImpressionCount: row.PublicMetrics.ImpressionCount,
 		})
 	}
 	return tweets, nil

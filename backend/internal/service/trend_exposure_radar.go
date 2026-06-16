@@ -766,6 +766,7 @@ func (s *TrendService) annotateExposureRadarMemoryState(userID uint, query dto.E
 func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query dto.ExposureRadarQuery, resp *dto.ExposureRadarResponse, now time.Time) *dto.ExposureRadarResponse {
 	if resp != nil {
 		resp.LearningControls = s.exposureRadarLearningControls(query.BotID, query.XAccountID, "no_memory")
+		resp = s.applyExposureRadarAccountFit(userID, query, resp)
 	}
 	if resp == nil || userID == 0 || s == nil || len(resp.Items) == 0 {
 		return sortExposureRadarItemsByQuality(resp)
@@ -867,6 +868,148 @@ func (s *TrendService) applyExposureRadarPerformanceRanking(userID uint, query d
 		}
 	}
 	return sortExposureRadarItemsByQuality(resp)
+}
+
+func (s *TrendService) applyExposureRadarAccountFit(userID uint, query dto.ExposureRadarQuery, resp *dto.ExposureRadarResponse) *dto.ExposureRadarResponse {
+	if resp == nil || userID == 0 || s == nil || s.botRepo == nil || len(resp.Items) == 0 {
+		return resp
+	}
+	bot, err := s.exposureRadarFitBot(userID, query)
+	if err != nil || bot == nil {
+		return resp
+	}
+	profile := exposureRadarFitProfileFromBot(*bot)
+	if len(profile.Keywords) == 0 && len(profile.AvoidKeywords) == 0 {
+		return resp
+	}
+	for i := range resp.Items {
+		score, label, reason, matched := exposureRadarAccountFit(resp.Items[i], profile)
+		if score <= 0 {
+			continue
+		}
+		resp.Items[i].AccountFitScore = score
+		resp.Items[i].AccountFitLabel = label
+		resp.Items[i].AccountFitReason = reason
+		resp.Items[i].AccountFitKeywords = matched
+		delta := exposureRadarAccountFitDelta(label)
+		if delta != 0 {
+			resp.Items[i].Score = radarMaxInt(0, radarMinInt(100, resp.Items[i].Score+delta))
+			resp.Items[i].RankingDelta += delta
+		}
+		if reason != "" {
+			resp.Items[i].RankingReason = exposureRadarJoinRankingReasons(resp.Items[i].RankingReason, reason)
+		}
+		if label == "avoid" {
+			resp.Items[i].RecommendedUse = exposureRadarConservativeRecommendedUse(resp.Items[i].RecommendedUse)
+		}
+	}
+	return resp
+}
+
+func (s *TrendService) exposureRadarFitBot(userID uint, query dto.ExposureRadarQuery) (*model.OAFBot, error) {
+	if query.BotID > 0 {
+		return s.botRepo.GetByUserAndID(userID, query.BotID)
+	}
+	if query.XAccountID > 0 {
+		return s.botRepo.GetByUserAndTwitterAccountID(userID, query.XAccountID)
+	}
+	return nil, nil
+}
+
+type exposureRadarFitProfile struct {
+	Keywords      []string
+	AvoidKeywords []string
+}
+
+func exposureRadarFitProfileFromBot(bot model.OAFBot) exposureRadarFitProfile {
+	keywords := []string{}
+	keywords = append(keywords, decodeStringList(bot.Topics)...)
+	keywords = append(keywords, decodeStringList(bot.Keywords)...)
+	keywords = append(keywords, decodeStringList(bot.ContentPillars)...)
+	keywords = append(keywords, bot.Industry, bot.ProjectOneLiner, bot.TargetAudience)
+	avoid := []string{}
+	avoid = append(avoid, decodeStringList(bot.ForbiddenTopics)...)
+	avoid = append(avoid, decodeStringList(bot.AvoidClaims)...)
+	return exposureRadarFitProfile{
+		Keywords:      exposureRadarFitTerms(keywords, 16),
+		AvoidKeywords: exposureRadarFitTerms(avoid, 12),
+	}
+}
+
+func exposureRadarAccountFit(item dto.ExposureRadarItem, profile exposureRadarFitProfile) (int, string, string, []string) {
+	text := strings.ToLower(strings.Join([]string{item.Title, item.TopicName, item.Content, item.AuthorName, item.AuthorHandle}, " "))
+	matched := []string{}
+	avoidMatched := []string{}
+	for _, term := range profile.Keywords {
+		if term != "" && strings.Contains(text, strings.ToLower(term)) {
+			matched = append(matched, term)
+		}
+	}
+	for _, term := range profile.AvoidKeywords {
+		if term != "" && strings.Contains(text, strings.ToLower(term)) {
+			avoidMatched = append(avoidMatched, term)
+		}
+	}
+	score := 45 + radarMinInt(35, len(matched)*12) - radarMinInt(40, len(avoidMatched)*18)
+	if item.RiskLevel == "high" {
+		score -= 18
+	} else if item.RiskLevel == "medium" {
+		score -= 8
+	}
+	score = radarMaxInt(5, radarMinInt(95, score))
+	label := "weak"
+	switch {
+	case len(avoidMatched) > 0 || score < 30:
+		label = "avoid"
+	case score >= 74:
+		label = "strong"
+	case score >= 56:
+		label = "good"
+	}
+	reason := ""
+	switch label {
+	case "strong":
+		reason = "Account fit boost: this signal matches the selected Bot/account positioning."
+	case "good":
+		reason = "Account fit signal: there is some overlap with the selected Bot/account positioning."
+	case "avoid":
+		reason = "Account fit penalty: this signal touches avoided topics or has weak persona fit."
+	default:
+		reason = "Account fit weak: inspect manually before spending reply effort."
+	}
+	return score, label, reason, compactAccountStrings(matched, 4)
+}
+
+func exposureRadarAccountFitDelta(label string) int {
+	switch label {
+	case "strong":
+		return 8
+	case "good":
+		return 4
+	case "avoid":
+		return -10
+	default:
+		return -2
+	}
+}
+
+func exposureRadarFitTerms(values []string, limit int) []string {
+	terms := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		for _, token := range accountTokens(value) {
+			token = strings.Trim(strings.ToLower(token), "#@")
+			if token == "" || accountStopWords[token] || len([]rune(token)) < 2 || seen[token] {
+				continue
+			}
+			seen[token] = true
+			terms = append(terms, token)
+			if limit > 0 && len(terms) >= limit {
+				return terms
+			}
+		}
+	}
+	return terms
 }
 
 func sortExposureRadarItemsByQuality(resp *dto.ExposureRadarResponse) *dto.ExposureRadarResponse {

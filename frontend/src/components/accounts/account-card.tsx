@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AlertTriangle, Bot, CheckCircle2, Clock3, Link2, ListChecks, PlugZap, Rocket, Send, ShieldCheck, Unplug, Workflow } from "lucide-react";
+import { AlertTriangle, Bot, BrainCircuit, CheckCircle2, Clock3, Link2, ListChecks, PlugZap, Rocket, Send, ShieldCheck, Unplug, Workflow } from "lucide-react";
 
 import type { ConnectedXAccount } from "@/types/accounts";
 import type { OAFBot } from "@/types/oaf-bot";
@@ -137,6 +137,10 @@ export function AccountCard({
             <Link href="/content-drafts" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
               <Rocket className="size-3.5" />
               {t("accounts.actions.openAutomation")}
+            </Link>
+            <Link href={`/accounts/${account.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+              <BrainCircuit className="size-3.5" />
+              {t("accounts.actions.openIntelligence")}
             </Link>
             <Button
               variant="ghost"

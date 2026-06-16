@@ -51,6 +51,10 @@ export type ExposureRadarItemApi = {
   reason: string;
   ranking_delta?: number;
   ranking_reason?: string;
+  account_fit_score?: number;
+  account_fit_label?: "strong" | "good" | "weak" | "avoid" | string;
+  account_fit_reason?: string;
+  account_fit_keywords?: string[];
   guardrails?: string[];
   review_task_id?: number;
   review_status?: string;

@@ -52,6 +52,8 @@ type LearningImpactRow = {
 };
 type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
 type FirstDayStepKey = "account" | "strategy" | "queue" | "result";
+type FirstDayActivationMode = "setup" | "strategy" | "signals" | "handle" | "result" | "complete";
+type FirstDayActivationAction = { key: string; href?: string; icon: ReactNode; onClick?: () => void; disabled?: boolean; primary?: boolean };
 type PeopleRadarStage = "priority" | "repeat" | "engaged" | "watch" | "avoid" | "new";
 type PeopleRadarEntry = {
   key: string;
@@ -934,6 +936,9 @@ export default function ExposureRadarPage() {
         moves={todayMoves}
         recentRecords={recentManualRecords}
         contentDraftBridge={contentDraftBridge}
+        itemsCount={items.length}
+        loadState={loadState}
+        onRefresh={() => void load()}
       />
 
       <div id="radar-strategy" className="scroll-mt-24">
@@ -1020,7 +1025,13 @@ export default function ExposureRadarPage() {
           <div className="rounded-2xl border border-[#f4212e]/25 bg-[#f4212e]/10 px-4 py-10 text-center text-sm text-[#ff8a91]">{t("exposureRadar.toast.loadFailed")}</div>
         ) : null}
         {loadState === "ready" && items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.empty")}</div>
+          <RadarEmptyStatePanel
+            data={data}
+            loadState={loadState}
+            onRefresh={() => void load()}
+            onWidenWindow={() => setHours(8)}
+            onRaiseFans={() => setMaxFans((current) => Math.max(current, 50000))}
+          />
         ) : null}
         {loadState === "ready" && items.length > 0 && displayedItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black px-4 py-10 text-center text-sm text-[#71767b]">{t("exposureRadar.list.filteredEmpty")}</div>
@@ -2079,6 +2090,9 @@ function FirstDayLaunchPanel({
   moves,
   recentRecords,
   contentDraftBridge,
+  itemsCount,
+  loadState,
+  onRefresh,
 }: {
   selectedAccountID: number;
   selectedBotID: number;
@@ -2088,6 +2102,9 @@ function FirstDayLaunchPanel({
   moves: DailyActionPlanItem[];
   recentRecords: ExposureRadarManualRecordApi[];
   contentDraftBridge: ContentDraftBridgeData;
+  itemsCount: number;
+  loadState: LoadState;
+  onRefresh: () => void;
 }) {
   const { t } = useT();
   const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
@@ -2098,11 +2115,11 @@ function FirstDayLaunchPanel({
   const steps: Array<{ key: FirstDayStepKey; done: boolean; anchor: string }> = ([
     { key: "account", done: selectedAccountID > 0 && selectedBotID > 0 },
     { key: "strategy", done: strategyReady },
-    { key: "queue", done: moves.length > 0 },
+    { key: "queue", done: moves.length > 0 || itemsCount > 0 },
     { key: "result", done: resultCount > 0 || handledCount > 0 },
   ] satisfies Array<{ key: FirstDayStepKey; done: boolean }>).map((step) => ({
     ...step,
-    anchor: step.key === "account" ? "#radar-setup" : step.key === "strategy" ? "#radar-strategy" : "#radar-workbench",
+    anchor: step.key === "account" ? "#radar-setup" : step.key === "strategy" ? "#radar-strategy" : step.key === "result" ? "#radar-results" : moves.length > 0 ? "#radar-workbench" : "#radar-setup",
   }));
   const doneCount = steps.filter((step) => step.done).length;
   const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
@@ -2116,6 +2133,15 @@ function FirstDayLaunchPanel({
     { key: "seed", done: savedCount > 0 || pendingDraftCount > 0, value: String(savedCount + pendingDraftCount) },
     { key: "result", done: resultCount > 0, value: String(resultCount) },
   ];
+  const activationMode = firstDayActivationMode({
+    selectedAccountID,
+    selectedBotID,
+    strategyReady,
+    itemsCount,
+    movesCount: moves.length,
+    handledCount,
+    resultCount,
+  });
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2148,6 +2174,7 @@ function FirstDayLaunchPanel({
         <FirstDaySetupChip icon={<Bot className="size-3.5" />} label={t("exposureRadar.firstDay.selected.bot")} value={selectedBot?.name || (selectedBotID ? t("oafBots.botNumber", { id: selectedBotID }) : t("exposureRadar.firstDay.selected.missing"))} />
         <FirstDaySetupChip icon={<Target className="size-3.5" />} label={t("exposureRadar.firstDay.selected.lane")} value={strategy?.target_audience || t("exposureRadar.firstDay.selected.missing")} />
       </div>
+      <FirstDayActivationCard mode={activationMode} loadState={loadState} onRefresh={onRefresh} />
       <div className="mt-4 grid gap-3 md:grid-cols-4">
         {steps.map((step, index) => (
           <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
@@ -2214,6 +2241,120 @@ function FirstDaySetupChip({ icon, label, value }: { icon: ReactNode; label: str
     <div className="rounded-xl border border-[#2f3336] bg-black p-3">
       <div className="flex items-center gap-2 text-[11px] font-semibold text-[#71767b]">{icon}{label}</div>
       <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function FirstDayActivationCard({ mode, loadState, onRefresh }: { mode: FirstDayActivationMode; loadState: LoadState; onRefresh: () => void }) {
+  const { t } = useT();
+  const actions = firstDayActivationActions(mode, onRefresh, loadState);
+  return (
+    <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-black/30 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Sparkles className="size-3.5" />
+            {t("exposureRadar.firstDay.activation.badge")}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.activation.${mode}.title`)}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t(`exposureRadar.firstDay.activation.${mode}.description`)}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {actions.map((action) => action.href ? (
+            <a key={action.key} href={action.href} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition ${action.primary ? "bg-[#1d9bf0] text-white hover:bg-[#1a8cd8]" : "border border-[#2f3336] bg-black text-[#e7e9ea] hover:bg-[#16181c]"}`}>
+              {action.icon}
+              {t(`exposureRadar.firstDay.activation.action.${action.key}`)}
+            </a>
+          ) : (
+            <Button key={action.key} type="button" variant={action.primary ? "default" : "outline"} onClick={action.onClick} disabled={action.disabled}>
+              {action.icon}
+              {t(`exposureRadar.firstDay.activation.action.${action.key}`)}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {["one", "two", "three"].map((key) => (
+          <div key={key} className="rounded-xl border border-[#2f3336] bg-black/60 p-3">
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.activation.${mode}.step.${key}.title`)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.activation.${mode}.step.${key}.description`)}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RadarEmptyStatePanel({
+  data,
+  loadState,
+  onRefresh,
+  onWidenWindow,
+  onRaiseFans,
+}: {
+  data: ExposureRadarData | null;
+  loadState: LoadState;
+  onRefresh: () => void;
+  onWidenWindow: () => void;
+  onRaiseFans: () => void;
+}) {
+  const { t } = useT();
+  const diagnostics = data?.diagnostics || null;
+  const reason = signalRecoveryReason(data, loadState, t);
+  const suggestions = signalRecoverySuggestions(diagnostics, t).slice(0, 3);
+  return (
+    <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-xs font-semibold text-[#f6d96b]">
+            <Search className="size-3.5" />
+            {t("exposureRadar.emptyState.badge")}
+          </span>
+          <h3 className="mt-3 text-lg font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.title")}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.emptyState.description", { reason })}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button type="button" onClick={onRefresh} disabled={loadState === "loading"}>
+            <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+            {t("exposureRadar.emptyState.action.refresh")}
+          </Button>
+          <Button type="button" variant="outline" onClick={onWidenWindow}>
+            <Clock3 className="size-4" />
+            {t("exposureRadar.emptyState.action.widen")}
+          </Button>
+          <Button type="button" variant="outline" onClick={onRaiseFans}>
+            <Users className="size-4" />
+            {t("exposureRadar.emptyState.action.raiseFans")}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.visible")} value={formatCompact(diagnostics?.visible_pool_count || 0)} detail={t("exposureRadar.emptyState.metric.visibleDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.maxViews")} value={formatCompact(diagnostics?.max_impression_count || 0)} detail={t("exposureRadar.emptyState.metric.maxViewsDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.maxSpeed")} value={`${formatOneDecimal(diagnostics?.max_views_per_minute || 0)}/min`} detail={t("exposureRadar.emptyState.metric.maxSpeedDetail")} />
+        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.coverage")} value={formatPercent(diagnostics?.sampling_coverage || 0)} detail={t("exposureRadar.emptyState.metric.coverageDetail")} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.suggestions")}</p>
+          <div className="mt-3 space-y-2">
+            {suggestions.map((suggestion) => (
+              <div key={suggestion} className="flex gap-2 rounded-lg border border-[#2f3336] bg-black px-3 py-2 text-xs leading-5 text-[#8b98a5]">
+                <Info className="mt-0.5 size-3.5 shrink-0 text-[#8ecdf8]" />
+                <span>{suggestion}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.safeFallback.title")}</p>
+          <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("exposureRadar.emptyState.safeFallback.description")}</p>
+          <a href="#radar-strategy" className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            {t("exposureRadar.emptyState.action.strategy")}
+            <ArrowRight className="size-4" />
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4734,6 +4875,69 @@ function dailyDeskRhythmAnchor(step: string) {
   if (step === "save") return "#radar-people";
   if (step === "review") return "#radar-results";
   return "#radar-workbench";
+}
+
+function firstDayActivationMode({
+  selectedAccountID,
+  selectedBotID,
+  strategyReady,
+  itemsCount,
+  movesCount,
+  handledCount,
+  resultCount,
+}: {
+  selectedAccountID: number;
+  selectedBotID: number;
+  strategyReady: boolean;
+  itemsCount: number;
+  movesCount: number;
+  handledCount: number;
+  resultCount: number;
+}): FirstDayActivationMode {
+  if (!selectedAccountID || !selectedBotID) return "setup";
+  if (!strategyReady) return "strategy";
+  if (!itemsCount && !movesCount) return "signals";
+  if (!handledCount) return "handle";
+  if (!resultCount) return "result";
+  return "complete";
+}
+
+function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () => void, loadState: LoadState): FirstDayActivationAction[] {
+  const refreshAction = { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading", primary: true };
+  switch (mode) {
+    case "setup":
+      return [
+        { key: "accounts", href: "/accounts", icon: <Users className="size-4" />, primary: true },
+        { key: "bots", href: "/oaf-bots", icon: <Bot className="size-4" /> },
+        { key: "selectors", href: "#radar-setup", icon: <Target className="size-4" /> },
+      ];
+    case "strategy":
+      return [
+        { key: "strategy", href: "#radar-strategy", icon: <Target className="size-4" />, primary: true },
+        { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading" },
+      ];
+    case "signals":
+      return [
+        refreshAction,
+        { key: "filters", href: "#radar-setup", icon: <SlidersHorizontal className="size-4" /> },
+        { key: "strategy", href: "#radar-strategy", icon: <Target className="size-4" /> },
+      ];
+    case "handle":
+      return [
+        { key: "workbench", href: "#radar-workbench", icon: <MessageCircle className="size-4" />, primary: true },
+        { key: "people", href: "#radar-people", icon: <Users className="size-4" /> },
+      ];
+    case "result":
+      return [
+        { key: "results", href: "#radar-results", icon: <BarChart3 className="size-4" />, primary: true },
+        { key: "workbench", href: "#radar-workbench", icon: <MessageCircle className="size-4" /> },
+      ];
+    default:
+      return [
+        { key: "review", href: "#radar-results", icon: <CheckCircle2 className="size-4" />, primary: true },
+        refreshAction,
+      ];
+  }
 }
 
 function isRecentManualRecord(record: ExposureRadarManualRecordApi, hours: number) {

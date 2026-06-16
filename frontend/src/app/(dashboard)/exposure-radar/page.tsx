@@ -51,6 +51,7 @@ type LearningImpactRow = {
   tone: "positive" | "negative" | "neutral";
 };
 type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
+type SessionFocusKey = "relationships" | "research" | "traffic" | "memory";
 type FirstDayStepKey = "account" | "strategy" | "queue" | "result";
 type FirstDayActivationMode = "setup" | "strategy" | "signals" | "handle" | "result" | "complete";
 type FirstDayActivationAction = { key: string; href?: string; icon: ReactNode; onClick?: () => void; disabled?: boolean; primary?: boolean };
@@ -144,6 +145,8 @@ type OperatorSessionNote = {
   text: string;
   updatedAt: string;
 };
+type PublishGateKey = "context" | "persona" | "nonPromo" | "claim";
+type PublishGateState = Partial<Record<PublishGateKey, boolean>> & { updatedAt?: string };
 
 type StrategyFormState = {
   targetAudience: string;
@@ -202,6 +205,8 @@ const replyAngleGenerationGuides: Record<ReplyAngleID, ReplyAngleGenerationGuide
 const radarRankStorageKeyPrefix = "oaf:exposure-radar:ranks";
 const radarManualActionStorageKey = "oaf:exposure-radar:manual-actions:v1";
 const radarOperatorNotesStorageKey = "oaf:exposure-radar:operator-notes:v1";
+const radarSessionFocusStorageKey = "oaf:exposure-radar:session-focus:v1";
+const radarPublishGateStorageKey = "oaf:exposure-radar:publish-gates:v1";
 
 export default function ExposureRadarPage() {
   const { t } = useT();
@@ -242,6 +247,10 @@ export default function ExposureRadarPage() {
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
   const [operatorNotes, setOperatorNotes] = useState<Record<string, OperatorSessionNote>>({});
   const [operatorNotesHydrated, setOperatorNotesHydrated] = useState(false);
+  const [sessionFocuses, setSessionFocuses] = useState<Record<string, SessionFocusKey>>({});
+  const [sessionFocusesHydrated, setSessionFocusesHydrated] = useState(false);
+  const [publishGateStates, setPublishGateStates] = useState<Record<string, PublishGateState>>({});
+  const [publishGatesHydrated, setPublishGatesHydrated] = useState(false);
   const [persistedPeople, setPersistedPeople] = useState<ExposureRadarPeopleItemApi[]>([]);
   const [activeWorkbenchID, setActiveWorkbenchID] = useState("");
   const [selectedReplyAngleIDs, setSelectedReplyAngleIDs] = useState<Record<string, string>>({});
@@ -293,6 +302,7 @@ export default function ExposureRadarPage() {
 
   const operatorNoteKey = useMemo(() => radarOperatorNoteKey(region, selectedAccountID, selectedBotID), [region, selectedAccountID, selectedBotID]);
   const operatorNote = operatorNotes[operatorNoteKey]?.text || "";
+  const sessionFocus = sessionFocuses[operatorNoteKey] || "relationships";
   const updateOperatorNote = useCallback((text: string) => {
     setOperatorNotes((current) => ({
       ...current,
@@ -302,6 +312,42 @@ export default function ExposureRadarPage() {
       },
     }));
   }, [operatorNoteKey]);
+  const updateSessionFocus = useCallback((focus: SessionFocusKey) => {
+    setSessionFocuses((current) => ({
+      ...current,
+      [operatorNoteKey]: focus,
+    }));
+  }, [operatorNoteKey]);
+  const updatePublishGate = useCallback((itemID: string, key: PublishGateKey, checked: boolean) => {
+    setPublishGateStates((current) => ({
+      ...current,
+      [itemID]: {
+        ...(current[itemID] || {}),
+        [key]: checked,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+  }, []);
+
+  useEffect(() => {
+    setSessionFocuses(readSessionFocuses());
+    setSessionFocusesHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionFocusesHydrated) return;
+    writeSessionFocuses(sessionFocuses);
+  }, [sessionFocuses, sessionFocusesHydrated]);
+
+  useEffect(() => {
+    setPublishGateStates(readPublishGateStates());
+    setPublishGatesHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!publishGatesHydrated) return;
+    writePublishGateStates(publishGateStates);
+  }, [publishGateStates, publishGatesHydrated]);
 
   const updateManualActionState = useCallback((itemID: string, patch: Partial<ManualActionState>) => {
     setManualActionStates((current) => ({
@@ -1076,6 +1122,8 @@ export default function ExposureRadarPage() {
         usingSampleMode={usingSampleMode}
       />
 
+      <SessionFocusPanel focus={sessionFocus} onChange={updateSessionFocus} strategy={growthStrategy} firstItem={firstLoopItem} usingSampleMode={usingSampleMode} />
+
       <DailyOperatingGoalsPanel
         strategy={growthStrategy}
         stats={workbenchStats}
@@ -1105,10 +1153,12 @@ export default function ExposureRadarPage() {
         handling={firstLoopItem ? handlingID === firstLoopItem.id : false}
         usingSampleMode={usingSampleMode}
         firstLoopDone={firstLoopDone}
+        publishGateState={firstLoopItem ? publishGateStates[firstLoopItem.id] : undefined}
         onStartSample={() => setSampleMode(true)}
         onCreateDraft={createDraft}
         onMarkHandled={markRadarHandled}
         onManualAction={(item, patch, replyAngle) => recordManualAction(item, patch, replyAngle)}
+        onTogglePublishGate={updatePublishGate}
         onFocusWorkbench={(itemID) => {
           if (itemID) setActiveWorkbenchID(itemID);
           if (itemID) focusRadarItem(itemID);
@@ -1131,6 +1181,17 @@ export default function ExposureRadarPage() {
           timeZone={timeZone}
         />
       </div>
+
+      <NextSessionCarryoverPanel
+        items={items}
+        manualActionStates={manualActionStates}
+        sessionFocus={sessionFocus}
+        operatorNote={operatorNote}
+        onFocus={(itemID) => {
+          setActiveWorkbenchID(itemID);
+          focusRadarItem(itemID);
+        }}
+      />
 
       <div id="radar-strategy" className="scroll-mt-24">
         <StrategySetupPanel
@@ -2748,6 +2809,59 @@ function PreflightSafetyPanel({
   );
 }
 
+function SessionFocusPanel({
+  focus,
+  onChange,
+  strategy,
+  firstItem,
+  usingSampleMode,
+}: {
+  focus: SessionFocusKey;
+  onChange: (focus: SessionFocusKey) => void;
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  firstItem?: ExposureRadarItemApi;
+  usingSampleMode: boolean;
+}) {
+  const { t } = useT();
+  const options = sessionFocusOptions(t);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Target className="size-3.5" />
+            {t("exposureRadar.sessionFocus.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.sessionFocus.title")} description={t("exposureRadar.sessionFocus.description")} className="mt-3 mb-0" />
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+          {usingSampleMode ? t("exposureRadar.sample.badge") : strategy?.primary_goal ? t(`exposureRadar.strategy.goal.${strategy.primary_goal}`) : t("exposureRadar.sessionFocus.noStrategy")}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {options.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            className={`rounded-2xl border p-4 text-left transition ${focus === option.key ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black hover:border-[#1d9bf0]/35"}`}
+          >
+            <span className={`inline-flex size-9 items-center justify-center rounded-xl border ${focus === option.key ? "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]"}`}>
+              {option.icon}
+            </span>
+            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{option.title}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{option.description}</p>
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.sessionFocus.guidance.title")}</p>
+        <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.sessionFocus.guidance.${focus}`, { signal: firstItem ? compactTitle(firstItem.title) : t("exposureRadar.sessionFocus.noSignal") })}</p>
+      </div>
+    </Card>
+  );
+}
+
 function DailyOperatingGoalsPanel({
   strategy,
   stats,
@@ -2826,6 +2940,49 @@ function DailyOperatingGoalsPanel({
   );
 }
 
+function PublishQualityGatePanel({
+  gates,
+  state,
+  ready,
+  onToggle,
+}: {
+  gates: Array<{ key: PublishGateKey; title: string; detail: string }>;
+  state?: PublishGateState;
+  ready: boolean;
+  onToggle: (key: PublishGateKey, checked: boolean) => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.publishGate.title")}</p>
+          <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t("exposureRadar.publishGate.description")}</p>
+        </div>
+        <span className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-semibold ${ready ? "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]"}`}>
+          {ready ? t("exposureRadar.publishGate.ready") : t("exposureRadar.publishGate.review")}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {gates.map((gate) => (
+          <label key={gate.key} className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${state?.[gate.key] ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(state?.[gate.key])}
+              onChange={(event) => onToggle(gate.key, event.target.checked)}
+              className="mt-1 size-4 accent-[#1d9bf0]"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-[#e7e9ea]">{gate.title}</span>
+              <span className="mt-1 block text-[11px] leading-5 text-[#71767b]">{gate.detail}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OperatorScratchpadPanel({
   note,
   onChange,
@@ -2865,6 +3022,55 @@ function OperatorScratchpadPanel({
             className="rounded-xl border border-[#2f3336] bg-black px-3 py-2 text-left text-xs leading-5 text-[#8b98a5] transition hover:border-[#1d9bf0]/45 hover:text-[#e7e9ea]"
           >
             {suggestion}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function NextSessionCarryoverPanel({
+  items,
+  manualActionStates,
+  sessionFocus,
+  operatorNote,
+  onFocus,
+}: {
+  items: ExposureRadarItemApi[];
+  manualActionStates: Record<string, ManualActionState>;
+  sessionFocus: SessionFocusKey;
+  operatorNote: string;
+  onFocus: (itemID: string) => void;
+}) {
+  const { t } = useT();
+  const carryovers = buildNextSessionCarryovers(items, manualActionStates, sessionFocus, operatorNote, t);
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-xs font-semibold text-[#f6d96b]">
+            <CalendarClock className="size-3.5" />
+            {t("exposureRadar.carryover.badge")}
+          </span>
+          <CardHeader title={t("exposureRadar.carryover.title")} description={t("exposureRadar.carryover.description")} className="mt-3 mb-0" />
+        </div>
+        <a href="#radar-workbench" className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          {t("exposureRadar.carryover.openWorkbench")}
+          <ArrowRight className="size-4" />
+        </a>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {carryovers.map((carryover) => (
+          <button
+            key={carryover.key}
+            type="button"
+            onClick={() => carryover.itemID && onFocus(carryover.itemID)}
+            className="rounded-2xl border border-[#2f3336] bg-black p-4 text-left transition hover:border-[#1d9bf0]/35 disabled:cursor-default"
+            disabled={!carryover.itemID}
+          >
+            <span className="inline-flex size-9 items-center justify-center rounded-xl border border-[#2f3336] bg-[#16181c] text-[#8b98a5]">{carryover.icon}</span>
+            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{carryover.title}</p>
+            <p className="mt-1 text-xs leading-5 text-[#71767b]">{carryover.detail}</p>
           </button>
         ))}
       </div>
@@ -2951,10 +3157,12 @@ function FirstLoopPanel({
   handling,
   usingSampleMode,
   firstLoopDone,
+  publishGateState,
   onStartSample,
   onCreateDraft,
   onMarkHandled,
   onManualAction,
+  onTogglePublishGate,
   onFocusWorkbench,
 }: {
   item?: ExposureRadarItemApi;
@@ -2965,10 +3173,12 @@ function FirstLoopPanel({
   handling: boolean;
   usingSampleMode: boolean;
   firstLoopDone: boolean;
+  publishGateState?: PublishGateState;
   onStartSample: () => void;
   onCreateDraft: (item: ExposureRadarItemApi, replyAngle?: ReplyAngleSuggestion) => void;
   onMarkHandled: (item: ExposureRadarItemApi, publishedURL: string) => MaybePromise<void>;
   onManualAction: (item: ExposureRadarItemApi, patch: Partial<ManualActionState>, replyAngle?: ReplyAngleSuggestion) => void;
+  onTogglePublishGate: (itemID: string, key: PublishGateKey, checked: boolean) => void;
   onFocusWorkbench: (itemID: string) => void;
 }) {
   const { t } = useT();
@@ -2979,6 +3189,8 @@ function FirstLoopPanel({
   const handled = item ? isManualActionHandled(item, manualState) : false;
   const stepKey = firstLoopStepKey(item, manualState, firstLoopDone);
   const priorityReasons = item ? buildPriorityReasonChips(item, t) : [];
+  const gateItems = item ? buildPublishGateItems(item, generatedComment, t) : [];
+  const gateReady = gateItems.length > 0 && gateItems.every((gate) => Boolean(publishGateState?.[gate.key]));
   const copyReply = async () => {
     if (!item || !generatedComment) return;
     try {
@@ -3076,6 +3288,14 @@ function FirstLoopPanel({
               <FirstLoopActionRow done={handled} label={t("exposureRadar.firstLoop.actions.handle")} />
               <FirstLoopActionRow done={Boolean(manualState?.resultCheckedAt)} label={t("exposureRadar.firstLoop.actions.backfill")} />
             </div>
+            {generatedComment ? (
+              <PublishQualityGatePanel
+                gates={gateItems}
+                state={publishGateState}
+                ready={gateReady}
+                onToggle={(key, checked) => onTogglePublishGate(item.id, key, checked)}
+              />
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               {generatedComment ? (
                 <Button type="button" size="sm" onClick={() => void copyReply()}>
@@ -5827,6 +6047,15 @@ function buildDailyOperatingGoals(
   ];
 }
 
+function sessionFocusOptions(t: (key: string) => string): Array<{ key: SessionFocusKey; icon: ReactNode; title: string; description: string }> {
+  return [
+    { key: "relationships", icon: <Users className="size-4" />, title: t("exposureRadar.sessionFocus.relationships.title"), description: t("exposureRadar.sessionFocus.relationships.description") },
+    { key: "research", icon: <Search className="size-4" />, title: t("exposureRadar.sessionFocus.research.title"), description: t("exposureRadar.sessionFocus.research.description") },
+    { key: "traffic", icon: <TrendingUp className="size-4" />, title: t("exposureRadar.sessionFocus.traffic.title"), description: t("exposureRadar.sessionFocus.traffic.description") },
+    { key: "memory", icon: <Database className="size-4" />, title: t("exposureRadar.sessionFocus.memory.title"), description: t("exposureRadar.sessionFocus.memory.description") },
+  ];
+}
+
 function buildPriorityReasonChips(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string) {
   const qualityStage = normalizeQualityStage(item.quality_stage, item);
   const tier = normalizeOpportunityTier(item.opportunity_tier);
@@ -5839,6 +6068,35 @@ function buildPriorityReasonChips(item: ExposureRadarItemApi, t: (key: string, p
     typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? t("exposureRadar.firstLoop.why.smallAuthor", { fans: formatCompact(item.followers_count) }) : "",
     item.risk_level === "low" ? t("exposureRadar.firstLoop.why.lowRisk") : "",
   ].filter(Boolean).slice(0, 4);
+}
+
+function buildPublishGateItems(
+  item: ExposureRadarItemApi,
+  generatedComment: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): Array<{ key: PublishGateKey; title: string; detail: string }> {
+  return [
+    {
+      key: "context",
+      title: t("exposureRadar.publishGate.context.title"),
+      detail: item.author_handle ? t("exposureRadar.publishGate.context.detailWithAuthor", { author: `@${item.author_handle}` }) : t("exposureRadar.publishGate.context.detail"),
+    },
+    {
+      key: "persona",
+      title: t("exposureRadar.publishGate.persona.title"),
+      detail: t("exposureRadar.publishGate.persona.detail"),
+    },
+    {
+      key: "nonPromo",
+      title: t("exposureRadar.publishGate.nonPromo.title"),
+      detail: hasPromotionalSmell(generatedComment) ? t("exposureRadar.publishGate.nonPromo.warning") : t("exposureRadar.publishGate.nonPromo.detail"),
+    },
+    {
+      key: "claim",
+      title: t("exposureRadar.publishGate.claim.title"),
+      detail: hasRiskyGrowthClaim(generatedComment) ? t("exposureRadar.publishGate.claim.warning") : t("exposureRadar.publishGate.claim.detail"),
+    },
+  ];
 }
 
 function buildPreflightChecks({
@@ -5925,6 +6183,47 @@ function buildOperatorScratchpadSuggestions(
 function appendOperatorNote(current: string, addition: string) {
   const trimmed = current.trim();
   return trimmed ? `${trimmed}\n- ${addition}` : `- ${addition}`;
+}
+
+function buildNextSessionCarryovers(
+  items: ExposureRadarItemApi[],
+  manualActionStates: Record<string, ManualActionState>,
+  sessionFocus: SessionFocusKey,
+  operatorNote: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  const byPriority = [...items].sort((a, b) => b.score - a.score);
+  const needsBackfill = byPriority.find((item) => isManualActionHandled(item, manualActionStates[item.id]) && !manualActionStates[item.id]?.resultCheckedAt);
+  const needsMemory = byPriority.find((item) => (item.generated_comment || manualActionStates[item.id]?.handled) && !manualActionStates[item.id]?.saved && !item.saved_memory_id);
+  const nextOpportunity = byPriority.find((item) => !isManualActionHandled(item, manualActionStates[item.id]));
+  return [
+    {
+      key: "focus",
+      icon: <Target className="size-4" />,
+      title: t("exposureRadar.carryover.focus.title"),
+      detail: t(`exposureRadar.carryover.focus.${sessionFocus}`),
+    },
+    {
+      key: "backfill",
+      icon: <BarChart3 className="size-4" />,
+      title: t("exposureRadar.carryover.backfill.title"),
+      detail: needsBackfill ? t("exposureRadar.carryover.backfill.detail", { signal: compactTitle(needsBackfill.title) }) : t("exposureRadar.carryover.backfill.empty"),
+      itemID: needsBackfill?.id,
+    },
+    {
+      key: "next",
+      icon: needsMemory ? <BookmarkPlus className="size-4" /> : <MessageCircle className="size-4" />,
+      title: needsMemory ? t("exposureRadar.carryover.memory.title") : t("exposureRadar.carryover.next.title"),
+      detail: needsMemory
+        ? t("exposureRadar.carryover.memory.detail", { signal: compactTitle(needsMemory.title) })
+        : nextOpportunity
+          ? t("exposureRadar.carryover.next.detail", { signal: compactTitle(nextOpportunity.title) })
+          : operatorNote.trim()
+            ? t("exposureRadar.carryover.next.note")
+            : t("exposureRadar.carryover.next.empty"),
+      itemID: needsMemory?.id || nextOpportunity?.id,
+    },
+  ];
 }
 
 function buildDailyRecapText({
@@ -7328,6 +7627,61 @@ function writeOperatorNotes(notes: Record<string, OperatorSessionNote>) {
     window.localStorage.setItem(radarOperatorNotesStorageKey, JSON.stringify(Object.fromEntries(entries)));
   } catch {
     // Scratchpad notes are local convenience only.
+  }
+}
+
+function readSessionFocuses(): Record<string, SessionFocusKey> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(radarSessionFocusStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, SessionFocusKey>;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([key, value]) => (
+      typeof key === "string" && isSessionFocusKey(value)
+    )));
+  } catch {
+    return {};
+  }
+}
+
+function writeSessionFocuses(focuses: Record<string, SessionFocusKey>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(radarSessionFocusStorageKey, JSON.stringify(focuses));
+  } catch {
+    // Session focus is a local UI preference only.
+  }
+}
+
+function isSessionFocusKey(value: string): value is SessionFocusKey {
+  return value === "relationships" || value === "research" || value === "traffic" || value === "memory";
+}
+
+function readPublishGateStates(): Record<string, PublishGateState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(radarPublishGateStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PublishGateState>;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([key, state]) => (
+      typeof key === "string" && state && typeof state === "object"
+    )));
+  } catch {
+    return {};
+  }
+}
+
+function writePublishGateStates(states: Record<string, PublishGateState>) {
+  if (typeof window === "undefined") return;
+  try {
+    const entries = Object.entries(states)
+      .sort(([, a], [, b]) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+      .slice(0, 200);
+    window.localStorage.setItem(radarPublishGateStorageKey, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // Publish gates are local operator reminders only.
   }
 }
 

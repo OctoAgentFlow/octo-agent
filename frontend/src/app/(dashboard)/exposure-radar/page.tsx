@@ -20,7 +20,7 @@ import { appendOperatorNote, dailyDeskFocusAnchor, dailyDeskFocusKey, dailyDeskR
 import { exposureRadarWorkspaceTabs, fanOptions, hotCountOptions, hourOptions, radarViewFilters, replyAngleGenerationGuides } from "@/components/exposure-radar/constants";
 import { DailyOperatingGoalsCard, FirstDayLaunchCard, PreflightSafetyCard, RadarEmptyStateCard, SessionFocusCard } from "@/components/exposure-radar/activation-session-panels";
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
-import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, exposureLearningTopicKey, isDeferredManualTask, radarItemMatchesFilter } from "@/components/exposure-radar/daily-action-plan-utils";
+import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, exposureLearningTopicKey, radarItemMatchesFilter } from "@/components/exposure-radar/daily-action-plan-utils";
 import { buildPriorityReasonChips, resultLearningTone, sessionStateTone } from "@/components/exposure-radar/display-helper-utils";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
@@ -39,7 +39,7 @@ import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
 import { clampPriority, compactTitle, extractTweetID, isManualActionHandled, isRadarItemSaved, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
-import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExplanation, buildOpportunityExplanation, buildReplyAngleIDs, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, buildSampleReplyDraft, formatMemoryOpportunityExplanation, hasPromotionalSmell, hasRiskyGrowthClaim, selectedReplyAngleForItem } from "@/components/exposure-radar/opportunity-reply-utils";
+import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExplanation, buildOpportunityExplanation, buildReplyAngleIDs, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, buildSampleReplyDraft, formatMemoryOpportunityExplanation, hasPromotionalSmell, selectedReplyAngleForItem } from "@/components/exposure-radar/opportunity-reply-utils";
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
@@ -50,7 +50,8 @@ import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/expo
 import { buildStarterStrategyTemplates, parseCommaList, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
-import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleSuggestion, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleSuggestion, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import { buildDailyOperatingGoals, buildPreflightChecks, buildPublishGateItems, buildWorkbenchStats } from "@/components/exposure-radar/workbench-helper-utils";
 import type { OAFBot } from "@/types/oaf-bot";
 
 export default function ExposureRadarPage() {
@@ -4652,171 +4653,6 @@ function buildResultLearningSummary({
       : t("exposureRadar.learningLoop.summary.default.detail", { count: moves.length }),
     tone: "neutral",
   };
-}
-
-function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>): WorkbenchStats {
-  return items.reduce((acc, item) => {
-    const handled = isManualActionHandled(item, manualActionStates[item.id]);
-    if (isDeferredManualTask(manualActionStates[item.id])) return acc;
-    const qualityStage = normalizeQualityStage(item.quality_stage, item);
-    const tier = normalizeOpportunityTier(item.opportunity_tier);
-    if (handled) {
-      acc.handled += 1;
-      return acc;
-    }
-    if (qualityStage === "act_now") acc.actNow += 1;
-    if (qualityStage === "act_now" || tier === "hot_opportunity" || tier === "rising_opportunity" || item.generated_comment || item.review_task_id) {
-      acc.pending += 1;
-    }
-    return acc;
-  }, { pending: 0, actNow: 0, handled: 0 });
-}
-
-function buildDailyOperatingGoals(
-  strategy: ExposureRadarGrowthStrategyApi | null,
-  stats: WorkbenchStats,
-  items: ExposureRadarItemApi[],
-  manualActionStates: Record<string, ManualActionState>,
-  savedMemoryIDs: Set<string>,
-  recentRecords: ExposureRadarManualRecordApi[],
-  t: (key: string, params?: Record<string, string | number>) => string,
-) {
-  const dailyLimit = Math.max(4, Math.min(20, strategy?.daily_move_limit || 8));
-  const reviewTarget = Math.max(3, Math.min(6, Math.ceil(dailyLimit / 2)));
-  const handleTarget = Math.max(1, Math.min(3, Math.ceil(dailyLimit / 4)));
-  const saveTarget = 1;
-  const backfillTarget = 1;
-  const reviewedCount = items.filter((item) => {
-    const state = manualActionStates[item.id];
-    return Boolean(state?.opened || state?.copied || state?.saved || state?.handled || item.generated_comment || item.review_task_id);
-  }).length;
-  const handledCount = Math.max(stats.handled, items.filter((item) => isManualActionHandled(item, manualActionStates[item.id])).length);
-  const savedCount = items.filter((item) => isRadarItemSaved(item, savedMemoryIDs) || manualActionStates[item.id]?.saved).length;
-  const backfilledCount = items.filter((item) => manualActionStates[item.id]?.resultCheckedAt).length + recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
-  return [
-    {
-      key: "review",
-      icon: <Search className="size-4" />,
-      title: t("exposureRadar.dailyGoals.review.title"),
-      description: t("exposureRadar.dailyGoals.review.description"),
-      done: Math.min(reviewedCount, reviewTarget),
-      target: reviewTarget,
-    },
-    {
-      key: "handle",
-      icon: <MessageCircle className="size-4" />,
-      title: t("exposureRadar.dailyGoals.handle.title"),
-      description: t("exposureRadar.dailyGoals.handle.description"),
-      done: Math.min(handledCount, handleTarget),
-      target: handleTarget,
-    },
-    {
-      key: "save",
-      icon: <BookmarkPlus className="size-4" />,
-      title: t("exposureRadar.dailyGoals.save.title"),
-      description: t("exposureRadar.dailyGoals.save.description"),
-      done: Math.min(savedCount, saveTarget),
-      target: saveTarget,
-    },
-    {
-      key: "backfill",
-      icon: <BarChart3 className="size-4" />,
-      title: t("exposureRadar.dailyGoals.backfill.title"),
-      description: t("exposureRadar.dailyGoals.backfill.description"),
-      done: Math.min(backfilledCount, backfillTarget),
-      target: backfillTarget,
-    },
-  ];
-}
-
-function buildPublishGateItems(
-  item: ExposureRadarItemApi,
-  generatedComment: string,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): Array<{ key: PublishGateKey; title: string; detail: string }> {
-  return [
-    {
-      key: "context",
-      title: t("exposureRadar.publishGate.context.title"),
-      detail: item.author_handle ? t("exposureRadar.publishGate.context.detailWithAuthor", { author: `@${item.author_handle}` }) : t("exposureRadar.publishGate.context.detail"),
-    },
-    {
-      key: "persona",
-      title: t("exposureRadar.publishGate.persona.title"),
-      detail: t("exposureRadar.publishGate.persona.detail"),
-    },
-    {
-      key: "nonPromo",
-      title: t("exposureRadar.publishGate.nonPromo.title"),
-      detail: hasPromotionalSmell(generatedComment) ? t("exposureRadar.publishGate.nonPromo.warning") : t("exposureRadar.publishGate.nonPromo.detail"),
-    },
-    {
-      key: "claim",
-      title: t("exposureRadar.publishGate.claim.title"),
-      detail: hasRiskyGrowthClaim(generatedComment) ? t("exposureRadar.publishGate.claim.warning") : t("exposureRadar.publishGate.claim.detail"),
-    },
-  ];
-}
-
-function buildPreflightChecks({
-  selectedAccountID,
-  selectedBotID,
-  strategy,
-  data,
-  items,
-  stats,
-  recentRecords,
-  usingSampleMode,
-  t,
-}: {
-  selectedAccountID: number;
-  selectedBotID: number;
-  strategy: ExposureRadarGrowthStrategyApi | null;
-  data: ExposureRadarData | null;
-  items: ExposureRadarItemApi[];
-  stats: WorkbenchStats;
-  recentRecords: ExposureRadarManualRecordApi[];
-  usingSampleMode: boolean;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}) {
-  const strategyReady = Boolean(strategy?.target_audience || strategy?.core_topics?.length);
-  const dailyLimit = Math.max(4, Math.min(20, strategy?.daily_move_limit || 8));
-  const handledToday = recentRecords.filter((record) => isRecentManualRecord(record, 24) && (record.handled_at || record.task_status === "done")).length;
-  const dataStatus = data?.diagnostics?.status || data?.source_status || "";
-  const accountStatus: SafetyReviewStatus = selectedAccountID && selectedBotID ? "pass" : "block";
-  const strategyStatus: SafetyReviewStatus = strategyReady ? "pass" : "watch";
-  const signalStatus: SafetyReviewStatus = usingSampleMode || items.length > 0 ? "pass" : dataStatus === "blocked" ? "block" : "watch";
-  const volumeStatus: SafetyReviewStatus = handledToday > dailyLimit ? "block" : stats.pending > dailyLimit * 2 ? "watch" : "pass";
-  return [
-    {
-      key: "context",
-      status: accountStatus,
-      icon: <Users className="size-4" />,
-      title: t("exposureRadar.preflight.context.title"),
-      detail: t(`exposureRadar.preflight.context.${accountStatus}`),
-    },
-    {
-      key: "strategy",
-      status: strategyStatus,
-      icon: <Target className="size-4" />,
-      title: t("exposureRadar.preflight.strategy.title"),
-      detail: t(`exposureRadar.preflight.strategy.${strategyStatus}`),
-    },
-    {
-      key: "signals",
-      status: signalStatus,
-      icon: <Search className="size-4" />,
-      title: t("exposureRadar.preflight.signals.title"),
-      detail: usingSampleMode ? t("exposureRadar.preflight.signals.sample") : t(`exposureRadar.preflight.signals.${signalStatus}`, { count: items.length }),
-    },
-    {
-      key: "volume",
-      status: volumeStatus,
-      icon: <Gauge className="size-4" />,
-      title: t("exposureRadar.preflight.volume.title"),
-      detail: t(`exposureRadar.preflight.volume.${volumeStatus}`, { handled: handledToday, limit: dailyLimit }),
-    },
-  ];
 }
 
 function buildOperatorScratchpadSuggestions(

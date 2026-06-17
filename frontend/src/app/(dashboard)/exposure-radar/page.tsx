@@ -43,6 +43,7 @@ import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshnes
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
 import { exposureRadarQueryStateFromSearch, exposureRadarQueryStringFromState } from "@/components/exposure-radar/route-query-utils";
+import { buildSampleExposureItems } from "@/components/exposure-radar/sample-data-utils";
 import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { buildStarterStrategyTemplates, parseCommaList, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
@@ -4960,111 +4961,6 @@ function firstLoopStepKey(item?: ExposureRadarItemApi, manualState?: ManualActio
   if (!manualState?.opened) return "open";
   if (!isManualActionHandled(item, manualState)) return "handle";
   return "backfill";
-}
-
-function buildSampleExposureItems(region: ExposureRadarRegion, t: (key: string, params?: Record<string, string | number>) => string): ExposureRadarItemApi[] {
-  const now = Date.now();
-  const sampleSearchURL = region === "zh"
-    ? "https://x.com/search?q=AI%20Agent%20%E5%B7%A5%E4%BD%9C%E6%B5%81&src=typed_query"
-    : "https://x.com/search?q=AI%20agent%20workflow%20human-in-the-loop&src=typed_query";
-  return [
-    {
-      id: `sample-${region}-workflow-proof`,
-      region,
-      data_source: "TODO_MYSQL_DSN",
-      data_quality: "tweet_level",
-      data_confidence: "real_impressions",
-      data_confidence_reason: t("exposureRadar.sample.item.one.confidence"),
-      title: t("exposureRadar.sample.item.one.title"),
-      author_handle: region === "zh" ? "sample_builder_cn" : "sample_builder",
-      author_name: t("exposureRadar.sample.item.one.author"),
-      author_id: `sample-${region}-author-1`,
-      content: t("exposureRadar.sample.item.one.content"),
-      url: sampleSearchURL,
-      tweet_id: `sample-${region}-tweet-1`,
-      status: "sample",
-      signal_label: t("exposureRadar.sample.signalLabel"),
-      topic_name: region === "zh" ? "AI Agent workflow" : "AI agent workflow",
-      published_at: new Date(now - 42 * 60 * 1000).toISOString(),
-      views_per_min: 38,
-      heat_count: 1680,
-      followers_count: 6200,
-      like_count: 84,
-      reply_count: 18,
-      retweet_count: 11,
-      quote_count: 5,
-      bookmark_count: 23,
-      impression_count: 9800,
-      hot_count: 3,
-      age_label: t("exposureRadar.sample.item.one.age"),
-      velocity_state: "rising",
-      opportunity_tier: "hot_opportunity",
-      tier_reason: t("exposureRadar.sample.item.one.tierReason"),
-      quality_stage: "act_now",
-      quality_reason: t("exposureRadar.sample.item.one.qualityReason"),
-      velocity_history: [9, 14, 19, 28, 35, 38],
-      score: 86,
-      risk_level: "low",
-      opportunity_type: "sample_manual_reply",
-      recommended_use: t("exposureRadar.sample.item.one.recommended"),
-      reason: t("exposureRadar.sample.item.one.reason"),
-      ranking_delta: 8,
-      ranking_reason: t("exposureRadar.sample.item.one.rankingReason"),
-      guardrails: [
-        t("exposureRadar.sample.guardrail.noPitch"),
-        t("exposureRadar.sample.guardrail.context"),
-      ],
-      updated_at: new Date(now).toISOString(),
-    },
-    {
-      id: `sample-${region}-operator-question`,
-      region,
-      data_source: "TODO_MYSQL_DSN",
-      data_quality: "tweet_level",
-      data_confidence: "engagement_estimate",
-      data_confidence_reason: t("exposureRadar.sample.item.two.confidence"),
-      title: t("exposureRadar.sample.item.two.title"),
-      author_handle: region === "zh" ? "sample_operator_cn" : "sample_operator",
-      author_name: t("exposureRadar.sample.item.two.author"),
-      author_id: `sample-${region}-author-2`,
-      content: t("exposureRadar.sample.item.two.content"),
-      url: sampleSearchURL,
-      tweet_id: `sample-${region}-tweet-2`,
-      status: "sample",
-      signal_label: t("exposureRadar.sample.signalLabel"),
-      topic_name: region === "zh" ? "Founder-led growth" : "Founder-led growth",
-      published_at: new Date(now - 93 * 60 * 1000).toISOString(),
-      views_per_min: 16,
-      heat_count: 790,
-      followers_count: 3400,
-      like_count: 42,
-      reply_count: 9,
-      retweet_count: 4,
-      quote_count: 2,
-      bookmark_count: 12,
-      impression_count: 4100,
-      hot_count: 2,
-      age_label: t("exposureRadar.sample.item.two.age"),
-      velocity_state: "steady",
-      opportunity_tier: "rising_opportunity",
-      tier_reason: t("exposureRadar.sample.item.two.tierReason"),
-      quality_stage: "watch",
-      quality_reason: t("exposureRadar.sample.item.two.qualityReason"),
-      velocity_history: [11, 13, 15, 16, 15, 16],
-      score: 73,
-      risk_level: "low",
-      opportunity_type: "sample_manual_reply",
-      recommended_use: t("exposureRadar.sample.item.two.recommended"),
-      reason: t("exposureRadar.sample.item.two.reason"),
-      ranking_delta: 3,
-      ranking_reason: t("exposureRadar.sample.item.two.rankingReason"),
-      guardrails: [
-        t("exposureRadar.sample.guardrail.noPitch"),
-        t("exposureRadar.sample.guardrail.context"),
-      ],
-      updated_at: new Date(now).toISOString(),
-    },
-  ];
 }
 
 function sessionStateTone(state: "complete" | "active" | "review" | "quiet") {

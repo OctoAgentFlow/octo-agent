@@ -82,6 +82,15 @@ export type SignalCredibility = {
   missing: string[];
   nextStep: string;
 };
+export type AccountFitLabel = "strong" | "good" | "weak" | "avoid";
+export type AccountFitSummary = {
+  label: AccountFitLabel;
+  score: number;
+  title: string;
+  detail: string;
+  keywords: string[];
+  guardrails: string[];
+};
 export type MemoryReplyCue = {
   key: string;
   title: string;
@@ -93,6 +102,8 @@ export type ResultLearningMove = {
   title: string;
   detail: string;
   tone: "positive" | "warning" | "neutral";
+  actionLabel?: string;
+  metric?: string;
 };
 export type ResultLearningSummary = ResultLearningMove;
 export type AccountHealthStatus = "healthy" | "watch" | "risk";

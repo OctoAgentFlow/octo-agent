@@ -335,15 +335,15 @@ func FreeTrialLimits() PlanLimits {
 
 func featuresForLimits(l PlanLimits) []PlanFeature {
 	return []PlanFeature{
-		{Key: "full_persona_fields", Label: "Full persona fields", Available: l.FullPersonaFields, MinPlan: PlanPlus},
-		{Key: "auto_dm_import", Label: "Content memory and review list management", Available: l.AutoDMImport, MinPlan: PlanPlus},
-		{Key: "advanced_bot_strategy", Label: "Advanced bot strategy", Available: l.AdvancedBotStrategy, MinPlan: PlanPro},
-		{Key: "bulk_review", Label: "Bulk review", Available: l.BulkReview, MinPlan: PlanPro},
-		{Key: "bot_performance", Label: "Bot performance analytics", Available: l.BotPerformance, MinPlan: PlanPro},
-		{Key: "data_export", Label: "Data export", Available: l.DataExport, MinPlan: PlanPro},
-		{Key: "multi_bot_matrix", Label: "Multi-bot matrix operation", Available: l.MultiBotMatrix, MinPlan: PlanProPlus},
-		{Key: "ab_testing", Label: "A/B testing", Available: l.ABTesting, MinPlan: PlanProPlus},
-		{Key: "advanced_flow_builder", Label: "Advanced Flow Builder", Available: l.AdvancedFlowBuilder, MinPlan: PlanProPlus},
+		{Key: "full_persona_fields", Label: "Full account persona and guardrails", Available: l.FullPersonaFields, MinPlan: PlanPlus},
+		{Key: "auto_dm_import", Label: "Content memory and handling list management", Available: l.AutoDMImport, MinPlan: PlanPlus},
+		{Key: "advanced_bot_strategy", Label: "Advanced account strategy recommendations", Available: l.AdvancedBotStrategy, MinPlan: PlanPro},
+		{Key: "bulk_review", Label: "Bulk handling review", Available: l.BulkReview, MinPlan: PlanPro},
+		{Key: "bot_performance", Label: "OAF Bot and account performance analytics", Available: l.BotPerformance, MinPlan: PlanPro},
+		{Key: "data_export", Label: "Outcome and content memory export", Available: l.DataExport, MinPlan: PlanPro},
+		{Key: "multi_bot_matrix", Label: "Multi-account OAF Bot matrix", Available: l.MultiBotMatrix, MinPlan: PlanProPlus},
+		{Key: "ab_testing", Label: "Reply angle experiments", Available: l.ABTesting, MinPlan: PlanProPlus},
+		{Key: "advanced_flow_builder", Label: "Advanced Growth Desk workflow builder", Available: l.AdvancedFlowBuilder, MinPlan: PlanProPlus},
 		{Key: "advanced_risk_rules", Label: "Advanced risk rules", Available: l.AdvancedRiskRules, MinPlan: PlanProPlus},
 		{Key: "priority_support", Label: "Priority support", Available: l.PrioritySupport, MinPlan: PlanProPlus},
 	}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Activity, ArrowRight, BarChart3, CalendarClock, CheckCircle2, Clock3, Database, Gauge, MessageCircle, RefreshCw, Search, ShieldAlert, Sparkles, Target, Users, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Bot, BrainCircuit, CalendarClock, CheckCircle2, Clock3, Database, ExternalLink, Gauge, MessageCircle, RefreshCw, Search, ShieldAlert, Sparkles, Target, Users, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -165,6 +165,9 @@ export function DailyGrowthDeskPanel({
   lastRefreshedAt,
   timeZone,
   loadState,
+  accountLabel,
+  botLabel,
+  accountIntelligenceHref,
   onRefresh,
 }: {
   selectedAccountID: number;
@@ -179,6 +182,9 @@ export function DailyGrowthDeskPanel({
   lastRefreshedAt: string;
   timeZone: string;
   loadState: LoadState;
+  accountLabel?: string;
+  botLabel?: string;
+  accountIntelligenceHref?: string;
   onRefresh: () => void;
 }) {
   const { t } = useT();
@@ -195,6 +201,7 @@ export function DailyGrowthDeskPanel({
   const effectiveRate = weeklyReview ? `${Math.round((weeklyReview.effective_rate || 0) * 100)}%` : "-";
   const rhythmSteps = ["scan", "reply", "save", "review"];
   const topTasks = moves.slice(0, 5);
+  const hasContext = Boolean(accountLabel || botLabel);
 
   return (
     <Card className="bg-[#0f1419]">
@@ -212,6 +219,32 @@ export function DailyGrowthDeskPanel({
           </div>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#e7e9ea]">{t("exposureRadar.dailyDesk.title")}</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.dailyDesk.description")}</p>
+          {hasContext ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[#2f3336] bg-black p-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+                <BrainCircuit className="size-3.5" />
+                {t("exposureRadar.dailyDesk.context.label")}
+              </span>
+              {accountLabel ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#e7e9ea]">
+                  <Users className="size-3.5 text-[#8b98a5]" />
+                  {accountLabel}
+                </span>
+              ) : null}
+              {botLabel ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#e7e9ea]">
+                  <Bot className="size-3.5 text-[#8b98a5]" />
+                  {botLabel}
+                </span>
+              ) : null}
+              {accountIntelligenceHref ? (
+                <a href={accountIntelligenceHref} className="inline-flex items-center gap-1 rounded-full border border-[#1d9bf0]/25 px-3 py-1 text-xs font-semibold text-[#8ecdf8] hover:bg-[#1d9bf0]/10">
+                  {t("exposureRadar.dailyDesk.context.open")}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <a href={focusAnchor} className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">

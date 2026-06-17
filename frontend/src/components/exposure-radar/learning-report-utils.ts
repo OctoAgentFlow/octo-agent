@@ -90,6 +90,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.backfill.title"),
       detail: t("exposureRadar.learningLoop.action.backfill.detail", { count: pendingBackfill }),
       tone: "warning",
+      actionLabel: t("exposureRadar.learningLoop.action.backfill.cta"),
+      metric: t("exposureRadar.learningLoop.action.backfill.metric", { count: pendingBackfill }),
     });
   }
   if (best) {
@@ -98,6 +100,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.best.title"),
       detail: t("exposureRadar.learningLoop.action.best.detail", { title: compactTitle(best.title || best.topic_name || best.signal_id), score: best.result_score || 0, views: formatCompact(best.result_impression_count || 0) }),
       tone: "positive",
+      actionLabel: t("exposureRadar.learningLoop.action.best.cta"),
+      metric: t("exposureRadar.learningLoop.action.best.metric", { score: best.result_score || 0 }),
     });
   }
   if (boostedTopic) {
@@ -106,6 +110,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.boosted.title"),
       detail: t("exposureRadar.learningLoop.action.boosted.detail", { topic: boostedTopic }),
       tone: "positive",
+      actionLabel: t("exposureRadar.learningLoop.action.boosted.cta"),
+      metric: boostedTopic,
     });
   }
   if (cautiousTopic || warnings > 0) {
@@ -114,6 +120,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.caution.title"),
       detail: cautiousTopic ? t("exposureRadar.learningLoop.action.caution.topic", { topic: cautiousTopic }) : t("exposureRadar.learningLoop.action.caution.safety", { count: warnings }),
       tone: "warning",
+      actionLabel: t("exposureRadar.learningLoop.action.caution.cta"),
+      metric: cautiousTopic || t("exposureRadar.learningLoop.action.caution.metric", { count: warnings }),
     });
   }
   if (nextMove) {
@@ -122,6 +130,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.next.title"),
       detail: t("exposureRadar.learningLoop.action.next.detail", { title: compactTitle(nextMove.title), score: nextMove.score }),
       tone: "neutral",
+      actionLabel: t("exposureRadar.learningLoop.action.next.cta"),
+      metric: t("exposureRadar.learningLoop.action.next.metric", { score: nextMove.score }),
     });
   }
   if (data?.diagnostics?.top_missing_reason && actions.length < 3) {
@@ -130,6 +140,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.diagnostic.title"),
       detail: t("exposureRadar.learningLoop.action.diagnostic.detail", { reason: data.diagnostics.top_missing_reason }),
       tone: "neutral",
+      actionLabel: t("exposureRadar.learningLoop.action.diagnostic.cta"),
+      metric: data.diagnostics.top_missing_reason,
     });
   }
   if (!actions.length) {
@@ -138,6 +150,8 @@ export function buildResultLearningMoves({
       title: t("exposureRadar.learningLoop.action.default.title"),
       detail: weeklyReview ? t("exposureRadar.learningLoop.action.default.review", { rate: Math.round((weeklyReview.effective_rate || 0) * 100) }) : t("exposureRadar.learningLoop.action.default.detail"),
       tone: "neutral",
+      actionLabel: t("exposureRadar.learningLoop.action.default.cta"),
+      metric: t("exposureRadar.learningLoop.action.default.metric"),
     });
   }
   return actions.slice(0, 3);

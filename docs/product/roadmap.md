@@ -75,6 +75,19 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 | UI smoke tests for core workflows | Done / refining | Added `scripts/smoke-core-workflows.sh` and runbook coverage for login, dashboard, Start Today, Exposure Radar, Daily X Queue, Content Drafts, Handling List, Billing, Admin, and optional API health. |
 | Legacy document archive | Done / refining | Added `docs/product/archive/legacy-automation-docs.md` as the historical archive entry. Individual old docs remain in place to avoid breaking links. |
 
+## Next Product Enhancement Sequence
+
+The next product work should improve decision quality and first-session clarity, not add higher-risk automation.
+
+| ID | Priority | Status | Goal |
+| --- | --- | --- | --- |
+| P125 | Account Intelligence handoff | Done | Keep `x_account_id` / `bot_id` context when moving from Account Intelligence into Daily Growth Desk, auto-pair bound Bots, and show the active account/Bot context on the desk. |
+| P126 | Opportunity fit scoring | Done | Signal cards and the handling workbench now show account fit score, fit keywords, avoid-topic guardrails, and on-lane/off-lane reasoning using existing `account_fit_*` fields plus local fallback inference. |
+| P127 | Reply quality coach | Done | Reply quality checks now include context, selected angle, specificity, length, non-promotional tone, and no growth-promise checks before copying/publishing manually. |
+| P128 | Result review next move | Done | Result learning actions now include visible next-action labels and metrics such as backfill links, repeat proven angle, slow down a weak lane, or handle the next controlled experiment. |
+| P129 | First-session guided path | Done | First-day launch now includes a guided first-session path: bind account/Bot, save strategy, handle one opportunity, and backfill one measurable result before scaling. |
+| P130 | Packaging and pricing clarity | Done | Marketing, billing, and plan feature labels are further aligned around Account Intelligence, Daily Growth Desk, opportunity drafts, content memory, review capacity, and learning windows. |
+
 ## Milestones
 
 | Milestone | Status | Scope |

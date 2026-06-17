@@ -85,6 +85,7 @@ export function FirstDayLaunchCard({
       </div>
       <SetupWizardPanel steps={wizardSteps} usingSampleMode={usingSampleMode} onStartSample={onStartSample} onExitSample={onExitSample} />
       <FirstDayActivationCard mode={activationMode} actions={activationActions} />
+      <FirstSessionPath steps={steps} checklist={checklist} />
       <div className="mt-4 grid gap-3 md:grid-cols-4">
         {steps.map((step, index) => (
           <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
@@ -440,6 +441,48 @@ export function DailyOperatingGoalsCard({
         )}
       </div>
     </Card>
+  );
+}
+
+function FirstSessionPath({ steps, checklist }: { steps: FirstDayLaunchStep[]; checklist: FirstDayChecklistItem[] }) {
+  const { t } = useT();
+  const doneCount = checklist.filter((item) => item.done).length;
+  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
+  return (
+    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Target className="size-3.5" />
+            {t("exposureRadar.firstDay.path.badge")}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("exposureRadar.firstDay.path.title")}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.firstDay.path.description")}</p>
+        </div>
+        <a href={nextStep.anchor} className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+          {t("exposureRadar.firstDay.path.next")}
+          <ArrowRight className="size-3.5" />
+        </a>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        {steps.map((step, index) => (
+          <a key={step.key} href={step.anchor} className={`rounded-xl border p-3 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[11px] font-semibold text-[#71767b]">{t("exposureRadar.firstDay.path.step", { index: index + 1 })}</span>
+              {step.done ? <CheckCircle2 className="size-3.5 text-[#7ee0b5]" /> : <Clock3 className="size-3.5 text-[#71767b]" />}
+            </div>
+            <p className="mt-2 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.path.${step.key}.title`)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.path.${step.key}.description`)}</p>
+          </a>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col gap-2 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.firstDay.path.rule")}</p>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#2f3336] bg-black px-2.5 py-1 text-[11px] font-semibold text-[#8b98a5]">
+          {doneCount}/{checklist.length} {t("exposureRadar.firstDay.path.checks")}
+        </span>
+      </div>
+    </div>
   );
 }
 

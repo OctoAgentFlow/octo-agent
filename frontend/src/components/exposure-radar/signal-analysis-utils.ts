@@ -1,21 +1,49 @@
 import type { ExposureRadarGrowthStrategyApi, ExposureRadarItemApi, ExposureRadarManualRecordApi } from "@/services/exposure-radar.service";
 import { exposureLearningTopicKey } from "@/components/exposure-radar/daily-action-plan-utils";
-import { hasPromotionalSmell } from "@/components/exposure-radar/opportunity-reply-utils";
+import { hasPromotionalSmell, hasRiskyGrowthClaim } from "@/components/exposure-radar/opportunity-reply-utils";
 import { publicEngagementCount } from "@/components/exposure-radar/people-radar-utils";
 import { uniqueList } from "@/components/exposure-radar/radar-signal-utils";
 import { formatCompact, formatVelocityLabel, normalizeDataConfidence, normalizeOpportunityTier, normalizeQualityStage, normalizeVelocityState, type TranslationFn } from "@/components/exposure-radar/radar-utils";
-import type { ExposureLearningProfile, MemoryReplyCue, ReplyAngleSuggestion, ReplyQualityScore, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary } from "@/components/exposure-radar/types";
+import type { AccountFitLabel, AccountFitSummary, ExposureLearningProfile, MemoryReplyCue, ReplyAngleSuggestion, ReplyQualityScore, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary } from "@/components/exposure-radar/types";
 
 export function buildReplyQualityScore(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion | undefined, generated: string): ReplyQualityScore {
   const checks = [
     { key: "context", pass: item.data_quality === "tweet_level" },
     { key: "angle", pass: Boolean(replyAngle) },
+    { key: "specificity", pass: !generated || generated.trim().length >= 24 },
     { key: "length", pass: !generated || generated.length <= 240 },
     { key: "noPitch", pass: !generated || !hasPromotionalSmell(generated) },
+    { key: "claims", pass: !generated || !hasRiskyGrowthClaim(generated) },
   ];
   const score = Math.round((checks.filter((check) => check.pass).length / checks.length) * 100);
   const status = checks[0].pass ? (score >= 75 ? "ready" : "needs_edit") : "research";
   return { score, status, checks };
+}
+
+export function buildAccountFitSummary(item: ExposureRadarItemApi, strategy: ExposureRadarGrowthStrategyApi | null, t: TranslationFn): AccountFitSummary {
+  const rawScore = typeof item.account_fit_score === "number" && Number.isFinite(item.account_fit_score) ? item.account_fit_score : undefined;
+  const explicitLabel = normalizeAccountFitLabel(item.account_fit_label);
+  const strategyKeywords = accountFitKeywordMatches(item, strategy?.core_topics || []);
+  const avoidMatches = accountFitKeywordMatches(item, strategy?.avoid_topics || []);
+  const guardrails = uniqueList([
+    ...(item.guardrails || []),
+    ...avoidMatches.map((topic) => t("exposureRadar.accountFit.guardrail.avoidTopic", { topic })),
+    item.risk_level === "high" ? t("exposureRadar.accountFit.guardrail.highRisk") : "",
+    item.risk_level === "medium" ? t("exposureRadar.accountFit.guardrail.mediumRisk") : "",
+    item.data_quality !== "tweet_level" ? t("exposureRadar.accountFit.guardrail.topicLevel") : "",
+  ]).slice(0, 4);
+  const keywords = uniqueList([...(item.account_fit_keywords || []), ...strategyKeywords]).slice(0, 5);
+  const inferredScore = inferAccountFitScore(item, keywords.length, avoidMatches.length);
+  const score = Math.max(0, Math.min(100, Math.round(rawScore ?? inferredScore)));
+  const label = explicitLabel || inferAccountFitLabel(score, item, avoidMatches.length);
+  return {
+    label,
+    score,
+    title: t(`exposureRadar.accountFit.label.${label}`),
+    detail: item.account_fit_reason || t(`exposureRadar.accountFit.detail.${label}`),
+    keywords,
+    guardrails,
+  };
 }
 
 export function buildSignalDecisionSummary(item: ExposureRadarItemApi, t: TranslationFn): SignalDecisionSummary {
@@ -161,4 +189,34 @@ export function buildMemoryReplyCues(
       tone: similarRecord ? "green" : "neutral",
     },
   ];
+}
+
+function normalizeAccountFitLabel(value?: string): AccountFitLabel | undefined {
+  if (value === "strong" || value === "good" || value === "weak" || value === "avoid") return value;
+  return undefined;
+}
+
+function inferAccountFitLabel(score: number, item: ExposureRadarItemApi, avoidMatches: number): AccountFitLabel {
+  if (item.risk_level === "high" || avoidMatches > 0) return "avoid";
+  if (score >= 78) return "strong";
+  if (score >= 58) return "good";
+  return "weak";
+}
+
+function inferAccountFitScore(item: ExposureRadarItemApi, keywordMatches: number, avoidMatches: number) {
+  let score = 38;
+  if (item.data_quality === "tweet_level") score += 14;
+  if ((item.score || 0) >= 70) score += 12;
+  if ((item.impression_count || 0) >= 1000) score += 8;
+  if ((item.views_per_min || 0) >= 5) score += 8;
+  score += Math.min(20, keywordMatches * 8);
+  if (item.risk_level === "medium") score -= 12;
+  if (item.risk_level === "high") score -= 28;
+  score -= Math.min(24, avoidMatches * 12);
+  return score;
+}
+
+function accountFitKeywordMatches(item: ExposureRadarItemApi, topics: string[]) {
+  const haystack = `${item.title || ""} ${item.content || ""} ${item.topic_name || ""}`.toLowerCase();
+  return uniqueList(topics.filter((topic) => topic && haystack.includes(topic.toLowerCase())));
 }

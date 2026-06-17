@@ -49,8 +49,8 @@ import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-rada
 import { exposureRadarQueryStateFromSearch, exposureRadarQueryStringFromState } from "@/components/exposure-radar/route-query-utils";
 import { buildSampleExposureItems } from "@/components/exposure-radar/sample-data-utils";
 import { buildDailyRecapText, buildNextSessionCarryovers, buildOperatorScratchpadSuggestions, firstLoopStepKey } from "@/components/exposure-radar/session-helper-utils";
-import { buildMemoryReplyCues, buildReplyQualityScore, buildSignalCredibility, buildSignalDecisionSummary } from "@/components/exposure-radar/signal-analysis-utils";
-import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
+import { buildAccountFitSummary, buildMemoryReplyCues, buildReplyQualityScore, buildSignalCredibility, buildSignalDecisionSummary } from "@/components/exposure-radar/signal-analysis-utils";
+import { AccountFitPanel, SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { buildStarterStrategyTemplates, parseCommaList, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
@@ -95,6 +95,7 @@ export default function ExposureRadarPage() {
   const [generatingSeedDraftID, setGeneratingSeedDraftID] = useState<string | null>(null);
   const [radarView, setRadarView] = useState<RadarViewFilter>("priority");
   const [workspaceTab, setWorkspaceTab] = useState<ExposureRadarWorkspaceTab>("today");
+  const [queryHydrated, setQueryHydrated] = useState(false);
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
@@ -121,6 +122,9 @@ export default function ExposureRadarPage() {
     selectedBotID,
     workspaceTab,
   });
+  const selectedAccount = useMemo(() => accounts.find((account) => account.id === selectedAccountID), [accounts, selectedAccountID]);
+  const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedBotID), [bots, selectedBotID]);
+  const selectedAccountIntelligenceHref = selectedAccountID > 0 ? `/accounts/${selectedAccountID}` : "";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -132,13 +136,15 @@ export default function ExposureRadarPage() {
     setSelectedAccountID(queryState.selectedAccountID);
     setSelectedBotID(queryState.selectedBotID);
     setWorkspaceTab(queryState.workspaceTab);
+    setQueryHydrated(true);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const query = exposureRadarQueryStringFromState(window.location.search, { region, hours, maxFans, minHotCount, workspaceTab });
+    if (!queryHydrated) return;
+    const query = exposureRadarQueryStringFromState(window.location.search, { region, hours, maxFans, minHotCount, selectedAccountID, selectedBotID, workspaceTab });
     window.history.replaceState(null, "", `${window.location.pathname}?${query}`);
-  }, [hours, maxFans, minHotCount, region, workspaceTab]);
+  }, [hours, maxFans, minHotCount, queryHydrated, region, selectedAccountID, selectedBotID, workspaceTab]);
 
   useEffect(() => {
     setManualActionStates(readManualActionStates());
@@ -317,23 +323,44 @@ export default function ExposureRadarPage() {
   }, [hours, hydrateManualWorkspace, maxFans, minHotCount, pushToast, region, selectedAccountID, selectedBotID, t]);
 
   useEffect(() => {
+    if (!queryHydrated) return;
     void load();
-  }, [load]);
+  }, [load, queryHydrated]);
 
   useEffect(() => {
     void (async () => {
       try {
         const [accountData, botData] = await Promise.all([accountService.list(), oafBotService.list()]);
         const connectedAccounts = accountData.items.filter((account) => account.status !== "disconnected");
+        const queryState = typeof window === "undefined"
+          ? initialQueryStateRef.current
+          : exposureRadarQueryStateFromSearch(window.location.search, initialQueryStateRef.current);
+        const accountIDForContext = queryState.selectedAccountID || connectedAccounts[0]?.id || 0;
+        const botIDForContext = queryState.selectedBotID
+          || botData.items.find((bot) => bot.twitter_account_id === accountIDForContext)?.id
+          || botData.items[0]?.id
+          || 0;
         setAccounts(connectedAccounts);
         setBots(botData.items);
-        setSelectedAccountID((current) => current || connectedAccounts[0]?.id || 0);
-        setSelectedBotID((current) => current || botData.items[0]?.id || 0);
+        setSelectedAccountID((current) => current || accountIDForContext);
+        setSelectedBotID((current) => current || botIDForContext);
       } catch (error) {
         pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.toast.configLoadFailed") : t("exposureRadar.toast.configLoadFailed"));
       }
     })();
   }, [pushToast, t]);
+
+  const selectAccountForRadar = useCallback((accountID: number) => {
+    setSelectedAccountID(accountID);
+    if (!accountID) {
+      setSelectedBotID(0);
+      return;
+    }
+    const boundBot = bots.find((bot) => bot.twitter_account_id === accountID);
+    if (boundBot) {
+      setSelectedBotID(boundBot.id);
+    }
+  }, [bots]);
 
   const loadContentDraftBridge = useCallback(async () => {
     setContentDraftBridgeLoading(true);
@@ -813,6 +840,9 @@ export default function ExposureRadarPage() {
               lastRefreshedAt={lastRefreshedAt}
               timeZone={timeZone}
               loadState={loadState}
+              accountLabel={selectedAccount ? `@${selectedAccount.username}` : ""}
+              botLabel={selectedBot?.name || ""}
+              accountIntelligenceHref={selectedAccountIntelligenceHref}
               onRefresh={() => void load()}
             />
           )}
@@ -1102,7 +1132,7 @@ export default function ExposureRadarPage() {
           onHoursChange={setHours}
           onMaxFansChange={setMaxFans}
           onMinHotCountChange={setMinHotCount}
-          onAccountChange={setSelectedAccountID}
+          onAccountChange={selectAccountForRadar}
           onBotChange={setSelectedBotID}
         />
       ) : null}
@@ -1464,8 +1494,21 @@ function ResultLearningLoopPanel({
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {actions.map((action) => (
           <div key={action.key} className={`rounded-2xl border p-4 ${resultLearningTone(action.tone)}`}>
-            <p className="text-sm font-semibold">{action.title}</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold">{action.title}</p>
+              {action.metric ? (
+                <span className="max-w-[9rem] truncate rounded-full border border-current/20 bg-black/25 px-2 py-0.5 text-[11px] font-semibold">
+                  {action.metric}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-2 text-xs leading-5 opacity-85">{action.detail}</p>
+            {action.actionLabel ? (
+              <p className="mt-3 inline-flex items-center gap-1 rounded-full border border-current/20 bg-black/25 px-2.5 py-1 text-[11px] font-semibold">
+                {action.actionLabel}
+                <ArrowRight className="size-3" />
+              </p>
+            ) : null}
           </div>
         ))}
       </div>
@@ -3098,6 +3141,7 @@ function HandlingWorkbenchPanel({
   const activeExplanation = activeItem ? buildOpportunityExplanation(activeItem, t) : null;
   const activeDecision = activeItem ? buildSignalDecisionSummary(activeItem, t) : null;
   const activeCredibility = activeItem ? buildSignalCredibility(activeItem, t) : null;
+  const activeAccountFit = activeItem ? buildAccountFitSummary(activeItem, strategy, t) : null;
   const replyAngles = activeItem ? buildReplyAngleSuggestions(activeItem, t) : [];
   const selectedReplyAngle = replyAngles.find((angle) => angle.id === selectedReplyAngleIDs[activeItem?.id || ""]) || replyAngles[0];
   const selectedReplyPlan = activeItem && selectedReplyAngle ? buildReplyPlan(activeItem, selectedReplyAngle, t) : null;
@@ -3159,6 +3203,7 @@ function HandlingWorkbenchPanel({
             {activeDecision && activeCredibility ? <OpportunityDecisionBrief item={activeItem} summary={activeDecision} credibility={activeCredibility} replyAngle={selectedReplyAngle} /> : null}
             {activeDecision ? <SignalDecisionCard summary={activeDecision} /> : null}
             {activeCredibility ? <SignalCredibilityPanel credibility={activeCredibility} /> : null}
+            {activeAccountFit ? <AccountFitPanel fit={activeAccountFit} /> : null}
             {activeExplanation ? <OpportunityExplanationPanel explanation={activeExplanation} /> : null}
             {replyAngles.length ? (
               <ReplyAngleSuggestionsPanel
@@ -3392,6 +3437,7 @@ function RadarCard({
       <RadarCardVelocityTrend item={item} />
       <SignalDecisionCard summary={buildSignalDecisionSummary(item, t)} />
       <SignalCredibilityPanel credibility={buildSignalCredibility(item, t)} compact />
+      <AccountFitPanel fit={buildAccountFitSummary(item, null, t)} compact />
       <RadarCardRecommendedUse item={item} />
       <RadarCardGeneratedCommentBlock
         generatedComment={generatedComment}

@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CheckCircle2, Gauge, Info, Zap } from "lucide-react";
+import { CheckCircle2, Gauge, Info, ShieldCheck, Target, Zap } from "lucide-react";
 
 import { useT } from "@/i18n/use-t";
-import type { SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary } from "@/components/exposure-radar/types";
+import type { AccountFitLabel, AccountFitSummary, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary } from "@/components/exposure-radar/types";
 
 export function SignalDecisionCard({ summary }: { summary: SignalDecisionSummary }) {
   const { t } = useT();
@@ -65,6 +65,39 @@ export function SignalCredibilityPanel({ credibility, compact = false }: { credi
   );
 }
 
+export function AccountFitPanel({ fit, compact = false }: { fit: AccountFitSummary; compact?: boolean }) {
+  const { t } = useT();
+  return (
+    <div className={`mt-4 rounded-2xl border p-3 ${accountFitTone(fit.label)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold opacity-80">{t("exposureRadar.accountFit.title")}</p>
+          <p className="mt-1 text-sm font-semibold">{fit.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-85">{fit.detail}</p>
+        </div>
+        <span className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border border-current/20 bg-black/20 px-2.5 py-1 text-[11px] font-semibold">
+          <Target className="size-3.5" />
+          {fit.score}/100
+        </span>
+      </div>
+      <div className={`mt-3 grid gap-2 ${compact ? "sm:grid-cols-2" : "lg:grid-cols-2"}`}>
+        <CredibilityColumn
+          title={t("exposureRadar.accountFit.keywords")}
+          items={fit.keywords}
+          empty={t("exposureRadar.accountFit.keywordsEmpty")}
+          icon={<CheckCircle2 className="size-3.5" />}
+        />
+        <CredibilityColumn
+          title={t("exposureRadar.accountFit.guardrails")}
+          items={fit.guardrails}
+          empty={t("exposureRadar.accountFit.guardrailsEmpty")}
+          icon={<ShieldCheck className="size-3.5" />}
+        />
+      </div>
+    </div>
+  );
+}
+
 function CredibilityColumn({ title, items, empty, icon }: { title: string; items: string[]; empty: string; icon: ReactNode }) {
   return (
     <div className="rounded-xl border border-current/15 bg-black/20 p-3">
@@ -101,5 +134,18 @@ function signalCredibilityTone(status: SignalCredibilityStatus) {
       return "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]";
     default:
       return "border-[#64748b]/30 bg-[#0b0f14] text-[#94a3b8]";
+  }
+}
+
+function accountFitTone(label: AccountFitLabel) {
+  switch (label) {
+    case "strong":
+      return "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]";
+    case "good":
+      return "border-[#1d9bf0]/25 bg-[#08131f] text-[#8ecdf8]";
+    case "avoid":
+      return "border-[#f4212e]/25 bg-[#1f0b0d] text-[#ff8a91]";
+    default:
+      return "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]";
   }
 }

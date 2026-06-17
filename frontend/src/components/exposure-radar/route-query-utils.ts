@@ -29,7 +29,7 @@ export function exposureRadarQueryStateFromSearch(search: string, current: Expos
 
 export function exposureRadarQueryStringFromState(
   search: string,
-  state: Pick<ExposureRadarQueryState, "region" | "hours" | "maxFans" | "minHotCount" | "workspaceTab">,
+  state: Pick<ExposureRadarQueryState, "region" | "hours" | "maxFans" | "minHotCount" | "selectedAccountID" | "selectedBotID" | "workspaceTab">,
 ) {
   const params = new URLSearchParams(search);
   params.set("region", state.region);
@@ -37,6 +37,17 @@ export function exposureRadarQueryStringFromState(
   params.set("max_fans", String(state.maxFans));
   params.set("min_hot_count", String(state.minHotCount));
   params.set("tab", state.workspaceTab);
+  if (state.selectedAccountID > 0) {
+    params.set("x_account_id", String(state.selectedAccountID));
+  } else {
+    params.delete("x_account_id");
+    params.delete("account_id");
+  }
+  if (state.selectedBotID > 0) {
+    params.set("bot_id", String(state.selectedBotID));
+  } else {
+    params.delete("bot_id");
+  }
   return params.toString();
 }
 

@@ -21,6 +21,7 @@ import { exposureRadarWorkspaceTabs, fanOptions, hotCountOptions, hourOptions, r
 import { DailyOperatingGoalsCard, FirstDayLaunchCard, PreflightSafetyCard, RadarEmptyStateCard, SessionFocusCard } from "@/components/exposure-radar/activation-session-panels";
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
 import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, exposureLearningTopicKey, isDeferredManualTask, radarItemMatchesFilter } from "@/components/exposure-radar/daily-action-plan-utils";
+import { buildPriorityReasonChips, resultLearningTone, sessionStateTone } from "@/components/exposure-radar/display-helper-utils";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
@@ -4653,17 +4654,6 @@ function buildResultLearningSummary({
   };
 }
 
-function resultLearningTone(tone: ResultLearningMove["tone"]) {
-  switch (tone) {
-    case "positive":
-      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "warning":
-      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-    default:
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  }
-}
-
 function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>): WorkbenchStats {
   return items.reduce((acc, item) => {
     const handled = isManualActionHandled(item, manualActionStates[item.id]);
@@ -4737,20 +4727,6 @@ function buildDailyOperatingGoals(
       target: backfillTarget,
     },
   ];
-}
-
-function buildPriorityReasonChips(item: ExposureRadarItemApi, t: (key: string, params?: Record<string, string | number>) => string) {
-  const qualityStage = normalizeQualityStage(item.quality_stage, item);
-  const tier = normalizeOpportunityTier(item.opportunity_tier);
-  return [
-    item.score >= 80 ? t("exposureRadar.firstLoop.why.highScore", { score: item.score }) : "",
-    qualityStage === "act_now" ? t("exposureRadar.firstLoop.why.actNow") : "",
-    tier === "hot_opportunity" || tier === "rising_opportunity" ? t(`exposureRadar.firstLoop.why.${tier}`) : "",
-    typeof item.views_per_min === "number" && item.views_per_min > 0 ? t("exposureRadar.firstLoop.why.velocity", { speed: formatOneDecimal(item.views_per_min) }) : "",
-    typeof item.impression_count === "number" && item.impression_count > 0 ? t("exposureRadar.firstLoop.why.views", { views: formatCompact(item.impression_count) }) : "",
-    typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000 ? t("exposureRadar.firstLoop.why.smallAuthor", { fans: formatCompact(item.followers_count) }) : "",
-    item.risk_level === "low" ? t("exposureRadar.firstLoop.why.lowRisk") : "",
-  ].filter(Boolean).slice(0, 4);
 }
 
 function buildPublishGateItems(
@@ -4961,17 +4937,4 @@ function firstLoopStepKey(item?: ExposureRadarItemApi, manualState?: ManualActio
   if (!manualState?.opened) return "open";
   if (!isManualActionHandled(item, manualState)) return "handle";
   return "backfill";
-}
-
-function sessionStateTone(state: "complete" | "active" | "review" | "quiet") {
-  switch (state) {
-    case "complete":
-      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "active":
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-    case "review":
-      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-    default:
-      return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
-  }
 }

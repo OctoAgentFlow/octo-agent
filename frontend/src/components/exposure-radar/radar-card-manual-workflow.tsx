@@ -8,6 +8,7 @@ import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
 import { manualOutcomeOptions } from "@/components/exposure-radar/constants";
+import { extractTweetID } from "@/components/exposure-radar/radar-signal-utils";
 import type { ManualActionState, ManualOutcome, SafetyReviewStatus } from "@/components/exposure-radar/types";
 
 type ResultPayload = {
@@ -333,11 +334,4 @@ function safetyReviewBadgeTone(status: SafetyReviewStatus) {
     default:
       return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
   }
-}
-
-function extractTweetID(raw: string) {
-  const trimmed = raw.trim();
-  if (/^\d+$/.test(trimmed)) return trimmed;
-  const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
-  return match?.[1] || "";
 }

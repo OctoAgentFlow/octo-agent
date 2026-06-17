@@ -16,6 +16,7 @@ import { contentDraftService, type ContentDraftPlanApi } from "@/services/conten
 import { contentLibraryService, type ContentLibraryItemPayload } from "@/services/content-library.service";
 import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticsApi, type ExposureRadarGrowthStrategyApi, type ExposureRadarItemApi, type ExposureRadarManualRecordApi, type ExposureRadarManualRecordPayload, type ExposureRadarPeopleItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion, type ExposureRadarResultRefreshApi, type ExposureRadarSafetyCenterData, type ExposureRadarSafetyCheckApi, type ExposureRadarWeeklyReviewData } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
+import { appendOperatorNote, dailyDeskFocusAnchor, dailyDeskFocusKey, dailyDeskRhythmAnchor, firstDayActivationActions, firstDayActivationMode, sessionFocusOptions } from "@/components/exposure-radar/activation-session-utils";
 import { exposureRadarWorkspaceTabs, fanOptions, hotCountOptions, hourOptions, manualOutcomeFeedbackMeta, radarViewFilters, replyAngleGenerationGuides } from "@/components/exposure-radar/constants";
 import { DailyOperatingGoalsCard, FirstDayLaunchCard, PreflightSafetyCard, RadarEmptyStateCard, SessionFocusCard } from "@/components/exposure-radar/activation-session-panels";
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
@@ -31,6 +32,7 @@ import { diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnos
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
+import { clampPriority, compactTitle, extractTweetID, isSampleRadarItem, radarCardAnchorID, scoreManualResult, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeManualOutcome, normalizeManualTaskStatus, normalizeOpportunityTier, normalizePeopleRadarStage, normalizeQualityStage, normalizeSafetyReviewStatus, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
@@ -38,7 +40,7 @@ import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposur
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
-import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, DailyDeskFocusKey, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayActivationAction, FirstDayActivationMode, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
 export default function ExposureRadarPage() {
@@ -5033,107 +5035,6 @@ function buildWorkbenchStats(items: ExposureRadarItemApi[], manualActionStates: 
   }, { pending: 0, actNow: 0, handled: 0 });
 }
 
-function dailyDeskFocusKey({
-  selectedAccountID,
-  selectedBotID,
-  strategyReady,
-  stats,
-  moves,
-  recentBackfilled,
-}: {
-  selectedAccountID: number;
-  selectedBotID: number;
-  strategyReady: boolean;
-  stats: WorkbenchStats;
-  moves: DailyActionPlanItem[];
-  recentBackfilled: number;
-}): DailyDeskFocusKey {
-  if (!selectedAccountID || !selectedBotID) return "setup";
-  if (!strategyReady) return "strategy";
-  if (stats.actNow > 0 || moves.length > 0) return "handle";
-  if (stats.handled > 0 && recentBackfilled === 0) return "backfill";
-  return "review";
-}
-
-function dailyDeskFocusAnchor(key: DailyDeskFocusKey) {
-  if (key === "setup") return "#radar-setup";
-  if (key === "strategy") return "#radar-strategy";
-  if (key === "backfill" || key === "review") return "#radar-results";
-  return "#radar-workbench";
-}
-
-function dailyDeskRhythmAnchor(step: string) {
-  if (step === "scan") return "#radar-setup";
-  if (step === "save") return "#radar-people";
-  if (step === "review") return "#radar-results";
-  return "#radar-workbench";
-}
-
-function firstDayActivationMode({
-  selectedAccountID,
-  selectedBotID,
-  strategyReady,
-  itemsCount,
-  movesCount,
-  handledCount,
-  resultCount,
-}: {
-  selectedAccountID: number;
-  selectedBotID: number;
-  strategyReady: boolean;
-  itemsCount: number;
-  movesCount: number;
-  handledCount: number;
-  resultCount: number;
-}): FirstDayActivationMode {
-  if (!selectedAccountID || !selectedBotID) return "setup";
-  if (!strategyReady) return "strategy";
-  if (!itemsCount && !movesCount) return "signals";
-  if (!handledCount) return "handle";
-  if (!resultCount) return "result";
-  return "complete";
-}
-
-function firstDayActivationActions(mode: FirstDayActivationMode, onRefresh: () => void, loadState: LoadState, onStartSample: () => void): FirstDayActivationAction[] {
-  const refreshAction = { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading", primary: true };
-  const sampleAction = { key: "sample", icon: <Sparkles className="size-4" />, onClick: onStartSample };
-  switch (mode) {
-    case "setup":
-      return [
-        { key: "accounts", href: "/accounts", icon: <Users className="size-4" />, primary: true },
-        { key: "bots", href: "/oaf-bots", icon: <Bot className="size-4" /> },
-        { key: "selectors", href: "#radar-setup", icon: <Target className="size-4" /> },
-      ];
-    case "strategy":
-      return [
-        { key: "strategy", href: "#radar-strategy", icon: <Target className="size-4" />, primary: true },
-        { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading" },
-      ];
-    case "signals":
-      return [
-        refreshAction,
-        sampleAction,
-        { key: "filters", href: "#radar-setup", icon: <SlidersHorizontal className="size-4" /> },
-        { key: "strategy", href: "#radar-strategy", icon: <Target className="size-4" /> },
-      ];
-    case "handle":
-      return [
-        { key: "workbench", href: "#radar-workbench", icon: <MessageCircle className="size-4" />, primary: true },
-        { key: "people", href: "#radar-people", icon: <Users className="size-4" /> },
-      ];
-    case "result":
-      return [
-        { key: "results", href: "#radar-results", icon: <BarChart3 className="size-4" />, primary: true },
-        { key: "workbench", href: "#radar-workbench", icon: <MessageCircle className="size-4" /> },
-      ];
-    default:
-      return [
-        { key: "review", href: "#radar-results", icon: <CheckCircle2 className="size-4" />, primary: true },
-        refreshAction,
-      ];
-  }
-}
-
 function buildDailyOperatingGoals(
   strategy: ExposureRadarGrowthStrategyApi | null,
   stats: WorkbenchStats,
@@ -5188,15 +5089,6 @@ function buildDailyOperatingGoals(
       done: Math.min(backfilledCount, backfillTarget),
       target: backfillTarget,
     },
-  ];
-}
-
-function sessionFocusOptions(t: (key: string) => string): Array<{ key: SessionFocusKey; icon: ReactNode; title: string; description: string }> {
-  return [
-    { key: "relationships", icon: <Users className="size-4" />, title: t("exposureRadar.sessionFocus.relationships.title"), description: t("exposureRadar.sessionFocus.relationships.description") },
-    { key: "research", icon: <Search className="size-4" />, title: t("exposureRadar.sessionFocus.research.title"), description: t("exposureRadar.sessionFocus.research.description") },
-    { key: "traffic", icon: <TrendingUp className="size-4" />, title: t("exposureRadar.sessionFocus.traffic.title"), description: t("exposureRadar.sessionFocus.traffic.description") },
-    { key: "memory", icon: <Database className="size-4" />, title: t("exposureRadar.sessionFocus.memory.title"), description: t("exposureRadar.sessionFocus.memory.description") },
   ];
 }
 
@@ -5324,11 +5216,6 @@ function buildOperatorScratchpadSuggestions(
   ];
 }
 
-function appendOperatorNote(current: string, addition: string) {
-  const trimmed = current.trim();
-  return trimmed ? `${trimmed}\n- ${addition}` : `- ${addition}`;
-}
-
 function buildNextSessionCarryovers(
   items: ExposureRadarItemApi[],
   manualActionStates: Record<string, ManualActionState>,
@@ -5419,10 +5306,6 @@ function buildDailyRecapText({
   ].join("\n");
 }
 
-function isSampleRadarItem(item: ExposureRadarItemApi) {
-  return item.id.startsWith("sample-") || item.data_source === "sample_mode";
-}
-
 function firstLoopStepKey(item?: ExposureRadarItemApi, manualState?: ManualActionState, firstLoopDone?: boolean) {
   if (firstLoopDone || manualState?.resultCheckedAt) return "done";
   if (!item) return "recover";
@@ -5431,21 +5314,6 @@ function firstLoopStepKey(item?: ExposureRadarItemApi, manualState?: ManualActio
   if (!manualState?.opened) return "open";
   if (!isManualActionHandled(item, manualState)) return "handle";
   return "backfill";
-}
-
-function scoreManualResult(result: {
-  impressions?: number;
-  likes?: number;
-  replies?: number;
-  reposts?: number;
-  quotes?: number;
-  bookmarks?: number;
-}) {
-  const impressions = result.impressions || 0;
-  const engagement = (result.likes || 0) + (result.replies || 0) * 3 + (result.reposts || 0) * 4 + (result.quotes || 0) * 4 + (result.bookmarks || 0) * 2;
-  const impressionScore = impressions > 0 ? Math.min(60, Math.round(Math.log10(impressions + 1) * 18)) : 0;
-  const engagementScore = Math.min(40, engagement * 3);
-  return Math.max(0, Math.min(100, impressionScore + engagementScore));
 }
 
 function buildSampleExposureItems(region: ExposureRadarRegion, t: (key: string, params?: Record<string, string | number>) => string): ExposureRadarItemApi[] {
@@ -6547,25 +6415,6 @@ function radarItemSavedMemoryID(item: ExposureRadarItemApi, savedMemoryIDs: Set<
   return savedMemoryIDs.has(item.id) ? -1 : 0;
 }
 
-function radarCardAnchorID(id: string) {
-  return `radar-signal-${id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-}
-
-function compactTitle(value: string) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= 96) return normalized;
-  return `${normalized.slice(0, 93).trim()}...`;
-}
-
-function uniqueList(values: Array<string | undefined>) {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).slice(0, 12);
-}
-
-function clampPriority(score: number) {
-  if (!Number.isFinite(score)) return 50;
-  return Math.max(50, Math.min(100, Math.round(score)));
-}
-
 function buildLeaderboardStats(items: ExposureRadarItemApi[], rankChanges: Map<string, RankChange>): LeaderboardStats {
   const stats: LeaderboardStats = { new: 0, burst: 0, rising: 0, steady: 0, cooling: 0, unknown: 0, newCount: 0, movers: 0 };
   items.forEach((item) => {
@@ -6587,11 +6436,4 @@ function getPositiveParam(params: URLSearchParams, key: string, fallback: number
 function getNonNegativeParam(params: URLSearchParams, key: string, fallback: number) {
   const value = Number(params.get(key));
   return Number.isFinite(value) && value >= 0 ? value : fallback;
-}
-
-function extractTweetID(raw: string) {
-  const trimmed = raw.trim();
-  if (/^\d+$/.test(trimmed)) return trimmed;
-  const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
-  return match?.[1] || "";
 }

@@ -1,5 +1,8 @@
 # Auto Post 在 OAF Bot 体系下的产品重设计
 
+> Historical archive note, updated 2026-06-17:
+> This document describes an older automation-heavy direction. The current product direction is the manual, review-first Daily Growth Desk / Exposure Radar workflow. See `docs/product/archive/legacy-automation-docs.md` before reusing ideas from this document.
+
 ## 1. 产品定位
 
 Auto Post 不应该只是“用户手动创建一条固定帖子，然后等待定时发布”。在 OAF Bot 体系下，Auto Post 应该成为一个由机器人持续运营的内容发布工作流：

@@ -1,5 +1,8 @@
 # OAF Bot Execution Mode 产品设计
 
+> Historical archive note, updated 2026-06-17:
+> This document includes older automation-mode concepts. The current default product stance is manual, review-first operation. Keep this document for compatibility context; do not use it to reintroduce unattended commenting, DM outreach, or spam-like automation.
+
 ## 背景
 
 OAF Bot 的长期方向是托管式 AI 社交运营，而不是让用户逐条处理所有 AI 生成内容。用户需要根据风险承受能力、套餐等级和场景差异，在“只给建议”“人工审核”“全托管执行”之间切换。

@@ -25,14 +25,14 @@ import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, radarItemMatchesF
 import { buildPriorityReasonChips, resultLearningTone, sessionStateTone } from "@/components/exposure-radar/display-helper-utils";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
-import { buildResultLearningMoves, buildResultLearningSummary, topRecordLabels } from "@/components/exposure-radar/learning-report-utils";
+import { buildResultLearningMoves, buildResultLearningSummary } from "@/components/exposure-radar/learning-report-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { bestExposureResultRecord, buildDailyReviewActions, buildDailyReviewReportText, buildDailyReviewTopics, buildGrowthDeskBrief, buildGrowthDeskBriefPreview, isRecentManualRecord } from "@/components/exposure-radar/growth-desk-utils";
 import { buildManualOutcomePayload, buildManualRecordPayload, buildManualResultPatch, buildResolvedManualResultPatch, buildSampleResolvedResultPatch, mergeManualRecordStates, mergePeopleRadar, normalizeResultLookupStatus, type ManualResultInput } from "@/components/exposure-radar/manual-record-utils";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
-import { AccountHealthScorePanel, GrowthExperimentPanel, OpportunityEvidenceDeskPanel, WeeklyOperatorReviewPanel } from "@/components/exposure-radar/operating-desk-panel-containers";
-import { MemoryAssetDeskCard, PeopleRelationshipDeskCard, peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
+import { AccountHealthScorePanel, GrowthExperimentPanel, MemoryAssetDeskPanel, OpportunityEvidenceDeskPanel, PeopleRelationshipDeskPanel, WeeklyOperatorReviewPanel } from "@/components/exposure-radar/operating-desk-panel-containers";
+import { peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { ActionPlanMetric, CommandList, CommandStep, FirstLoopActionRow, GrowthDeskMetric, LightMetric, MiniStat, ReviewList, StrategyInput } from "@/components/exposure-radar/panel-primitives";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
@@ -1261,54 +1261,6 @@ export default function ExposureRadarPage() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function PeopleRelationshipDeskPanel({ people, recentRecords, onFocus }: { people: PeopleRadarEntry[]; recentRecords: ExposureRadarManualRecordApi[]; onFocus: (itemID: string) => void }) {
-  const priority = people.filter((person) => person.stage === "priority" || person.crmStage === "priority");
-  const repeat = people.filter((person) => person.stage === "repeat");
-  const engaged = people.filter((person) => person.stage === "engaged" || person.handled > 0);
-  const avoid = people.filter((person) => person.stage === "avoid" || person.crmStage === "avoid");
-  const topPeople = [...priority, ...repeat, ...engaged].filter((person, index, list) => list.findIndex((row) => row.key === person.key) === index).slice(0, 3);
-  const relationshipRecords = recentRecords.filter((record) => record.author_handle && (record.handled_at || record.feedback_at || record.saved_at));
-  return (
-    <PeopleRelationshipDeskCard
-      relationshipCount={relationshipRecords.length}
-      priorityCount={priority.length}
-      repeatCount={repeat.length}
-      engagedCount={engaged.length}
-      avoidCount={avoid.length}
-      topPeople={topPeople}
-      onFocus={onFocus}
-    />
-  );
-}
-
-function MemoryAssetDeskPanel({
-  bridge,
-  items,
-  recentRecords,
-  savedMemoryIDs,
-  manualActionStates,
-}: {
-  bridge: ContentDraftBridgeData;
-  items: ExposureRadarItemApi[];
-  recentRecords: ExposureRadarManualRecordApi[];
-  savedMemoryIDs: Set<string>;
-  manualActionStates: Record<string, ManualActionState>;
-}) {
-  const savedSignals = items.filter((item) => radarItemSavedMemoryID(item, savedMemoryIDs)).length;
-  const localSaved = Object.values(manualActionStates).filter((state) => state.saved).length;
-  const effectiveTopics = topRecordLabels(recentRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60), "topic_name", 4);
-  const contentSeeds = bridge.drafts.filter((draft) => draft.content_library_item_id || draft.content_direction || draft.content_title).slice(0, 3);
-  return (
-    <MemoryAssetDeskCard
-      savedSignalsCount={savedSignals + localSaved}
-      draftCount={bridge.drafts.length}
-      enabledPlanCount={bridge.plans.filter((plan) => plan.enabled).length}
-      effectiveTopics={effectiveTopics}
-      contentSeeds={contentSeeds}
-    />
   );
 }
 

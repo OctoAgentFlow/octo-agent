@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	htmlstd "html"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,6 +22,8 @@ import (
 
 const (
 	dailyXQueueDraftCount       = 3
+	dailyXQueueWebsiteReadLimit = 512 * 1024
+	dailyXQueueImportedBodyMax  = 8000
 	dailyXQueuePreviewSetup     = "activity.preview.dailyXQueueSetupSaved"
 	dailyXQueuePreviewSource    = "activity.preview.dailyXQueueSourceSaved"
 	dailyXQueuePreviewGenerated = "activity.preview.dailyXQueueGenerated"
@@ -31,6 +39,7 @@ const (
 var (
 	ErrDailyXQueueSetupRequired    = errors.New("daily x queue setup is required")
 	ErrDailyXQueueSourceRequired   = errors.New("source material is required")
+	ErrDailyXQueueInvalidSourceURL = errors.New("source url must be a public http or https url")
 	ErrDailyXQueueRejectReason     = errors.New("reject reason is required")
 	ErrDailyXQueueDraftUnsupported = errors.New("draft is not available in daily x queue")
 )
@@ -38,8 +47,30 @@ var (
 type dailyXQueueTextGenerator func(context.Context, GenerateContentDraftInput) (AIGeneratedText, error)
 type dailyXQueueRewriteGenerator func(context.Context, GenerateContentDraftInput, string, string, string) (AIGeneratedText, error)
 
+var (
+	dailyXQueueTitleRe        = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	dailyXQueueMetaDescRe     = regexp.MustCompile(`(?is)<meta\s+[^>]*(?:name|property)=["'](?:description|og:description)["'][^>]*content=["']([^"']*)["'][^>]*>`)
+	dailyXQueueMetaDescAltRe  = regexp.MustCompile(`(?is)<meta\s+[^>]*content=["']([^"']*)["'][^>]*(?:name|property)=["'](?:description|og:description)["'][^>]*>`)
+	dailyXQueueScriptStyleRe  = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>|<noscript[^>]*>.*?</noscript>|<svg[^>]*>.*?</svg>`)
+	dailyXQueueTagRe          = regexp.MustCompile(`(?is)<[^>]+>`)
+	dailyXQueueWhitespaceRe   = regexp.MustCompile(`\s+`)
+	dailyXQueueUnsafeProtocol = regexp.MustCompile(`(?i)^\s*(javascript|data|file|ftp):`)
+	dailyXQueueHTTPClient     = func() *http.Client {
+		return &http.Client{
+			Timeout: 8 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 4 {
+					return fmt.Errorf("source url redirected too many times")
+				}
+				return validateDailyXQueueParsedURL(req.URL)
+			},
+		}
+	}
+)
+
 type DailyXQueueService struct {
 	contextRepo      *repository.DailyXQueueContextRepository
+	runRepo          *repository.DailyXQueueRunRepository
 	botRepo          *repository.OAFBotRepository
 	accountRepo      *repository.TwitterAccountRepository
 	contentRepo      *repository.ContentLibraryRepository
@@ -56,9 +87,10 @@ type DailyXQueueService struct {
 	rewriteText  dailyXQueueRewriteGenerator
 }
 
-func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, contentDraftRepo *repository.ContentDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
+func NewDailyXQueueService(contextRepo *repository.DailyXQueueContextRepository, runRepo *repository.DailyXQueueRunRepository, botRepo *repository.OAFBotRepository, accountRepo *repository.TwitterAccountRepository, contentRepo *repository.ContentLibraryRepository, contentDraftRepo *repository.ContentDraftRepository, usageRepo *repository.AIGenerationUsageRepository, feedbackRepo *repository.OAFBotGenerationFeedbackRepository, activityRepo *repository.ActivityRepository, verdictRepo *repository.ReviewQueueFeedbackIssueVerdictRepository, prefRepo *repository.OAFBotLearningRulePreferenceRepository, oafBot *OAFBotService, ai *AIService) *DailyXQueueService {
 	return &DailyXQueueService{
 		contextRepo:      contextRepo,
+		runRepo:          runRepo,
 		botRepo:          botRepo,
 		accountRepo:      accountRepo,
 		contentRepo:      contentRepo,
@@ -208,6 +240,28 @@ func (s *DailyXQueueService) SaveSourceMaterial(userID uint, req dto.DailyXQueue
 	return &dto.DailyXQueueSourceMaterialResponse{Context: dailyXContextToDTO(*ctxRow), SourceMaterial: out}, nil
 }
 
+func (s *DailyXQueueService) ImportSourceMaterialFromURL(ctx context.Context, userID uint, req dto.DailyXQueueImportURLRequest) (*dto.DailyXQueueSourceMaterialResponse, error) {
+	ctxRow, err := s.latestContext(userID)
+	if err != nil {
+		return nil, ErrDailyXQueueSetupRequired
+	}
+	page, err := fetchDailyXQueueWebsiteContent(ctx, req.SourceURL)
+	if err != nil {
+		return nil, err
+	}
+	topics := []string{}
+	if page.Host != "" {
+		topics = append(topics, page.Host)
+	}
+	return s.SaveSourceMaterial(userID, dto.DailyXQueueSourceMaterialRequest{
+		Title:      page.Title,
+		Body:       page.Body,
+		SourceURL:  page.SourceURL,
+		Topics:     topics,
+		GrowthGoal: firstNonEmpty(ctxRow.ProductContext, ctxRow.TargetAudience),
+	})
+}
+
 func (s *DailyXQueueService) SelectSourceMaterial(userID uint, req dto.DailyXQueueSelectSourceMaterialRequest) (*dto.DailyXQueueSourceMaterialResponse, error) {
 	ctxRow, err := s.latestContext(userID)
 	if err != nil || ctxRow.BotID == 0 {
@@ -240,6 +294,125 @@ func (s *DailyXQueueService) SelectSourceMaterial(userID uint, req dto.DailyXQue
 	_ = s.recordActivity(userID, 0, "system", "review", dailyXQueuePreviewSource, "@"+ctxRow.XHandle, "Daily X Queue existing source material selected.")
 	out := contentLibraryItemToDTO(*item)
 	return &dto.DailyXQueueSourceMaterialResponse{Context: dailyXContextToDTO(*ctxRow), SourceMaterial: out}, nil
+}
+
+type dailyXQueueWebsiteContent struct {
+	Title     string
+	Body      string
+	SourceURL string
+	Host      string
+}
+
+func fetchDailyXQueueWebsiteContent(ctx context.Context, rawURL string) (dailyXQueueWebsiteContent, error) {
+	sourceURL, parsed, err := normalizeDailyXQueueSourceURL(rawURL)
+	if err != nil {
+		return dailyXQueueWebsiteContent{}, err
+	}
+	client := dailyXQueueHTTPClient()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return dailyXQueueWebsiteContent{}, ErrDailyXQueueInvalidSourceURL
+	}
+	req.Header.Set("User-Agent", "OctoAgentFlow/1.0 (+https://octo-agent.com)")
+	req.Header.Set("Accept", "text/html, text/plain;q=0.9, */*;q=0.5")
+	resp, err := client.Do(req)
+	if err != nil {
+		return dailyXQueueWebsiteContent{}, fmt.Errorf("source url could not be fetched")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return dailyXQueueWebsiteContent{}, fmt.Errorf("source url returned status %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, dailyXQueueWebsiteReadLimit))
+	if err != nil {
+		return dailyXQueueWebsiteContent{}, fmt.Errorf("source url could not be read")
+	}
+	htmlText := string(raw)
+	title := compactDailyXQueueText(extractDailyXQueueTitle(htmlText))
+	if title == "" {
+		title = parsed.Hostname()
+	}
+	description := compactDailyXQueueText(extractDailyXQueueMetaDescription(htmlText))
+	body := compactDailyXQueueText(stripDailyXQueueHTML(htmlText))
+	if description != "" && !strings.Contains(strings.ToLower(body), strings.ToLower(description)) {
+		body = strings.TrimSpace(description + "\n\n" + body)
+	}
+	body = truncateRunes(body, dailyXQueueImportedBodyMax)
+	if strings.TrimSpace(body) == "" {
+		return dailyXQueueWebsiteContent{}, ErrDailyXQueueSourceRequired
+	}
+	return dailyXQueueWebsiteContent{
+		Title:     limitString(title, 160),
+		Body:      body,
+		SourceURL: sourceURL,
+		Host:      parsed.Hostname(),
+	}, nil
+}
+
+func normalizeDailyXQueueSourceURL(raw string) (string, *url.URL, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" || dailyXQueueUnsafeProtocol.MatchString(value) {
+		return "", nil, ErrDailyXQueueInvalidSourceURL
+	}
+	if !strings.Contains(value, "://") {
+		value = "https://" + value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", nil, ErrDailyXQueueInvalidSourceURL
+	}
+	if err := validateDailyXQueueParsedURL(parsed); err != nil {
+		return "", nil, err
+	}
+	return parsed.String(), parsed, nil
+}
+
+func validateDailyXQueueParsedURL(parsed *url.URL) error {
+	if parsed == nil {
+		return ErrDailyXQueueInvalidSourceURL
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return ErrDailyXQueueInvalidSourceURL
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") {
+		return ErrDailyXQueueInvalidSourceURL
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+			return ErrDailyXQueueInvalidSourceURL
+		}
+	}
+	return nil
+}
+
+func extractDailyXQueueTitle(htmlText string) string {
+	matches := dailyXQueueTitleRe.FindStringSubmatch(htmlText)
+	if len(matches) < 2 {
+		return ""
+	}
+	return htmlstd.UnescapeString(stripDailyXQueueHTML(matches[1]))
+}
+
+func extractDailyXQueueMetaDescription(htmlText string) string {
+	for _, re := range []*regexp.Regexp{dailyXQueueMetaDescRe, dailyXQueueMetaDescAltRe} {
+		matches := re.FindStringSubmatch(htmlText)
+		if len(matches) >= 2 {
+			return htmlstd.UnescapeString(matches[1])
+		}
+	}
+	return ""
+}
+
+func stripDailyXQueueHTML(htmlText string) string {
+	withoutScripts := dailyXQueueScriptStyleRe.ReplaceAllString(htmlText, " ")
+	withoutTags := dailyXQueueTagRe.ReplaceAllString(withoutScripts, " ")
+	return htmlstd.UnescapeString(withoutTags)
+}
+
+func compactDailyXQueueText(value string) string {
+	value = strings.ReplaceAll(value, "\u00a0", " ")
+	return strings.TrimSpace(dailyXQueueWhitespaceRe.ReplaceAllString(value, " "))
 }
 
 func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.DailyXQueueGenerateResponse, error) {
@@ -304,10 +477,12 @@ func (s *DailyXQueueService) Generate(ctx context.Context, userID uint) (*dto.Da
 		item.FeedbackSignalSummary = feedbackSignalSummaryFromRowsAndRules(memoryRows, learningRules)
 		drafts = append(drafts, item)
 	}
+	run := s.recordDailyXQueueRun(userID, ctxRow, content.ID, len(feedbackSignals), drafts)
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewGenerated, "@"+ctxRow.XHandle, "Daily X Queue generated exactly 3 post drafts.")
 	return &dto.DailyXQueueGenerateResponse{
 		Context:              dailyXContextToDTO(*ctxRow),
 		Drafts:               drafts,
+		Run:                  run,
 		LearningAppliedCount: len(feedbackSignals),
 		LearningSummary:      dailyLearningSummary(memoryRows, learningRules),
 	}, nil
@@ -329,6 +504,7 @@ func (s *DailyXQueueService) UpdateDraft(userID, id uint, content string) (*dto.
 	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
+	s.updateRunItemStatusForDraft(draft.ID, draft.Status)
 	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"edited_example", "voice_example"}, "OAF Bot memory: user edited this Daily X Queue draft. Treat the edited version as a voice/style example, not a trusted factual source.", original, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewEdited, "", fmt.Sprintf("Daily X Queue draft edited; draft_id=%d; OAF Bot memory captured for future queues.", draft.ID))
 	return s.actionResponse(userID, *draft, "OAF Bot memory captured from this edit.")
@@ -346,6 +522,7 @@ func (s *DailyXQueueService) ApproveDraft(userID, id uint) (*dto.DailyXQueueActi
 	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
+	s.updateRunItemStatusForDraft(draft.ID, draft.Status)
 	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"approved_example"}, "OAF Bot memory: user approved this Daily X Queue draft. Use it as an acceptable style/example only; do not treat generated claims as trusted source material.", draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "success", dailyXQueuePreviewApproved, "", fmt.Sprintf("Daily X Queue draft approved; draft_id=%d. No publish job was created.", draft.ID))
 	return s.actionResponse(userID, *draft, "")
@@ -367,6 +544,7 @@ func (s *DailyXQueueService) RejectDraft(userID, id uint, reason string) (*dto.D
 	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
+	s.updateRunItemStatusForDraft(draft.ID, draft.Status)
 	_ = s.createFeedback(userID, draft.BotID, "negative", []string{normalized, "negative_pattern"}, dailyRejectFeedbackComment(normalized), draft.ContentDirection, draft.GeneratedContent)
 	_ = s.recordActivity(userID, 0, "post", "review", dailyXQueuePreviewRejected, "", fmt.Sprintf("Daily X Queue draft rejected; draft_id=%d; reason=%s", draft.ID, normalized))
 	return s.actionResponse(userID, *draft, "")
@@ -411,6 +589,7 @@ func (s *DailyXQueueService) RewriteDraft(ctx context.Context, userID, id uint, 
 	if err := s.contentDraftRepo.Save(draft); err != nil {
 		return nil, err
 	}
+	s.updateRunItemStatusForDraft(draft.ID, draft.Status)
 	_ = recordAIGenerationUsage(s.usageRepo, userID, draft.BotID, repository.AIGenerationSceneAutoPost, now, generated.Usage)
 	if strings.TrimSpace(req.Feedback) != "" {
 		_ = s.createFeedback(userID, draft.BotID, "positive", []string{"rewrite_instruction"}, "OAF Bot memory: rewrite feedback from Daily X Queue reviewer: "+strings.TrimSpace(req.Feedback), draft.ContentDirection, text)
@@ -425,6 +604,7 @@ func (s *DailyXQueueService) CopyDraft(userID, id uint) (*dto.DailyXQueueActionR
 		return nil, err
 	}
 	_ = s.createFeedback(userID, draft.BotID, "positive", []string{"useful_output", "copied_example"}, "OAF Bot memory: user copied this Daily X Queue draft. Treat it as a useful voice/style example, not trusted factual source material.", draft.ContentDirection, draft.GeneratedContent)
+	s.updateRunItemStatusForDraft(draft.ID, "copied")
 	_ = s.recordActivity(userID, 0, "post", "success", dailyXQueuePreviewCopied, "", fmt.Sprintf("Daily X Queue draft copied; draft_id=%d.", draft.ID))
 	return s.actionResponse(userID, *draft, "")
 }
@@ -458,6 +638,7 @@ func (s *DailyXQueueService) overviewForContext(userID uint, ctxRow *model.Daily
 		Bot:                  botDTO,
 		SourceMaterial:       sourceDTO,
 		Drafts:               drafts,
+		LatestRun:            s.latestRunSummary(userID),
 		ReviewActionsCount:   reviewActions,
 		ApprovedOrCopied:     approvedOrCopied,
 		Activated:            ctxRow.Activated,
@@ -512,6 +693,101 @@ func (s *DailyXQueueService) dailyDrafts(userID, botID uint) ([]dto.DailyXQueueD
 		}
 	}
 	return out, nil
+}
+
+func (s *DailyXQueueService) recordDailyXQueueRun(userID uint, ctxRow *model.DailyXQueueContext, contentID uint, learningCount int, drafts []dto.DailyXQueueDraftItem) *dto.DailyXQueueRunSummary {
+	if s.runRepo == nil || ctxRow == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	reviewActions, approvedOrCopied := s.activationCounts(userID)
+	run := &model.DailyXQueueRun{
+		UserID:                userID,
+		ContextID:             ctxRow.ID,
+		BotID:                 ctxRow.BotID,
+		ContentLibraryID:      contentID,
+		Status:                "completed",
+		DraftCount:            len(drafts),
+		ReviewActionsCount:    reviewActions,
+		ApprovedOrCopiedCount: approvedOrCopied,
+		LearningAppliedCount:  learningCount,
+		StartedAt:             now,
+		CompletedAt:           &now,
+	}
+	if err := s.runRepo.CreateRun(run); err != nil {
+		return nil
+	}
+	for _, draft := range drafts {
+		_ = s.runRepo.CreateRunItem(&model.DailyXQueueRunItem{
+			RunID:            run.ID,
+			DraftID:          draft.ID,
+			ItemType:         "draft",
+			Status:           draft.Status,
+			ContentDirection: truncateRunes(firstNonEmpty(draft.WhyGenerated, draft.ContentDirection), 512),
+		})
+	}
+	return s.dailyXQueueRunSummary(*run)
+}
+
+func (s *DailyXQueueService) latestRunSummary(userID uint) *dto.DailyXQueueRunSummary {
+	if s.runRepo == nil {
+		return nil
+	}
+	run, err := s.runRepo.LatestByUser(userID)
+	if err != nil {
+		return nil
+	}
+	return s.dailyXQueueRunSummary(*run)
+}
+
+func (s *DailyXQueueService) dailyXQueueRunSummary(row model.DailyXQueueRun) *dto.DailyXQueueRunSummary {
+	if s.runRepo == nil {
+		return nil
+	}
+	items, _ := s.runRepo.ListItems(row.ID)
+	outItems := make([]dto.DailyXQueueRunItem, 0, len(items))
+	for _, item := range items {
+		outItems = append(outItems, dto.DailyXQueueRunItem{
+			ID:               item.ID,
+			RunID:            item.RunID,
+			DraftID:          item.DraftID,
+			ItemType:         item.ItemType,
+			Status:           item.Status,
+			ContentDirection: item.ContentDirection,
+			CreatedAt:        item.CreatedAt.UTC().Format(timeRFC3339),
+		})
+	}
+	return &dto.DailyXQueueRunSummary{
+		ID:                    row.ID,
+		Status:                row.Status,
+		DraftCount:            row.DraftCount,
+		ReviewActionsCount:    row.ReviewActionsCount,
+		ApprovedOrCopiedCount: row.ApprovedOrCopiedCount,
+		LearningAppliedCount:  row.LearningAppliedCount,
+		StartedAt:             row.StartedAt.UTC().Format(timeRFC3339),
+		CompletedAt:           formatOptionalTime(row.CompletedAt),
+		Items:                 outItems,
+	}
+}
+
+func (s *DailyXQueueService) updateLatestRunCounters(userID uint, reviewActions int64, approvedOrCopied int64) {
+	if s.runRepo == nil {
+		return
+	}
+	run, err := s.runRepo.LatestByUser(userID)
+	if err != nil {
+		return
+	}
+	run.ReviewActionsCount = reviewActions
+	run.ApprovedOrCopiedCount = approvedOrCopied
+	_ = s.runRepo.SaveRun(run)
+}
+
+func (s *DailyXQueueService) updateRunItemStatusForDraft(draftID uint, status string) {
+	if s.runRepo == nil {
+		return
+	}
+	_ = s.runRepo.UpdateRunItemStatusByDraftID(draftID, status)
 }
 
 func (s *DailyXQueueService) toDailyDraftItem(row model.AutoPostDraft) dto.DailyXQueueDraftItem {
@@ -736,6 +1012,7 @@ func dailyXQueueMemorySignal(row model.OAFBotGenerationFeedback) string {
 func (s *DailyXQueueService) actionResponse(userID uint, draft model.AutoPostDraft, message string) (*dto.DailyXQueueActionResponse, error) {
 	activated := s.maybeRecordActivation(userID)
 	reviewActions, approvedOrCopied := s.activationCounts(userID)
+	s.updateLatestRunCounters(userID, reviewActions, approvedOrCopied)
 	return &dto.DailyXQueueActionResponse{
 		Draft:              s.toDailyDraftItem(draft),
 		ReviewActionsCount: reviewActions,

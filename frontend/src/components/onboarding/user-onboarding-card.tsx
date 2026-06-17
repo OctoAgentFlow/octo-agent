@@ -65,7 +65,7 @@ export function UserOnboardingCard({
       titleKey: "onboarding.step.dailyXQueue.title",
       descriptionKey: "onboarding.step.dailyXQueue.description",
       ctaKey: "onboarding.step.dailyXQueue.cta",
-      href: "/exposure-radar?tab=today",
+      href: "/start-today",
     },
     {
       done: hasContentDraftConfigured,

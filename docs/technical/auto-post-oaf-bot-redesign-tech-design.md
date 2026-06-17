@@ -1,5 +1,8 @@
 # Auto Post + OAF Bot 技术设计方案
 
+> Historical archive note, updated 2026-06-17:
+> This document describes an older automation-heavy design. The current product direction is the manual, review-first Daily Growth Desk / Exposure Radar workflow. See `docs/product/archive/legacy-automation-docs.md` and `docs/technical/content-draft-route-migration.md` before reusing implementation details.
+
 ## 1. 设计目标
 
 本设计用于把 Auto Post 从“手动创建一条帖子并定时发布”升级为“基于 OAF Bot、人设、内容来源、发推规则、审核模式和统一发布器的自动发推工作流”。

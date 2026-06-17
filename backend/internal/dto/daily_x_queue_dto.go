@@ -19,6 +19,10 @@ type DailyXQueueSourceMaterialRequest struct {
 	CTAPreference string   `json:"cta_preference"`
 }
 
+type DailyXQueueImportURLRequest struct {
+	SourceURL string `json:"source_url" binding:"required"`
+}
+
 type DailyXQueueSelectSourceMaterialRequest struct {
 	ContentLibraryID uint `json:"content_library_id" binding:"required"`
 }
@@ -56,11 +60,34 @@ type DailyXQueueDraftItem struct {
 	CopiedCount  int64  `json:"copied_count"`
 }
 
+type DailyXQueueRunItem struct {
+	ID               uint   `json:"id"`
+	RunID            uint   `json:"run_id"`
+	DraftID          uint   `json:"draft_id"`
+	ItemType         string `json:"item_type"`
+	Status           string `json:"status"`
+	ContentDirection string `json:"content_direction,omitempty"`
+	CreatedAt        string `json:"created_at"`
+}
+
+type DailyXQueueRunSummary struct {
+	ID                    uint                 `json:"id"`
+	Status                string               `json:"status"`
+	DraftCount            int                  `json:"draft_count"`
+	ReviewActionsCount    int64                `json:"review_actions_count"`
+	ApprovedOrCopiedCount int64                `json:"approved_or_copied_count"`
+	LearningAppliedCount  int                  `json:"learning_applied_count"`
+	StartedAt             string               `json:"started_at"`
+	CompletedAt           string               `json:"completed_at,omitempty"`
+	Items                 []DailyXQueueRunItem `json:"items"`
+}
+
 type DailyXQueueOverviewResponse struct {
 	Context              *DailyXQueueContextItem `json:"context,omitempty"`
 	Bot                  *OAFBotItem             `json:"bot,omitempty"`
 	SourceMaterial       *ContentLibraryItem     `json:"source_material,omitempty"`
 	Drafts               []DailyXQueueDraftItem  `json:"drafts"`
+	LatestRun            *DailyXQueueRunSummary  `json:"latest_run,omitempty"`
 	ReviewActionsCount   int64                   `json:"review_actions_count"`
 	ApprovedOrCopied     int64                   `json:"approved_or_copied_count"`
 	Activated            bool                    `json:"activated"`
@@ -81,6 +108,7 @@ type DailyXQueueSourceMaterialResponse struct {
 type DailyXQueueGenerateResponse struct {
 	Context              DailyXQueueContextItem `json:"context"`
 	Drafts               []DailyXQueueDraftItem `json:"drafts"`
+	Run                  *DailyXQueueRunSummary `json:"run,omitempty"`
 	LearningAppliedCount int                    `json:"learning_applied_count"`
 	LearningSummary      string                 `json:"learning_summary,omitempty"`
 }

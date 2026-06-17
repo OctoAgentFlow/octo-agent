@@ -13,14 +13,17 @@ import type {
 import {
   AccountHealthScoreCard,
   GrowthExperimentCard,
+  MemoryAssetDeskCard,
   OpportunityEvidenceDeskCard,
+  PeopleRelationshipDeskCard,
   WeeklyOperatorReviewCard,
 } from "@/components/exposure-radar/operating-desk-panels";
-import { buildWeeklyFallbackRecommendations, buildWeeklyOperatorReport } from "@/components/exposure-radar/learning-report-utils";
+import { buildWeeklyFallbackRecommendations, buildWeeklyOperatorReport, topRecordLabels } from "@/components/exposure-radar/learning-report-utils";
 import { buildAccountHealthScore, buildGrowthExperiments } from "@/components/exposure-radar/operating-analysis-utils";
 import { buildSignalCredibility } from "@/components/exposure-radar/signal-analysis-utils";
+import { radarItemSavedMemoryID } from "@/components/exposure-radar/radar-signal-utils";
 import { formatCompact, formatOneDecimal, formatPercent, formatVelocityLabel } from "@/components/exposure-radar/radar-utils";
-import type { DailyActionPlanItem, ExposureLearningProfile, LoadState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, LoadState, ManualActionState, PeopleRadarEntry, WorkbenchStats } from "@/components/exposure-radar/types";
 
 export function AccountHealthScorePanel({
   selectedAccountID,
@@ -152,6 +155,54 @@ export function WeeklyOperatorReviewPanel({
       topTopicItems={topTopicItems}
       nextItems={nextItems}
       onCopyReport={() => void copyReport()}
+    />
+  );
+}
+
+export function PeopleRelationshipDeskPanel({ people, recentRecords, onFocus }: { people: PeopleRadarEntry[]; recentRecords: ExposureRadarManualRecordApi[]; onFocus: (itemID: string) => void }) {
+  const priority = people.filter((person) => person.stage === "priority" || person.crmStage === "priority");
+  const repeat = people.filter((person) => person.stage === "repeat");
+  const engaged = people.filter((person) => person.stage === "engaged" || person.handled > 0);
+  const avoid = people.filter((person) => person.stage === "avoid" || person.crmStage === "avoid");
+  const topPeople = [...priority, ...repeat, ...engaged].filter((person, index, list) => list.findIndex((row) => row.key === person.key) === index).slice(0, 3);
+  const relationshipRecords = recentRecords.filter((record) => record.author_handle && (record.handled_at || record.feedback_at || record.saved_at));
+  return (
+    <PeopleRelationshipDeskCard
+      relationshipCount={relationshipRecords.length}
+      priorityCount={priority.length}
+      repeatCount={repeat.length}
+      engagedCount={engaged.length}
+      avoidCount={avoid.length}
+      topPeople={topPeople}
+      onFocus={onFocus}
+    />
+  );
+}
+
+export function MemoryAssetDeskPanel({
+  bridge,
+  items,
+  recentRecords,
+  savedMemoryIDs,
+  manualActionStates,
+}: {
+  bridge: ContentDraftBridgeData;
+  items: ExposureRadarItemApi[];
+  recentRecords: ExposureRadarManualRecordApi[];
+  savedMemoryIDs: Set<string>;
+  manualActionStates: Record<string, ManualActionState>;
+}) {
+  const savedSignals = items.filter((item) => radarItemSavedMemoryID(item, savedMemoryIDs)).length;
+  const localSaved = Object.values(manualActionStates).filter((state) => state.saved).length;
+  const effectiveTopics = topRecordLabels(recentRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60), "topic_name", 4);
+  const contentSeeds = bridge.drafts.filter((draft) => draft.content_library_item_id || draft.content_direction || draft.content_title).slice(0, 3);
+  return (
+    <MemoryAssetDeskCard
+      savedSignalsCount={savedSignals + localSaved}
+      draftCount={bridge.drafts.length}
+      enabledPlanCount={bridge.plans.filter((plan) => plan.enabled).length}
+      effectiveTopics={effectiveTopics}
+      contentSeeds={contentSeeds}
     />
   );
 }

@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -15,6 +17,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type dailyXQueueRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f dailyXQueueRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -25,6 +33,8 @@ func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 		&model.User{},
 		&model.TwitterAccount{},
 		&model.DailyXQueueContext{},
+		&model.DailyXQueueRun{},
+		&model.DailyXQueueRunItem{},
 		&model.OAFBot{},
 		&model.ContentLibraryItem{},
 		&model.AutoPostPlan{},
@@ -43,6 +53,7 @@ func newDailyXQueueTestService(t *testing.T) (*DailyXQueueService, *gorm.DB) {
 	}
 	svc := NewDailyXQueueService(
 		repository.NewDailyXQueueContextRepository(db),
+		repository.NewDailyXQueueRunRepository(db),
 		repository.NewOAFBotRepository(db),
 		repository.NewTwitterAccountRepository(db),
 		repository.NewContentLibraryRepository(db),
@@ -190,6 +201,60 @@ func TestDailyXQueueCanSelectExistingContentLibraryItemForOAFBot(t *testing.T) {
 	}
 }
 
+func TestDailyXQueueCanImportWebsiteSourceMaterial(t *testing.T) {
+	svc, _ := newDailyXQueueTestService(t)
+	userID := uint(135)
+	setupDailyXQueueFixture(t, svc, userID)
+	originalClient := dailyXQueueHTTPClient
+	dailyXQueueHTTPClient = func() *http.Client {
+		return &http.Client{Transport: dailyXQueueRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Hostname() != "example.com" {
+				t.Fatalf("unexpected host: %s", req.URL.Hostname())
+			}
+			body := `<!doctype html>
+				<html>
+					<head>
+						<title>OctoAgentFlow launch note</title>
+						<meta name="description" content="A practical update for X operators.">
+					</head>
+					<body>
+						<script>window.noise = true</script>
+						<h1>Daily Growth Desk</h1>
+						<p>Use persona, memory, guardrails, and review queues before posting.</p>
+					</body>
+				</html>`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		})}
+	}
+	defer func() {
+		dailyXQueueHTTPClient = originalClient
+	}()
+
+	imported, err := svc.ImportSourceMaterialFromURL(context.Background(), userID, dto.DailyXQueueImportURLRequest{
+		SourceURL: "example.com/product-update",
+	})
+	if err != nil {
+		t.Fatalf("import website source: %v", err)
+	}
+	if imported.SourceMaterial.Title != "OctoAgentFlow launch note" {
+		t.Fatalf("expected imported title, got %q", imported.SourceMaterial.Title)
+	}
+	if !strings.Contains(imported.SourceMaterial.Body, "Daily Growth Desk") || strings.Contains(imported.SourceMaterial.Body, "window.noise") {
+		t.Fatalf("expected cleaned website body, got %q", imported.SourceMaterial.Body)
+	}
+	if imported.SourceMaterial.SourceURL != "https://example.com/product-update" {
+		t.Fatalf("expected normalized source url, got %q", imported.SourceMaterial.SourceURL)
+	}
+	if imported.Context.ContentLibraryID != imported.SourceMaterial.ID {
+		t.Fatalf("expected imported source to become active context source")
+	}
+}
+
 func TestDailyXQueueRejectsSourceMaterialFromAnotherOAFBot(t *testing.T) {
 	svc, db := newDailyXQueueTestService(t)
 	userID := uint(36)
@@ -290,6 +355,9 @@ func TestDailyXQueueFreshUserWithoutOAuthCanSetupSourceAndGenerateExactlyThreeDr
 	if len(out.Drafts) != 3 {
 		t.Fatalf("expected exactly 3 drafts, got %d", len(out.Drafts))
 	}
+	if out.Run == nil || out.Run.DraftCount != 3 || len(out.Run.Items) != 3 {
+		t.Fatalf("expected run tracking with 3 items, got %#v", out.Run)
+	}
 	for _, draft := range out.Drafts {
 		if draft.XAccountID != 0 || draft.PlanID != 0 {
 			t.Fatalf("daily queue draft should not use account/plan, got account=%d plan=%d", draft.XAccountID, draft.PlanID)
@@ -315,6 +383,16 @@ func TestDailyXQueueApproveDoesNotPublishOrSchedule(t *testing.T) {
 	}
 	if res.Draft.Status != "approved" {
 		t.Fatalf("expected approved status, got %s", res.Draft.Status)
+	}
+	overview, err := svc.Overview(userID)
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+	if overview.LatestRun == nil || overview.LatestRun.ReviewActionsCount < 1 || overview.LatestRun.ApprovedOrCopiedCount < 1 {
+		t.Fatalf("expected latest run counters to update after approve, got %#v", overview.LatestRun)
+	}
+	if len(overview.LatestRun.Items) == 0 || overview.LatestRun.Items[0].Status != "approved" {
+		t.Fatalf("expected approved run item status, got %#v", overview.LatestRun.Items)
 	}
 	var publishJobs int64
 	if err := db.Table("publish_jobs").Count(&publishJobs).Error; err == nil && publishJobs != 0 {

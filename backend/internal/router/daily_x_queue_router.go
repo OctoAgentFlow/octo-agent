@@ -13,6 +13,7 @@ func RegisterDailyXQueue(rg *gin.RouterGroup, c *controller.DailyXQueueControlle
 	group.GET("/overview", c.Overview)
 	group.POST("/setup", c.Setup)
 	group.POST("/source-material", c.SaveSourceMaterial)
+	group.POST("/source-material/import-url", c.ImportSourceMaterialFromURL)
 	group.POST("/source-material/select", c.SelectSourceMaterial)
 	group.POST("/generate", c.Generate)
 	group.PATCH("/drafts/:id", c.UpdateDraft)

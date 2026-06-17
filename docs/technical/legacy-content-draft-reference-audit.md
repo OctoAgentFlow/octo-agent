@@ -1,6 +1,7 @@
 # Legacy Content Draft Reference Audit
 
 Date: 2026-06-14
+Last updated: 2026-06-17
 
 ## Scope
 
@@ -71,3 +72,9 @@ cleanup.
 P3.6 completed the Category A helper naming pass. The remaining `AutoPost` and
 `auto_post` references should be treated as Category B compatibility contracts
 or Category C migration projects unless a fresh audit proves otherwise.
+
+## 2026-06-17 Update
+
+- Added `docs/runbooks/legacy-route-traffic-audit.md` as the production traffic gate before hiding or removing legacy routes.
+- Added `docs/product/archive/legacy-automation-docs.md` as the historical archive entry for older automation design docs.
+- Category B and C references remain intentionally preserved. Do not remove `/api/v1/auto-post/*`, legacy JSON quota fields, model/table names, activity keys, or AI usage scene values without a dedicated migration and rollback plan.

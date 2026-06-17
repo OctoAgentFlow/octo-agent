@@ -15,11 +15,12 @@ This document maps the current product pages to their backend API areas. It is w
 | Path | Purpose | Backend/API |
 | --- | --- | --- |
 | `/dashboard` | Operator overview: subscription, readiness, recent activity, account status, and workflow health. | `GET /dashboard/overview`, `GET /billing/subscription`, `GET /activities`, `GET /automations/runtime-status`. |
+| `/start-today` | Stable first-run entry point for a safe daily growth session; redirects to Daily Growth Desk today view. | Redirects to `/exposure-radar?tab=today`. |
 | `/accounts` | Bind, inspect, and disconnect X accounts; show readiness and account intelligence entry points. | `GET /accounts`, `POST /accounts/oauth/x/start`, OAuth callback, `DELETE /accounts/:id`. |
 | `/oaf-bots` | Configure account persona, voice, topics, boundaries, language style, and learning preferences. | `GET/POST/PUT /oaf-bots`, `POST /oaf-bots/:id/test-generate`, `GET /oaf-bots/:id/generation-usages`. |
 | `/exposure-radar` | Daily Growth Desk: opportunity signals, hot/rising filters, diagnostics, strategy, reply angles, people radar, manual records, and learning loop. | `/trends/exposure-radar*`, `/exposure-radar/drafts*`, `/exposure-radar/manual-records*`, `/exposure-radar/strategy`, `/exposure-radar/people*`. |
 | `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
-| `/daily-x-queue` | Daily content material and draft preparation workflow. | `/daily-x-queue*`, content memory, OAF Bot, and draft generation APIs. |
+| `/daily-x-queue` | Daily content material and draft preparation workflow with website import and generation run tracking. | `/daily-x-queue*`, content memory, OAF Bot, website source import, draft generation APIs, and run/item summaries. |
 | `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
 | `/review-queue` | Compatibility redirect to Handling List. | Redirects to `/handling-list`. |
 | `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |

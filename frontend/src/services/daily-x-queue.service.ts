@@ -28,11 +28,34 @@ export type DailyXQueueDraftApi = AutoPostDraftApi & {
   copied_count: number;
 };
 
+export type DailyXQueueRunItemApi = {
+  id: number;
+  run_id: number;
+  draft_id: number;
+  item_type: string;
+  status: string;
+  content_direction?: string;
+  created_at: string;
+};
+
+export type DailyXQueueRunApi = {
+  id: number;
+  status: string;
+  draft_count: number;
+  review_actions_count: number;
+  approved_or_copied_count: number;
+  learning_applied_count: number;
+  started_at: string;
+  completed_at?: string;
+  items: DailyXQueueRunItemApi[];
+};
+
 export type DailyXQueueOverviewApi = {
   context?: DailyXQueueContextApi;
   bot?: OAFBot;
   source_material?: ContentLibraryItemApi;
   drafts: DailyXQueueDraftApi[];
+  latest_run?: DailyXQueueRunApi;
   review_actions_count: number;
   approved_or_copied_count: number;
   activated: boolean;
@@ -72,6 +95,7 @@ export type DailyXQueueSourceApi = {
 export type DailyXQueueGenerateApi = {
   context: DailyXQueueContextApi;
   drafts: DailyXQueueDraftApi[];
+  run?: DailyXQueueRunApi;
   learning_applied_count: number;
   learning_summary?: string;
 };
@@ -95,6 +119,12 @@ export const dailyXQueueService = {
   },
   async saveSourceMaterial(payload: DailyXQueueSourcePayload) {
     const res = await request.post<ApiResponse<DailyXQueueSourceApi>>("/daily-x-queue/source-material", payload);
+    return res.data.data;
+  },
+  async importWebsiteSource(sourceUrl: string) {
+    const res = await request.post<ApiResponse<DailyXQueueSourceApi>>("/daily-x-queue/source-material/import-url", {
+      source_url: sourceUrl,
+    });
     return res.data.data;
   },
   async selectSourceMaterial(contentLibraryID: number) {

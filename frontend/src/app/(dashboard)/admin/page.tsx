@@ -825,6 +825,7 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
   const isHealthy = runtime.scheduler_status === "healthy";
   const failureReasons = runtime.failure_reasons || [];
   const exposureRegions = runtime.exposure_regions || [];
+  const exposureRefreshesPerDay = runtime.exposure_refresh_interval_minutes > 0 ? Math.ceil(1440 / runtime.exposure_refresh_interval_minutes) : 0;
   return (
     <Card className="bg-[#0f1419]">
       <CardHeader
@@ -832,10 +833,11 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
         description={t("admin.costScheduler.description", { hours: runtime.window_hours || 24 })}
         right={<Badge variant={isHealthy ? "success" : "warning"}>{isHealthy ? t("admin.costScheduler.status.healthy") : t("admin.costScheduler.status.attention")}</Badge>}
       />
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Metric label={t("admin.costScheduler.openaiGenerations")} value={runtime.openai_generations} icon={Activity} />
         <Metric label={t("admin.costScheduler.xApiCalls")} value={runtime.x_api_calls} icon={Radar} tone={runtime.x_api_calls > 0 ? "warn" : "default"} />
         <Metric label={t("admin.costScheduler.exposureSignals")} value={runtime.exposure_signals} icon={TrendingUp} tone={runtime.exposure_signals > 0 ? "good" : "warn"} />
+        <Metric label={t("admin.costScheduler.exposureRefreshes")} value={exposureRefreshesPerDay} icon={RefreshCcw} tone={exposureRefreshesPerDay > 96 ? "warn" : "default"} />
         <Metric label={t("admin.costScheduler.totalCost")} value={`${runtime.openai_cost_amount || "0.00"} + ${runtime.x_cost_amount || "0.00"} USDT`} icon={Coins} tone={runtime.openai_cost_cents + runtime.x_cost_cents > 0 ? "warn" : "default"} />
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">

@@ -66,14 +66,14 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 
 | Priority | Status | Notes |
 | --- | --- | --- |
-| Legacy route protection and documentation alignment | Mostly done | Protected legacy automation middleware is in place and docs now describe the manual workflow. Still open: production traffic audit before removing or hiding compatibility routes further. |
-| Exposure Radar modularization | In progress | The page has been split into many helpers/components and is much smaller. Recent checkpoints include workspace panels and operating desk panel containers. Continue extracting remaining page-local panels before larger product work. |
-| Cost and rate observability | Partially done | Admin exposes OpenAI generation/cost fields, X Trends/Exposure refresh config, and skip/failure health. Still open: a unified cost/rate ledger for X API calls, Exposure refresh attempts, OpenAI generations, skipped reasons, and failures. |
+| Legacy route protection and documentation alignment | Mostly done | Protected legacy automation middleware is in place. Added legacy traffic audit runbook and historical archive entry. Still open: production traffic audit window before route removal. |
+| Exposure Radar modularization | In progress | The page has been split into many helpers/components and is much smaller. Recent checkpoints include workspace panels, operating desk panels, people relationship desk, and memory asset desk containers. Continue extracting remaining page-local panels opportunistically. |
+| Cost and rate observability | Partially done | Admin exposes OpenAI generation/cost fields, X Trends/Exposure refresh config, skip/failure health, and estimated Exposure refreshes/day. Still open: a persistent unified cost/rate ledger for every X API call and OpenAI generation. |
 | Opportunity quality and learning loop | Done / refining | Hot/rising, quality tiers, manual records, result backfill, memory, strategy, people radar, and weekly review exist. Keep improving ranking quality and user-facing explanations. |
 | Account Intelligence clarity | Done / refining | Current docs and product surfaces avoid assuming Creator Studio private data. Next step is optional user-provided analytics import or future authorized private metrics access. |
 | Billing and quota semantic cleanup | Mostly done | Frontend/API display prefers content drafts, opportunity drafts, review capacity, content memory, and account intelligence. Legacy DB/JSON fields remain by design. |
-| UI smoke tests for core workflows | Open | Need repeatable checks for login, dashboard, Exposure Radar, Daily X Queue, Content Drafts, Handling List, Billing, and Admin health. |
-| Legacy document archive | Open | Old Auto Post / Auto Reply / Auto Comment / Auto DM design docs still need historical labels or archive movement. |
+| UI smoke tests for core workflows | Done / refining | Added `scripts/smoke-core-workflows.sh` and runbook coverage for login, dashboard, Start Today, Exposure Radar, Daily X Queue, Content Drafts, Handling List, Billing, Admin, and optional API health. |
+| Legacy document archive | Done / refining | Added `docs/product/archive/legacy-automation-docs.md` as the historical archive entry. Individual old docs remain in place to avoid breaking links. |
 
 ## Milestones
 

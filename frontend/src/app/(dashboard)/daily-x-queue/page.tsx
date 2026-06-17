@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, Clipboard, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
+import { Bot, CheckCircle2, Clipboard, Globe2, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
 type LoadState = "loading" | "ready" | "error";
-type BusyAction = "setup" | "source" | "generate" | `edit-${number}` | `approve-${number}` | `reject-${number}` | `rewrite-${number}` | `copy-${number}` | "";
+type BusyAction = "setup" | "source" | "import-url" | "generate" | `edit-${number}` | `approve-${number}` | `reject-${number}` | `rewrite-${number}` | `copy-${number}` | "";
 
 const rejectReasons = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "duplicate", "other"];
 const defaultVoicePreferences = ["Concise founder/operator voice", "简洁的创始人 / 运营者语气"];
@@ -78,12 +78,21 @@ function requestedBotIDFromLocation() {
   return Number.isFinite(id) && id > 0 ? id : 0;
 }
 
+function formatDailyXQueueRunTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
 function knownDailyXQueueErrorKey(message: string) {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return "";
   if (normalized.includes("setup is required")) return "dailyXQueue.toast.error.setupRequired";
   if (normalized.includes("source material is required")) return "dailyXQueue.toast.error.sourceRequired";
   if (normalized.includes("source material is not available") || normalized.includes("source material is not active")) return "dailyXQueue.toast.error.sourceUnavailable";
+  if (normalized.includes("source url must be")) return "dailyXQueue.toast.error.sourceUrlInvalid";
+  if (normalized.includes("source url could not") || normalized.includes("source url returned")) return "dailyXQueue.toast.error.sourceUrlFetch";
   if (normalized.includes("reject reason is required")) return "dailyXQueue.toast.error.rejectReasonRequired";
   if (normalized.includes("x_handle is required")) return "dailyXQueue.toast.error.handleRequired";
   if (normalized.includes("openai api key is empty")) return "dailyXQueue.toast.error.llmConfig";
@@ -102,6 +111,14 @@ function directionKey(value?: string) {
   if (normalized.startsWith("oaf bot memory boundary:") || normalized.includes("memory boundary")) return "dailyXQueue.direction.oafBotMemoryBoundary";
   if (normalized.startsWith("founder/operator note:")) return "dailyXQueue.direction.founderOperatorNote";
   return "";
+}
+
+function runStatusKey(status?: string) {
+  const normalized = (status || "").trim().toLowerCase();
+  if (normalized === "completed" || normalized === "failed" || normalized === "running") {
+    return `dailyXQueue.run.status.${normalized}`;
+  }
+  return "dailyXQueue.run.status.completed";
 }
 
 export default function DailyXQueuePage() {
@@ -321,6 +338,11 @@ export default function DailyXQueuePage() {
       return {
         ...current,
         drafts: current.drafts.map((item) => (item.id === draft.id ? draft : item)),
+        latest_run: current.latest_run ? {
+          ...current.latest_run,
+          review_actions_count: actionData?.review_actions_count ?? current.latest_run.review_actions_count,
+          approved_or_copied_count: actionData?.approved_or_copied_count ?? current.latest_run.approved_or_copied_count,
+        } : current.latest_run,
         review_actions_count: actionData?.review_actions_count ?? current.review_actions_count,
         approved_or_copied_count: actionData?.approved_or_copied_count ?? current.approved_or_copied_count,
         activated: actionData?.activated ?? current.activated,
@@ -375,6 +397,37 @@ export default function DailyXQueuePage() {
     }
   };
 
+  const handleImportWebsiteSource = async () => {
+    const sourceURL = (sourceForm.source_url || setupForm.website_url).trim();
+    if (!sourceURL) {
+      pushToast(t("dailyXQueue.toast.error.sourceUrlRequired"));
+      return;
+    }
+    setBusy("import-url");
+    try {
+      const data = await dailyXQueueService.importWebsiteSource(sourceURL);
+      setOverview((current) => ({ ...(current || emptyOverview()), context: data.context, source_material: data.source_material }));
+      setSourceForm({
+        title: data.source_material.title || "",
+        body: data.source_material.body || "",
+        source_url: data.source_material.source_url || "",
+        topics: (data.source_material.topics || []).join(", "),
+        growth_goal: data.source_material.growth_goal || "",
+        cta_preference: data.source_material.cta_preference || "",
+      });
+      setSelectedContentID(data.source_material.id);
+      setContentItems((current) => {
+        const rest = current.filter((item) => item.id !== data.source_material.id);
+        return [data.source_material, ...rest];
+      });
+      pushToast(t("dailyXQueue.toast.sourceImported"));
+    } catch (error) {
+      pushToast(localizedError(error, "dailyXQueue.toast.error.sourceImport"));
+    } finally {
+      setBusy("");
+    }
+  };
+
   const handleSelectContentSource = async () => {
     if (!selectedContentID) {
       pushToast(t("dailyXQueue.toast.error.contentSelectionRequired"));
@@ -409,6 +462,7 @@ export default function DailyXQueuePage() {
         ...(current || emptyOverview()),
         context: data.context,
         drafts: data.drafts,
+        latest_run: data.run || current?.latest_run,
         learning_applied_count: data.learning_applied_count,
         learning_summary: data.learning_summary,
       }));
@@ -606,6 +660,38 @@ export default function DailyXQueuePage() {
         </div>
       </div>
 
+      {overview?.latest_run ? (
+        <Card className="border-[#2f3336] bg-black">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.run.title")}</p>
+              <p className="mt-1 text-xs leading-5 text-[#8b98a5]">
+                {t("dailyXQueue.run.description", {
+                  id: overview.latest_run.id,
+                  time: formatDailyXQueueRunTime(overview.latest_run.completed_at || overview.latest_run.started_at),
+                })}
+              </p>
+            </div>
+            <span className="w-fit rounded-full border border-emerald-300/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+              {t(runStatusKey(overview.latest_run.status))}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { key: "drafts", label: t("dailyXQueue.run.metric.drafts"), value: overview.latest_run.draft_count },
+              { key: "reviews", label: t("dailyXQueue.run.metric.reviews"), value: overview.latest_run.review_actions_count },
+              { key: "outputs", label: t("dailyXQueue.run.metric.outputs"), value: overview.latest_run.approved_or_copied_count },
+              { key: "learning", label: t("dailyXQueue.run.metric.learning"), value: overview.latest_run.learning_applied_count },
+            ].map((item) => (
+              <div key={item.key} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
+                <p className="text-xs text-[#71767b]">{item.label}</p>
+                <p className="mt-1 text-lg font-semibold text-[#e7e9ea]">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="border-[#2f3336] bg-black">
           <CardHeader title={t("dailyXQueue.setup.title")} description={t("dailyXQueue.setup.description")} />
@@ -707,6 +793,30 @@ export default function DailyXQueuePage() {
             }`}>
               {sourceReady ? <CheckCircle2 className="size-3.5" /> : null}
               {sourceReady ? t("dailyXQueue.source.readyStatus") : t("dailyXQueue.source.notReadyStatus")}
+            </div>
+            <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[#e7e9ea]">{t("dailyXQueue.source.importTitle")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("dailyXQueue.source.importDescription")}</p>
+                  <Input
+                    className="mt-3"
+                    placeholder={setupForm.website_url || t("dailyXQueue.source.importPlaceholder")}
+                    value={sourceForm.source_url}
+                    onChange={(event) => setSourceForm((v) => ({ ...v, source_url: event.target.value }))}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy === "import-url" || !setupReady || !(sourceForm.source_url || setupForm.website_url).trim()}
+                  onClick={() => void handleImportWebsiteSource()}
+                >
+                  {busy === "import-url" ? <Loader2 className="size-4 animate-spin" /> : <Globe2 className="size-4" />}
+                  {t("dailyXQueue.source.importButton")}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("dailyXQueue.source.importHint")}</p>
             </div>
             {selectedBot ? (
               <div className="rounded-2xl border border-[#2f3336] bg-[#0f1419] p-3">

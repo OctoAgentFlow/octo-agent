@@ -10,6 +10,8 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 
 - `runbooks/LOCAL_RUNBOOK.md`：本地四服务启动链路。
 - `runbooks/exposure-radar-smoke-test.md`：Exposure Radar 发布前后冒烟测试 Runbook。
+- `runbooks/core-workflow-smoke-test.md`：核心手动增长工作流冒烟测试脚本说明。
+- `runbooks/legacy-route-traffic-audit.md`：旧自动化路由生产流量审计 Runbook。
 
 ## Acceptance
 
@@ -37,6 +39,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 - `product/prd.md`：产品需求文档。
 - `product/page-list.md`：页面清单。
 - `product/roadmap.md`：产品路线图。
+- `product/archive/legacy-automation-docs.md`：旧自动化设计文档历史归档入口。
 - `product/oaf-bot-billing.md`：OAF Bot + Billing 会员体系。
 - `product/oaf-bot-execution-mode.md`：OAF Bot 执行模式产品设计。
 - `product/auto-post-oaf-bot-redesign.md`：Auto Post 在 OAF Bot 体系下的产品重设计。

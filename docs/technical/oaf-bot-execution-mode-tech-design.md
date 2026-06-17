@@ -1,5 +1,8 @@
 # OAF Bot Execution Mode 技术设计
 
+> Historical archive note, updated 2026-06-17:
+> This document includes older automation-mode implementation context. The current default product stance is manual, review-first operation. Keep it for compatibility boundaries and migration history.
+
 ## 目标
 
 在不破坏当前 OAF Bot、Auto Post、Auto Reply、Auto Comment、Billing 和 AI 生成计量的前提下，为自动化链路提供统一执行模式。

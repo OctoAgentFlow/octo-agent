@@ -1,35 +1,10 @@
 import { BookmarkPlus, CheckCircle2, MessageSquarePlus, Search, ShieldAlert } from "lucide-react";
 
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
-import type { DailyActionPlanItem, DailyActionReason, DailyActionType, ExposureLearningProfile, ManualActionState, RadarViewFilter, ReplyAngleID } from "@/components/exposure-radar/types";
+import type { DailyActionPlanItem, DailyActionReason, DailyActionType, ExposureLearningProfile, ManualActionState, RadarViewFilter } from "@/components/exposure-radar/types";
+import { buildReplyAngleIDs } from "@/components/exposure-radar/opportunity-reply-utils";
 import { hasManualBackfill, isManualActionHandled, isRadarItemSaved } from "@/components/exposure-radar/radar-signal-utils";
 import { normalizeOpportunityTier, normalizeQualityStage, normalizeVelocityState } from "@/components/exposure-radar/radar-utils";
-
-export function buildReplyAngleIDs(item: ExposureRadarItemApi): ReplyAngleID[] {
-  const qualityStage = normalizeQualityStage(item.quality_stage, item);
-  const tier = normalizeOpportunityTier(item.opportunity_tier);
-  const risky = item.risk_level === "medium" || item.risk_level === "high";
-  const lowFans = typeof item.followers_count === "number" && item.followers_count > 0 && item.followers_count <= 10000;
-  const candidates: Array<ReplyAngleID | undefined> = [
-    item.data_quality === "topic_level" ? "topicResearch" : undefined,
-    risky ? "cautionNote" : undefined,
-    qualityStage === "act_now" || tier === "hot_opportunity" ? "operatorObservation" : undefined,
-    lowFans ? "peerExperience" : undefined,
-    !risky ? "lightQuestion" : undefined,
-    "operatorObservation",
-    "lightQuestion",
-    "peerExperience",
-  ];
-  const seen = new Set<ReplyAngleID>();
-  const suggestions: ReplyAngleID[] = [];
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
-    suggestions.push(candidate);
-    if (suggestions.length >= 3) break;
-  }
-  return suggestions;
-}
 
 export function buildDailyActionPlan(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>, learningProfile: ExposureLearningProfile, limit = 6): DailyActionPlanItem[] {
   return items

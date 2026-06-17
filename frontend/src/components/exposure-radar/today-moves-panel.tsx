@@ -1,13 +1,14 @@
 "use client";
 
-import { BookmarkPlus, CheckCircle2, Clock3, MessageCircle, MessageSquarePlus, Search, ShieldAlert, Zap } from "lucide-react";
+import { CheckCircle2, Clock3, MessageCircle, Search, ShieldAlert, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
+import { actionPlanIcon, actionPlanTone } from "@/components/exposure-radar/daily-action-plan-utils";
 import { formatCompact, formatVelocityLabel, normalizeQualityStage, qualityStageClass } from "@/components/exposure-radar/radar-utils";
-import type { DailyActionPlanItem, DailyActionType, DailyTaskStatus, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { DailyActionPlanItem, DailyTaskStatus, WorkbenchStats } from "@/components/exposure-radar/types";
 
 type TodayMovesPanelProps = {
   moves: DailyActionPlanItem[];
@@ -136,34 +137,4 @@ function LeaderboardPill({ label, value, tone }: { label: string; value: number;
       <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px]">{value}</span>
     </span>
   );
-}
-
-function actionPlanTone(action: DailyActionType) {
-  switch (action) {
-    case "publish_reply":
-      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "generate_reply":
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-    case "save_memory":
-      return "border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]";
-    case "review_fit":
-      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-    default:
-      return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
-  }
-}
-
-function actionPlanIcon(action: DailyActionType) {
-  switch (action) {
-    case "publish_reply":
-      return <CheckCircle2 className="size-3.5" />;
-    case "generate_reply":
-      return <MessageSquarePlus className="size-3.5" />;
-    case "save_memory":
-      return <BookmarkPlus className="size-3.5" />;
-    case "review_fit":
-      return <ShieldAlert className="size-3.5" />;
-    default:
-      return <Search className="size-3.5" />;
-  }
 }

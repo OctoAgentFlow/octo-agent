@@ -3,6 +3,7 @@ import type {
   ExposureRadarManualRecordApi,
   ExposureRadarManualRecordPayload,
   ExposureRadarPeopleItemApi,
+  ExposureRadarResultLookupApi,
   ExposureRadarSafetyCheckApi,
 } from "@/services/exposure-radar.service";
 import { manualOutcomeFeedbackMeta } from "@/components/exposure-radar/constants";
@@ -12,7 +13,7 @@ import {
   publicEngagementCount,
   radarItemTimeValue,
 } from "@/components/exposure-radar/people-radar-utils";
-import { extractTweetID } from "@/components/exposure-radar/radar-signal-utils";
+import { extractTweetID, scoreManualResult } from "@/components/exposure-radar/radar-signal-utils";
 import {
   normalizeManualOutcome,
   normalizeManualTaskStatus,
@@ -27,6 +28,16 @@ import type {
   SafetyReview,
   SafetyReviewCheck,
 } from "@/components/exposure-radar/types";
+
+export type ManualResultInput = {
+  impressions?: number;
+  likes?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  bookmarks?: number;
+  notes?: string;
+};
 
 export function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item: ExposureRadarItemApi) {
   const meta = manualOutcomeFeedbackMeta[outcome];
@@ -126,6 +137,53 @@ export function normalizeResultLookupStatus(value?: string) {
     default:
       return "failed";
   }
+}
+
+export function buildManualResultPatch(result: ManualResultInput, handled: boolean, checkedAt = new Date().toISOString()): Partial<ManualActionState> {
+  return {
+    resultImpressionCount: result.impressions,
+    resultLikeCount: result.likes,
+    resultReplyCount: result.replies,
+    resultRetweetCount: result.reposts,
+    resultQuoteCount: result.quotes,
+    resultBookmarkCount: result.bookmarks,
+    resultNotes: result.notes,
+    resultScore: scoreManualResult(result),
+    resultCheckedAt: checkedAt,
+    taskStatus: handled ? "done" : "in_progress",
+  };
+}
+
+export function buildSampleResolvedResultPatch(resolvedURL: string, handled: boolean, checkedAt = new Date().toISOString()): Partial<ManualActionState> {
+  return {
+    publishedUrl: resolvedURL,
+    resultImpressionCount: 1280,
+    resultLikeCount: 24,
+    resultReplyCount: 3,
+    resultRetweetCount: 2,
+    resultBookmarkCount: 5,
+    resultScore: 74,
+    resultCheckedAt: checkedAt,
+    taskStatus: handled ? "done" : "in_progress",
+  };
+}
+
+export function buildResolvedManualResultPatch(result: ExposureRadarResultLookupApi, fallbackURL: string, handled: boolean, checkedAt = new Date().toISOString()) {
+  const resolvedURL = result.published_url || fallbackURL;
+  const patch: Partial<ManualActionState> = {
+    publishedUrl: resolvedURL,
+    taskStatus: handled ? "done" : "in_progress",
+  };
+  if (typeof result.result_impression_count === "number") patch.resultImpressionCount = result.result_impression_count;
+  if (typeof result.result_like_count === "number") patch.resultLikeCount = result.result_like_count;
+  if (typeof result.result_reply_count === "number") patch.resultReplyCount = result.result_reply_count;
+  if (typeof result.result_retweet_count === "number") patch.resultRetweetCount = result.result_retweet_count;
+  if (typeof result.result_quote_count === "number") patch.resultQuoteCount = result.result_quote_count;
+  if (typeof result.result_bookmark_count === "number") patch.resultBookmarkCount = result.result_bookmark_count;
+  if (result.metrics_fetched) {
+    patch.resultCheckedAt = checkedAt;
+  }
+  return { patch, resolvedURL };
 }
 
 export function mergeManualRecordStates(current: Record<string, ManualActionState>, records: ExposureRadarManualRecordApi[]) {

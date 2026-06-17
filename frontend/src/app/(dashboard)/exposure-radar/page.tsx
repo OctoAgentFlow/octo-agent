@@ -25,7 +25,7 @@ import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, Learnin
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { isExposureRadarWorkspaceTab, radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { bestExposureResultRecord, buildDailyReviewActions, buildDailyReviewReportText, buildDailyReviewTopics, buildGrowthDeskBrief, buildGrowthDeskBriefPreview, isRecentManualRecord } from "@/components/exposure-radar/growth-desk-utils";
-import { buildManualOutcomePayload, buildManualRecordPayload, mergeManualRecordStates, mergePeopleRadar, normalizeResultLookupStatus } from "@/components/exposure-radar/manual-record-utils";
+import { buildManualOutcomePayload, buildManualRecordPayload, buildManualResultPatch, buildResolvedManualResultPatch, buildSampleResolvedResultPatch, mergeManualRecordStates, mergePeopleRadar, normalizeResultLookupStatus, type ManualResultInput } from "@/components/exposure-radar/manual-record-utils";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
 import { AccountHealthScoreCard, GrowthExperimentCard, MemoryAssetDeskCard, OpportunityEvidenceDeskCard, PeopleRelationshipDeskCard, WeeklyOperatorReviewCard, peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
@@ -36,7 +36,7 @@ import { diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnos
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
-import { clampPriority, compactTitle, extractTweetID, isManualActionHandled, isRadarItemSaved, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID, scoreManualResult, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
+import { clampPriority, compactTitle, extractTweetID, isManualActionHandled, isRadarItemSaved, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
 import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExplanation, buildOpportunityExplanation, buildReplyAngleIDs, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, formatMemoryOpportunityExplanation, hasPromotionalSmell, hasRiskyGrowthClaim } from "@/components/exposure-radar/opportunity-reply-utils";
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
@@ -695,28 +695,8 @@ export default function ExposureRadarPage() {
     }
   }, [manualActionStates, pushToast, recordManualAction, t]);
 
-  const submitManualResult = useCallback(async (item: ExposureRadarItemApi, result: {
-    impressions?: number;
-    likes?: number;
-    replies?: number;
-    reposts?: number;
-    quotes?: number;
-    bookmarks?: number;
-    notes?: string;
-  }) => {
-    const resultScore = scoreManualResult(result);
-    const patch: Partial<ManualActionState> = {
-      resultImpressionCount: result.impressions,
-      resultLikeCount: result.likes,
-      resultReplyCount: result.replies,
-      resultRetweetCount: result.reposts,
-      resultQuoteCount: result.quotes,
-      resultBookmarkCount: result.bookmarks,
-      resultNotes: result.notes,
-      resultScore,
-      resultCheckedAt: new Date().toISOString(),
-      taskStatus: isManualActionHandled(item, manualActionStates[item.id]) ? "done" : "in_progress",
-    };
+  const submitManualResult = useCallback(async (item: ExposureRadarItemApi, result: ManualResultInput) => {
+    const patch = buildManualResultPatch(result, isManualActionHandled(item, manualActionStates[item.id]));
     recordManualAction(item, patch);
     setFirstLoopCompletedAt((current) => current || new Date().toISOString());
     pushToast(t("exposureRadar.resultTracking.savedToast"));
@@ -4012,17 +3992,7 @@ function RadarCard({
     if (isSampleRadarItem(item)) {
       const resolvedURL = nextURL || item.url || "";
       if (resolvedURL) setPublishedURL(resolvedURL);
-      onManualAction({
-        publishedUrl: resolvedURL,
-        resultImpressionCount: 1280,
-        resultLikeCount: 24,
-        resultReplyCount: 3,
-        resultRetweetCount: 2,
-        resultBookmarkCount: 5,
-        resultScore: 74,
-        resultCheckedAt: new Date().toISOString(),
-        taskStatus: handledDone ? "done" : "in_progress",
-      });
+      onManualAction(buildSampleResolvedResultPatch(resolvedURL, handledDone));
       pushToast(t("exposureRadar.sample.toast.resultSaved"));
       return;
     }
@@ -4036,22 +4006,9 @@ function RadarCard({
         published_url: nextURL || undefined,
         comment_tweet_id: commentTweetID || undefined,
       });
-      const resolvedURL = result.published_url || nextURL;
+      const { patch, resolvedURL } = buildResolvedManualResultPatch(result, nextURL, handledDone);
       if (resolvedURL) {
         setPublishedURL(resolvedURL);
-      }
-      const patch: Partial<ManualActionState> = {
-        publishedUrl: resolvedURL,
-        taskStatus: handledDone ? "done" : "in_progress",
-      };
-      if (typeof result.result_impression_count === "number") patch.resultImpressionCount = result.result_impression_count;
-      if (typeof result.result_like_count === "number") patch.resultLikeCount = result.result_like_count;
-      if (typeof result.result_reply_count === "number") patch.resultReplyCount = result.result_reply_count;
-      if (typeof result.result_retweet_count === "number") patch.resultRetweetCount = result.result_retweet_count;
-      if (typeof result.result_quote_count === "number") patch.resultQuoteCount = result.result_quote_count;
-      if (typeof result.result_bookmark_count === "number") patch.resultBookmarkCount = result.result_bookmark_count;
-      if (result.metrics_fetched) {
-        patch.resultCheckedAt = new Date().toISOString();
       }
       onManualAction(patch);
       const status = normalizeResultLookupStatus(result.status);

@@ -25,7 +25,7 @@ below instead of leaving the original problem statement stale.
 | Legacy automation scheduler needed to be conservative. | Done | Scheduler calls `RunContentDraftOnce`, Exposure refresh, Trends refresh, publishing guardrails, billing/points jobs, and gross-margin checks. Legacy Auto Reply / Auto Comment / Auto DM loops are not in the default scheduler path. |
 | Billing needed new product semantics. | Done / refining | Billing and quota displays now prefer content drafts, opportunity drafts, review capacity, content memory, account intelligence, and radar refresh language while keeping legacy JSON fields compatible. |
 | Account analysis needed explicit data boundaries. | Done / refining | Roadmap and product copy state that Creator Studio private analytics are not assumed. Account intelligence uses public X data, user-provided context, and available internal workflow data. |
-| Exposure Radar page was too large and risky to modify. | In progress with large reduction | `page.tsx` has been split into many helper/component files and is currently about 3.6k lines, down from the prior very large single-file surface. Recent splits include workspace panels, panel primitives, content payload helpers, signal analysis, learning reports, and operating desk panel containers. |
+| Exposure Radar page was too large and risky to modify. | Done / maintain boundary | `page.tsx` is now about 1.2k lines and mainly handles data/state orchestration. P1 moved hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused component modules. |
 
 ### Partially Solved
 
@@ -36,13 +36,12 @@ below instead of leaving the original problem statement stale.
 | Posts + replies in one queue | Partially solved | Daily X Queue handles post drafts. Exposure Radar handles reply/opportunity signals. Handling List can review both, but the user still sees multiple surfaces. |
 | Learning explainability | Partially solved | Learning panels, weekly review, memory cues, and result feedback exist. The product can still explain "what changed because of my feedback" more simply. |
 | Cost and rate observability | Partially solved | Admin tracks OpenAI generations/costs, X Trends config, Exposure refresh interval, source health, and refresh skips. A unified operator ledger for X API calls, Exposure refresh attempts, OpenAI generation attempts, skip reasons, and failure reasons is still needed. |
-| Page modularization | Partially solved | Many helpers and panels are extracted. Remaining page-local candidates include People Relationship / Memory Asset panels, Daily Review / Strategy setup sections, and other stateful page-level containers. |
+| Page modularization | Solved for current risk level | Exposure Radar is no longer a monolithic product page. Remaining work is boundary discipline: keep future UI panels in component/helper modules and avoid putting new display logic back into `page.tsx`. |
 
 ### Still Open
 
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
-| P0 | Finish Exposure Radar modularization checkpoint sequence. | The page is much healthier, but still contains several page-local panels and stateful containers. Smaller files reduce regression risk. |
 | P0 | Add unified cost/rate observability. | X API and OpenAI cost control is now product-critical; operators need refresh counts, API call counts, skipped reasons, rate-limit failures, and generation costs in one place. |
 | P0 | Decide first-run IA between Daily X Queue and Daily Growth Desk. | Both are useful, but a new user should not need to understand two adjacent "daily workflow" concepts. |
 | P1 | Website/context import. | Daily X Queue accepts a website URL, but it does not yet fetch/summarize a website into source material automatically. |

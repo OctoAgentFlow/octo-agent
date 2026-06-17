@@ -41,8 +41,8 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 1. **Legacy route protection and documentation alignment**
    Keep historical compatibility data visible but safe. Old high-risk automation routes and old frontend aliases are downlined; documents stay aligned with the manual growth workflow.
 
-2. **Exposure Radar modularization**
-   Split the large `/exposure-radar` page into workbench, signal list, diagnostics, strategy, people radar, manual record, and learning modules.
+2. **Exposure Radar module boundary upkeep**
+   Keep `/exposure-radar` page code focused on data loading, state, and orchestration. New UI should land in focused component/helper modules instead of rebuilding a monolithic page.
 
 3. **Cost and rate observability**
    Add admin/operator visibility for X Recent Search calls, Exposure refresh counts, OpenAI generations, skipped refreshes, rate-limit errors, and budget guardrails.
@@ -67,7 +67,7 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 | Priority | Status | Notes |
 | --- | --- | --- |
 | Legacy route protection and documentation alignment | Done / refreshed | Old `/auto-post`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. Public DM unsubscribe remains for compliance. P0 cleanup also added a real `/content-library` entry, redirected `/agents` to `/oaf-bots`, and consolidated nav/start links around Daily Growth Desk, Content Memory, OAF Bots, and Handling List. |
-| Exposure Radar modularization | In progress | The page has been split into many helpers/components and is much smaller. Recent checkpoints include workspace panels, operating desk panels, people relationship desk, memory asset desk containers, and learning/history panels. Continue extracting remaining page-local panels opportunistically. |
+| Exposure Radar modularization | Done / maintain boundary | The former large `/exposure-radar` page is now about 1.2k lines and mainly orchestrates data/state. P1 extracted hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused modules. Future work should keep new panels outside `page.tsx`. |
 | Cost and rate observability | Done / refining | `CostUsageLedger` records OpenAI generation cost and major X API usage. Admin exposes OpenAI cost, X API calls, X Trends/Exposure refresh config, skip/failure health, estimated Exposure refreshes/day, and budget guardrail status. |
 | Opportunity quality and learning loop | Done / refining | Hot/rising, quality tiers, manual records, result backfill, memory, strategy, people radar, and weekly review exist. Keep improving ranking quality and user-facing explanations. |
 | Account Intelligence clarity | Done / refining | Current docs and product surfaces avoid assuming Creator Studio private data. Next step is optional user-provided analytics import or future authorized private metrics access. |

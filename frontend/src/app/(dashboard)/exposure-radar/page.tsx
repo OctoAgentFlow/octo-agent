@@ -17,9 +17,10 @@ import { contentLibraryService, type ContentLibraryItemPayload } from "@/service
 import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadarData, type ExposureRadarDiagnosticsApi, type ExposureRadarGrowthStrategyApi, type ExposureRadarItemApi, type ExposureRadarManualRecordApi, type ExposureRadarManualRecordPayload, type ExposureRadarPeopleItemApi, type ExposureRadarPerformanceData, type ExposureRadarRegion, type ExposureRadarResultRefreshApi, type ExposureRadarSafetyCenterData, type ExposureRadarSafetyCheckApi, type ExposureRadarWeeklyReviewData } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import { exposureRadarWorkspaceTabs, fanOptions, hotCountOptions, hourOptions, manualOutcomeFeedbackMeta, radarViewFilters, replyAngleGenerationGuides } from "@/components/exposure-radar/constants";
+import { DailyOperatingGoalsCard, FirstDayLaunchCard, PreflightSafetyCard, RadarEmptyStateCard, SessionFocusCard } from "@/components/exposure-radar/activation-session-panels";
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
-import { DiagnosticMetric, LeaderboardPill, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
+import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { isExposureRadarWorkspaceTab, radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
 import { AccountHealthScoreCard, GrowthExperimentCard, MemoryAssetDeskCard, OpportunityEvidenceDeskCard, PeopleRelationshipDeskCard, WeeklyOperatorReviewCard, peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
@@ -2688,8 +2689,6 @@ function FirstDayLaunchPanel({
     ...step,
     anchor: step.key === "account" ? "#radar-setup" : step.key === "strategy" ? "#radar-strategy" : step.key === "result" ? "#radar-results" : moves.length > 0 ? "#radar-workbench" : "#radar-setup",
   }));
-  const doneCount = steps.filter((step) => step.done).length;
-  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
   const selectedAccount = accounts.find((account) => account.id === selectedAccountID);
   const selectedBot = bots.find((bot) => bot.id === selectedBotID);
   const checklist = [
@@ -2717,210 +2716,22 @@ function FirstDayLaunchPanel({
     { key: "result", done: resultCount > 0 || handledCount > 0, href: "#radar-results", icon: <BarChart3 className="size-4" /> },
   ];
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <CardHeader title={t("exposureRadar.firstDay.title")} description={t("exposureRadar.firstDay.description")} className="mb-0" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <LeaderboardPill label={t("exposureRadar.firstDay.metric.ready")} value={moves.length} tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]" />
-            <LeaderboardPill label={t("exposureRadar.firstDay.metric.handled")} value={handledCount} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
-            <LeaderboardPill label={t("exposureRadar.firstDay.metric.backfilled")} value={resultCount} tone="border-[#7856ff]/25 bg-[#7856ff]/10 text-[#c4b5fd]" />
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-64">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] text-[#71767b]">{t("exposureRadar.firstDay.progress")}</p>
-              <p className="text-2xl font-semibold text-white">{doneCount}/4</p>
-            </div>
-            <a href={nextStep.anchor} className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
-              {doneCount === steps.length ? t("exposureRadar.firstDay.cta.done") : t(`exposureRadar.firstDay.cta.${nextStep.key}`)}
-              <ArrowRight className="size-3.5" />
-            </a>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#202327]">
-            <div className="h-full rounded-full bg-[#1d9bf0]" style={{ width: `${Math.round((doneCount / steps.length) * 100)}%` }} />
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        <FirstDaySetupChip icon={<Users className="size-3.5" />} label={t("exposureRadar.firstDay.selected.account")} value={selectedAccount ? `@${selectedAccount.username}` : t("exposureRadar.firstDay.selected.missing")} />
-        <FirstDaySetupChip icon={<Bot className="size-3.5" />} label={t("exposureRadar.firstDay.selected.bot")} value={selectedBot?.name || (selectedBotID ? t("oafBots.botNumber", { id: selectedBotID }) : t("exposureRadar.firstDay.selected.missing"))} />
-        <FirstDaySetupChip icon={<Target className="size-3.5" />} label={t("exposureRadar.firstDay.selected.lane")} value={strategy?.target_audience || t("exposureRadar.firstDay.selected.missing")} />
-      </div>
-      <SetupWizardPanel steps={wizardSteps} usingSampleMode={usingSampleMode} onStartSample={onStartSample} onExitSample={onExitSample} />
-      <FirstDayActivationCard mode={activationMode} loadState={loadState} onRefresh={onRefresh} onStartSample={onStartSample} />
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        {steps.map((step, index) => (
-          <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex size-7 items-center justify-center rounded-full border border-[#2f3336] text-xs font-semibold text-[#8b98a5]">{index + 1}</span>
-              {step.done ? <CheckCircle2 className="size-4 text-[#7ee0b5]" /> : <Clock3 className="size-4 text-[#71767b]" />}
-            </div>
-            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.${step.key}.title`)}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.${step.key}.description`)}</p>
-          </a>
-        ))}
-      </div>
-      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstDay.checklist.title")}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.firstDay.checklist.description")}</p>
-          </div>
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-[#16181c] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <CheckCircle2 className="size-3.5" />
-            {checklist.filter((item) => item.done).length}/{checklist.length}
-          </span>
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {checklist.map((item) => (
-            <div key={item.key} className={`rounded-xl border p-3 ${item.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.checklist.${item.key}.title`)}</p>
-                {item.done ? <CheckCircle2 className="size-3.5 text-[#7ee0b5]" /> : <Clock3 className="size-3.5 text-[#71767b]" />}
-              </div>
-              <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.checklist.${item.key}.description`)}</p>
-              <p className="mt-2 truncate text-xs font-semibold text-[#8ecdf8]">{item.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.firstDay.timebox.title")}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.firstDay.timebox.description")}</p>
-          </div>
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-[#16181c] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <Clock3 className="size-3.5" />
-            {t("exposureRadar.firstDay.timebox.total")}
-          </span>
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-4">
-          {["strategy", "scan", "reply", "backfill"].map((key) => (
-            <div key={key} className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">
-              <p className="text-[11px] font-semibold text-[#8ecdf8]">{t(`exposureRadar.firstDay.timebox.${key}.time`)}</p>
-              <p className="mt-1 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.timebox.${key}.title`)}</p>
-              <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.timebox.${key}.description`)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function FirstDaySetupChip({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
-      <div className="flex items-center gap-2 text-[11px] font-semibold text-[#71767b]">{icon}{label}</div>
-      <p className="mt-1 truncate text-sm font-semibold text-[#e7e9ea]">{value}</p>
-    </div>
-  );
-}
-
-function SetupWizardPanel({
-  steps,
-  usingSampleMode,
-  onStartSample,
-  onExitSample,
-}: {
-  steps: Array<{ key: string; done: boolean; href: string; icon: ReactNode }>;
-  usingSampleMode: boolean;
-  onStartSample: () => void;
-  onExitSample: () => void;
-}) {
-  const { t } = useT();
-  const doneCount = steps.filter((step) => step.done).length;
-  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
-  return (
-    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#7856ff]/25 bg-[#7856ff]/10 px-3 py-1 text-xs font-semibold text-[#c4b5fd]">
-            <ShieldCheck className="size-3.5" />
-            {t("exposureRadar.setupWizard.badge")}
-          </span>
-          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t("exposureRadar.setupWizard.title")}</p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.setupWizard.description")}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <a href={nextStep.href} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
-            {t(nextStep.done ? "exposureRadar.setupWizard.action.review" : `exposureRadar.setupWizard.action.${nextStep.key}`)}
-            <ArrowRight className="size-3.5" />
-          </a>
-          {usingSampleMode ? (
-            <Button type="button" variant="outline" onClick={onExitSample}>
-              <RefreshCw className="size-4" />
-              {t("exposureRadar.sample.exit")}
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={onStartSample}>
-              <Sparkles className="size-4" />
-              {t("exposureRadar.sample.start")}
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-5">
-        {steps.map((step, index) => (
-          <a key={step.key} href={step.href} className={`rounded-xl border p-3 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className={`inline-flex size-8 items-center justify-center rounded-full border ${step.done ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-black text-[#8b98a5]"}`}>
-                {step.done ? <CheckCircle2 className="size-4" /> : step.icon}
-              </span>
-              <span className="text-[11px] font-semibold text-[#71767b]">{String(index + 1).padStart(2, "0")}</span>
-            </div>
-            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.setupWizard.${step.key}.title`)}</p>
-            <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.setupWizard.${step.key}.description`)}</p>
-          </a>
-        ))}
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#202327]">
-        <div className="h-full rounded-full bg-[#00ba7c]" style={{ width: `${Math.round((doneCount / steps.length) * 100)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function FirstDayActivationCard({ mode, loadState, onRefresh, onStartSample }: { mode: FirstDayActivationMode; loadState: LoadState; onRefresh: () => void; onStartSample: () => void }) {
-  const { t } = useT();
-  const actions = firstDayActivationActions(mode, onRefresh, loadState, onStartSample);
-  return (
-    <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/30 bg-black/30 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
-            <Sparkles className="size-3.5" />
-            {t("exposureRadar.firstDay.activation.badge")}
-          </span>
-          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.activation.${mode}.title`)}</p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t(`exposureRadar.firstDay.activation.${mode}.description`)}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {actions.map((action) => action.href ? (
-            <a key={action.key} href={action.href} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition ${action.primary ? "bg-[#1d9bf0] text-white hover:bg-[#1a8cd8]" : "border border-[#2f3336] bg-black text-[#e7e9ea] hover:bg-[#16181c]"}`}>
-              {action.icon}
-              {t(`exposureRadar.firstDay.activation.action.${action.key}`)}
-            </a>
-          ) : (
-            <Button key={action.key} type="button" variant={action.primary ? "default" : "outline"} onClick={action.onClick} disabled={action.disabled}>
-              {action.icon}
-              {t(`exposureRadar.firstDay.activation.action.${action.key}`)}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        {["one", "two", "three"].map((key) => (
-          <div key={key} className="rounded-xl border border-[#2f3336] bg-black/60 p-3">
-            <p className="text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.activation.${mode}.step.${key}.title`)}</p>
-            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.firstDay.activation.${mode}.step.${key}.description`)}</p>
-          </div>
-        ))}
-      </div>
-    </div>
+    <FirstDayLaunchCard
+      steps={steps}
+      checklist={checklist}
+      wizardSteps={wizardSteps}
+      activationMode={activationMode}
+      activationActions={firstDayActivationActions(activationMode, onRefresh, loadState, onStartSample)}
+      selectedAccountLabel={selectedAccount ? `@${selectedAccount.username}` : t("exposureRadar.firstDay.selected.missing")}
+      selectedBotLabel={selectedBot?.name || (selectedBotID ? t("oafBots.botNumber", { id: selectedBotID }) : t("exposureRadar.firstDay.selected.missing"))}
+      selectedLaneLabel={strategy?.target_audience || t("exposureRadar.firstDay.selected.missing")}
+      readyCount={moves.length}
+      handledCount={handledCount}
+      resultCount={resultCount}
+      usingSampleMode={usingSampleMode}
+      onStartSample={onStartSample}
+      onExitSample={onExitSample}
+    />
   );
 }
 
@@ -2944,112 +2755,21 @@ function RadarEmptyStatePanel({
   const reason = signalRecoveryReason(data, loadState, t);
   const suggestions = signalRecoverySuggestions(diagnostics, t).slice(0, 3);
   return (
-    <div className="rounded-2xl border border-dashed border-[#2f3336] bg-black p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-xs font-semibold text-[#f6d96b]">
-            <Search className="size-3.5" />
-            {t("exposureRadar.emptyState.badge")}
-          </span>
-          <h3 className="mt-3 text-lg font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.title")}</h3>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t("exposureRadar.emptyState.description", { reason })}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button type="button" onClick={onRefresh} disabled={loadState === "loading"}>
-            <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
-            {t("exposureRadar.emptyState.action.refresh")}
-          </Button>
-          <Button type="button" variant="outline" onClick={onWidenWindow}>
-            <Clock3 className="size-4" />
-            {t("exposureRadar.emptyState.action.widen")}
-          </Button>
-          <Button type="button" variant="outline" onClick={onRaiseFans}>
-            <Users className="size-4" />
-            {t("exposureRadar.emptyState.action.raiseFans")}
-          </Button>
-          <Button type="button" variant="outline" onClick={onStartSample}>
-            <Sparkles className="size-4" />
-            {t("exposureRadar.sample.start")}
-          </Button>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.visible")} value={formatCompact(diagnostics?.visible_pool_count || 0)} detail={t("exposureRadar.emptyState.metric.visibleDetail")} />
-        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.maxViews")} value={formatCompact(diagnostics?.max_impression_count || 0)} detail={t("exposureRadar.emptyState.metric.maxViewsDetail")} />
-        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.maxSpeed")} value={`${formatOneDecimal(diagnostics?.max_views_per_minute || 0)}/min`} detail={t("exposureRadar.emptyState.metric.maxSpeedDetail")} />
-        <DiagnosticMetric label={t("exposureRadar.emptyState.metric.coverage")} value={formatPercent(diagnostics?.sampling_coverage || 0)} detail={t("exposureRadar.emptyState.metric.coverageDetail")} />
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.suggestions")}</p>
-          <div className="mt-3 space-y-2">
-            {suggestions.map((suggestion) => (
-              <div key={suggestion} className="flex gap-2 rounded-lg border border-[#2f3336] bg-black px-3 py-2 text-xs leading-5 text-[#8b98a5]">
-                <Info className="mt-0.5 size-3.5 shrink-0 text-[#8ecdf8]" />
-                <span>{suggestion}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border border-[#2f3336] bg-[#0f1419] p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyState.safeFallback.title")}</p>
-          <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("exposureRadar.emptyState.safeFallback.description")}</p>
-          <a href="#radar-strategy" className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("exposureRadar.emptyState.action.strategy")}
-            <ArrowRight className="size-4" />
-          </a>
-        </div>
-      </div>
-      <EmptyStatePlaybook onRefresh={onRefresh} onWidenWindow={onWidenWindow} onStartSample={onStartSample} loadState={loadState} />
-    </div>
-  );
-}
-
-function EmptyStatePlaybook({
-  onRefresh,
-  onWidenWindow,
-  onStartSample,
-  loadState,
-}: {
-  onRefresh: () => void;
-  onWidenWindow: () => void;
-  onStartSample: () => void;
-  loadState: LoadState;
-}) {
-  const { t } = useT();
-  const actions = [
-    { key: "refresh", icon: <RefreshCw className={`size-4 ${loadState === "loading" ? "animate-spin" : ""}`} />, onClick: onRefresh, disabled: loadState === "loading" },
-    { key: "window", icon: <Clock3 className="size-4" />, onClick: onWidenWindow },
-    { key: "sample", icon: <Sparkles className="size-4" />, onClick: onStartSample },
-  ];
-  return (
-    <div className="mt-4 rounded-2xl border border-[#2f3336] bg-[#0f1419] p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.emptyPlaybook.title")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#71767b]">{t("exposureRadar.emptyPlaybook.description")}</p>
-        </div>
-        <a href="#radar-strategy" className="inline-flex h-8 w-fit items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-          {t("exposureRadar.emptyPlaybook.strategy")}
-          <ArrowRight className="size-3.5" />
-        </a>
-      </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
-        {actions.map((action) => (
-          <button
-            key={action.key}
-            type="button"
-            disabled={action.disabled}
-            onClick={action.onClick}
-            className="rounded-xl border border-[#2f3336] bg-black p-3 text-left transition hover:border-[#1d9bf0]/45 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className="inline-flex size-8 items-center justify-center rounded-lg border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]">{action.icon}</span>
-            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{t(`exposureRadar.emptyPlaybook.${action.key}.title`)}</p>
-            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{t(`exposureRadar.emptyPlaybook.${action.key}.description`)}</p>
-          </button>
-        ))}
-      </div>
-    </div>
+    <RadarEmptyStateCard
+      reason={reason}
+      suggestions={suggestions}
+      metrics={{
+        visible: formatCompact(diagnostics?.visible_pool_count || 0),
+        maxViews: formatCompact(diagnostics?.max_impression_count || 0),
+        maxSpeed: `${formatOneDecimal(diagnostics?.max_views_per_minute || 0)}/min`,
+        coverage: formatPercent(diagnostics?.sampling_coverage || 0),
+      }}
+      loadState={loadState}
+      onRefresh={onRefresh}
+      onWidenWindow={onWidenWindow}
+      onRaiseFans={onRaiseFans}
+      onStartSample={onStartSample}
+    />
   );
 }
 
@@ -3087,34 +2807,7 @@ function PreflightSafetyPanel({
   const blocked = checks.filter((check) => check.status === "block").length;
   const watch = checks.filter((check) => check.status === "watch").length;
   const status = blocked > 0 ? "block" : watch > 0 ? "watch" : "pass";
-  return (
-    <Card className={safetyReviewTone(status)}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${safetyReviewBadgeTone(status)}`}>
-            <ShieldCheck className="size-3.5" />
-            {t("exposureRadar.preflight.badge")}
-          </span>
-          <CardHeader title={t("exposureRadar.preflight.title")} description={t(`exposureRadar.preflight.description.${status}`)} className="mt-3 mb-0" />
-        </div>
-        <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${safetyReviewBadgeTone(status)}`}>
-          {t(`exposureRadar.preflight.status.${status}`)}
-        </span>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        {checks.map((check) => (
-          <div key={check.key} className="rounded-xl border border-[#2f3336] bg-black/35 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <span className={`inline-flex size-8 items-center justify-center rounded-lg border ${safetyReviewBadgeTone(check.status)}`}>{check.icon}</span>
-              <span className={`size-2 rounded-full ${safetyReviewDot(check.status)}`} />
-            </div>
-            <p className="mt-3 text-xs font-semibold text-[#e7e9ea]">{check.title}</p>
-            <p className="mt-1 text-[11px] leading-5 text-[#71767b]">{check.detail}</p>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
+  return <PreflightSafetyCard checks={checks} status={status} />;
 }
 
 function SessionFocusPanel({
@@ -3132,41 +2825,10 @@ function SessionFocusPanel({
 }) {
   const { t } = useT();
   const options = sessionFocusOptions(t);
+  const strategyLabel = usingSampleMode ? t("exposureRadar.sample.badge") : strategy?.primary_goal ? t(`exposureRadar.strategy.goal.${strategy.primary_goal}`) : t("exposureRadar.sessionFocus.noStrategy");
+  const guidance = t(`exposureRadar.sessionFocus.guidance.${focus}`, { signal: firstItem ? compactTitle(firstItem.title) : t("exposureRadar.sessionFocus.noSignal") });
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
-            <Target className="size-3.5" />
-            {t("exposureRadar.sessionFocus.badge")}
-          </span>
-          <CardHeader title={t("exposureRadar.sessionFocus.title")} description={t("exposureRadar.sessionFocus.description")} className="mt-3 mb-0" />
-        </div>
-        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#2f3336] bg-black px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-          {usingSampleMode ? t("exposureRadar.sample.badge") : strategy?.primary_goal ? t(`exposureRadar.strategy.goal.${strategy.primary_goal}`) : t("exposureRadar.sessionFocus.noStrategy")}
-        </span>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        {options.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => onChange(option.key)}
-            className={`rounded-2xl border p-4 text-left transition ${focus === option.key ? "border-[#1d9bf0]/55 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black hover:border-[#1d9bf0]/35"}`}
-          >
-            <span className={`inline-flex size-9 items-center justify-center rounded-xl border ${focus === option.key ? "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]"}`}>
-              {option.icon}
-            </span>
-            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{option.title}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{option.description}</p>
-          </button>
-        ))}
-      </div>
-      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
-        <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.sessionFocus.guidance.title")}</p>
-        <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(`exposureRadar.sessionFocus.guidance.${focus}`, { signal: firstItem ? compactTitle(firstItem.title) : t("exposureRadar.sessionFocus.noSignal") })}</p>
-      </div>
-    </Card>
+    <SessionFocusCard focus={focus} options={options} strategyLabel={strategyLabel} guidance={guidance} onChange={onChange} />
   );
 }
 
@@ -3194,57 +2856,7 @@ function DailyOperatingGoalsPanel({
   const completed = goals.filter((goal) => goal.done >= goal.target).length;
   const overall = goals.length ? Math.round((goals.reduce((sum, goal) => sum + Math.min(1, goal.done / goal.target), 0) / goals.length) * 100) : 0;
   return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-1 text-xs font-semibold text-[#7ee0b5]">
-            <Gauge className="size-3.5" />
-            {t("exposureRadar.dailyGoals.badge")}
-          </span>
-          <CardHeader title={t("exposureRadar.dailyGoals.title")} description={t("exposureRadar.dailyGoals.description")} className="mt-3 mb-0" />
-        </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4 lg:min-w-56">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] text-[#71767b]">{t("exposureRadar.dailyGoals.progress")}</p>
-              <p className="text-2xl font-semibold text-white">{completed}/{goals.length}</p>
-            </div>
-            <span className="inline-flex size-12 items-center justify-center rounded-full border border-[#00ba7c]/25 bg-[#00ba7c]/10 text-sm font-semibold text-[#7ee0b5]">{overall}%</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#202327]">
-            <div className="h-full rounded-full bg-[#00ba7c]" style={{ width: `${overall}%` }} />
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        {goals.map((goal) => (
-          <div key={goal.key} className={`rounded-2xl border p-4 ${goal.done >= goal.target ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : "border-[#2f3336] bg-black"}`}>
-            <div className="flex items-start justify-between gap-3">
-              <span className={`inline-flex size-9 items-center justify-center rounded-xl border ${goal.done >= goal.target ? "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]" : "border-[#2f3336] bg-[#16181c] text-[#8b98a5]"}`}>
-                {goal.icon}
-              </span>
-              <span className="text-sm font-semibold text-[#e7e9ea]">{goal.done}/{goal.target}</span>
-            </div>
-            <p className="mt-3 text-sm font-semibold text-[#e7e9ea]">{goal.title}</p>
-            <p className="mt-1 text-xs leading-5 text-[#71767b]">{goal.description}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#2f3336] bg-black p-4 md:flex-row md:items-center md:justify-between">
-        <p className="text-xs leading-5 text-[#8b98a5]">{usingSampleMode ? t("exposureRadar.dailyGoals.sampleNote") : t("exposureRadar.dailyGoals.note")}</p>
-        {items.length === 0 ? (
-          <Button type="button" size="sm" onClick={onStartSample}>
-            <Sparkles className="size-3.5" />
-            {t("exposureRadar.sample.start")}
-          </Button>
-        ) : (
-          <a href="#radar-workbench" className="inline-flex h-8 items-center gap-1 rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
-            {t("exposureRadar.dailyGoals.openWorkbench")}
-            <ArrowRight className="size-3.5" />
-          </a>
-        )}
-      </div>
-    </Card>
+    <DailyOperatingGoalsCard goals={goals} completed={completed} overall={overall} hasItems={items.length > 0} usingSampleMode={usingSampleMode} onStartSample={onStartSample} />
   );
 }
 
@@ -5320,39 +4932,6 @@ function hasPromotionalSmell(value: string) {
 function hasRiskyGrowthClaim(value: string) {
   if (!value) return false;
   return /guarantee|guaranteed|5m|5M|fully automated|passive income|spam at scale/i.test(value);
-}
-
-function safetyReviewTone(status: SafetyReviewStatus) {
-  switch (status) {
-    case "block":
-      return "border-[#f4212e]/25 bg-[#1f0709]";
-    case "watch":
-      return "border-[#ffd400]/25 bg-[#1f1a07]";
-    default:
-      return "border-[#00ba7c]/20 bg-[#061a14]";
-  }
-}
-
-function safetyReviewBadgeTone(status: SafetyReviewStatus) {
-  switch (status) {
-    case "block":
-      return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-    case "watch":
-      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-    default:
-      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  }
-}
-
-function safetyReviewDot(status: SafetyReviewStatus) {
-  switch (status) {
-    case "block":
-      return "bg-[#f4212e]";
-    case "watch":
-      return "bg-[#ffd400]";
-    default:
-      return "bg-[#00ba7c]";
-  }
 }
 
 function buildReplyAngleIDs(item: ExposureRadarItemApi): ReplyAngleID[] {

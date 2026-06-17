@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { Activity, Database, ListChecks, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import { getPlanBenefits, planAudienceKey, planBadgeKey, planDescriptionKey, planUnitKey } from "@/lib/plan-display";
 import { pricingPlans } from "@/mocks/landing.mock";
 
 import { SectionShell } from "./section-shell";
+
+const pricingProofItems = [
+  { key: "radar", icon: Radar },
+  { key: "drafts", icon: ListChecks },
+  { key: "memory", icon: Database },
+  { key: "learning", icon: Activity },
+];
 
 export function PricingSection() {
   const { t, lang } = useT();
@@ -36,6 +44,20 @@ export function PricingSection() {
         <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
           {t("pricing.yearlySave")}
         </span>
+      </div>
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
+        {pricingProofItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div key={item.key} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <span className="grid size-9 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                <Icon className="size-4" />
+              </span>
+              <p className="mt-3 text-sm font-semibold text-white">{t(`pricing.proof.${item.key}.title`)}</p>
+              <p className="mt-1.5 text-xs leading-5 text-white/58">{t(`pricing.proof.${item.key}.description`)}</p>
+            </div>
+          );
+        })}
       </div>
       <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-5">
         {pricingPlans.map((plan) => {

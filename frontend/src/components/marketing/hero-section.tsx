@@ -55,7 +55,7 @@ export function HeroSection() {
             {t("marketing.hero.primaryCta")}
           </Link>
           <a
-            href="#oaf-bot"
+            href="#exposure-radar"
             className={cn(
               buttonVariants({ variant: "outline" }),
               "h-12 w-full border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:h-10 sm:w-auto"

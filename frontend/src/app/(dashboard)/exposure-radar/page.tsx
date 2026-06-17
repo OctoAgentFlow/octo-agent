@@ -39,7 +39,7 @@ import { buildSampleExposureItems } from "@/components/exposure-radar/sample-dat
 import { DailySessionProgressPanel } from "@/components/exposure-radar/session-progress-panel";
 import { DailyOperatingGoalsPanel, DailyRecapPanel, FirstDayLaunchPanel, FirstLoopCompletionPanel, FirstLoopPanel, NextSessionCarryoverPanel, OperatorScratchpadPanel, PreflightSafetyPanel, RadarEmptyStatePanel, SampleModeBanner, SessionFocusPanel } from "@/components/exposure-radar/session-workflow-panels";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
-import { parseCommaList } from "@/components/exposure-radar/strategy-form-utils";
+import { parseCommaList, type StrategyContextImportDraft } from "@/components/exposure-radar/strategy-form-utils";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { LearningInsightsPanel, TopicHistoryPanel } from "@/components/exposure-radar/learning-history-panels";
 import { DailyReviewReportPanel, ResultLearningLoopPanel } from "@/components/exposure-radar/strategy-report-panels";
@@ -82,9 +82,11 @@ export default function ExposureRadarPage() {
   const [savingMemoryID, setSavingMemoryID] = useState<string | null>(null);
   const [savingSeedID, setSavingSeedID] = useState<string | null>(null);
   const [generatingSeedDraftID, setGeneratingSeedDraftID] = useState<string | null>(null);
+  const [savingContextMemory, setSavingContextMemory] = useState(false);
   const [radarView, setRadarView] = useState<RadarViewFilter>("priority");
   const [workspaceTab, setWorkspaceTab] = useState<ExposureRadarWorkspaceTab>("today");
   const [queryHydrated, setQueryHydrated] = useState(false);
+  const [guidedFirstSession, setGuidedFirstSession] = useState(false);
   const [savedMemoryIDs, setSavedMemoryIDs] = useState<Set<string>>(() => new Set());
   const [manualActionStates, setManualActionStates] = useState<Record<string, ManualActionState>>({});
   const [manualActionsHydrated, setManualActionsHydrated] = useState(false);
@@ -117,6 +119,7 @@ export default function ExposureRadarPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
     const queryState = exposureRadarQueryStateFromSearch(window.location.search, initialQueryStateRef.current);
     setRegion(queryState.region);
     setHours(queryState.hours);
@@ -125,6 +128,7 @@ export default function ExposureRadarPage() {
     setSelectedAccountID(queryState.selectedAccountID);
     setSelectedBotID(queryState.selectedBotID);
     setWorkspaceTab(queryState.workspaceTab);
+    setGuidedFirstSession(params.get("activation") === "first_day");
     setQueryHydrated(true);
   }, []);
 
@@ -407,6 +411,34 @@ export default function ExposureRadarPage() {
       setStrategySaving(false);
     }
   }, [pushToast, region, selectedAccountID, selectedBotID, t]);
+
+  const saveStrategyContextMemory = useCallback(async (draft: StrategyContextImportDraft) => {
+    if (!selectedAccountID && !selectedBotID) {
+      pushToast(t("exposureRadar.toast.selectBotAccountForMemory"));
+      return;
+    }
+    setSavingContextMemory(true);
+    try {
+      await contentLibraryService.create({
+        twitter_account_id: selectedAccountID || undefined,
+        bot_id: selectedBotID || undefined,
+        title: draft.title,
+        item_type: "idea",
+        body: draft.memoryBody,
+        topics: draft.topics,
+        growth_goal: draft.form.primaryGoal,
+        cta_preference: draft.form.replyStyle,
+        priority: 70,
+        status: "active",
+      });
+      void loadContentDraftBridge();
+      pushToast(t("exposureRadar.strategy.contextImport.memorySaved"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("exposureRadar.strategy.contextImport.memoryFailed") : t("exposureRadar.strategy.contextImport.memoryFailed"));
+    } finally {
+      setSavingContextMemory(false);
+    }
+  }, [loadContentDraftBridge, pushToast, selectedAccountID, selectedBotID, t]);
 
   const savePeopleNote = useCallback(async (person: PeopleRadarEntry, stage: string, notes: string, tags: string) => {
     if (!person.handle) return;
@@ -772,10 +804,13 @@ export default function ExposureRadarPage() {
     <div className="space-y-5">
       <ExposureRadarHeroPanel itemCount={items.length} metrics={metrics} />
 
-      <ExposureRadarWorkspaceNav value={workspaceTab} counts={workspaceTabCounts} onChange={setWorkspaceTab} />
+      {guidedFirstSession && !firstLoopDone ? null : (
+        <ExposureRadarWorkspaceNav value={workspaceTab} counts={workspaceTabCounts} onChange={setWorkspaceTab} />
+      )}
 
       {workspaceTab === "today" ? (
         <DailyGrowthDesk
+          guidedFirstSession={guidedFirstSession && !firstLoopDone}
           overview={(
             <DailyGrowthDeskPanel
               selectedAccountID={selectedAccountID}
@@ -813,6 +848,8 @@ export default function ExposureRadarPage() {
               strategy={growthStrategy}
               moves={todayMoves}
               stats={workbenchStats}
+              items={items}
+              manualActionStates={manualActionStates}
               recentRecords={recentManualRecords}
               timeZone={timeZone}
             />
@@ -1094,7 +1131,9 @@ export default function ExposureRadarPage() {
               strategy={growthStrategy}
               region={region}
               saving={strategySaving}
+              contextMemorySaving={savingContextMemory}
               onSave={saveGrowthStrategy}
+              onSaveContextMemory={saveStrategyContextMemory}
             />
           </div>
 

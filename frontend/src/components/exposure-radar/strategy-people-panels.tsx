@@ -12,13 +12,29 @@ import { peopleRadarStageTone } from "@/components/exposure-radar/operating-desk
 import { ActionPlanMetric, MiniStat, ReviewList, StrategyInput } from "@/components/exposure-radar/panel-primitives";
 import { buildPeopleRadarNextTouch, buildPeopleRadarPlaybook, peopleRadarPlaybookTone } from "@/components/exposure-radar/people-radar-utils";
 import { formatCompact } from "@/components/exposure-radar/radar-utils";
-import { buildStarterStrategyTemplates, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
+import { buildStarterStrategyTemplates, buildStrategyContextImportDraft, strategyFormFromApi, type StrategyContextImportDraft } from "@/components/exposure-radar/strategy-form-utils";
 import type { PeopleRadarEntry, StarterStrategyTemplate, StrategyFormState } from "@/components/exposure-radar/types";
 
-export function StrategySetupPanel({ strategy, region, saving, onSave }: { strategy: ExposureRadarGrowthStrategyApi | null; region: ExposureRadarRegion; saving: boolean; onSave: (form: StrategyFormState) => void }) {
+export function StrategySetupPanel({
+  strategy,
+  region,
+  saving,
+  contextMemorySaving = false,
+  onSave,
+  onSaveContextMemory,
+}: {
+  strategy: ExposureRadarGrowthStrategyApi | null;
+  region: ExposureRadarRegion;
+  saving: boolean;
+  contextMemorySaving?: boolean;
+  onSave: (form: StrategyFormState) => void;
+  onSaveContextMemory?: (draft: StrategyContextImportDraft) => void;
+}) {
   const { t } = useT();
   const [form, setForm] = useState<StrategyFormState>(() => strategyFormFromApi(strategy));
+  const [contextImport, setContextImport] = useState("");
   const templates = useMemo(() => buildStarterStrategyTemplates(t, region), [region, t]);
+  const contextDraft = useMemo(() => contextImport.trim() ? buildStrategyContextImportDraft(form, contextImport, t) : null, [contextImport, form, t]);
   useEffect(() => {
     setForm(strategyFormFromApi(strategy));
   }, [strategy]);
@@ -29,6 +45,10 @@ export function StrategySetupPanel({ strategy, region, saving, onSave }: { strat
       ...template.form,
     }));
   };
+  const applyContextImport = () => {
+    if (!contextDraft) return;
+    setForm(contextDraft.form);
+  };
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -37,6 +57,44 @@ export function StrategySetupPanel({ strategy, region, saving, onSave }: { strat
           <SlidersHorizontal className="size-3.5" />
           {t(`exposureRadar.region.${region}`)}
         </span>
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#1d9bf0]/20 bg-[#08131f] p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.strategy.contextImport.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.strategy.contextImport.description")}</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-black px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Database className="size-3.5" />
+            {t("exposureRadar.strategy.contextImport.badge")}
+          </span>
+        </div>
+        <textarea
+          className="form-input mt-3 min-h-32 resize-y"
+          placeholder={t("exposureRadar.strategy.contextImport.placeholder")}
+          value={contextImport}
+          onChange={(event) => setContextImport(event.target.value)}
+        />
+        {contextDraft ? (
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <ContextImportPreview title={t("exposureRadar.strategy.contextImport.previewTopics")} items={contextDraft.topics} empty={t("exposureRadar.strategy.contextImport.previewEmpty")} />
+            <ContextImportPreview title={t("exposureRadar.strategy.contextImport.previewGuardrails")} items={contextDraft.guardrails} empty={t("exposureRadar.strategy.contextImport.previewSafe")} />
+            <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+              <p className="text-xs font-semibold text-[#8b98a5]">{t("exposureRadar.strategy.contextImport.previewMemory")}</p>
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-[#e7e9ea]">{contextDraft.title}</p>
+            </div>
+          </div>
+        ) : null}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="outline" disabled={!contextDraft} onClick={applyContextImport}>
+            <Target className="size-4" />
+            {t("exposureRadar.strategy.contextImport.apply")}
+          </Button>
+          <Button type="button" variant="outline" disabled={!contextDraft || contextMemorySaving || !onSaveContextMemory} onClick={() => contextDraft && onSaveContextMemory?.(contextDraft)}>
+            {contextMemorySaving ? <RefreshCw className="size-4 animate-spin" /> : <Database className="size-4" />}
+            {t("exposureRadar.strategy.contextImport.saveMemory")}
+          </Button>
+        </div>
       </div>
       <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -106,6 +164,21 @@ export function StrategySetupPanel({ strategy, region, saving, onSave }: { strat
         </Button>
       </div>
     </Card>
+  );
+}
+
+function ContextImportPreview({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+  return (
+    <div className="rounded-xl border border-[#2f3336] bg-black p-3">
+      <p className="text-xs font-semibold text-[#8b98a5]">{title}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {(items.length ? items : [empty]).slice(0, 6).map((item) => (
+          <span key={item} className="rounded-full border border-[#2f3336] bg-[#16181c] px-2 py-1 text-[11px] text-[#c9d1d9]">
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

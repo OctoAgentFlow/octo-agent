@@ -16,12 +16,12 @@ This document maps the current product pages to their backend API areas. It is w
 | --- | --- | --- |
 | `/dashboard` | Operator overview: subscription, readiness, recent activity, account status, and workflow health. | `GET /dashboard/overview`, `GET /billing/subscription`, `GET /activities`, `GET /automations/runtime-status`. |
 | `/start-today` | Stable first-run entry point for a safe daily growth session; redirects to the day-one Daily Growth Desk path. | Redirects to `/exposure-radar?tab=today&activation=first_day#first-day-path`. |
-| `/accounts` | Bind, inspect, and disconnect X accounts; show readiness and account intelligence entry points. | `GET /accounts`, `POST /accounts/oauth/x/start`, OAuth callback, `DELETE /accounts/:id`. |
+| `/accounts` | Bind, inspect, and disconnect X accounts; show readiness, account intelligence entry points, and data-source boundaries for public X data, user-provided context, OAF workflow data, and unavailable Creator Studio private metrics. | `GET /accounts`, `POST /accounts/oauth/x/start`, OAuth callback, `DELETE /accounts/:id`. |
 | `/oaf-bots` | Configure account persona, voice, topics, boundaries, language style, and learning preferences. | `GET/POST/PUT /oaf-bots`, `POST /oaf-bots/:id/test-generate`, `GET /oaf-bots/:id/generation-usages`. |
 | `/exposure-radar` | Daily Growth Desk: opportunity signals, hot/rising filters, diagnostics, strategy, reply angles, people radar, manual records, and learning loop. | `/trends/exposure-radar*`, `/exposure-radar/drafts*`, `/exposure-radar/manual-records*`, `/exposure-radar/strategy`, `/exposure-radar/people*`. |
 | `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
 | `/content-library` | Content Memory entry point; opens the Content Library panel inside Content Drafts so memory links never dead-end. | Redirects to `/content-drafts?panel=content#content-library`; data comes from `/content-library/items`. |
-| `/daily-x-queue` | Daily content material and draft preparation workflow with website import and generation run tracking. | `/daily-x-queue*`, content memory, OAF Bot, website source import, draft generation APIs, and run/item summaries. |
+| `/daily-x-queue` | Supporting content-prep workflow for preparing OAF Bot post drafts from one trusted source. It is not the primary first-day workbench; users can return to Daily Growth Desk from the page header. Automatic website summarization remains planned. | `/daily-x-queue*`, content memory, OAF Bot, draft generation APIs, and current run/item summaries. Website source import is tracked as a product-strength optimization item. |
 | `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
 | `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |
 | `/activity` | Activity log and failure investigation. | `GET /activities` with type, status, time range, account, and failure filters. |
@@ -57,4 +57,4 @@ Historical DB fields, stored activity keys, and DTO names may still use old `aut
 - Content Memory is the context layer: it stores reusable product, signal, and feedback knowledge.
 - Content Drafts are the creation layer: they produce copy-ready suggestions.
 - Handling List is the human decision layer: operators review, copy, publish manually where appropriate, and record outcomes.
-- Analytics and Admin are the observability layers: they show usage, results, costs, and operational health.
+- Analytics and Admin are supporting observability layers: they show usage, results, costs, and operational health without competing with the Daily Growth Desk activation path.

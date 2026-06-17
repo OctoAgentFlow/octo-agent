@@ -21,11 +21,11 @@ here.
 
 | Plan item | Status | Current implementation / remaining gap |
 | --- | --- | --- |
-| P0.1 Add Daily X Queue navigation and route | Done / IA decision open | `/daily-x-queue` exists, `docs/product/page-list.md` lists it, and related services/routes are implemented. The broader product now also uses `/exposure-radar` as Daily Growth Desk, so the first-run CTA needs a final IA decision. |
+| P0.1 Add Daily X Queue navigation and route | Done / repositioned | `/daily-x-queue` exists and related services/routes are implemented, but it is no longer the primary first-run route. Daily Growth Desk (`/exposure-radar` via `/start-today`) is the primary workbench; Daily X Queue is supporting post-draft prep. |
 | P0.2 Build single-page first value flow | Mostly done | The page supports setup, source material, generate, edit, approve, reject, rewrite, and copy. It is strongest for post drafts; reply opportunities live in Exposure Radar rather than inside Daily X Queue. |
 | P0.3 Add thin backend orchestration | Done | Backend exposes `/api/v1/daily-x-queue/overview`, `/setup`, `/source-material`, `/source-material/select`, `/generate`, and draft action endpoints. |
 | P0.4 Capture edit and reject learning signals | Mostly done | Reject requires a reason and creates negative feedback. Approve/copy can feed memory for future generation. Edit/copy/activation paths have service coverage. Continue simplifying the user-facing "what was learned" explanation. |
-| P0.5 Make dashboard point to daily queue | Partially done | Dashboard and onboarding now point strongly toward Exposure Radar / Handling List. Points and some product paths point to Daily X Queue. Decide whether the primary activation CTA should be Daily X Queue or Daily Growth Desk. |
+| P0.5 Make dashboard point to daily queue | Superseded by Daily Growth Desk IA | Dashboard hero, today workbench, homepage hero, `/start-today`, and primary navigation now point to Daily Growth Desk as the first-day path. Daily X Queue remains linked from content-prep contexts only. |
 | P1.1 Reply opportunities in daily queue | Moved / partially solved | Reply and opportunity handling is implemented in Exposure Radar and Handling List, not directly inside Daily X Queue. This may be the right split, but the product IA should make the relationship clear. |
 | P1.2 Website context import | Open | Daily X Queue has a `website_url` field, but automatic fetch/readability/summarization into source material is not implemented yet. |
 | P1.3 Daily queue run tracking | Partially done | `DailyXQueueContext` exists. Dedicated run/item tracking for cohort metrics is still open. |

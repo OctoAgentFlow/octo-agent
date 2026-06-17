@@ -771,41 +771,41 @@ function DailyXQueueStartCard({
   const items = [
     {
       key: "setup",
-      title: t("dashboard.dailyXQueueHero.step.setup.title"),
-      description: t("dashboard.dailyXQueueHero.step.setup.description"),
+      title: t("dashboard.dailyGrowthDeskHero.step.setup.title"),
+      description: t("dashboard.dailyGrowthDeskHero.step.setup.description"),
     },
     {
       key: "source",
-      title: t("dashboard.dailyXQueueHero.step.source.title"),
-      description: t("dashboard.dailyXQueueHero.step.source.description"),
+      title: t("dashboard.dailyGrowthDeskHero.step.source.title"),
+      description: t("dashboard.dailyGrowthDeskHero.step.source.description"),
     },
     {
       key: "review",
-      title: t("dashboard.dailyXQueueHero.step.review.title"),
-      description: t("dashboard.dailyXQueueHero.step.review.description"),
+      title: t("dashboard.dailyGrowthDeskHero.step.review.title"),
+      description: t("dashboard.dailyGrowthDeskHero.step.review.description"),
     },
   ];
   const metrics = [
-    { key: "bot", value: loading ? "—" : hasBot ? t("dashboard.dailyXQueueHero.metric.ready") : t("dashboard.dailyXQueueHero.metric.notReady"), label: t("dashboard.dailyXQueueHero.metric.bot") },
-    { key: "accounts", value: loading ? "—" : connectedAccounts, label: t("dashboard.dailyXQueueHero.metric.accounts") },
-    { key: "reviews", value: loading ? "—" : pendingReviews, label: t("dashboard.dailyXQueueHero.metric.reviews") },
-    { key: "blockers", value: loading ? "—" : blockers, label: t("dashboard.dailyXQueueHero.metric.blockers") },
+    { key: "bot", value: loading ? "—" : hasBot ? t("dashboard.dailyGrowthDeskHero.metric.ready") : t("dashboard.dailyGrowthDeskHero.metric.notReady"), label: t("dashboard.dailyGrowthDeskHero.metric.bot") },
+    { key: "accounts", value: loading ? "—" : connectedAccounts, label: t("dashboard.dailyGrowthDeskHero.metric.accounts") },
+    { key: "reviews", value: loading ? "—" : pendingReviews, label: t("dashboard.dailyGrowthDeskHero.metric.reviews") },
+    { key: "blockers", value: loading ? "—" : blockers, label: t("dashboard.dailyGrowthDeskHero.metric.blockers") },
   ];
   return (
     <Card className="border-[#1d9bf0]/30 bg-[#06111d]">
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr] xl:items-start">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wide text-[#1d9bf0] uppercase">{t("dashboard.dailyXQueueHero.eyebrow")}</p>
-          <h2 className="mt-2 max-w-3xl text-2xl font-semibold tracking-normal text-[#e7e9ea] md:text-3xl">{t("dashboard.dailyXQueueHero.title")}</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5] md:text-base">{t("dashboard.dailyXQueueHero.description")}</p>
+          <p className="text-xs font-semibold tracking-wide text-[#1d9bf0] uppercase">{t("dashboard.dailyGrowthDeskHero.eyebrow")}</p>
+          <h2 className="mt-2 max-w-3xl text-2xl font-semibold tracking-normal text-[#e7e9ea] md:text-3xl">{t("dashboard.dailyGrowthDeskHero.title")}</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8b98a5] md:text-base">{t("dashboard.dailyGrowthDeskHero.description")}</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/start-today" className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
               <MessageCircle className="size-4" />
-              {t("dashboard.dailyXQueueHero.primaryCta")}
+              {t("dashboard.dailyGrowthDeskHero.primaryCta")}
             </Link>
             <Link href="/oaf-bots" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
               <Bot className="size-4" />
-              {t("dashboard.dailyXQueueHero.secondaryCta")}
+              {t("dashboard.dailyGrowthDeskHero.secondaryCta")}
             </Link>
           </div>
         </div>
@@ -819,7 +819,7 @@ function DailyXQueueStartCard({
             ))}
           </div>
           <div className="rounded-2xl border border-[#2f3336] bg-black/60 p-3">
-            <p className="text-sm font-semibold text-[#e7e9ea]">{t("dashboard.dailyXQueueHero.stepsTitle")}</p>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("dashboard.dailyGrowthDeskHero.stepsTitle")}</p>
             <div className="mt-3 space-y-2">
               {items.map((item, index) => (
                 <div key={item.key} className="flex gap-3 rounded-xl border border-[#2f3336] bg-[#0f1419] p-3">

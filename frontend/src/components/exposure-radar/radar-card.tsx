@@ -11,7 +11,7 @@ import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { extractTweetID, isManualActionHandled, isSampleRadarItem, radarCardAnchorID } from "@/components/exposure-radar/radar-signal-utils";
 import { normalizeOpportunityTier, normalizeQualityStage, normalizeVelocityState } from "@/components/exposure-radar/radar-utils";
-import { AccountFitPanel, SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
+import { AccountFitPanel, OperatorEvidencePanel, SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { buildAccountFitSummary, buildSignalCredibility, buildSignalDecisionSummary } from "@/components/exposure-radar/signal-analysis-utils";
 import type { ManualActionState, ManualOutcome, RankChange, ReplyAngleSuggestion } from "@/components/exposure-radar/types";
 
@@ -88,6 +88,9 @@ export function RadarCard({
     : rankChange?.kind === "down"
       ? "shadow-[0_0_0_1px_rgba(244,33,46,0.20)]"
       : "";
+  const signalDecision = buildSignalDecisionSummary(item, t);
+  const signalCredibility = buildSignalCredibility(item, t);
+  const accountFit = buildAccountFitSummary(item, null, t);
   useEffect(() => {
     const nextURL = manualState?.publishedUrl || item.comment_url || "";
     if (nextURL && nextURL !== lastHydratedPublishedURLRef.current) {
@@ -146,9 +149,10 @@ export function RadarCard({
       <RadarCardPrimaryMetrics item={item} />
       <RadarCardPublicMetrics item={item} />
       <RadarCardVelocityTrend item={item} />
-      <SignalDecisionCard summary={buildSignalDecisionSummary(item, t)} />
-      <SignalCredibilityPanel credibility={buildSignalCredibility(item, t)} compact />
-      <AccountFitPanel fit={buildAccountFitSummary(item, null, t)} compact />
+      <OperatorEvidencePanel summary={signalDecision} credibility={signalCredibility} fit={accountFit} />
+      <SignalDecisionCard summary={signalDecision} />
+      <SignalCredibilityPanel credibility={signalCredibility} compact />
+      <AccountFitPanel fit={accountFit} compact />
       <RadarCardRecommendedUse item={item} />
       <RadarCardGeneratedCommentBlock
         generatedComment={generatedComment}

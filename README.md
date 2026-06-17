@@ -112,4 +112,7 @@ Some historical names remain in code, database fields, and compatibility DTOs be
 - `scripts/`: local helpers and production deployment scripts.
 - `docs/`: product, API, database, deployment, runbook, and audit documents.
 
-See [docs/product/roadmap.md](docs/product/roadmap.md) and [docs/product/page-list.md](docs/product/page-list.md) for the current product map.
+See [docs/product/roadmap.md](docs/product/roadmap.md),
+[docs/product/page-list.md](docs/product/page-list.md), and
+[docs/product/product-strength-optimization-plan.md](docs/product/product-strength-optimization-plan.md)
+for the current product map and product-strength optimization tracker.

@@ -65,6 +65,59 @@ export function buildLearningImpactRows(
   return [...boosted, ...cautious, ...angles];
 }
 
+export function buildLearningChangeRows(
+  records: ExposureRadarManualRecordApi[],
+  states: Record<string, ManualActionState>,
+  profile: ExposureLearningProfile,
+  t: TranslationFn,
+): LearningImpactRow[] {
+  const rows: LearningImpactRow[] = [];
+  const boostedCount = profile.boostedTopics.size;
+  const cautiousCount = profile.cautiousTopics.size;
+  const preferredAngleCount = profile.preferredAngles.size;
+  const resultRecordCount = records.filter(hasManualResultMetrics).length;
+  const pendingBackfillCount = Math.max(
+    records.filter((record) => Boolean(record.published_url || record.handled_at || record.task_status === "done") && !hasManualResultMetrics(record)).length,
+    Object.values(states).filter((state) => Boolean(state.handled || state.taskStatus === "done") && !hasManualStateResultMetrics(state)).length,
+  );
+  if (boostedCount > 0) {
+    rows.push({
+      label: t("exposureRadar.learningPanel.change.boosted.label", { count: boostedCount }),
+      detail: t("exposureRadar.learningPanel.change.boosted.detail"),
+      tone: "positive",
+    });
+  }
+  if (cautiousCount > 0) {
+    rows.push({
+      label: t("exposureRadar.learningPanel.change.cautious.label", { count: cautiousCount }),
+      detail: t("exposureRadar.learningPanel.change.cautious.detail"),
+      tone: "negative",
+    });
+  }
+  if (preferredAngleCount > 0) {
+    rows.push({
+      label: t("exposureRadar.learningPanel.change.angle.label", { count: preferredAngleCount }),
+      detail: t("exposureRadar.learningPanel.change.angle.detail"),
+      tone: "neutral",
+    });
+  }
+  if (resultRecordCount > 0) {
+    rows.push({
+      label: t("exposureRadar.learningPanel.change.metrics.label", { count: resultRecordCount }),
+      detail: t("exposureRadar.learningPanel.change.metrics.detail"),
+      tone: "positive",
+    });
+  }
+  if (pendingBackfillCount > 0) {
+    rows.push({
+      label: t("exposureRadar.learningPanel.change.pending.label", { count: pendingBackfillCount }),
+      detail: t("exposureRadar.learningPanel.change.pending.detail"),
+      tone: "negative",
+    });
+  }
+  return rows;
+}
+
 export function buildExposureLearningTopics(records: ExposureRadarManualRecordApi[], items: ExposureRadarItemApi[]) {
   const scores = new Map<string, { count: number; score: number }>();
   const add = (topic: string | undefined, score: number) => {
@@ -80,6 +133,32 @@ export function buildExposureLearningTopics(records: ExposureRadarManualRecordAp
   return Array.from(scores.entries())
     .sort((a, b) => (b[1].score + b[1].count * 10) - (a[1].score + a[1].count * 10))
     .map(([topic, value]) => `${topic} · ${value.count}`);
+}
+
+function hasManualResultMetrics(record: ExposureRadarManualRecordApi) {
+  return Boolean(
+    record.result_checked_at
+      || (record.result_score || 0) > 0
+      || (record.result_impression_count || 0) > 0
+      || (record.result_like_count || 0) > 0
+      || (record.result_reply_count || 0) > 0
+      || (record.result_retweet_count || 0) > 0
+      || (record.result_quote_count || 0) > 0
+      || (record.result_bookmark_count || 0) > 0,
+  );
+}
+
+function hasManualStateResultMetrics(state: ManualActionState) {
+  return Boolean(
+    state.resultCheckedAt
+      || (state.resultScore || 0) > 0
+      || (state.resultImpressionCount || 0) > 0
+      || (state.resultLikeCount || 0) > 0
+      || (state.resultReplyCount || 0) > 0
+      || (state.resultRetweetCount || 0) > 0
+      || (state.resultQuoteCount || 0) > 0
+      || (state.resultBookmarkCount || 0) > 0,
+  );
 }
 
 export function buildExposureLearningAngles(records: ExposureRadarManualRecordApi[], states: Record<string, ManualActionState>) {

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   BadgeDollarSign,
-  BarChart3,
   Bot,
   Database,
   LayoutDashboard,
@@ -25,7 +24,6 @@ const navItems = [
   { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
   { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.executionQueue", href: "/handling-list", icon: ListChecks },
-  { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
   { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
 ];

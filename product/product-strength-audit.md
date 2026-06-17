@@ -12,6 +12,11 @@ This file started as a product-strength audit. Keep it as the running resolution
 tracker: when an item is implemented or deliberately deferred, update the tables
 below instead of leaving the original problem statement stale.
 
+The active shortcoming-to-fix plan now lives in
+`docs/product/product-strength-optimization-plan.md`. Use that file for the
+current execution order, and update this audit when an item resolves one of the
+original concerns.
+
 ### Completed Or Resolved
 
 | Original concern | Current status | Evidence / current implementation |
@@ -22,32 +27,34 @@ below instead of leaving the original problem statement stale.
 | Opportunity discovery needed to be core, not a side feature. | Done / refining | `/exposure-radar` is now packaged as Daily Growth Desk with Chinese/English signals, hot/rising classification, quality tiers, diagnostics, reply angles, people radar, manual handling, and learning loop. |
 | Reply/comment opportunities should not auto-comment by default. | Done | Exposure Radar supports manual reply generation, copy/open-original workflows, manual records, and result backfill. Automatic commenting is not the default product path. |
 | Feedback should teach the system. | Done / refining | Daily X Queue captures reject feedback. Exposure Radar stores manual handling records, published-result backfill, memory payloads, people notes, topic learning, weekly review, and strategy recommendations. |
+| Opportunity evidence and learning explainability needed to be clearer. | Done / refining | Exposure Radar cards now include an Operator Evidence layer that explains why now, account fit, manual move, and risk. Learning Insights now shows what feedback changed: boosted topics, cautious lanes, preferred reply angles, linked result metrics, and pending backfills. |
 | Legacy automation scheduler needed to be conservative. | Done | Scheduler calls `RunContentDraftOnce`, Exposure refresh, Trends refresh, publishing guardrails, billing/points jobs, and gross-margin checks. Legacy Auto Reply / Auto Comment / Auto DM loops are not in the default scheduler path. |
 | Billing needed new product semantics. | Done / refining | Billing and quota displays now prefer content drafts, opportunity drafts, review capacity, content memory, account intelligence, and radar refresh language while keeping legacy JSON fields compatible. |
-| Account analysis needed explicit data boundaries. | Done / refining | Roadmap and product copy state that Creator Studio private analytics are not assumed. Account intelligence uses public X data, user-provided context, and available internal workflow data. |
+| Pricing and proof needed to match the Daily Growth Desk promise. | Done / refining | Marketing pricing and billing packaging now explain plans as operating capacity for Radar refreshes, opportunity drafts, Content Memory, review capacity, and result learning. Landing proof and sample-loop empty states demonstrate the manual workflow without fake metrics. |
+| Account analysis needed explicit data boundaries. | Done | Account Intelligence now includes a visible Data Boundary panel for public X data, user-provided context, OAF workflow data, and unavailable Creator Studio private analytics. Roadmap and product copy continue to avoid assuming private Creator Studio data. |
 | Exposure Radar page was too large and risky to modify. | Done / maintain boundary | `page.tsx` is now about 1.2k lines and mainly handles data/state orchestration. P1 moved hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused component modules. |
+| Website/product context import was missing from the core strategy flow. | Done / refining | Exposure Radar strategy setup now accepts pasted website/product/FAQ/changelog text, extracts audience, topics, guardrails, reply style, and operator notes, and can save the context as Content Memory. |
 
 ### Partially Solved
 
 | Area | Current status | Remaining gap |
 | --- | --- | --- |
-| Single first-value entry point | Partially solved | Daily X Queue exists, but the current main product workbench is `/exposure-radar` Daily Growth Desk. Decide whether first-run CTA should lead to Daily X Queue, Exposure Radar, or a combined "Start today" flow. |
-| Minimal setup form | Partially solved | Daily X Queue has handle, website URL, product context, audience, voice, and guardrails. Exposure Radar has strategy templates and first-day activation. The two setup paths are not yet unified. |
+| Single first-value entry point | Solved for current IA | Daily Growth Desk is the default first-day workbench. `/start-today`, dashboard CTA, homepage hero CTA, and primary nav now reinforce Daily Growth Desk; Daily X Queue and Analytics are supporting surfaces, not primary activation nav items. Tracked as completed PS-0 and PS-8 in `docs/product/product-strength-optimization-plan.md`. |
+| Minimal setup form | Solved for first session / refining | `/start-today` now opens a guided Daily Growth Desk first-session mode. It keeps users on one path from account/Bot context to strategy, first opportunity, first reply, and result record. Strategy setup can import product context into strategy and Content Memory. |
 | Posts + replies in one queue | Partially solved | Daily X Queue handles post drafts. Exposure Radar handles reply/opportunity signals. Handling List can review both, but the user still sees multiple surfaces. |
-| Learning explainability | Partially solved | Learning panels, weekly review, memory cues, and result feedback exist. The product can still explain "what changed because of my feedback" more simply. |
+| Learning explainability | Solved for current loop / refining | Learning panels, weekly review, memory cues, result feedback, and the new Learning Change Summary explain how feedback changes future ranking, topics, angles, and backfill gaps. |
 | Cost and rate observability | Done / refining | Admin tracks OpenAI generations/costs, X API call breakdown, X Trends config, Exposure refresh interval, source health, refresh skips, failure reasons, and recent cost-driving events from the unified cost ledger. |
 | Page modularization | Solved for current risk level | Exposure Radar is no longer a monolithic product page. Remaining work is boundary discipline: keep future UI panels in component/helper modules and avoid putting new display logic back into `page.tsx`. |
+| Self-serve proof and pricing clarity | Solved for current packaging / refining | Product and billing language now packages the paid promise around Daily Growth Desk refreshes, opportunity drafts, account intelligence, content memory, review capacity, and result learning. Continue refining once real usage appears. |
 
 ### Still Open
 
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
-| P0 | Decide first-run IA between Daily X Queue and Daily Growth Desk. | Both are useful, but a new user should not need to understand two adjacent "daily workflow" concepts. |
-| P1 | Website/context import. | Daily X Queue accepts a website URL, but it does not yet fetch/summarize a website into source material automatically. |
 | P1 | Daily queue run tracking. | `DailyXQueueContext` exists, but dedicated `daily_queue_runs` / `daily_queue_items` style tracking is not fully implemented. |
 | P1 | UI smoke tests for core workflows. | The product now has many interconnected flows; smoke tests should cover login, Daily Growth Desk, Daily X Queue, Content Drafts, Handling List, Billing, and Admin health. |
 | P1 | Legacy route traffic audit and archive. | `/auto-post`, `/execution-queue`, and legacy docs remain for compatibility. Removal requires prod access-log evidence and an archive plan. |
-| P2 | Creator Studio / private analytics ingestion. | Public X data is available, but Creator Studio audience panels and long-range private metrics need user-provided export or future authorized access. |
+| P2 | Creator Studio / private analytics ingestion. | Data boundaries are now visible in Account Intelligence. Actual Creator Studio audience panels and long-range private metrics still need user-provided export or future authorized access. |
 | P2 | High-risk backend naming/data migrations. | `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design. They need a dedicated migration plan before renaming. |
 
 ## Original User Journey At Time Of Audit

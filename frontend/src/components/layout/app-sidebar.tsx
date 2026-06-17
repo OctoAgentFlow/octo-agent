@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   BadgeDollarSign,
-  BarChart3,
   Bot,
   Database,
   LayoutDashboard,
@@ -39,7 +38,6 @@ const navGroups = [
     labelKey: "sidebar.group.operations",
     items: [
       { labelKey: "sidebar.nav.executionQueue", href: "/handling-list", icon: ListChecks },
-      { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
     ],
   },
   {

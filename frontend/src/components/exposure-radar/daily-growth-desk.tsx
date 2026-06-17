@@ -18,6 +18,7 @@ type DailyGrowthDeskProps = {
   scratchpad: ReactNode;
   recap: ReactNode;
   carryover: ReactNode;
+  guidedFirstSession?: boolean;
 };
 
 export function DailyGrowthDesk({
@@ -36,7 +37,21 @@ export function DailyGrowthDesk({
   scratchpad,
   recap,
   carryover,
+  guidedFirstSession = false,
 }: DailyGrowthDeskProps) {
+  if (guidedFirstSession) {
+    return (
+      <div className="space-y-5">
+        {overview}
+        <section id="first-day-path">{firstDay}</section>
+        {sampleBanner}
+        {preflight}
+        {firstLoop}
+        {completion}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {overview}

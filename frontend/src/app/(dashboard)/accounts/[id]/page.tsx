@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import axios from "axios";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowRight, BarChart3, Bot, BrainCircuit, CheckCircle2, ExternalLink, Gauge, RefreshCw, ShieldAlert, Sparkles, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, Bot, BrainCircuit, CheckCircle2, Database, ExternalLink, FileText, Gauge, Lock, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -173,6 +173,8 @@ export default function AccountDetailPage() {
           </div>
         </div>
       </Card>
+
+      <DataBoundaryPanel />
 
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -345,6 +347,51 @@ export default function AccountDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DataBoundaryPanel() {
+  const { t } = useT();
+  const items = [
+    {
+      key: "publicX",
+      Icon: Database,
+      tone: "border-[#1d9bf0]/25 bg-[#07111a] text-[#8ecdf8]",
+    },
+    {
+      key: "userContext",
+      Icon: FileText,
+      tone: "border-[#a78bfa]/25 bg-[#171125] text-[#c4b5fd]",
+    },
+    {
+      key: "workflowData",
+      Icon: ShieldCheck,
+      tone: "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]",
+    },
+    {
+      key: "notAvailable",
+      Icon: Lock,
+      tone: "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]",
+    },
+  ];
+
+  return (
+    <Card className="bg-[#0f1419]">
+      <CardHeader title={t("accounts.intelligence.dataBoundary.title")} description={t("accounts.intelligence.dataBoundary.description")} />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.key} className={`rounded-2xl border p-4 ${item.tone}`}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-8 items-center justify-center rounded-full border border-current/25 bg-black/35">
+                <item.Icon className="size-4" />
+              </span>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t(`accounts.intelligence.dataBoundary.${item.key}.title`)}</p>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#8b98a5]">{t(`accounts.intelligence.dataBoundary.${item.key}.description`)}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 
-import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
-import { buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
+import { BoostedSignalsCard, LearningChangeSummaryCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
+import { buildLearningChangeRows, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
 import { PerformanceMetric } from "@/components/exposure-radar/performance-panel";
 import { formatArchiveDate, formatCompact } from "@/components/exposure-radar/radar-utils";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
@@ -34,6 +34,7 @@ export function LearningInsightsPanel({
   const boosted = items.filter((item) => (item.ranking_delta || 0) > 0).slice(0, 4);
   const riskyCount = items.filter((item) => item.risk_level === "medium" || item.risk_level === "high").length;
   const topTopics = data?.top_topics?.slice(0, 4) || [];
+  const changeRows = buildLearningChangeRows(recentRecords, manualActionStates, learningProfile, t).slice(0, 4);
   const impactRows = buildLearningImpactRows(recentRecords, learningProfile, t).slice(0, 5);
   return (
     <Card className="bg-[#0f1419]">
@@ -46,7 +47,10 @@ export function LearningInsightsPanel({
           <PerformanceMetric label={t("exposureRadar.learningPanel.metric.risky")} value={formatCompact(riskyCount)} detail={t("exposureRadar.learningPanel.metric.riskyDetail")} />
         </div>
       </div>
-      <div className="mt-4 grid gap-3 xl:grid-cols-4">
+      <div className="mt-4">
+        <LearningChangeSummaryCard rows={changeRows} />
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-4">
         <LearningFeedbackCard effectiveCount={effectiveCount} neutralCount={neutralCount} negativeCount={negativeCount} />
         <BoostedSignalsCard items={boosted} />
         <LearningControlsCard controls={controls} topTopics={topTopics} />

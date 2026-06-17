@@ -616,12 +616,21 @@ export default function DailyXQueuePage() {
             {t("dailyXQueue.subtitle")}
           </p>
         </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-sm text-[#8b98a5]">
-          {activated ? (
-            <span className="font-semibold text-emerald-200">{t("dailyXQueue.activated")}</span>
-          ) : (
-            <span>{t("dailyXQueue.progress.nextLabel", { step: nextActivationStep?.label || t("dailyXQueue.progress.done") })}</span>
-          )}
+        <div className="flex flex-col gap-2 md:items-end">
+          <Link
+            href="/start-today"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]"
+          >
+            <Sparkles className="size-4" />
+            {t("dailyXQueue.openGrowthDesk")}
+          </Link>
+          <div className="rounded-2xl border border-[#2f3336] bg-black px-4 py-3 text-sm text-[#8b98a5]">
+            {activated ? (
+              <span className="font-semibold text-emerald-200">{t("dailyXQueue.activated")}</span>
+            ) : (
+              <span>{t("dailyXQueue.progress.nextLabel", { step: nextActivationStep?.label || t("dailyXQueue.progress.done") })}</span>
+            )}
+          </div>
         </div>
       </header>
 

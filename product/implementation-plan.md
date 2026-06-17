@@ -13,6 +13,25 @@ Create the smallest usable Daily X Queue experience:
 
 This should reuse the existing OAF Bot, Content Library, Auto Post, Review Queue, Publishing Pipeline, and feedback-learning code.
 
+## Implementation Status - 2026-06-17
+
+Use this section as the working status tracker for this plan. When a planned item
+is shipped or intentionally moved into another product surface, update the row
+here.
+
+| Plan item | Status | Current implementation / remaining gap |
+| --- | --- | --- |
+| P0.1 Add Daily X Queue navigation and route | Done / IA decision open | `/daily-x-queue` exists, `docs/product/page-list.md` lists it, and related services/routes are implemented. The broader product now also uses `/exposure-radar` as Daily Growth Desk, so the first-run CTA needs a final IA decision. |
+| P0.2 Build single-page first value flow | Mostly done | The page supports setup, source material, generate, edit, approve, reject, rewrite, and copy. It is strongest for post drafts; reply opportunities live in Exposure Radar rather than inside Daily X Queue. |
+| P0.3 Add thin backend orchestration | Done | Backend exposes `/api/v1/daily-x-queue/overview`, `/setup`, `/source-material`, `/source-material/select`, `/generate`, and draft action endpoints. |
+| P0.4 Capture edit and reject learning signals | Mostly done | Reject requires a reason and creates negative feedback. Approve/copy can feed memory for future generation. Edit/copy/activation paths have service coverage. Continue simplifying the user-facing "what was learned" explanation. |
+| P0.5 Make dashboard point to daily queue | Partially done | Dashboard and onboarding now point strongly toward Exposure Radar / Handling List. Points and some product paths point to Daily X Queue. Decide whether the primary activation CTA should be Daily X Queue or Daily Growth Desk. |
+| P1.1 Reply opportunities in daily queue | Moved / partially solved | Reply and opportunity handling is implemented in Exposure Radar and Handling List, not directly inside Daily X Queue. This may be the right split, but the product IA should make the relationship clear. |
+| P1.2 Website context import | Open | Daily X Queue has a `website_url` field, but automatic fetch/readability/summarization into source material is not implemented yet. |
+| P1.3 Daily queue run tracking | Partially done | `DailyXQueueContext` exists. Dedicated run/item tracking for cohort metrics is still open. |
+| P1.4 Manual publish and copy flow | Partially done | Copy flow exists and is safe. Real publish remains outside the core Daily X Queue path and should stay guarded. |
+| P1.5 Activation analytics | Partially done | Daily X Queue tracks review/copy/activation counts and activity events. A complete activation analytics dashboard is still open. |
+
 ## P0 Changes
 
 ### 1. Add Daily X Queue Navigation And Route

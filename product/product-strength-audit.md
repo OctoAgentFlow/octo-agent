@@ -6,7 +6,53 @@ OctoAgentFlow has many of the right building blocks for AI social operations, bu
 
 The strongest wedge is not "generic AI social operations." It is a daily operating queue for one X account: generate today's posts and reply opportunities, review them, and let the bot learn from edits and rejections.
 
-## Current User Journey
+## Status Update - 2026-06-17
+
+This file started as a product-strength audit. Keep it as the running resolution
+tracker: when an item is implemented or deliberately deferred, update the tables
+below instead of leaving the original problem statement stale.
+
+### Completed Or Resolved
+
+| Original concern | Current status | Evidence / current implementation |
+| --- | --- | --- |
+| Product sounded like broad automation instead of safe daily operation. | Done | README, roadmap, page list, billing copy, and dashboard copy now position the product around manual, human-in-the-loop X operation. Legacy Auto Reply, authenticated Auto DM, Auto Comment, and Auto Comments APIs are protected by default and logged. |
+| Auto Post / Execution Queue naming was too prominent. | Mostly done | `/content-drafts` and `/handling-list` are the product routes. `/auto-post` and `/execution-queue` remain compatibility routes only. Frontend services and many i18n keys moved to Content Draft / Handling List wording. |
+| First value needed a focused daily workflow. | Mostly done | `/daily-x-queue` now exists with setup, source material, generate, edit, approve, reject, rewrite, and copy actions. Backend has `/api/v1/daily-x-queue/*`, `DailyXQueueContext`, and service tests. |
+| Opportunity discovery needed to be core, not a side feature. | Done / refining | `/exposure-radar` is now packaged as Daily Growth Desk with Chinese/English signals, hot/rising classification, quality tiers, diagnostics, reply angles, people radar, manual handling, and learning loop. |
+| Reply/comment opportunities should not auto-comment by default. | Done | Exposure Radar supports manual reply generation, copy/open-original workflows, manual records, and result backfill. Automatic commenting is not the default product path. |
+| Feedback should teach the system. | Done / refining | Daily X Queue captures reject feedback. Exposure Radar stores manual handling records, published-result backfill, memory payloads, people notes, topic learning, weekly review, and strategy recommendations. |
+| Legacy automation scheduler needed to be conservative. | Done | Scheduler calls `RunContentDraftOnce`, Exposure refresh, Trends refresh, publishing guardrails, billing/points jobs, and gross-margin checks. Legacy Auto Reply / Auto Comment / Auto DM loops are not in the default scheduler path. |
+| Billing needed new product semantics. | Done / refining | Billing and quota displays now prefer content drafts, opportunity drafts, review capacity, content memory, account intelligence, and radar refresh language while keeping legacy JSON fields compatible. |
+| Account analysis needed explicit data boundaries. | Done / refining | Roadmap and product copy state that Creator Studio private analytics are not assumed. Account intelligence uses public X data, user-provided context, and available internal workflow data. |
+| Exposure Radar page was too large and risky to modify. | In progress with large reduction | `page.tsx` has been split into many helper/component files and is currently about 3.6k lines, down from the prior very large single-file surface. Recent splits include workspace panels, panel primitives, content payload helpers, signal analysis, learning reports, and operating desk panel containers. |
+
+### Partially Solved
+
+| Area | Current status | Remaining gap |
+| --- | --- | --- |
+| Single first-value entry point | Partially solved | Daily X Queue exists, but the current main product workbench is `/exposure-radar` Daily Growth Desk. Decide whether first-run CTA should lead to Daily X Queue, Exposure Radar, or a combined "Start today" flow. |
+| Minimal setup form | Partially solved | Daily X Queue has handle, website URL, product context, audience, voice, and guardrails. Exposure Radar has strategy templates and first-day activation. The two setup paths are not yet unified. |
+| Posts + replies in one queue | Partially solved | Daily X Queue handles post drafts. Exposure Radar handles reply/opportunity signals. Handling List can review both, but the user still sees multiple surfaces. |
+| Learning explainability | Partially solved | Learning panels, weekly review, memory cues, and result feedback exist. The product can still explain "what changed because of my feedback" more simply. |
+| Cost and rate observability | Partially solved | Admin tracks OpenAI generations/costs, X Trends config, Exposure refresh interval, source health, and refresh skips. A unified operator ledger for X API calls, Exposure refresh attempts, OpenAI generation attempts, skip reasons, and failure reasons is still needed. |
+| Page modularization | Partially solved | Many helpers and panels are extracted. Remaining page-local candidates include People Relationship / Memory Asset panels, Daily Review / Strategy setup sections, and other stateful page-level containers. |
+
+### Still Open
+
+| Priority | Open item | Why it still matters |
+| --- | --- | --- |
+| P0 | Finish Exposure Radar modularization checkpoint sequence. | The page is much healthier, but still contains several page-local panels and stateful containers. Smaller files reduce regression risk. |
+| P0 | Add unified cost/rate observability. | X API and OpenAI cost control is now product-critical; operators need refresh counts, API call counts, skipped reasons, rate-limit failures, and generation costs in one place. |
+| P0 | Decide first-run IA between Daily X Queue and Daily Growth Desk. | Both are useful, but a new user should not need to understand two adjacent "daily workflow" concepts. |
+| P1 | Website/context import. | Daily X Queue accepts a website URL, but it does not yet fetch/summarize a website into source material automatically. |
+| P1 | Daily queue run tracking. | `DailyXQueueContext` exists, but dedicated `daily_queue_runs` / `daily_queue_items` style tracking is not fully implemented. |
+| P1 | UI smoke tests for core workflows. | The product now has many interconnected flows; smoke tests should cover login, Daily Growth Desk, Daily X Queue, Content Drafts, Handling List, Billing, and Admin health. |
+| P1 | Legacy route traffic audit and archive. | `/auto-post`, `/execution-queue`, and legacy docs remain for compatibility. Removal requires prod access-log evidence and an archive plan. |
+| P2 | Creator Studio / private analytics ingestion. | Public X data is available, but Creator Studio audience panels and long-range private metrics need user-provided export or future authorized access. |
+| P2 | High-risk backend naming/data migrations. | `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design. They need a dedicated migration plan before renaming. |
+
+## Original User Journey At Time Of Audit
 
 Current first-run path, inferred from the frontend routes, onboarding component, and API docs:
 
@@ -133,3 +179,12 @@ Daily X Operating Queue should become the first product surface:
 "Give OctoAgentFlow your X handle and product context. It generates today's X operating queue: posts to review, reply opportunities to consider, and learning from every edit or rejection."
 
 This is narrower, easier to activate, and still uses the platform's real strengths: persona-based workflow, content memory, guardrails, review queue, execution queue, publishing pipeline, and human-in-the-loop feedback.
+
+## Documentation Maintenance Rule
+
+When a product issue in this audit is fixed:
+
+1. Move or update the item in `Status Update - 2026-06-17`.
+2. Keep the original audit text below as historical context unless it is actively misleading.
+3. Add evidence: route, API, component, test, or release note.
+4. If the fix creates a new compatibility boundary, also update the relevant technical doc in `docs/technical/`.

@@ -25,14 +25,14 @@ import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, radarItemMatchesF
 import { buildPriorityReasonChips, resultLearningTone, sessionStateTone } from "@/components/exposure-radar/display-helper-utils";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
-import { buildResultLearningMoves, buildResultLearningSummary, buildWeeklyFallbackRecommendations, buildWeeklyOperatorReport, topRecordLabels } from "@/components/exposure-radar/learning-report-utils";
+import { buildResultLearningMoves, buildResultLearningSummary, topRecordLabels } from "@/components/exposure-radar/learning-report-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { bestExposureResultRecord, buildDailyReviewActions, buildDailyReviewReportText, buildDailyReviewTopics, buildGrowthDeskBrief, buildGrowthDeskBriefPreview, isRecentManualRecord } from "@/components/exposure-radar/growth-desk-utils";
 import { buildManualOutcomePayload, buildManualRecordPayload, buildManualResultPatch, buildResolvedManualResultPatch, buildSampleResolvedResultPatch, mergeManualRecordStates, mergePeopleRadar, normalizeResultLookupStatus, type ManualResultInput } from "@/components/exposure-radar/manual-record-utils";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
-import { AccountHealthScoreCard, GrowthExperimentCard, MemoryAssetDeskCard, OpportunityEvidenceDeskCard, PeopleRelationshipDeskCard, WeeklyOperatorReviewCard, peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
-import { buildAccountHealthScore, buildGrowthExperiments } from "@/components/exposure-radar/operating-analysis-utils";
+import { AccountHealthScorePanel, GrowthExperimentPanel, OpportunityEvidenceDeskPanel, WeeklyOperatorReviewPanel } from "@/components/exposure-radar/operating-desk-panel-containers";
+import { MemoryAssetDeskCard, PeopleRelationshipDeskCard, peopleRadarStageTone } from "@/components/exposure-radar/operating-desk-panels";
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { ActionPlanMetric, CommandList, CommandStep, FirstLoopActionRow, GrowthDeskMetric, LightMetric, MiniStat, ReviewList, StrategyInput } from "@/components/exposure-radar/panel-primitives";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
@@ -1261,140 +1261,6 @@ export default function ExposureRadarPage() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function AccountHealthScorePanel({
-  selectedAccountID,
-  selectedBotID,
-  strategy,
-  data,
-  items,
-  recentRecords,
-  safety,
-  stats,
-  loadState,
-}: {
-  selectedAccountID: number;
-  selectedBotID: number;
-  strategy: ExposureRadarGrowthStrategyApi | null;
-  data: ExposureRadarData | null;
-  items: ExposureRadarItemApi[];
-  recentRecords: ExposureRadarManualRecordApi[];
-  safety: ExposureRadarSafetyCenterData | null;
-  stats: WorkbenchStats;
-  loadState: LoadState;
-}) {
-  const { t } = useT();
-  const health = buildAccountHealthScore({
-    selectedAccountID,
-    selectedBotID,
-    strategy,
-    data,
-    items,
-    recentRecords,
-    safety,
-    stats,
-    loadState,
-    t,
-  });
-  return <AccountHealthScoreCard health={health} />;
-}
-
-function OpportunityEvidenceDeskPanel({ items, moves, data, loadState }: { items: ExposureRadarItemApi[]; moves: DailyActionPlanItem[]; data: ExposureRadarData | null; loadState: LoadState }) {
-  const { t } = useT();
-  const credibility = items.map((item) => buildSignalCredibility(item, t));
-  const strong = credibility.filter((entry) => entry.status === "strong").length;
-  const usable = credibility.filter((entry) => entry.status === "usable").length;
-  const thin = credibility.filter((entry) => entry.status === "thin").length;
-  const weak = credibility.filter((entry) => entry.status === "weak").length;
-  const topMove = moves[0]?.item || items[0];
-  const topCredibility = topMove ? buildSignalCredibility(topMove, t) : null;
-  const diagnostics = data?.diagnostics || null;
-  return (
-    <OpportunityEvidenceDeskCard
-      itemCount={items.length}
-      loadState={loadState}
-      strong={strong}
-      usable={usable}
-      thin={thin}
-      weak={weak}
-      topSignal={topMove && topCredibility ? {
-        title: topMove.title,
-        views: formatCompact(topMove.impression_count || 0),
-        speed: formatVelocityLabel(topMove.views_per_min, "-"),
-        followers: formatCompact(topMove.followers_count || 0),
-        nextStep: topCredibility.nextStep,
-      } : null}
-      diagnostics={{
-        maxViews: formatCompact(diagnostics?.max_impression_count || 0),
-        maxSpeed: formatOneDecimal(diagnostics?.max_views_per_minute || 0),
-        coverage: formatPercent(diagnostics?.real_view_coverage || 0),
-      }}
-    />
-  );
-}
-
-function GrowthExperimentPanel({
-  items,
-  moves,
-  recentRecords,
-  learningProfile,
-  safety,
-}: {
-  items: ExposureRadarItemApi[];
-  moves: DailyActionPlanItem[];
-  recentRecords: ExposureRadarManualRecordApi[];
-  learningProfile: ExposureLearningProfile;
-  safety: ExposureRadarSafetyCenterData | null;
-}) {
-  const { t } = useT();
-  const experiments = buildGrowthExperiments({ items, moves, recentRecords, learningProfile, safety, t });
-  return <GrowthExperimentCard experiments={experiments} />;
-}
-
-function WeeklyOperatorReviewPanel({
-  weeklyReview,
-  recentRecords,
-  moves,
-  learningProfile,
-  safety,
-  timeZone,
-}: {
-  weeklyReview: ExposureRadarWeeklyReviewData | null;
-  recentRecords: ExposureRadarManualRecordApi[];
-  moves: DailyActionPlanItem[];
-  learningProfile: ExposureLearningProfile;
-  safety: ExposureRadarSafetyCenterData | null;
-  timeZone: string;
-}) {
-  const { t } = useT();
-  const { pushToast } = useToast();
-  const handled = weeklyReview?.handled_count || recentRecords.filter((record) => record.handled_at || record.task_status === "done").length;
-  const effective = weeklyReview?.effective_count || recentRecords.filter((record) => record.outcome === "effective").length;
-  const negative = weeklyReview?.negative_count || recentRecords.filter((record) => record.outcome === "ineffective" || record.outcome === "not_suitable").length;
-  const backfilled = recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
-  const report = buildWeeklyOperatorReport({ weeklyReview, recentRecords, moves, learningProfile, safety, timeZone, t });
-  const topTopicItems = (weeklyReview?.top_topics || []).slice(0, 5).map((topic) => `${topic.topic_name} · ${topic.effective}/${topic.count}`);
-  const nextItems = weeklyReview?.recommendations?.length ? weeklyReview.recommendations : buildWeeklyFallbackRecommendations(learningProfile, safety, t);
-  const copyReport = async () => {
-    try {
-      await navigator.clipboard.writeText(report);
-      pushToast(t("exposureRadar.weeklyOps.copied"));
-    } catch {
-      pushToast(t("exposureRadar.weeklyOps.copyFailed"));
-    }
-  };
-  return (
-    <WeeklyOperatorReviewCard
-      handled={handled}
-      effective={effective}
-      negative={negative}
-      backfilled={backfilled}
-      topTopicItems={topTopicItems}
-      nextItems={nextItems}
-      onCopyReport={() => void copyReport()}
-    />
   );
 }
 

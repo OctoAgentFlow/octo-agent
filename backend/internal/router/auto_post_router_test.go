@@ -8,13 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestRegisterContentDraftsMirrorsAutoPostRoutes(t *testing.T) {
+func TestRegisterContentDraftsRoutesOnlyNewProductPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	v1 := r.Group("/api/v1")
 	c := controller.NewContentDraftController(nil)
 
-	RegisterAutoPost(v1, c)
 	RegisterContentDrafts(v1, c)
 
 	routes := map[string]bool{}
@@ -40,13 +39,13 @@ func TestRegisterContentDraftsMirrorsAutoPostRoutes(t *testing.T) {
 		{method: "POST", path: "/drafts/:id/prepare-publish"},
 		{method: "POST", path: "/drafts/:id/reject"},
 	} {
-		oldPath := endpoint.method + " /api/v1/auto-post" + endpoint.path
 		newPath := endpoint.method + " /api/v1/content-drafts" + endpoint.path
-		if !routes[oldPath] {
-			t.Fatalf("missing legacy route %s", oldPath)
-		}
 		if !routes[newPath] {
-			t.Fatalf("missing content draft alias route %s", newPath)
+			t.Fatalf("missing content draft route %s", newPath)
+		}
+		oldPath := endpoint.method + " /api/v1/auto-post" + endpoint.path
+		if routes[oldPath] {
+			t.Fatalf("legacy route should be downlined: %s", oldPath)
 		}
 	}
 }

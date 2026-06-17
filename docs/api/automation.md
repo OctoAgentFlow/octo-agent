@@ -2,7 +2,7 @@
 
 Base path: `/api/v1`
 
-本文档覆盖当前自动化相关 API：自动化总览、OAF Bot、Auto Post Planner、Content Library、Auto Reply、Auto Comment、Auto DM、Execution Queue 和 Publishing Pipeline。所有登录态接口均需要 Bearer Token，公开退订接口除外。
+本文档覆盖当前自动化相关 API：自动化总览、OAF Bot、Content Draft Planner、Content Library、Exposure Radar 手动机会草稿、Handling List 和 Publishing Pipeline。所有登录态接口均需要 Bearer Token，公开退订接口除外。
 
 统一返回结构：
 
@@ -35,7 +35,7 @@ Base path: `/api/v1`
 
 - **用途**：更新某个场景的执行模式。
 - **模式**：`manual` / `review` / `autopilot`。
-- **说明**：Auto Comment、Auto Reply、Auto Post 的生成结果会根据执行模式进入 `draft`、`pending_review` 或 `ready_to_publish`。
+- **说明**：Content Draft 与 Exposure Radar 手动机会草稿会根据执行模式进入 `draft`、`pending_review` 或 `ready_to_publish`。
 
 ### GET /api/v1/automations/runtime-status
 
@@ -76,28 +76,30 @@ Base path: `/api/v1`
 - **用途**：展示该 Bot 本月 AI 生成用量分布。
 - **说明**：这是用量分布，不是 scene 独立额度；所有场景共享套餐 AI 生成总额度。
 
-## Auto Post Planner
+## Content Drafts
 
-### GET /api/v1/auto-post/plans
+> 旧 `/api/v1/auto-post/*` 路由已下线。当前产品接口使用 `/api/v1/content-drafts/*`，底层 JSON 字段仍保持历史兼容。
 
-- **用途**：列出当前用户 Auto Post Planner 配置。
+### GET /api/v1/content-drafts/plans
 
-### POST /api/v1/auto-post/plans
+- **用途**：列出当前用户 Content Draft Planner 配置。
+
+### POST /api/v1/content-drafts/plans
 
 - **用途**：创建 Planner。
 - **核心字段**：`twitter_account_id`、`enabled`、`execution_mode`、`daily_limit`、`min_interval_minutes`、`posting_windows`、`timezone`。
 
-### GET /api/v1/auto-post/plans/:id
+### GET /api/v1/content-drafts/plans/:id
 
 - **用途**：查看单个 Planner。
 
-### PUT /api/v1/auto-post/plans/:id
+### PUT /api/v1/content-drafts/plans/:id
 
 - **用途**：更新 Planner。
 
-### POST /api/v1/auto-post/plans/:id/generate
+### POST /api/v1/content-drafts/plans/:id/generate
 
-- **用途**：手动生成一条 Auto Post 草稿。
+- **用途**：手动生成一条 Content Draft。
 - **输入**：可传 `content_library_item_id` 或 `content_direction`。
 - **生成规则**：读取 X 账号绑定的 OAF Bot、人设、语言配置和内容素材；输出纯文本单条推文。
 - **状态流转**：
@@ -107,36 +109,36 @@ Base path: `/api/v1`
   - 命中风险 -> `pending_review`
 - **计量**：成功生成记录 `scene=auto_post`，AI 用量 +1。
 
-### POST /api/v1/auto-post/plans/:id/run-now
+### POST /api/v1/content-drafts/plans/:id/run-now
 
 - **用途**：手动触发一次 scheduler 同等逻辑，用于测试 Planner。
 - **说明**：可忽略 `next_run_at`，但仍校验 planner enabled、X 账号 connected、订阅、AI 额度、daily limit、内容素材和重复内容。
 
-### GET /api/v1/auto-post/runs
+### GET /api/v1/content-drafts/runs
 
-- **用途**：查看最近 Auto Post scheduler / run-now 运行记录。
+- **用途**：查看最近 Content Draft scheduler / run-now 运行记录。
 - **查询参数**：`status=completed|skipped|failed`、`x_account_id`、`range=24h|7d|30d`、`date_from`、`date_to`、`page`、`page_size`。
 - **返回**：`items` 和 `pagination`，用于后台按状态/账号分页排查。
 - **状态**：`completed` / `skipped` / `failed`。
 - **skip_reason**：如 `no_active_content_source`、`ai_generation_quota_exceeded`、`daily_auto_post_limit_exceeded`、`duplicate_content`。
 
-### GET /api/v1/auto-post/drafts
+### GET /api/v1/content-drafts/drafts
 
-- **用途**：查看 Auto Post 草稿。
+- **用途**：查看 Content Draft 草稿。
 
-### PATCH /api/v1/auto-post/drafts/:id
+### PATCH /api/v1/content-drafts/drafts/:id
 
-- **用途**：编辑 Auto Post 草稿内容或状态。
+- **用途**：编辑 Content Draft 内容或状态。
 
-### POST /api/v1/auto-post/drafts/:id/approve
+### POST /api/v1/content-drafts/drafts/:id/approve
 
 - **用途**：批准 review 模式生成的草稿。批准后可创建发布任务。
 
-### POST /api/v1/auto-post/drafts/:id/prepare-publish
+### POST /api/v1/content-drafts/drafts/:id/prepare-publish
 
-- **用途**：为 ready/approved 的 Auto Post 草稿创建 `publish_job`。
+- **用途**：为 ready/approved 的 Content Draft 创建 `publish_job`。
 
-### POST /api/v1/auto-post/drafts/:id/reject
+### POST /api/v1/content-drafts/drafts/:id/reject
 
 - **用途**：拒绝草稿。
 
@@ -165,102 +167,22 @@ Base path: `/api/v1`
 
 - **用途**：删除素材。
 
-## Auto Reply
+## Downlined Legacy Automation APIs
 
-### GET /api/v1/auto-replies/drafts
+以下需要登录的旧自动化 API 已下线，不再作为产品接口注册：
 
-- **用途**：列出 Auto Reply 草稿。
+- `/api/v1/auto-replies/*`
+- `/api/v1/auto-comment/*`
+- `/api/v1/auto-comments/*`
+- authenticated `/api/v1/auto-dm/*`
 
-### POST /api/v1/auto-replies/drafts/generate
+当前替代路径：
 
-- **用途**：基于待回复评论生成回复草稿。
-- **计量**：成功生成记录 `scene=auto_reply`，AI 用量 +1。
-- **执行模式**：同 Auto Post。
+- 评论/回复机会：`/api/v1/exposure-radar/drafts` + `/api/v1/exposure-radar/manual-records*`
+- 队列聚合：`/api/v1/review-queue`
+- 内容草稿：`/api/v1/content-drafts/*`
 
-### PATCH /api/v1/auto-replies/drafts/:id
-
-- **用途**：编辑回复草稿。
-
-### POST /api/v1/auto-replies/drafts/:id/approve
-
-- **用途**：批准回复草稿；若草稿进入待发布状态，会由 Publishing Pipeline 创建或处理发布任务。
-
-### POST /api/v1/auto-replies/drafts/:id/reject
-
-- **用途**：拒绝回复草稿。
-
-## Auto Comment
-
-### GET /api/v1/auto-comments/targets
-
-- **用途**：列出目标推文/目标账号。
-
-### POST /api/v1/auto-comments/targets
-
-- **用途**：新增目标推文。
-
-### POST /api/v1/auto-comments/targets/:id/generate
-
-- **用途**：基于目标推文生成评论草稿。
-- **计量**：成功生成记录 `scene=auto_comment`，AI 用量 +1。
-- **执行模式**：同 Auto Post。
-
-### GET /api/v1/auto-comments/drafts
-
-- **用途**：列出评论草稿。
-
-### PATCH /api/v1/auto-comments/drafts/:id
-
-- **用途**：编辑评论草稿。
-
-### POST /api/v1/auto-comments/drafts/:id/approve
-
-- **用途**：批准评论草稿。
-
-### POST /api/v1/auto-comments/drafts/:id/reject
-
-- **用途**：拒绝评论草稿。
-
-兼容路径 `/api/v1/auto-comment/*` 当前仍存在，优先使用复数 `/auto-comments/*`。
-
-## Auto DM
-
-### GET /api/v1/auto-dm/tasks
-
-- **用途**：返回 Auto DM 发送前审计任务。
-- **状态**：`review` / `approved` / `sending` / `blocked` / `failed` / `sent` 等。
-
-### POST /api/v1/auto-dm/tasks/:id/approve
-
-- **用途**：批准 DM 任务。
-
-### POST /api/v1/auto-dm/tasks/:id/block
-
-- **用途**：阻断 DM 任务。
-
-### POST /api/v1/auto-dm/tasks/:id/retry
-
-- **用途**：重试可重试失败任务。
-
-### GET /api/v1/auto-dm/recipients
-
-- **用途**：名单规则查询，可筛选 allowlisted / blocked / unsubscribed。
-
-### POST /api/v1/auto-dm/recipients/import
-
-- **用途**：CSV 导入 allowlist。
-
-### GET /api/v1/auto-dm/recipients/imports
-
-- **用途**：导入批次历史。
-
-### PATCH /api/v1/auto-dm/recipient-rules/:id
-
-- **用途**：更新名单规则。
-
-### POST /api/v1/auto-dm/recipient-rules/bulk
-
-- **用途**：批量更新名单规则。
+## Public DM Unsubscribe
 
 ### GET /api/v1/auto-dm/unsubscribe/:token
 

@@ -706,7 +706,7 @@ func reviewQueueVerdictURL(row model.ReviewQueueFeedbackIssueVerdict) string {
 	}
 	issue := strings.TrimSpace(row.FeedbackIssue)
 	status := "pending_review"
-	return "/execution-queue?type=" + queueType + "&status=" + status + "&feedback_issue=" + issue + "&focus_type=" + queueType + "&focus_source_id=" + strconv.FormatUint(uint64(row.SourceID), 10)
+	return "/handling-list?type=" + queueType + "&status=" + status + "&feedback_issue=" + issue + "&focus_type=" + queueType + "&focus_source_id=" + strconv.FormatUint(uint64(row.SourceID), 10)
 }
 
 func ratio(numerator int, denominator int) float64 {

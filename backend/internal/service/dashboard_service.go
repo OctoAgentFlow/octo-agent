@@ -227,7 +227,7 @@ func dashboardCommentOpportunitySummary(task model.AutoCommentTask) dto.Dashboar
 		Title:       compactDashboardSummary(firstNonEmpty(formatDashboardHandle(task.TargetUsername), task.TargetTweetAuthor, "Auto Comment"), 40),
 		Description: "",
 		Status:      status,
-		Href:        "/execution-queue?type=comment",
+		Href:        "/handling-list?type=comment",
 		Tone:        dashboardTone(task.RiskLevel, status, "blue"),
 		Score:       task.OpportunityScore,
 	}
@@ -348,9 +348,9 @@ func dashboardWorkbenchStatus(status string) bool {
 func dashboardExecutionQueueHref(itemType string, status string) string {
 	status = normalizeReviewQueueStatus(status)
 	if status == "" {
-		return fmt.Sprintf("/execution-queue?type=%s", itemType)
+		return fmt.Sprintf("/handling-list?type=%s", itemType)
 	}
-	return fmt.Sprintf("/execution-queue?type=%s&status=%s", itemType, status)
+	return fmt.Sprintf("/handling-list?type=%s&status=%s", itemType, status)
 }
 
 func dashboardTone(riskLevel string, status string, fallback string) string {

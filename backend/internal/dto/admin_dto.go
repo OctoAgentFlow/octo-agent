@@ -110,6 +110,8 @@ type AdminCostSchedulerSummary struct {
 	ExposureRegions                []AdminExposureRegionRuntimeItem `json:"exposure_regions"`
 	SchedulerStatus                string                           `json:"scheduler_status"`
 	SkipReason                     string                           `json:"skip_reason,omitempty"`
+	BudgetStatus                   string                           `json:"budget_status"`
+	BudgetGuardrails               []string                         `json:"budget_guardrails"`
 	FailureReasons                 []AdminSchedulerFailureReason    `json:"failure_reasons"`
 }
 

@@ -92,17 +92,17 @@ The default backend scheduler currently focuses on safe operational jobs:
 - Publishing job processing with configured publisher guardrails.
 - Billing scanner, point expiry, and margin alerts.
 
-Legacy Auto Reply, Auto Comment, and Auto DM background loops are not part of the default scheduler path. Their historical API routes are treated as legacy compatibility and should not be used for new product work.
+Legacy Auto Reply, Auto Comment, and Auto DM background loops are not part of the default scheduler path. Their authenticated historical API routes are no longer registered; public DM unsubscribe links remain for compliance.
 
 ## Legacy Boundaries
 
-Some historical names remain in code, database fields, and compatibility routes because existing data still depends on them.
+Some historical names remain in code, database fields, and compatibility DTOs because existing data still depends on them.
 
 - New product code should prefer `ContentDraft`, `HandlingList`, `ExposureRadar`, `DailyGrowthDesk`, and `ContentMemory` language.
 - `/content-drafts` is the product route for content strategy drafts.
 - `/handling-list` is the product route for manual review and follow-through.
-- `/auto-post` is a deprecated API alias for `/content-drafts` and is logged when used.
-- `/auto-replies`, authenticated `/auto-dm`, `/auto-comment`, and `/auto-comments` are protected legacy automation APIs. They are blocked by default and log access. Set `OCTO_ALLOW_LEGACY_AUTOMATION_ROUTES=true` only for an emergency rollback window.
+- `/auto-post`, `/execution-queue`, `/review-queue`, `/auto-replies`, authenticated `/auto-dm`, `/auto-comment`, and `/auto-comments` are downlined routes and should return no product surface.
+- Historical DB table names, JSON quota fields, activity keys, and AI usage scene strings remain stable until a dedicated data migration is planned.
 - Public DM unsubscribe links remain available for historical compliance.
 
 ## Repository Structure

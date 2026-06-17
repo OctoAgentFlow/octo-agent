@@ -337,7 +337,7 @@ function QueueMetric({ label, value, tone = "default" }: { label: string; value:
 function automationHref(type: AccountAutomationState["type"]) {
   if (type === "post") return "/content-drafts";
   if (type === "comment") return "/exposure-radar";
-  return "/review-queue";
+  return "/handling-list";
 }
 
 function HealthRow({

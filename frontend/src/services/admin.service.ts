@@ -104,6 +104,8 @@ export type AdminCostSchedulerSummaryApi = {
   exposure_regions: AdminExposureRegionRuntimeApi[];
   scheduler_status: "healthy" | "attention" | string;
   skip_reason?: string;
+  budget_status: "healthy" | "watch" | "tighten" | string;
+  budget_guardrails: string[];
   failure_reasons: AdminSchedulerFailureReasonApi[];
 };
 

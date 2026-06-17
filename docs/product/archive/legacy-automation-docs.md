@@ -32,7 +32,19 @@ Some legacy names remain intentionally:
 - JSON fields such as `monthly_auto_posts`
 - AI usage scenes such as `auto_post`
 - Activity preview keys for historical rows
-- `/api/v1/auto-post/*` compatibility aliases
+
+The old product routes and authenticated old automation APIs are no longer active:
+
+- `/auto-post`
+- `/execution-queue`
+- `/review-queue`
+- `/api/v1/auto-post/*`
+- authenticated `/api/v1/auto-replies/*`
+- `/api/v1/auto-comment/*`
+- `/api/v1/auto-comments/*`
+- authenticated `/api/v1/auto-dm/*`
+
+Public DM unsubscribe stays available for historical compliance.
 
 See:
 

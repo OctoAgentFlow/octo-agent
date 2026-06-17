@@ -2841,7 +2841,7 @@ function contentItemMatchesBot(item: ContentLibraryItemApi, bot: OAFBot) {
 function automationHref(type: BotAutomationType) {
   if (type === "post") return "/content-drafts";
   if (type === "comment") return "/exposure-radar";
-  return "/review-queue";
+  return "/handling-list";
 }
 
 function getErrorBody(error: unknown): ApiErrorBody | undefined {

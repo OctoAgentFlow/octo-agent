@@ -6,23 +6,23 @@ Base path: `/api/v1`
 
 统一响应：`{ "code", "message", "data" }`。
 
-## 与 Auto Post Planner 的边界
+## 与 Content Draft Planner 的边界
 
 `posts` 是传统帖子 CRUD / 手动执行 / 定时发布接口，仍然可用。
 
-新版 OAF Bot 自动发推闭环优先使用：
+新版 OAF Bot 内容草稿闭环优先使用：
 
-- `/api/v1/auto-post/plans`
+- `/api/v1/content-drafts/plans`
 - `/api/v1/content-library/items`
-- `/api/v1/auto-post/drafts`
+- `/api/v1/content-drafts/drafts`
 - `/api/v1/review-queue`
 - `/api/v1/publishing/jobs`
 
 也就是说：
 
 - `posts` 适合用户手动创建固定内容。
-- Auto Post Planner 适合让 OAF Bot 根据人设、内容池和发推规则自动生成草稿。
-- Auto Post Planner 生成的内容通过 Execution Queue / Publishing Pipeline 发布，不直接复用 `POST /posts/:id/execute`。
+- Content Draft Planner 适合让 OAF Bot 根据人设、内容池和发布规则生成草稿。
+- Content Draft Planner 生成的内容通过 Handling List / Publishing Pipeline 处理，不直接复用 `POST /posts/:id/execute`。
 
 ## 数据模型（`posts` 表）
 
@@ -116,6 +116,6 @@ Base path: `/api/v1`
 - **X 频率限制（429 等）**：帖子 **改回 `scheduled`**，并按 `Retry-After`（缺省约 15 分钟，有上限）延后 `scheduled_at`；Activity 记一条失败说明（含 `error_message`），帖子记录 `last_error_message`。
 - 若 **Post 自动化未启用**，该用户的计划帖 **不会** 被自动执行。
 
-## Auto Post Planner 调度
+## Content Draft Planner 调度
 
-Auto Post Planner 的 scheduler 使用 `auto_post_plans`、`content_library_items` 和 `auto_post_drafts`，不写入 `posts` 表。详见 [automation.md](./automation.md)。
+Content Draft Planner 的 scheduler 使用历史表 `auto_post_plans`、`content_library_items` 和 `auto_post_drafts`，不写入 `posts` 表。当前产品接口是 `/api/v1/content-drafts/*`，详见 [automation.md](./automation.md)。

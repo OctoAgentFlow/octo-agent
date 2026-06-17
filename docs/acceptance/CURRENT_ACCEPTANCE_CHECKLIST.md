@@ -1,6 +1,6 @@
 # CURRENT_ACCEPTANCE_CHECKLIST
 
-当前阶段验收重点是 OAF Bot、Auto Post Planner、Execution Queue 和 Publishing Pipeline。历史 MVP 验收文档仍保留，但不再作为最新调试入口。
+当前阶段验收重点是 OAF Bot、Exposure Radar、Content Drafts、Handling List 和 Publishing Pipeline。历史 MVP 验收文档仍保留，但不再作为最新调试入口。
 
 ## 1. 四服务健康
 
@@ -34,31 +34,28 @@
 - Billing 页面 AI 生成额度进度条正确。
 - AI 用量接近上限时有 warning；用尽时提示升级。
 
-## 5. Auto Post Planner
+## 5. Content Draft Planner
 
-- `/auto-post` 页面可访问。
+- `/content-drafts` 页面可访问。
 - 可以保存 Planner。
 - 可以新增/编辑/暂停/删除 Content Library 素材。
-- 手动生成 Auto Post 草稿成功。
+- 手动生成 Content Draft 成功。
 - run-now 成功时生成草稿并记录 run。
 - enabled planner 到点后 scheduler 能自动生成草稿。
 - 没有素材时 run 显示 `no_active_content_source`，不崩溃。
 - AI 额度不足时显示 `ai_generation_quota_exceeded`。
 - 生成成功后 AI 用量 +1，素材 usage_count / last_used_at 更新。
 
-## 6. Auto Reply / Auto Comment
+## 6. Exposure Radar Manual Workflow
 
-- Auto Reply 可录入评论上下文并生成回复草稿。
-- Auto Comment 可录入目标推文并生成评论草稿。
-- manual -> `draft`。
-- review -> `pending_review`。
-- autopilot -> `ready_to_publish`。
-- 风险命中 -> `pending_review`。
-- 生成成功后进入 Execution Queue。
+- `/exposure-radar` 可以加载中文区 / 英文区机会信号。
+- 机会卡支持生成回复、复制回复、打开原贴、保存记忆、记录处理结果。
+- 手动结果回填后可在页面看到处理状态和学习反馈。
+- 旧自动评论 / 自动回复 / 自动 DM 路由不作为验收入口。
 
-## 7. Execution Queue
+## 7. Handling List
 
-- `/execution-queue` 可访问。
+- `/handling-list` 可访问。
 - 可按 type/status/execution_mode 筛选。
 - post/comment/reply 均可展示。
 - pending_review 内容可编辑、批准、拒绝。

@@ -82,12 +82,11 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1
 - Dashboard：`/dashboard/overview`
 - OAF Bot：`/oaf-bots`
 - Automations：`/automations`、`/automations/:type/execution-mode`
-- Content Drafts：页面使用 `/content-drafts`，前端默认调用 `/content-drafts/plans`、`/content-drafts/drafts`、`/content-drafts/runs`；后端仍保留 `/auto-post/*` 兼容入口
+- Content Drafts：页面使用 `/content-drafts`，前端默认调用 `/content-drafts/plans`、`/content-drafts/drafts`、`/content-drafts/runs`
 - Content Library：`/content-library/items`
-- Auto Reply：`/auto-replies/drafts`
-- Auto Comment：`/auto-comments/targets`、`/auto-comments/drafts`
-- Auto DM：`/auto-dm/tasks`、`/auto-dm/recipients`、`/auto-dm/unsubscribe/:token`
-- Execution Queue：`/review-queue`
+- Exposure Radar：`/trends/exposure-radar*`、`/exposure-radar/drafts`、`/exposure-radar/manual-records*`
+- Public DM unsubscribe：`/auto-dm/unsubscribe/:token`
+- Handling List API：`/review-queue`
 - Publishing：`/publishing/status`、`/publishing/jobs`、`/publishing/jobs/:id/publish-now`
 - Posts：`/posts`
 - Activity：`/activities`
@@ -99,11 +98,11 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1
 
 - 邮箱验证码清理。
 - 传统 scheduled posts。
-- Auto Reply / Auto DM 既有调度。
-- Auto Post Planner 到点生成。
+- Content Draft Planner 到点生成。
+- Exposure Radar refresh / X Trends cache refresh。
 - Publishing Pipeline simulated publish。
 
-重要边界：scheduler 不会自动真实发布到 X。
+重要边界：scheduler 不会启动旧 Auto Reply / Auto Comment / Auto DM 后台循环，也不会自动真实发布到 X。
 
 ## Admin API 当前主要路由
 

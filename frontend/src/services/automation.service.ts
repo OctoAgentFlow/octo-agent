@@ -54,45 +54,6 @@ export type AutoDMPreferenceData = {
   status: string;
 };
 
-export type AutoReplyDraftApi = {
-  id: number;
-  bot_id: number;
-  x_account_id: number;
-  comment_tweet_id?: string;
-  comment_url?: string;
-  comment_author_handle: string;
-  root_tweet_text?: string;
-  comment_text: string;
-  generated_reply?: string;
-  feedback_signal_count?: number;
-  feedback_signal_summary?: {
-    count: number;
-    scenes: string[];
-    issue_tags: string[];
-    latest_comment?: string;
-    applied_learning_rules?: Array<{
-      issue: string;
-      confidence: number;
-      accurate_judgments: number;
-      instruction: string;
-      evidence?: string[];
-      preference_status?: string;
-    }>;
-  };
-  status: "draft" | "review" | "pending_review" | "approved" | "ready_to_publish" | "processing" | "published" | "rejected" | "failed" | "sent";
-  risk_level: "low" | "medium" | "high" | string;
-  capability_status: string;
-  failure_category?: string;
-  failure_reason?: string;
-  approval_required: boolean;
-  activity_log_id?: number;
-  created_at: string;
-  generated_at?: string;
-  approved_at?: string;
-  rejected_at?: string;
-  sent_at?: string;
-};
-
 export type AutomationSavePayload = {
   enabled: boolean;
   frequency: {
@@ -148,24 +109,6 @@ export const automationService = {
   },
   async unsubscribeDM(token: string) {
     const res = await request.post<ApiResponse<AutoDMPreferenceData>>(`/auto-dm/unsubscribe/${token}`);
-    return res.data.data;
-  },
-  async updateReplyDraft(id: number, generatedReply: string) {
-    const res = await request.patch<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}`, {
-      generated_reply: generatedReply,
-    });
-    return res.data.data;
-  },
-  async rewriteReplyDraft(id: number, payload: { rewrite_mode: string; feedback?: string; disabled_learning_issues?: string[] }) {
-    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/rewrite`, payload);
-    return res.data.data;
-  },
-  async approveReplyDraft(id: number) {
-    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/approve`);
-    return res.data.data;
-  },
-  async rejectReplyDraft(id: number, reason: string) {
-    const res = await request.post<ApiResponse<AutoReplyDraftApi>>(`/auto-replies/drafts/${id}/reject`, { reason });
     return res.data.data;
   },
 };

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -1482,7 +1483,61 @@ func (s *AdminService) costSchedulerSummary(now time.Time) dto.AdminCostSchedule
 	if len(out.FailureReasons) > 0 {
 		out.SchedulerStatus = "attention"
 	}
+	out.BudgetStatus, out.BudgetGuardrails = adminSchedulerBudgetGuardrails(out)
 	return out
+}
+
+func adminSchedulerBudgetGuardrails(summary dto.AdminCostSchedulerSummary) (string, []string) {
+	status := "healthy"
+	guardrails := []string{}
+	totalCostCents := summary.OpenAICostCents + summary.XCostCents
+	refreshesPerDay := 0
+	if summary.ExposureRefreshIntervalMinutes > 0 {
+		refreshesPerDay = int(math.Ceil(1440 / float64(summary.ExposureRefreshIntervalMinutes)))
+	}
+	addWatch := func(code string) {
+		if status != "tighten" {
+			status = "watch"
+		}
+		guardrails = append(guardrails, code)
+	}
+	addTighten := func(code string) {
+		status = "tighten"
+		guardrails = append(guardrails, code)
+	}
+	if refreshesPerDay > 144 {
+		addTighten("refresh_cadence_too_high")
+	} else if refreshesPerDay > 96 {
+		addWatch("refresh_cadence_watch")
+	}
+	if summary.XAPICalls > 2000 {
+		addTighten("x_api_calls_too_high")
+	} else if summary.XAPICalls > 1000 {
+		addWatch("x_api_calls_watch")
+	}
+	if summary.OpenAIGenerations > 1000 {
+		addTighten("openai_generations_too_high")
+	} else if summary.OpenAIGenerations > 500 {
+		addWatch("openai_generations_watch")
+	}
+	if totalCostCents > 2000 {
+		addTighten("daily_cost_too_high")
+	} else if totalCostCents > 500 {
+		addWatch("daily_cost_watch")
+	}
+	if summary.XWriteCalls > 0 {
+		addWatch("write_calls_present")
+	}
+	if strings.TrimSpace(summary.SkipReason) != "" {
+		addWatch("scheduler_skip_present")
+	}
+	if len(summary.FailureReasons) > 0 {
+		addWatch("failure_reasons_present")
+	}
+	if len(guardrails) == 0 {
+		guardrails = append(guardrails, "within_guardrails")
+	}
+	return status, guardrails
 }
 
 func (s *AdminService) schedulerFailureReasons(since time.Time, limit int) []dto.AdminSchedulerFailureReason {

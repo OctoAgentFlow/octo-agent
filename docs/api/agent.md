@@ -2,7 +2,7 @@
 
 Base path: `/api/v1`
 
-> **说明**：`/agents` 当前作为兼容接口保留，数据来源已与 **自动化模块（`automation_configs`）** 对齐。当前产品主线是 [OAF Bot](./automation.md#oaf-bot) 与 `/automations`、`/auto-post`、`/execution-queue`，不要把 `/agents` 当作新的机器人模型。
+> **说明**：`/agents` 当前作为兼容接口保留，数据来源已与 **自动化模块（`automation_configs`）** 对齐。当前产品主线是 [OAF Bot](./automation.md#oaf-bot)、`/automations`、`/content-drafts`、`/handling-list` 与 `/exposure-radar`，不要把 `/agents` 当作新的机器人模型。
 
 ## GET /api/v1/agents
 

@@ -110,8 +110,9 @@ type SocialDraftRewriteRequest struct {
 	DisabledLearningIssues []string `json:"disabled_learning_issues"`
 }
 
-// AutoPost* DTOs remain the legacy wire contract for /auto-post and persisted
-// clients. ContentDraft* aliases below are the preferred runtime names.
+// AutoPost* DTOs remain as legacy field/type compatibility for persisted data
+// and older code aliases. ContentDraft* aliases below are the preferred runtime
+// names, and active routes use /content-drafts.
 type AutoPostPlanRequest struct {
 	XAccountID           uint     `json:"x_account_id" binding:"required"`
 	Enabled              bool     `json:"enabled"`

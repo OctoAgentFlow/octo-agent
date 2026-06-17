@@ -15,10 +15,18 @@ Base path: `/api/v1`
 - `expiration_date`：订阅到期日（`YYYY-MM-DD`，可空）
 - `trial_days_left`：剩余试用天数
 - `billing_hint`：展示用提示文案
+- `limits.monthly_content_drafts`：内容草稿额度
+- `limits.monthly_opportunity_drafts`：机会回复草稿额度
+- `limits.monthly_review_capacity`：人工审核/处理容量
+- `limits.content_memory_sources`：内容记忆容量
+- `usage.content_drafts_month`、`usage.opportunity_drafts_month`、`usage.review_capacity_month`：当前周期用量
+- `monthly_auto_posts` / `auto_posts_month` 等旧字段：兼容字段，不作为新产品展示口径
 
 ## GET /api/v1/billing/plans
 
 - **用途**：返回可展示的套餐列表；数据来自 **`billing.plans` YAML 配置**（非数据库表）。若配置为空则服务层返回内置默认项。
+- **Quota 语义**：前端和 API 文档以 `monthly_content_drafts`、`monthly_opportunity_drafts`、`monthly_review_capacity`、`content_memory_sources`、`monthly_radar_refreshes` 等字段作为当前产品口径。
+- **兼容字段**：`monthly_auto_posts`、`monthly_auto_comments`、`monthly_auto_dms`、`auto_posts_month`、`auto_comments_month` 等旧字段仍可能出现在响应中，用于历史客户端和旧存储兼容；新功能不要以这些字段作为展示口径。
 
 ## GET /api/v1/billing/payment-methods
 

@@ -825,13 +825,20 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
   const isHealthy = runtime.scheduler_status === "healthy";
   const failureReasons = runtime.failure_reasons || [];
   const exposureRegions = runtime.exposure_regions || [];
+  const budgetGuardrails = runtime.budget_guardrails || [];
+  const budgetStatus = runtime.budget_status || "healthy";
   const exposureRefreshesPerDay = runtime.exposure_refresh_interval_minutes > 0 ? Math.ceil(1440 / runtime.exposure_refresh_interval_minutes) : 0;
   return (
     <Card className="bg-[#0f1419]">
       <CardHeader
         title={t("admin.costScheduler.title")}
         description={t("admin.costScheduler.description", { hours: runtime.window_hours || 24 })}
-        right={<Badge variant={isHealthy ? "success" : "warning"}>{isHealthy ? t("admin.costScheduler.status.healthy") : t("admin.costScheduler.status.attention")}</Badge>}
+        right={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Badge variant={isHealthy ? "success" : "warning"}>{isHealthy ? t("admin.costScheduler.status.healthy") : t("admin.costScheduler.status.attention")}</Badge>
+            <Badge variant={budgetStatus === "tighten" ? "danger" : budgetStatus === "watch" ? "warning" : "success"}>{t(`admin.costScheduler.budgetStatus.${budgetStatus === "tighten" || budgetStatus === "watch" ? budgetStatus : "healthy"}`)}</Badge>
+          </div>
+        }
       />
       <div className="grid gap-3 md:grid-cols-5">
         <Metric label={t("admin.costScheduler.openaiGenerations")} value={runtime.openai_generations} icon={Activity} />
@@ -858,6 +865,17 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
           <p className={`mt-4 rounded-xl border px-3 py-2 text-xs ${runtime.skip_reason ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>
             {t("admin.costScheduler.skipReason")}: {adminCostSchedulerSkipReasonLabel(runtime.skip_reason, t)}
           </p>
+          <div className="mt-4 rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.budgetGuardrails")}</p>
+            <ul className="mt-2 space-y-2">
+              {budgetGuardrails.map((code) => (
+                <li key={code} className="flex gap-2 text-xs leading-5 text-[#cfd9de]">
+                  <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${budgetStatus === "tighten" ? "bg-rose-400" : budgetStatus === "watch" ? "bg-amber-300" : "bg-emerald-300"}`} />
+                  <span>{t(`admin.costScheduler.guardrail.${code}`)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <div className="rounded-2xl border border-[#2f3336] bg-black/30 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.exposureRegions")}</p>

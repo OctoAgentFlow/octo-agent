@@ -17,9 +17,9 @@ type Props = {
 
 const workspaceHref: Record<AutomationModule["type"], string> = {
   post: "/content-drafts",
-  reply: "/review-queue",
+  reply: "/handling-list",
   comment: "/exposure-radar",
-  dm: "/review-queue",
+  dm: "/handling-list",
 };
 
 export function AutomationModuleCard({ module, onToggle }: Props) {

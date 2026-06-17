@@ -222,7 +222,7 @@ export type TrendFeedbackListData = {
   };
 };
 
-const createAutoPostService = (basePath: "/auto-post" | "/content-drafts") => ({
+const createAutoPostService = (basePath: "/content-drafts") => ({
   async plans() {
     const res = await request.get<ApiResponse<AutoPostPlansData>>(`${basePath}/plans`);
     return res.data.data;
@@ -329,5 +329,5 @@ const createAutoPostService = (basePath: "/auto-post" | "/content-drafts") => ({
   },
 });
 
-export const autoPostService = createAutoPostService("/auto-post");
+export const autoPostService = createAutoPostService("/content-drafts");
 export const contentDraftService = createAutoPostService("/content-drafts");

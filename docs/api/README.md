@@ -11,7 +11,7 @@
 | [auth.md](./auth.md) | 注册/登录/刷新、管理员登录、`/users/me`、钱包 challenge/bind/unbind |
 | [account.md](./account.md) | X 账号列表、OAuth 起止、解绑 |
 | [dashboard.md](./dashboard.md) | Dashboard 概览 |
-| [automation.md](./automation.md) | 自动化总览、Auto Post、Content Library、Auto Reply、Auto Comment、Auto DM、Execution Queue、Publishing |
+| [automation.md](./automation.md) | 自动化总览、Content Drafts、Content Library、Exposure Radar 手动草稿、Handling List、Publishing，以及已下线旧自动化 API 边界 |
 | [activity.md](./activity.md) | 活动日志分页列表 |
 | [analytics.md](./analytics.md) | 分析概览 |
 | [billing.md](./billing.md) | 订阅/套餐/支付方式、下单、订单查询、链上确认 |
@@ -24,11 +24,10 @@
 这些分组目前集中写在 [automation.md](./automation.md)，后续如果内容继续膨胀，可拆成独立文档：
 
 - `/oaf-bots`：OAF Bot 创建、编辑、示例生成和生成用量。
-- `/auto-post`：Planner、草稿、scheduler runs、run-now。
-- `/content-library/items`：Auto Post 内容池素材。
-- `/auto-replies`：Auto Reply 草稿生成、编辑、批准、拒绝。
-- `/auto-comments`：Auto Comment 目标和草稿。
-- `/auto-dm`：Auto DM 任务、名单、导入、公开退订。
+- `/content-drafts`：Planner、草稿、scheduler runs、run-now。
+- `/content-library/items`：Content Memory / Content Draft 内容池素材。
+- `/exposure-radar`：机会回复草稿、手动处理记录、策略、people note。
+- `/auto-dm/unsubscribe/:token`：公开退订入口，保留用于历史合规。
 - `/review-queue`：统一执行队列聚合查询。
 - `/publishing`：发布任务、发布器状态、重试、取消、手动 publish-now。
 

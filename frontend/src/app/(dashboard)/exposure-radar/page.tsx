@@ -23,8 +23,7 @@ import { buildRadarContentSeedPayload, buildRadarMemoryPayload, buildSeedDraftDi
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
 import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, radarItemMatchesFilter } from "@/components/exposure-radar/daily-action-plan-utils";
 import { buildPriorityReasonChips, resultLearningTone, sessionStateTone } from "@/components/exposure-radar/display-helper-utils";
-import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
-import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
+import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics } from "@/components/exposure-radar/learning-profile-utils";
 import { buildResultLearningMoves, buildResultLearningSummary } from "@/components/exposure-radar/learning-report-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
@@ -36,7 +35,7 @@ import { peopleRadarStageTone } from "@/components/exposure-radar/operating-desk
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { ActionPlanMetric, CommandList, CommandStep, FirstLoopActionRow, GrowthDeskMetric, LightMetric, MiniStat, ReviewList, StrategyInput } from "@/components/exposure-radar/panel-primitives";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
-import { PerformanceMetric, PerformancePanel } from "@/components/exposure-radar/performance-panel";
+import { PerformancePanel } from "@/components/exposure-radar/performance-panel";
 import { buildPeopleRadar, buildPeopleRadarNextTouch, buildPeopleRadarPlaybook, peopleRadarPlaybookTone } from "@/components/exposure-radar/people-radar-utils";
 import { apiBudgetMode, apiBudgetWarnings, buildLeaderboardStats, exposureSignalQualityStatus, diagnosticSuggestions, shouldShowSignalRecovery, signalHealthDetail, signalQualityTone, signalRecoveryReason, signalRecoverySuggestions } from "@/components/exposure-radar/radar-diagnostic-utils";
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
@@ -44,7 +43,7 @@ import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock,
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
 import { compactTitle, extractTweetID, isManualActionHandled, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID } from "@/components/exposure-radar/radar-signal-utils";
 import { buildDraftReason, buildDraftRecommendedUse, buildOpportunityExplanation, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, buildSampleReplyDraft, selectedReplyAngleForItem } from "@/components/exposure-radar/opportunity-reply-utils";
-import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
+import { diagnosticStatusClass, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
 import { exposureRadarQueryStateFromSearch, exposureRadarQueryStringFromState } from "@/components/exposure-radar/route-query-utils";
@@ -55,7 +54,7 @@ import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposur
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { buildStarterStrategyTemplates, parseCommaList, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
-import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
+import { LearningInsightsPanel, TopicHistoryPanel } from "@/components/exposure-radar/learning-history-panels";
 import type { ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, LoadState, ManualActionState, ManualOutcome, MaybePromise, OperatorSessionNote, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleSuggestion, SessionFocusKey, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import { buildDailyOperatingGoals, buildPreflightChecks, buildPublishGateItems, buildWorkbenchStats } from "@/components/exposure-radar/workbench-helper-utils";
 import { DailyGrowthDeskPanel, ExposureRadarWorkspaceNav, TenMinuteActivationPanel } from "@/components/exposure-radar/workspace-panels";
@@ -3256,79 +3255,6 @@ function HandlingWorkbenchPanel({
           </div>
         </div>
       )}
-    </Card>
-  );
-}
-
-function LearningInsightsPanel({
-  data,
-  items,
-  manualActionStates,
-  recentRecords,
-  learningProfile,
-}: {
-  data: ExposureRadarPerformanceData | null;
-  items: ExposureRadarItemApi[];
-  manualActionStates: Record<string, ManualActionState>;
-  recentRecords: ExposureRadarManualRecordApi[];
-  learningProfile: ExposureLearningProfile;
-}) {
-  const { t } = useT();
-  const controls = data?.learning_controls;
-  const outcomes = Object.values(manualActionStates).filter((state) => state.outcome);
-  const effectiveCount = outcomes.filter((state) => state.outcome === "effective").length;
-  const neutralCount = outcomes.filter((state) => state.outcome === "neutral").length;
-  const negativeCount = outcomes.filter((state) => state.outcome === "ineffective" || state.outcome === "not_suitable").length;
-  const boosted = items.filter((item) => (item.ranking_delta || 0) > 0).slice(0, 4);
-  const riskyCount = items.filter((item) => item.risk_level === "medium" || item.risk_level === "high").length;
-  const topTopics = data?.top_topics?.slice(0, 4) || [];
-  const impactRows = buildLearningImpactRows(recentRecords, learningProfile, t).slice(0, 5);
-  return (
-    <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <CardHeader title={t("exposureRadar.learningPanel.title")} description={t("exposureRadar.learningPanel.description")} className="mb-0" />
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.feedback")} value={formatCompact(outcomes.length)} detail={t("exposureRadar.learningPanel.metric.feedbackDetail")} />
-          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.effective")} value={formatCompact(effectiveCount)} detail={t("exposureRadar.learningPanel.metric.effectiveDetail")} />
-          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.boosted")} value={formatCompact(boosted.length)} detail={t("exposureRadar.learningPanel.metric.boostedDetail")} />
-          <PerformanceMetric label={t("exposureRadar.learningPanel.metric.risky")} value={formatCompact(riskyCount)} detail={t("exposureRadar.learningPanel.metric.riskyDetail")} />
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 xl:grid-cols-4">
-        <LearningFeedbackCard effectiveCount={effectiveCount} neutralCount={neutralCount} negativeCount={negativeCount} />
-        <BoostedSignalsCard items={boosted} />
-        <LearningControlsCard controls={controls} topTopics={topTopics} />
-        <LearningImpactCard rows={impactRows} />
-      </div>
-    </Card>
-  );
-}
-
-function TopicHistoryPanel({ data, timeZone }: { data: ExposureRadarArchiveData | null; timeZone: string }) {
-  const { t } = useT();
-  const days = useMemo(() => data?.days || [], [data?.days]);
-  const totals = useMemo(() => {
-    return days.reduce(
-      (acc, row) => ({
-        signals: acc.signals + row.signal_count,
-        drafts: acc.drafts + row.draft_count,
-        positives: acc.positives + row.positive_count,
-        memories: acc.memories + row.saved_memory_count,
-      }),
-      { signals: 0, drafts: 0, positives: 0, memories: 0 },
-    );
-  }, [days]);
-  return (
-    <Card className="bg-[#0f1419]">
-      <ArchivePanelHeader rangeDays={data?.range_days || 7} generatedAt={data?.generated_at} region={data?.region} timeZone={timeZone} />
-      <ArchiveTotalsMetrics totals={totals} />
-      <div className="mt-4 space-y-2">
-        {days.length ? days.map((day) => (
-          <ArchiveDayRow key={`${day.date_key}:${day.region}`} day={day} dateLabel={formatArchiveDate(day.date_key, timeZone)} />
-        )) : (
-          <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b]">{t("exposureRadar.archive.empty")}</p>
-        )}
-      </div>
     </Card>
   );
 }

@@ -1,8 +1,8 @@
 # Legacy Route Traffic Audit
 
-Status: Active.
+Status: Superseded by route downline on 2026-06-17.
 
-Use this before hiding or removing legacy automation routes. The current product direction is the manual, review-first growth workflow, but several old route contracts remain for rollback safety and historical clients.
+This runbook was used while old routes were still protected compatibility entries. The current product direction is the manual, review-first growth workflow, and the old authenticated automation routes plus old frontend aliases have now been removed from active routing.
 
 ## Routes To Watch
 
@@ -40,14 +40,14 @@ grep -R "deprecated api route used\|legacy automation api route used" \
   /home/ubuntu/octo/shared/logs /home/ubuntu/octo/current/backend/logs 2>/dev/null | tail -200
 ```
 
-## Decision Rules
+## Current Decision
 
-- Any real user traffic to legacy automation APIs means keep protection enabled and investigate caller/source.
-- Repeated crawler/probe traffic can stay blocked and logged.
-- `/api/v1/auto-post/*` can remain as a compatibility alias while new clients use `/api/v1/content-drafts/*`.
+- `/api/v1/content-drafts/*`, `/handling-list`, and `/api/v1/exposure-radar/*` are the active product routes.
+- `/api/v1/auto-post/*`, `/auto-post`, `/execution-queue`, `/review-queue`, authenticated `/api/v1/auto-replies/*`, `/api/v1/auto-comment/*`, `/api/v1/auto-comments/*`, and authenticated `/api/v1/auto-dm/*` are downlined.
+- Public `/api/v1/auto-dm/unsubscribe/:token` remains available for historical compliance.
 - Do not remove database model/table names, JSON fields, activity keys, or AI usage scene strings without a dedicated migration and rollback plan.
 
-## Removal Gate
+## Historical Removal Gate
 
 Only consider route removal after:
 

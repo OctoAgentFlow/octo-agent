@@ -17,8 +17,8 @@ Latest scan:
 - `478` files searched under `backend/internal` and `frontend/src`.
 
 The remaining matches are not all cleanup debt. Most are compatibility anchors
-for existing rows, routes, JSON fields, historical activity keys, or rollback
-paths.
+for existing rows, JSON fields, historical activity keys, or code import aliases.
+Old product routes have been downlined.
 
 ## Category A: Low-Risk Cleanup
 
@@ -42,10 +42,9 @@ older clients, rollback behavior, historical rows, or API consumers.
 
 | Area | Reference Examples | Why It Stays |
 | --- | --- | --- |
-| Legacy API routes | `/api/v1/auto-post/*`, `/auto-post` compatibility route | Existing bookmarks, older frontend builds, scripts, and rollback safety. |
 | Legacy service/controller wrappers | `AutoPostController`, `NewAutoPostController`, `AutoPostService`, `NewAutoPostService` | Existing constructors/tests/imports can keep working while new wiring uses Content Draft aliases. |
-| DTO aliases and wire shapes | `AutoPostPlanRequest`, `AutoPostDraftItem`, `AutoPostGenerationRunItem` | The JSON contract is shared by `/auto-post/*` and `/content-drafts/*`. |
-| Frontend compatibility service | `frontend/src/services/auto-post.service.ts` | Old import path and old type names remain as wrappers while new callers use Content Draft services. |
+| DTO aliases and wire shapes | `AutoPostPlanRequest`, `AutoPostDraftItem`, `AutoPostGenerationRunItem` | The JSON contract remains compatible for persisted data and older code aliases while active routes use `/content-drafts/*`. |
+| Frontend compatibility service | `frontend/src/services/auto-post.service.ts` | Old import path and old type names remain as wrappers, but the service now calls `/content-drafts/*`. |
 | Billing/quota compatibility fields | `monthly_auto_posts`, `daily_auto_posts`, `auto_posts_month`, `auto_posts_today`, `monthlyAutoPosts` | API consumers and plan storage still use these fields; semantic aliases are additive. |
 | OAF Bot readiness flags | `auto_post_not_ready`, `auto_post_not_ready_count` | Stored/filter semantics and dashboard data shape still use the old flag. |
 | Activity display aliases | `activity.preview.autoPost*` dictionary keys and display mapping | Historical `activity_logs.preview_key` values must continue resolving. |
@@ -65,7 +64,7 @@ cleanup.
 | Activity preview keys | Stored `activity.preview.autoPost*` values | Backward display mapping and optional future-key emission plan. |
 | Subscription package internals | `MonthlyAutoPosts`, `DailyAutoPosts` and sibling storage fields | Dual-read/dual-write period and billing regression test matrix. |
 | Migration descriptions | Legacy migration strings mentioning Auto Post | Historical schema documentation; not user-facing product copy. |
-| Legacy route removal | `/auto-post`, `/execution-queue`, `/api/v1/auto-post/*` | Production access-log audit showing no meaningful traffic for a defined window. |
+| Legacy route removal | `/auto-post`, `/execution-queue`, `/review-queue`, `/api/v1/auto-post/*` | Completed on 2026-06-17 after owner approval. |
 
 ## P3.6 Completion
 
@@ -77,4 +76,4 @@ or Category C migration projects unless a fresh audit proves otherwise.
 
 - Added `docs/runbooks/legacy-route-traffic-audit.md` as the production traffic gate before hiding or removing legacy routes.
 - Added `docs/product/archive/legacy-automation-docs.md` as the historical archive entry for older automation design docs.
-- Category B and C references remain intentionally preserved. Do not remove `/api/v1/auto-post/*`, legacy JSON quota fields, model/table names, activity keys, or AI usage scene values without a dedicated migration and rollback plan.
+- Old route surfaces are now downlined. Category B and C references remain intentionally preserved for non-route compatibility. Do not remove legacy JSON quota fields, model/table names, activity keys, or AI usage scene values without a dedicated migration and rollback plan.

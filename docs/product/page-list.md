@@ -22,7 +22,6 @@ This document maps the current product pages to their backend API areas. It is w
 | `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
 | `/daily-x-queue` | Daily content material and draft preparation workflow with website import and generation run tracking. | `/daily-x-queue*`, content memory, OAF Bot, website source import, draft generation APIs, and run/item summaries. |
 | `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
-| `/review-queue` | Compatibility redirect to Handling List. | Redirects to `/handling-list`. |
 | `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |
 | `/activity` | Activity log and failure investigation. | `GET /activities` with type, status, time range, account, and failure filters. |
 | `/analytics` | Internal performance analytics and available public X metrics. | `GET /analytics/overview?range=7d|30d&account_id=...`. |
@@ -40,13 +39,14 @@ This document maps the current product pages to their backend API areas. It is w
 
 | Legacy Path/API | Current Status | Replacement |
 | --- | --- | --- |
-| `/auto-post` page/API | Deprecated compatibility for Content Drafts. API access is logged with deprecation headers. | `/content-drafts` and `/api/v1/content-drafts`. |
-| `/execution-queue` page | Compatibility implementation behind Handling List. | `/handling-list`. |
-| `/auto-replies` API | Protected legacy automation API; blocked by default. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |
-| Authenticated `/auto-dm` API | Protected legacy automation API; blocked by default except public unsubscribe. | Manual growth workflows and account operations; no direct replacement for automated DM outreach. |
-| `/auto-comment` and `/auto-comments` APIs | Protected legacy automation APIs; blocked by default. | `/api/v1/exposure-radar/drafts` and manual handling records. |
+| `/auto-post` page/API | Downlined. | `/content-drafts` and `/api/v1/content-drafts`. |
+| `/execution-queue` page | Downlined. | `/handling-list`. |
+| `/review-queue` page | Downlined frontend route; backend API remains for Handling List data. | `/handling-list`. |
+| `/auto-replies` API | Downlined authenticated legacy automation API. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |
+| Authenticated `/auto-dm` API | Downlined authenticated legacy automation API. Public unsubscribe remains. | Manual growth workflows and account operations; no direct replacement for automated DM outreach. |
+| `/auto-comment` and `/auto-comments` APIs | Downlined authenticated legacy automation APIs. | `/api/v1/exposure-radar/drafts` and manual handling records. |
 
-Emergency rollback for protected legacy automation APIs requires setting `OCTO_ALLOW_LEGACY_AUTOMATION_ROUTES=true` in the server environment. This should only be used temporarily while investigating historical data or old clients.
+Historical DB fields, stored activity keys, and DTO names may still use old `auto_*` wording for data compatibility. They are not public product routes.
 
 ## Information Architecture
 

@@ -98,6 +98,12 @@ ALLOW_KILL_PORT=1 ./scripts/deploy-backend-api-prod.sh
 
 ## 生产配置 TODO
 
+Historical note: the current production deployment path is documented in
+`docs/deployment/prod-lite-deployment.md` and reads server-local secrets from
+`/home/ubuntu/octo/shared/backend/configs/.env`. The placeholder list below is
+kept for the older split-config deployment scripts and should not be interpreted
+as an active blocker for the current prod lite flow.
+
 生产配置文件已拆分为：
 
 - `backend/configs/config.prod.api.yaml`

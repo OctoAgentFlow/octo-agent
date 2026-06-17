@@ -33,7 +33,7 @@ import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-rada
 import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
-import { ArchiveDayRow, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
+import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
 import type { AccountHealthScore, AccountHealthStatus, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, DailyDeskFocusKey, DailyTaskStatus, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayActivationAction, FirstDayActivationMode, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -4421,19 +4421,7 @@ function TopicHistoryPanel({ data, timeZone }: { data: ExposureRadarArchiveData 
   }, [days]);
   return (
     <Card className="bg-[#0f1419]">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <CardHeader title={t("exposureRadar.archive.title")} description={t("exposureRadar.archive.description", { days: data?.range_days || 7 })} className="mb-0" />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <CalendarClock className="size-3.5" />
-            {data?.generated_at ? formatDateTime(data.generated_at, timeZone) : "-"}
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
-            <Activity className="size-3.5" />
-            {data?.region && data.region !== "all" ? t(`exposureRadar.region.${data.region === "zh" ? "zh" : "en"}`) : t("common.all")}
-          </span>
-        </div>
-      </div>
+      <ArchivePanelHeader rangeDays={data?.range_days || 7} generatedAt={data?.generated_at} region={data?.region} timeZone={timeZone} />
       <ArchiveTotalsMetrics totals={totals} />
       <div className="mt-4 space-y-2">
         {days.length ? days.map((day) => (

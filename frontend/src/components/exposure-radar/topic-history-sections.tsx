@@ -1,9 +1,11 @@
 "use client";
 
-import { CalendarClock } from "lucide-react";
+import { Activity, CalendarClock } from "lucide-react";
 
 import { PerformanceMetric } from "@/components/exposure-radar/performance-panel";
+import { CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
+import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarArchiveDayApi } from "@/services/exposure-radar.service";
 
 export type ArchiveTotals = {
@@ -12,6 +14,26 @@ export type ArchiveTotals = {
   positives: number;
   memories: number;
 };
+
+export function ArchivePanelHeader({ rangeDays, generatedAt, region, timeZone }: { rangeDays: number; generatedAt?: string; region?: string; timeZone: string }) {
+  const { t } = useT();
+  const regionLabel = region && region !== "all" ? t(`exposureRadar.region.${region === "zh" ? "zh" : "en"}`) : t("common.all");
+  return (
+    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+      <CardHeader title={t("exposureRadar.archive.title")} description={t("exposureRadar.archive.description", { days: rangeDays })} className="mb-0" />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+          <CalendarClock className="size-3.5" />
+          {generatedAt ? formatDateTime(generatedAt, timeZone) : "-"}
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-3 py-1 text-xs font-semibold text-[#8b98a5]">
+          <Activity className="size-3.5" />
+          {regionLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function ArchiveTotalsMetrics({ totals }: { totals: ArchiveTotals }) {
   const { t } = useT();

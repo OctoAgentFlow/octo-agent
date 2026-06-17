@@ -28,6 +28,9 @@ echo "[build] backend linux/amd64 binaries"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$WORK_DIR/backend/bin/exposure-refresh" ./cmd/exposure-refresh
 )
 
+echo "[build] clean frontend bundles"
+rm -rf "$ROOT_DIR/frontend/.next-api" "$ROOT_DIR/frontend/.next-admin"
+
 echo "[build] frontend api bundle"
 (
   cd "$ROOT_DIR/frontend"

@@ -33,6 +33,7 @@ import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-rada
 import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
+import { ArchiveDayRow, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
 import type { AccountHealthScore, AccountHealthStatus, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, DailyDeskFocusKey, DailyTaskStatus, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayActivationAction, FirstDayActivationMode, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
@@ -4433,51 +4434,11 @@ function TopicHistoryPanel({ data, timeZone }: { data: ExposureRadarArchiveData 
           </span>
         </div>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <PerformanceMetric label={t("exposureRadar.archive.totalSignals")} value={formatCompact(totals.signals)} detail={t("exposureRadar.archive.totalSignalsDetail")} />
-        <PerformanceMetric label={t("exposureRadar.archive.totalDrafts")} value={formatCompact(totals.drafts)} detail={t("exposureRadar.archive.totalDraftsDetail")} />
-        <PerformanceMetric label={t("exposureRadar.archive.totalPositive")} value={formatCompact(totals.positives)} detail={t("exposureRadar.archive.totalPositiveDetail")} />
-        <PerformanceMetric label={t("exposureRadar.archive.totalMemory")} value={formatCompact(totals.memories)} detail={t("exposureRadar.archive.totalMemoryDetail")} />
-      </div>
+      <ArchiveTotalsMetrics totals={totals} />
       <div className="mt-4 space-y-2">
-        {days.length ? days.map((day) => {
-          const total = day.signal_count + day.draft_count + day.saved_memory_count;
-          const positiveRate = day.draft_count > 0 ? Math.round((day.positive_count / day.draft_count) * 100) : 0;
-          return (
-            <div key={`${day.date_key}:${day.region}`} className="rounded-2xl border border-[#2f3336] bg-black p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#e7e9ea]">
-                      <CalendarClock className="size-3.5 text-[#8ecdf8]" />
-                      {formatArchiveDate(day.date_key, timeZone)}
-                    </span>
-                    <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#8b98a5]">
-                      {t(`exposureRadar.region.${day.region === "zh" ? "zh" : "en"}`)}
-                    </span>
-                    {total === 0 ? <span className="rounded-full border border-[#2f3336] px-2.5 py-1 text-xs font-semibold text-[#71767b]">{t("exposureRadar.archive.noActivity")}</span> : null}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#8b98a5]">
-                    <span>{t("exposureRadar.archive.signals", { count: day.signal_count })}</span>
-                    <span>{t("exposureRadar.archive.drafts", { count: day.draft_count })}</span>
-                    <span>{t("exposureRadar.archive.positive", { count: day.positive_count })}</span>
-                    <span>{t("exposureRadar.archive.memory", { count: day.saved_memory_count })}</span>
-                    {day.draft_count ? <span>{t("exposureRadar.archive.positiveRate", { rate: positiveRate })}</span> : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  {day.top_topics.length ? day.top_topics.map((topic) => (
-                    <span key={`${day.date_key}:${topic.region}:${topic.topic_name}`} className="rounded-full border border-[#2f3336] bg-[#0f1419] px-2.5 py-1 text-xs font-semibold text-[#c9d1d9]">
-                      {topic.topic_name}
-                    </span>
-                  )) : (
-                    <span className="text-xs text-[#71767b]">{t("exposureRadar.archive.noTopics")}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }) : (
+        {days.length ? days.map((day) => (
+          <ArchiveDayRow key={`${day.date_key}:${day.region}`} day={day} dateLabel={formatArchiveDate(day.date_key, timeZone)} />
+        )) : (
           <p className="rounded-2xl border border-dashed border-[#2f3336] px-4 py-8 text-center text-sm text-[#71767b]">{t("exposureRadar.archive.empty")}</p>
         )}
       </div>

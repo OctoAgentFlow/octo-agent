@@ -82,6 +82,19 @@ export type AdminSchedulerFailureReasonApi = {
   last_seen_at?: string;
 };
 
+export type AdminCostSchedulerEventApi = {
+  provider: string;
+  metric: string;
+  source_type: string;
+  source_id: number;
+  user_id: number;
+  bot_id: number;
+  quantity: number;
+  cost_cents: number;
+  cost_amount: string;
+  occurred_at?: string;
+};
+
 export type AdminCostSchedulerSummaryApi = {
   window_hours: number;
   openai_generations: number;
@@ -107,6 +120,7 @@ export type AdminCostSchedulerSummaryApi = {
   budget_status: "healthy" | "watch" | "tighten" | string;
   budget_guardrails: string[];
   failure_reasons: AdminSchedulerFailureReasonApi[];
+  recent_events: AdminCostSchedulerEventApi[];
 };
 
 export type AdminPromptGuardSceneApi = {

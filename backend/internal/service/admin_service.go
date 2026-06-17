@@ -1444,6 +1444,7 @@ func (s *AdminService) costSchedulerSummary(now time.Time) dto.AdminCostSchedule
 		ExposureRefreshIntervalMinutes: 15,
 		SchedulerStatus:                "healthy",
 		FailureReasons:                 s.schedulerFailureReasons(since, 5),
+		RecentEvents:                   s.costSchedulerRecentEvents(since, 8),
 	}
 	if s.cfg != nil {
 		if s.cfg.XTrends.IntervalHours > 0 {
@@ -1567,6 +1568,43 @@ func (s *AdminService) schedulerFailureReasons(since time.Time, limit int) []dto
 		}
 		if !row.LastSeenAt.IsZero() {
 			item.LastSeenAt = row.LastSeenAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func (s *AdminService) costSchedulerRecentEvents(since time.Time, limit int) []dto.AdminCostSchedulerEvent {
+	if limit <= 0 {
+		limit = 8
+	}
+	var rows []model.CostUsageLedger
+	if err := s.db.Model(&model.CostUsageLedger{}).
+		Where("occurred_at >= ?", since.UTC()).
+		Order("occurred_at DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return []dto.AdminCostSchedulerEvent{}
+	}
+	out := make([]dto.AdminCostSchedulerEvent, 0, len(rows))
+	for _, row := range rows {
+		costCents := row.ActualCostCents
+		if costCents <= 0 {
+			costCents = row.EstimatedCostCents
+		}
+		item := dto.AdminCostSchedulerEvent{
+			Provider:   strings.TrimSpace(row.Provider),
+			Metric:     strings.TrimSpace(row.Metric),
+			SourceType: strings.TrimSpace(row.SourceType),
+			SourceID:   row.SourceID,
+			UserID:     row.UserID,
+			BotID:      row.BotID,
+			Quantity:   row.Quantity,
+			CostCents:  costCents,
+			CostAmount: adminCentsAmountString(costCents),
+		}
+		if !row.OccurredAt.IsZero() {
+			item.OccurredAt = row.OccurredAt.UTC().Format(time.RFC3339)
 		}
 		out = append(out, item)
 	}

@@ -35,14 +35,13 @@ below instead of leaving the original problem statement stale.
 | Minimal setup form | Partially solved | Daily X Queue has handle, website URL, product context, audience, voice, and guardrails. Exposure Radar has strategy templates and first-day activation. The two setup paths are not yet unified. |
 | Posts + replies in one queue | Partially solved | Daily X Queue handles post drafts. Exposure Radar handles reply/opportunity signals. Handling List can review both, but the user still sees multiple surfaces. |
 | Learning explainability | Partially solved | Learning panels, weekly review, memory cues, and result feedback exist. The product can still explain "what changed because of my feedback" more simply. |
-| Cost and rate observability | Partially solved | Admin tracks OpenAI generations/costs, X Trends config, Exposure refresh interval, source health, and refresh skips. A unified operator ledger for X API calls, Exposure refresh attempts, OpenAI generation attempts, skip reasons, and failure reasons is still needed. |
+| Cost and rate observability | Done / refining | Admin tracks OpenAI generations/costs, X API call breakdown, X Trends config, Exposure refresh interval, source health, refresh skips, failure reasons, and recent cost-driving events from the unified cost ledger. |
 | Page modularization | Solved for current risk level | Exposure Radar is no longer a monolithic product page. Remaining work is boundary discipline: keep future UI panels in component/helper modules and avoid putting new display logic back into `page.tsx`. |
 
 ### Still Open
 
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
-| P0 | Add unified cost/rate observability. | X API and OpenAI cost control is now product-critical; operators need refresh counts, API call counts, skipped reasons, rate-limit failures, and generation costs in one place. |
 | P0 | Decide first-run IA between Daily X Queue and Daily Growth Desk. | Both are useful, but a new user should not need to understand two adjacent "daily workflow" concepts. |
 | P1 | Website/context import. | Daily X Queue accepts a website URL, but it does not yet fetch/summarize a website into source material automatically. |
 | P1 | Daily queue run tracking. | `DailyXQueueContext` exists, but dedicated `daily_queue_runs` / `daily_queue_items` style tracking is not fully implemented. |

@@ -113,6 +113,7 @@ type AdminCostSchedulerSummary struct {
 	BudgetStatus                   string                           `json:"budget_status"`
 	BudgetGuardrails               []string                         `json:"budget_guardrails"`
 	FailureReasons                 []AdminSchedulerFailureReason    `json:"failure_reasons"`
+	RecentEvents                   []AdminCostSchedulerEvent        `json:"recent_events"`
 }
 
 type AdminExposureRegionRuntimeItem struct {
@@ -125,6 +126,19 @@ type AdminSchedulerFailureReason struct {
 	Reason     string `json:"reason"`
 	Count      int64  `json:"count"`
 	LastSeenAt string `json:"last_seen_at,omitempty"`
+}
+
+type AdminCostSchedulerEvent struct {
+	Provider   string `json:"provider"`
+	Metric     string `json:"metric"`
+	SourceType string `json:"source_type"`
+	SourceID   uint   `json:"source_id"`
+	UserID     uint   `json:"user_id"`
+	BotID      uint   `json:"bot_id"`
+	Quantity   int64  `json:"quantity"`
+	CostCents  int64  `json:"cost_cents"`
+	CostAmount string `json:"cost_amount"`
+	OccurredAt string `json:"occurred_at,omitempty"`
 }
 
 type AdminConfigSummary struct {

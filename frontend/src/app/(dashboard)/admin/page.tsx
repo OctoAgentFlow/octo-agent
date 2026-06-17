@@ -824,6 +824,7 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
   if (!runtime) return null;
   const isHealthy = runtime.scheduler_status === "healthy";
   const failureReasons = runtime.failure_reasons || [];
+  const recentEvents = runtime.recent_events || [];
   const exposureRegions = runtime.exposure_regions || [];
   const budgetGuardrails = runtime.budget_guardrails || [];
   const budgetStatus = runtime.budget_status || "healthy";
@@ -905,6 +906,33 @@ function CostSchedulerCard({ overview }: { overview: AdminOverviewApi }) {
               ))
             ) : (
               <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">{t("admin.costScheduler.noFailures")}</p>
+            )}
+          </div>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-[#71767b]">{t("admin.costScheduler.recentEvents")}</p>
+          <div className="mt-3 grid gap-2">
+            {recentEvents.length > 0 ? (
+              recentEvents.map((item, index) => {
+                const provider = item.provider === "openai" ? t("admin.costScheduler.provider.openai") : item.provider === "x" ? t("admin.costScheduler.provider.x") : item.provider || t("admin.common.none");
+                return (
+                  <div key={`${item.provider}-${item.metric}-${item.occurred_at || index}`} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{provider} · {item.metric || t("admin.common.none")}</p>
+                        <p className="mt-1 text-xs text-[#71767b]">{item.source_type || t("admin.common.none")}{item.source_id ? ` #${item.source_id}` : ""}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[#2f3336] px-2 py-0.5 text-xs font-semibold text-[#cfd9de]">
+                        x{item.quantity || 0}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#71767b]">
+                      <span>{t("admin.costScheduler.eventCost")}: {item.cost_amount || "0.00"} USDT</span>
+                      {item.occurred_at ? <span>{formatDate(item.occurred_at, timeZone)}</span> : null}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="rounded-xl border border-[#2f3336] px-3 py-2 text-sm text-[#71767b]">{t("admin.costScheduler.noRecentEvents")}</p>
             )}
           </div>
         </div>

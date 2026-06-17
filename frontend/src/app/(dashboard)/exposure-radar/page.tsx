@@ -22,6 +22,7 @@ import { DailyOperatingGoalsCard, FirstDayLaunchCard, PreflightSafetyCard, Radar
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
 import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, exposureLearningTopicKey, isDeferredManualTask, radarItemMatchesFilter } from "@/components/exposure-radar/daily-action-plan-utils";
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
+import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { isExposureRadarWorkspaceTab, radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { bestExposureResultRecord, buildDailyReviewActions, buildDailyReviewReportText, buildDailyReviewTopics, buildGrowthDeskBrief, buildGrowthDeskBriefPreview, isRecentManualRecord } from "@/components/exposure-radar/growth-desk-utils";
@@ -37,7 +38,7 @@ import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
 import { clampPriority, compactTitle, extractTweetID, isManualActionHandled, isRadarItemSaved, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
-import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExplanation, buildOpportunityExplanation, buildReplyAngleIDs, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, formatMemoryOpportunityExplanation, hasPromotionalSmell, hasRiskyGrowthClaim } from "@/components/exposure-radar/opportunity-reply-utils";
+import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExplanation, buildOpportunityExplanation, buildReplyAngleIDs, buildReplyAngleSuggestions, buildReplyPlan, buildSafetyReview, buildSampleReplyDraft, formatMemoryOpportunityExplanation, hasPromotionalSmell, hasRiskyGrowthClaim, selectedReplyAngleForItem } from "@/components/exposure-radar/opportunity-reply-utils";
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
@@ -45,7 +46,7 @@ import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposur
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
-import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleID, ReplyAngleSuggestion, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleSuggestion, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
 export default function ExposureRadarPage() {
@@ -5062,14 +5063,6 @@ function buildSampleExposureItems(region: ExposureRadarRegion, t: (key: string, 
   ];
 }
 
-function buildSampleReplyDraft(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion | undefined, t: (key: string, params?: Record<string, string | number>) => string) {
-  const angleTitle = replyAngle?.title || t("exposureRadar.replyAngles.operatorObservation.title");
-  if (item.region === "zh") {
-    return t("exposureRadar.sample.reply.zh", { angle: angleTitle });
-  }
-  return t("exposureRadar.sample.reply.en", { angle: angleTitle });
-}
-
 function exposureSignalQualityStatus(data: ExposureRadarData | null, loadState: LoadState): SignalQualityStatus {
   if (loadState === "loading" || !data) return "warming";
   if (!data.items.length) return "empty";
@@ -5102,97 +5095,6 @@ function signalHealthDetail(data: ExposureRadarData | null, loadState: LoadState
     return t("exposureRadar.command.signalHealth.detail.limited", { reason: data.diagnostics.top_missing_reason });
   }
   return t("exposureRadar.command.signalHealth.detail.ready", { count: data.items.length });
-}
-
-function buildExposureLearningProfile(records: ExposureRadarManualRecordApi[], states: Record<string, ManualActionState>): ExposureLearningProfile {
-  const boostedTopics = new Set<string>();
-  const cautiousTopics = new Set<string>();
-  const preferredAngles = new Set<string>();
-  const markTopic = (record: ExposureRadarManualRecordApi, positive: boolean) => {
-    const key = exposureLearningTopicKey(record.topic_name || record.title);
-    if (!key) return;
-    if (positive) {
-      boostedTopics.add(key);
-      cautiousTopics.delete(key);
-    } else if (!boostedTopics.has(key)) {
-      cautiousTopics.add(key);
-    }
-  };
-  records.forEach((record) => {
-    const resultScore = record.result_score || 0;
-    const positive = record.outcome === "effective" || resultScore >= 60 || (record.result_impression_count || 0) >= 500;
-    const negative = record.outcome === "ineffective" || record.outcome === "not_suitable" || (resultScore > 0 && resultScore <= 20);
-    if (positive) markTopic(record, true);
-    if (negative) markTopic(record, false);
-    if (positive && record.reply_angle_id) preferredAngles.add(record.reply_angle_id);
-  });
-  Object.values(states).forEach((state) => {
-    if (state.outcome === "effective" && state.replyAngleID) preferredAngles.add(state.replyAngleID);
-  });
-  return { boostedTopics, cautiousTopics, preferredAngles };
-}
-
-function buildLearningImpactRows(
-  records: ExposureRadarManualRecordApi[],
-  profile: ExposureLearningProfile,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): LearningImpactRow[] {
-  const topicLabels = new Map<string, string>();
-  records.forEach((record) => {
-    const label = record.topic_name || record.title;
-    const key = exposureLearningTopicKey(label);
-    if (key && label && !topicLabels.has(key)) topicLabels.set(key, label);
-  });
-  const boosted = Array.from(profile.boostedTopics).map((key) => ({
-    label: compactTitle(topicLabels.get(key) || key),
-    detail: t("exposureRadar.learningPanel.impact.boosted"),
-    tone: "positive" as const,
-  }));
-  const cautious = Array.from(profile.cautiousTopics).map((key) => ({
-    label: compactTitle(topicLabels.get(key) || key),
-    detail: t("exposureRadar.learningPanel.impact.cautious"),
-    tone: "negative" as const,
-  }));
-  const angles = Array.from(profile.preferredAngles).map((angleID) => {
-    const guide = replyAngleGenerationGuides[angleID as ReplyAngleID];
-    return {
-      label: guide?.label || angleID,
-      detail: t("exposureRadar.learningPanel.impact.angle"),
-      tone: "neutral" as const,
-    };
-  });
-  return [...boosted, ...cautious, ...angles];
-}
-
-function buildExposureLearningTopics(records: ExposureRadarManualRecordApi[], items: ExposureRadarItemApi[]) {
-  const scores = new Map<string, { count: number; score: number }>();
-  const add = (topic: string | undefined, score: number) => {
-    const key = (topic || "").trim();
-    if (!key) return;
-    const existing = scores.get(key) || { count: 0, score: 0 };
-    existing.count += 1;
-    existing.score += score;
-    scores.set(key, existing);
-  };
-  records.forEach((record) => add(record.topic_name || record.title, Math.max(record.result_score || 0, record.score || 0)));
-  items.forEach((item) => add(item.topic_name || item.title, item.score || 0));
-  return Array.from(scores.entries())
-    .sort((a, b) => (b[1].score + b[1].count * 10) - (a[1].score + a[1].count * 10))
-    .map(([topic, value]) => `${topic} · ${value.count}`);
-}
-
-function buildExposureLearningAngles(records: ExposureRadarManualRecordApi[], states: Record<string, ManualActionState>) {
-  const counts = new Map<string, number>();
-  const add = (value?: string) => {
-    const key = (value || "").trim();
-    if (!key) return;
-    counts.set(key, (counts.get(key) || 0) + 1);
-  };
-  records.forEach((record) => add(record.reply_angle_title || record.reply_angle_id));
-  Object.values(states).forEach((state) => add(state.replyAngleTitle || state.replyAngleID));
-  return Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([angle, count]) => `${angle} · ${count}`);
 }
 
 function strategyFormFromApi(strategy: ExposureRadarGrowthStrategyApi | null): StrategyFormState {
@@ -5239,11 +5141,6 @@ function parseCommaList(value: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 20);
-}
-
-function selectedReplyAngleForItem(item: ExposureRadarItemApi, selectedReplyAngleIDs: Record<string, string>, t: (key: string, params?: Record<string, string | number>) => string) {
-  const suggestions = buildReplyAngleSuggestions(item, t);
-  return suggestions.find((angle) => angle.id === selectedReplyAngleIDs[item.id]) || suggestions[0];
 }
 
 function apiBudgetMode(diagnostics: ExposureRadarDiagnosticsApi | null) {

@@ -135,6 +135,19 @@ export function buildReplyAngleSuggestions(item: ExposureRadarItemApi, t: Transl
   return buildReplyAngleIDs(item).map((id) => replyAngle(id, t));
 }
 
+export function selectedReplyAngleForItem(item: ExposureRadarItemApi, selectedReplyAngleIDs: Record<string, string>, t: TranslationFn) {
+  const suggestions = buildReplyAngleSuggestions(item, t);
+  return suggestions.find((angle) => angle.id === selectedReplyAngleIDs[item.id]) || suggestions[0];
+}
+
+export function buildSampleReplyDraft(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion | undefined, t: TranslationFn) {
+  const angleTitle = replyAngle?.title || t("exposureRadar.replyAngles.operatorObservation.title");
+  if (item.region === "zh") {
+    return t("exposureRadar.sample.reply.zh", { angle: angleTitle });
+  }
+  return t("exposureRadar.sample.reply.en", { angle: angleTitle });
+}
+
 export function buildReplyPlan(item: ExposureRadarItemApi, replyAngle: ReplyAngleSuggestion, t: TranslationFn): ReplyPlan {
   const risky = item.risk_level === "medium" || item.risk_level === "high";
   const topic = item.topic_name || item.title || t("exposureRadar.replyPlan.topicFallback");

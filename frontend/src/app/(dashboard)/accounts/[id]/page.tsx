@@ -11,6 +11,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
 import { accountService, type AccountIntelligenceApi, type AccountIntelligencePostApi } from "@/services/account.service";
+import { exposureRadarService, type ExposureRadarGrowthStrategyPayload, type ExposureRadarRegion } from "@/services/exposure-radar.service";
 import { oafBotService } from "@/services/oaf-bot.service";
 import type { OAFBot, OAFBotPayload } from "@/types/oaf-bot";
 
@@ -32,17 +33,20 @@ export default function AccountDetailPage() {
   const [data, setData] = useState<AccountIntelligenceApi | null>(null);
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [applying, setApplying] = useState(false);
+  const [applyingStrategy, setApplyingStrategy] = useState(false);
 
   const boundBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === accountID), [accountID, bots]);
+  const strategyRegion = useMemo(() => accountIntelligenceRegion(data), [data]);
+  const strategyPreview = useMemo(() => data ? buildGrowthStrategyPayloadFromAccount(data, accountID, boundBot?.id || 0, strategyRegion) : null, [accountID, boundBot?.id, data, strategyRegion]);
   const radarHref = useMemo(() => {
     const query = new URLSearchParams({
       x_account_id: String(accountID || data?.account.id || 0),
-      region: data?.positioning.primary_language?.startsWith("zh") ? "zh" : "en",
+      region: strategyRegion,
       tab: "today",
     });
     if (boundBot?.id) query.set("bot_id", String(boundBot.id));
     return `/exposure-radar?${query.toString()}`;
-  }, [accountID, boundBot?.id, data?.account.id, data?.positioning.primary_language]);
+  }, [accountID, boundBot?.id, data?.account.id, strategyRegion]);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(accountID) || accountID <= 0) {
@@ -93,6 +97,19 @@ export default function AccountDetailPage() {
       setApplying(false);
     }
   }, [accountID, boundBot, data, pushToast, t]);
+
+  const applyGrowthStrategy = useCallback(async () => {
+    if (!data || !strategyPreview || !Number.isFinite(accountID) || accountID <= 0) return;
+    setApplyingStrategy(true);
+    try {
+      await exposureRadarService.saveGrowthStrategy(strategyPreview);
+      pushToast(t(boundBot ? "accounts.intelligence.toast.strategyApplied" : "accounts.intelligence.toast.strategyAppliedAccount"));
+    } catch (error) {
+      pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("accounts.intelligence.toast.strategyFailed") : t("accounts.intelligence.toast.strategyFailed"));
+    } finally {
+      setApplyingStrategy(false);
+    }
+  }, [accountID, boundBot, data, pushToast, strategyPreview, t]);
 
   if (loadState === "loading") {
     return (
@@ -268,6 +285,30 @@ export default function AccountDetailPage() {
 
           <Card className="bg-[#0f1419]">
             <CardHeader title={t("accounts.intelligence.radar.title")} description={t("accounts.intelligence.radar.description")} />
+            {strategyPreview ? (
+              <div className="mb-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#07111a] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-[#e7e9ea]">{t("accounts.intelligence.strategyApply.title")}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t(boundBot ? "accounts.intelligence.strategyApply.descriptionBound" : "accounts.intelligence.strategyApply.descriptionAccount")}</p>
+                  </div>
+                  <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-2.5 py-1 text-[11px] font-semibold text-[#8ecdf8]">
+                    <Target className="size-3.5" />
+                    {t(`exposureRadar.region.${strategyPreview.region}`)}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <MiniStrategyField label={t("accounts.intelligence.strategyApply.audience")} value={strategyPreview.target_audience || "-"} />
+                  <MiniStrategyField label={t("accounts.intelligence.strategyApply.safety")} value={t(`exposureRadar.strategy.safetyMode.${strategyPreview.safety_mode || "balanced"}`)} />
+                  <MiniStrategyField label={t("accounts.intelligence.strategyApply.topics")} value={(strategyPreview.core_topics || []).slice(0, 5).join(", ") || "-"} />
+                  <MiniStrategyField label={t("accounts.intelligence.strategyApply.avoid")} value={(strategyPreview.avoid_topics || []).slice(0, 5).join(", ") || "-"} />
+                </div>
+                <Button type="button" className="mt-4 w-full" disabled={applyingStrategy} onClick={() => void applyGrowthStrategy()}>
+                  {applyingStrategy ? <RefreshCw className="size-4 animate-spin" /> : <BrainCircuit className="size-4" />}
+                  {t("accounts.intelligence.strategyApply.button")}
+                </Button>
+              </div>
+            ) : null}
             <TagSection title={t("accounts.intelligence.radar.fitKeywords")} values={data.radar_guidance.fit_keywords} compact />
             <TagSection title={t("accounts.intelligence.radar.avoidKeywords")} values={data.radar_guidance.avoid_keywords} compact tone="warning" />
             <BulletList title={t("accounts.intelligence.radar.rules")} items={data.radar_guidance.opportunity_fit_rules} icon="target" />
@@ -293,6 +334,15 @@ function MetricTile({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4">
       <p className="text-xs text-[#71767b]">{label}</p>
       <p className="mt-2 break-words text-lg font-semibold text-[#e7e9ea]">{value}</p>
+    </div>
+  );
+}
+
+function MiniStrategyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#2f3336] bg-black px-3 py-2">
+      <p className="text-[11px] font-semibold text-[#71767b]">{label}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#e7e9ea]">{value}</p>
     </div>
   );
 }
@@ -406,6 +456,81 @@ function normalizeBotPayload(payload: OAFBotPayload): OAFBotPayload {
     language_strategy: payload.language_strategy || "follow_context",
     sensitive_trend_policy: payload.sensitive_trend_policy || "review_only",
   };
+}
+
+function accountIntelligenceRegion(data: AccountIntelligenceApi | null): ExposureRadarRegion {
+  const language = data?.positioning.primary_language?.toLowerCase() || data?.bot_suggestion.primary_language?.toLowerCase() || "";
+  return language.startsWith("zh") || language.includes("chinese") ? "zh" : "en";
+}
+
+function buildGrowthStrategyPayloadFromAccount(data: AccountIntelligenceApi, accountID: number, botID: number, region: ExposureRadarRegion): ExposureRadarGrowthStrategyPayload {
+  const bot = normalizeBotPayload(data.bot_suggestion);
+  const coreTopics = uniqueStrings([
+    ...(data.radar_guidance.fit_keywords || []),
+    ...(data.positioning.detected_topics || []),
+    ...(data.positioning.content_pillars || []),
+    ...(bot.topics || []),
+    ...(bot.content_pillars || []),
+    ...(bot.keywords || []),
+  ], 20);
+  const avoidTopics = uniqueStrings([
+    ...(data.radar_guidance.avoid_keywords || []),
+    ...(bot.forbidden_topics || []),
+    ...(bot.avoid_claims || []),
+  ], 20);
+  return {
+    bot_id: botID || undefined,
+    x_account_id: accountID || data.account.id,
+    region,
+    target_audience: data.positioning.audience_guess || bot.target_audience || data.positioning.positioning_summary || "",
+    primary_goal: inferGrowthStrategyGoal(data),
+    core_topics: coreTopics,
+    avoid_topics: avoidTopics,
+    competitors: [],
+    reply_style: inferReplyStyle(data),
+    daily_move_limit: data.positioning.confidence >= 65 ? (region === "zh" ? 10 : 8) : 5,
+    safety_mode: avoidTopics.length || data.positioning.risks?.length ? "conservative" : "balanced",
+    operator_notes: compactStrategyNotes(data),
+  };
+}
+
+function uniqueStrings(values: string[], limit: number) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => value.trim())
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function inferGrowthStrategyGoal(data: AccountIntelligenceApi) {
+  const text = `${data.positioning.positioning_summary} ${data.positioning.audience_guess} ${(data.weekly_review.next_actions || []).join(" ")}`.toLowerCase();
+  if (text.includes("community") || text.includes("社群") || text.includes("社区")) return "community";
+  if (text.includes("traffic") || text.includes("website") || text.includes("转化") || text.includes("访问")) return "traffic";
+  if (text.includes("research") || text.includes("learn") || text.includes("调研")) return "research";
+  if (text.includes("relationship") || text.includes("network") || text.includes("关系")) return "relationships";
+  return "awareness";
+}
+
+function inferReplyStyle(data: AccountIntelligenceApi) {
+  const tone = `${data.positioning.voice_tone} ${data.bot_suggestion.voice_tone}`.toLowerCase();
+  if (tone.includes("question") || tone.includes("curious") || tone.includes("提问")) return "light_question";
+  if (tone.includes("caution") || tone.includes("careful") || tone.includes("谨慎")) return "caution_note";
+  if (tone.includes("peer") || tone.includes("builder") || tone.includes("同行")) return "peer_experience";
+  return "operator_observation";
+}
+
+function compactStrategyNotes(data: AccountIntelligenceApi) {
+  const parts = [
+    data.positioning.positioning_summary,
+    data.radar_guidance.opportunity_fit_rules?.length ? `Fit rules: ${data.radar_guidance.opportunity_fit_rules.slice(0, 3).join("; ")}` : "",
+    data.weekly_review.next_actions?.length ? `Next: ${data.weekly_review.next_actions.slice(0, 2).join("; ")}` : "",
+  ].filter(Boolean);
+  return parts.join("\n").slice(0, 500);
 }
 
 function normalizeSourceStatus(value?: string) {

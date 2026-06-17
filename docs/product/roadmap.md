@@ -87,6 +87,7 @@ The next product work should improve decision quality and first-session clarity,
 | P128 | Result review next move | Done | Result learning actions now include visible next-action labels and metrics such as backfill links, repeat proven angle, slow down a weak lane, or handle the next controlled experiment. |
 | P129 | First-session guided path | Done | First-day launch now includes a guided first-session path: bind account/Bot, save strategy, handle one opportunity, and backfill one measurable result before scaling. |
 | P130 | Packaging and pricing clarity | Done | Marketing, billing, and plan feature labels are further aligned around Account Intelligence, Daily Growth Desk, opportunity drafts, content memory, review capacity, and learning windows. |
+| P131 | Account Intelligence to Growth Strategy apply | Done | Account Intelligence can now write target audience, core topics, avoid topics, reply style, safety mode, and operator notes into Exposure Radar Growth Strategy with one action; strategy lookup falls back from Bot-specific to account-level strategy when needed. |
 
 ## Milestones
 

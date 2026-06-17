@@ -304,6 +304,16 @@ func (s *ExposureRadarManualService) GetGrowthStrategy(userID uint, region strin
 	row, err := s.strategyRepo.Get(userID, item.Region, botID, xAccountID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if botID > 0 && xAccountID > 0 {
+				if fallback, fallbackErr := s.strategyRepo.Get(userID, item.Region, 0, xAccountID); fallbackErr == nil {
+					next := exposureRadarGrowthStrategyToDTO(*fallback)
+					next.BotID = botID
+					next.XAccountID = xAccountID
+					return &next, nil
+				} else if !errors.Is(fallbackErr, gorm.ErrRecordNotFound) {
+					return nil, fallbackErr
+				}
+			}
 			return &item, nil
 		}
 		return nil, err

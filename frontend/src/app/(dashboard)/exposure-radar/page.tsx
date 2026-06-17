@@ -18,12 +18,13 @@ import { exposureRadarService, type ExposureRadarArchiveData, type ExposureRadar
 import { oafBotService } from "@/services/oaf-bot.service";
 import { exposureRadarWorkspaceTabs, fanOptions, hotCountOptions, hourOptions, manualOutcomeFeedbackMeta, radarViewFilters, replyAngleGenerationGuides } from "@/components/exposure-radar/constants";
 import { DailyGrowthDesk } from "@/components/exposure-radar/daily-growth-desk";
+import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { DiagnosticMetric, LeaderboardPill, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
 import { isExposureRadarWorkspaceTab, radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
-import { LearningBadge, PerformanceMetric, PerformancePanel } from "@/components/exposure-radar/performance-panel";
+import { PerformanceMetric, PerformancePanel } from "@/components/exposure-radar/performance-panel";
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
@@ -4376,6 +4377,7 @@ function LearningInsightsPanel({
   const controls = data?.learning_controls;
   const outcomes = Object.values(manualActionStates).filter((state) => state.outcome);
   const effectiveCount = outcomes.filter((state) => state.outcome === "effective").length;
+  const neutralCount = outcomes.filter((state) => state.outcome === "neutral").length;
   const negativeCount = outcomes.filter((state) => state.outcome === "ineffective" || state.outcome === "not_suitable").length;
   const boosted = items.filter((item) => (item.ranking_delta || 0) > 0).slice(0, 4);
   const riskyCount = items.filter((item) => item.risk_level === "medium" || item.risk_level === "high").length;
@@ -4393,67 +4395,10 @@ function LearningInsightsPanel({
         </div>
       </div>
       <div className="mt-4 grid gap-3 xl:grid-cols-4">
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.feedbackTitle")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{negativeCount > 0 ? t("exposureRadar.learningPanel.feedbackMixed", { count: negativeCount }) : t("exposureRadar.learningPanel.feedbackHealthy")}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.effective")} value={effectiveCount} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
-            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.neutral")} value={outcomes.filter((state) => state.outcome === "neutral").length} tone="border-[#2f3336] bg-[#16181c] text-[#8b98a5]" />
-            <LeaderboardPill label={t("exposureRadar.learningPanel.outcome.negative")} value={negativeCount} tone="border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" />
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.boostedTitle")}</p>
-          <div className="mt-3 space-y-2">
-            {boosted.length ? boosted.map((item) => (
-              <div key={item.id} className="rounded-xl border border-[#2f3336] bg-[#0f1419] px-3 py-2">
-                <p className="line-clamp-1 text-xs font-semibold text-[#e7e9ea]">{item.title}</p>
-                <p className="mt-1 text-[11px] text-[#71767b]">{t("exposureRadar.learningPanel.boostedReason", { delta: item.ranking_delta || 0 })}</p>
-              </div>
-            )) : (
-              <p className="rounded-xl border border-dashed border-[#2f3336] px-3 py-6 text-center text-xs text-[#71767b]">{t("exposureRadar.learningPanel.boostedEmpty")}</p>
-            )}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.controlsTitle")}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <LearningBadge label={t("exposureRadar.learning.ranking")} value={controls?.ranking_enabled ? t("exposureRadar.learning.on") : t("exposureRadar.learning.off")} active={Boolean(controls?.ranking_enabled)} />
-            <LearningBadge label={t("exposureRadar.learning.collector")} value={controls?.collector_enabled ? t("exposureRadar.learning.on") : t("exposureRadar.learning.off")} active={Boolean(controls?.collector_enabled)} />
-            <LearningBadge label={t("exposureRadar.learning.mode")} value={t(`exposureRadar.learningMode.${normalizeLearningMode(controls?.mode)}`)} />
-            <LearningBadge label={t("exposureRadar.learning.window")} value={t("exposureRadar.learning.days", { days: controls?.window_days || 30 })} />
-          </div>
-          <div className="mt-3 rounded-xl border border-[#1d9bf0]/20 bg-[#08131f] px-3 py-2">
-            <p className="text-xs leading-5 text-[#8ecdf8]">
-              {controls?.ranking_enabled ? t("exposureRadar.learningPanel.rankingEnabled") : t("exposureRadar.learningPanel.rankingDisabled")}
-            </p>
-          </div>
-          {topTopics.length ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.topicTitle")}</p>
-              {topTopics.map((topic) => (
-                <div key={`${topic.region}:${topic.topic_name}`} className="flex items-center justify-between gap-2 rounded-lg border border-[#2f3336] bg-[#0f1419] px-3 py-2 text-xs">
-                  <span className="truncate text-[#c9d1d9]">{topic.topic_name}</span>
-                  <span className="shrink-0 text-[#71767b]">{topic.success_count}/{topic.signal_count}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
-          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.impactTitle")}</p>
-          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.learningPanel.impactDescription")}</p>
-          <div className="mt-3 space-y-2">
-            {impactRows.length ? impactRows.map((row) => (
-              <div key={`${row.tone}:${row.label}`} className={`rounded-xl border px-3 py-2 ${learningImpactTone(row.tone)}`}>
-                <p className="line-clamp-1 text-xs font-semibold">{row.label}</p>
-                <p className="mt-1 text-[11px] leading-4 opacity-85">{row.detail}</p>
-              </div>
-            )) : (
-              <p className="rounded-xl border border-dashed border-[#2f3336] px-3 py-6 text-center text-xs text-[#71767b]">{t("exposureRadar.learningPanel.impactEmpty")}</p>
-            )}
-          </div>
-        </div>
+        <LearningFeedbackCard effectiveCount={effectiveCount} neutralCount={neutralCount} negativeCount={negativeCount} />
+        <BoostedSignalsCard items={boosted} />
+        <LearningControlsCard controls={controls} topTopics={topTopics} />
+        <LearningImpactCard rows={impactRows} />
       </div>
     </Card>
   );
@@ -7225,17 +7170,6 @@ function sessionStateTone(state: "complete" | "active" | "review" | "quiet") {
   }
 }
 
-function learningImpactTone(tone: LearningImpactRow["tone"]) {
-  switch (tone) {
-    case "positive":
-      return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "negative":
-      return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-    default:
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  }
-}
-
 function shouldShowSignalRecovery(data: ExposureRadarData | null, loadState: LoadState, stats: WorkbenchStats) {
   if (loadState === "loading") return false;
   if (!data || data.items.length === 0) return true;
@@ -7417,11 +7351,6 @@ function normalizeSourceStatus(value?: string) {
 function normalizeDiagnosticStatus(value?: string) {
   if (value === "healthy" || value === "warming" || value === "limited" || value === "empty" || value === "fallback" || value === "stale" || value === "blocked") return value;
   return "limited";
-}
-
-function normalizeLearningMode(value?: string) {
-  if (value === "hybrid" || value === "workspace" || value === "scoped") return value;
-  return "hybrid";
 }
 
 function normalizeVelocityState(value?: string, fallback?: string) {

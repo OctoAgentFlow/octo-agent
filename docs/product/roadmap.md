@@ -88,6 +88,7 @@ The next product work should improve decision quality and first-session clarity,
 | P129 | First-session guided path | Done | First-day launch now includes a guided first-session path: bind account/Bot, save strategy, handle one opportunity, and backfill one measurable result before scaling. |
 | P130 | Packaging and pricing clarity | Done | Marketing, billing, and plan feature labels are further aligned around Account Intelligence, Daily Growth Desk, opportunity drafts, content memory, review capacity, and learning windows. |
 | P131 | Account Intelligence to Growth Strategy apply | Done | Account Intelligence can now write target audience, core topics, avoid topics, reply style, safety mode, and operator notes into Exposure Radar Growth Strategy with one action; strategy lookup falls back from Bot-specific to account-level strategy when needed. |
+| P132 | First-day activation path | Done | Account Intelligence now hands users into a day-one path: analyze account, apply Growth Strategy, enter Daily Growth Desk, generate the first manual reply, and backfill the result so new users know the next step. |
 
 ## Milestones
 

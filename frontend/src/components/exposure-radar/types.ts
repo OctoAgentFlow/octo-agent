@@ -37,7 +37,7 @@ export type LearningImpactRow = {
 };
 export type DailyTaskStatus = "todo" | "in_progress" | "done" | "skipped" | "later";
 export type SessionFocusKey = "relationships" | "research" | "traffic" | "memory";
-export type FirstDayStepKey = "account" | "strategy" | "queue" | "result";
+export type FirstDayStepKey = "analysis" | "strategy" | "desk" | "reply" | "result";
 export type FirstDayActivationMode = "setup" | "strategy" | "signals" | "handle" | "result" | "complete";
 export type FirstDayActivationAction = { key: string; href?: string; icon: ReactNode; onClick?: () => void; disabled?: boolean; primary?: boolean };
 export type ExposureRadarWorkspaceTab = "today" | "signals" | "people" | "strategy" | "diagnostics";

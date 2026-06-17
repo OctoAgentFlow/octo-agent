@@ -66,7 +66,7 @@ export function FirstDayLaunchCard({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] text-[#71767b]">{t("exposureRadar.firstDay.progress")}</p>
-              <p className="text-2xl font-semibold text-white">{doneCount}/4</p>
+              <p className="text-2xl font-semibold text-white">{doneCount}/{steps.length}</p>
             </div>
             <a href={nextStep.anchor} className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1d9bf0] px-3 text-xs font-semibold text-white hover:bg-[#1a8cd8]">
               {doneCount === steps.length ? t("exposureRadar.firstDay.cta.done") : t(`exposureRadar.firstDay.cta.${nextStep.key}`)}
@@ -86,7 +86,7 @@ export function FirstDayLaunchCard({
       <SetupWizardPanel steps={wizardSteps} usingSampleMode={usingSampleMode} onStartSample={onStartSample} onExitSample={onExitSample} />
       <FirstDayActivationCard mode={activationMode} actions={activationActions} />
       <FirstSessionPath steps={steps} checklist={checklist} />
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-5">
         {steps.map((step, index) => (
           <a key={step.key} href={step.anchor} className={`rounded-2xl border p-4 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-black"}`}>
             <div className="flex items-center justify-between gap-2">
@@ -464,7 +464,7 @@ function FirstSessionPath({ steps, checklist }: { steps: FirstDayLaunchStep[]; c
           <ArrowRight className="size-3.5" />
         </a>
       </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-4">
+      <div className="mt-4 grid gap-2 md:grid-cols-5">
         {steps.map((step, index) => (
           <a key={step.key} href={step.anchor} className={`rounded-xl border p-3 transition hover:border-[#1d9bf0]/45 ${step.done ? "border-[#00ba7c]/25 bg-[#00ba7c]/10" : step.key === nextStep.key ? "border-[#1d9bf0]/45 bg-[#1d9bf0]/10" : "border-[#2f3336] bg-[#0f1419]"}`}>
             <div className="flex items-start justify-between gap-3">

@@ -16,6 +16,7 @@ export function exposureRadarQueryStateFromSearch(search: string, current: Expos
   const params = new URLSearchParams(search);
   const nextRegion = params.get("region");
   const nextTab = params.get("tab");
+  const activation = params.get("activation");
   return {
     region: nextRegion === "zh" || nextRegion === "en" ? nextRegion : current.region,
     hours: getPositiveParam(params, "hours", current.hours),
@@ -23,7 +24,7 @@ export function exposureRadarQueryStateFromSearch(search: string, current: Expos
     minHotCount: getNonNegativeParam(params, "min_hot_count", getNonNegativeParam(params, "minHotCount", current.minHotCount)),
     selectedAccountID: getPositiveParam(params, "x_account_id", getPositiveParam(params, "account_id", current.selectedAccountID)),
     selectedBotID: getPositiveParam(params, "bot_id", current.selectedBotID),
-    workspaceTab: isExposureRadarWorkspaceTab(nextTab) ? nextTab : current.workspaceTab,
+    workspaceTab: isExposureRadarWorkspaceTab(nextTab) ? nextTab : activation === "first_day" ? "today" : current.workspaceTab,
   };
 }
 

@@ -44,7 +44,7 @@ export function DailyGrowthDesk({
       {progress}
       {handoff}
       {command}
-      {firstDay}
+      <section id="first-day-path">{firstDay}</section>
       {preflight}
       {sessionFocus}
       {goals}

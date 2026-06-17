@@ -2195,14 +2195,22 @@ function FirstDayLaunchPanel({
   const resultCount = recentRecords.filter((record) => record.result_checked_at || record.result_score).length;
   const savedCount = recentRecords.filter((record) => record.saved_at || record.saved_memory_id).length;
   const pendingDraftCount = contentDraftBridge.drafts.filter((draft) => draft.status === "draft" || draft.status === "pending_review" || draft.status === "approved" || draft.status === "ready_to_publish").length;
+  const replyDraftCount = moves.filter((entry) => entry.item.generated_comment || entry.item.review_task_id).length;
   const steps: Array<{ key: FirstDayStepKey; done: boolean; anchor: string }> = ([
-    { key: "account", done: selectedAccountID > 0 && selectedBotID > 0 },
+    { key: "analysis", done: selectedAccountID > 0 },
     { key: "strategy", done: strategyReady },
-    { key: "queue", done: moves.length > 0 || itemsCount > 0 },
-    { key: "result", done: resultCount > 0 || handledCount > 0 },
+    { key: "desk", done: moves.length > 0 || itemsCount > 0 },
+    { key: "reply", done: replyDraftCount > 0 || handledCount > 0 },
+    { key: "result", done: resultCount > 0 },
   ] satisfies Array<{ key: FirstDayStepKey; done: boolean }>).map((step) => ({
     ...step,
-    anchor: step.key === "account" ? "#radar-setup" : step.key === "strategy" ? "#radar-strategy" : step.key === "result" ? "#radar-results" : moves.length > 0 ? "#radar-workbench" : "#radar-setup",
+    anchor: step.key === "analysis"
+      ? selectedAccountID > 0 ? `/accounts/${selectedAccountID}` : "/accounts"
+      : step.key === "strategy"
+        ? "#radar-strategy"
+        : step.key === "result"
+          ? "#radar-results"
+          : "#radar-workbench",
   }));
   const selectedAccount = accounts.find((account) => account.id === selectedAccountID);
   const selectedBot = bots.find((bot) => bot.id === selectedBotID);
@@ -2210,7 +2218,7 @@ function FirstDayLaunchPanel({
     { key: "account", done: selectedAccountID > 0 && selectedBotID > 0, value: selectedAccount ? `@${selectedAccount.username}` : t("exposureRadar.firstDay.selected.missing") },
     { key: "strategy", done: strategyReady, value: strategy?.target_audience || t("exposureRadar.firstDay.selected.missing") },
     { key: "queue", done: moves.length > 0, value: String(moves.length) },
-    { key: "reply", done: moves.some((entry) => entry.item.generated_comment || entry.item.review_task_id) || handledCount > 0, value: String(moves.filter((entry) => entry.item.generated_comment || entry.item.review_task_id).length) },
+    { key: "reply", done: replyDraftCount > 0 || handledCount > 0, value: String(replyDraftCount) },
     { key: "seed", done: savedCount > 0 || pendingDraftCount > 0, value: String(savedCount + pendingDraftCount) },
     { key: "result", done: resultCount > 0, value: String(resultCount) },
   ];

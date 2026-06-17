@@ -34,6 +34,7 @@ export default function AccountDetailPage() {
   const [bots, setBots] = useState<OAFBot[]>([]);
   const [applying, setApplying] = useState(false);
   const [applyingStrategy, setApplyingStrategy] = useState(false);
+  const [strategyAppliedAt, setStrategyAppliedAt] = useState("");
 
   const boundBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === accountID), [accountID, bots]);
   const strategyRegion = useMemo(() => accountIntelligenceRegion(data), [data]);
@@ -43,10 +44,12 @@ export default function AccountDetailPage() {
       x_account_id: String(accountID || data?.account.id || 0),
       region: strategyRegion,
       tab: "today",
+      activation: "first_day",
     });
     if (boundBot?.id) query.set("bot_id", String(boundBot.id));
     return `/exposure-radar?${query.toString()}`;
   }, [accountID, boundBot?.id, data?.account.id, strategyRegion]);
+  const firstDayHref = `${radarHref}#first-day-path`;
 
   const load = useCallback(async () => {
     if (!Number.isFinite(accountID) || accountID <= 0) {
@@ -103,6 +106,7 @@ export default function AccountDetailPage() {
     setApplyingStrategy(true);
     try {
       await exposureRadarService.saveGrowthStrategy(strategyPreview);
+      setStrategyAppliedAt(new Date().toISOString());
       pushToast(t(boundBot ? "accounts.intelligence.toast.strategyApplied" : "accounts.intelligence.toast.strategyAppliedAccount"));
     } catch (error) {
       pushToast(axios.isAxiosError(error) ? error.response?.data?.message || t("accounts.intelligence.toast.strategyFailed") : t("accounts.intelligence.toast.strategyFailed"));
@@ -307,6 +311,21 @@ export default function AccountDetailPage() {
                   {applyingStrategy ? <RefreshCw className="size-4 animate-spin" /> : <BrainCircuit className="size-4" />}
                   {t("accounts.intelligence.strategyApply.button")}
                 </Button>
+                {strategyAppliedAt ? (
+                  <div className="mt-3 rounded-2xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#7ee0b5]" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[#e7e9ea]">{t("accounts.intelligence.strategyApply.saved.title")}</p>
+                        <p className="mt-1 text-[11px] leading-5 text-[#8b98a5]">{t("accounts.intelligence.strategyApply.saved.description")}</p>
+                      </div>
+                    </div>
+                    <Link href={firstDayHref} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-[#00ba7c] px-3 text-sm font-semibold text-black hover:bg-[#7ee0b5]">
+                      {t("accounts.intelligence.strategyApply.saved.cta")}
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <TagSection title={t("accounts.intelligence.radar.fitKeywords")} values={data.radar_guidance.fit_keywords} compact />

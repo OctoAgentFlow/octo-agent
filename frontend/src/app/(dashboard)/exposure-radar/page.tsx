@@ -27,6 +27,7 @@ import { AccountHealthScoreCard, GrowthExperimentCard, MemoryAssetDeskCard, Oppo
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
 import { PerformanceMetric, PerformancePanel } from "@/components/exposure-radar/performance-panel";
+import { diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnostic-utils";
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
@@ -6593,22 +6594,4 @@ function extractTweetID(raw: string) {
   if (/^\d+$/.test(trimmed)) return trimmed;
   const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
   return match?.[1] || "";
-}
-
-function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, t: (key: string, params?: Record<string, string | number>) => string) {
-  const codes = new Set((diagnostics.issues || []).map((issue) => issue.code));
-  const suggestions: string[] = [];
-  const add = (key: string) => {
-    const value = t(key);
-    if (!suggestions.includes(value)) suggestions.push(value);
-  };
-  if (codes.has("x_trends_disabled") || codes.has("bearer_token_missing")) add("exposureRadar.diagnostics.suggestion.configureToken");
-  if (codes.has("no_owned_signals") || codes.has("collector_stale") || codes.has("first_sample_only")) add("exposureRadar.diagnostics.suggestion.manualRefresh");
-  if (codes.has("window_too_short")) add("exposureRadar.diagnostics.suggestion.widenWindow");
-  if (codes.has("fan_filter_strict")) add("exposureRadar.diagnostics.suggestion.raiseFans");
-  if (codes.has("topic_cache_only") || codes.has("external_fallback")) add("exposureRadar.diagnostics.suggestion.researchOnly");
-  if (codes.has("no_true_hot") && diagnostics.top_missing_reason) add(`exposureRadar.diagnostics.suggestion.${diagnostics.top_missing_reason}`);
-  if (codes.has("no_true_hot")) add("exposureRadar.diagnostics.suggestion.useRising");
-  if (suggestions.length === 0) add("exposureRadar.diagnostics.suggestion.operate");
-  return suggestions.slice(0, 5);
 }

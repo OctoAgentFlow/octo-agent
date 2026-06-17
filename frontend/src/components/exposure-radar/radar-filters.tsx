@@ -9,6 +9,7 @@ import { useT } from "@/i18n/use-t";
 import type { AccountListItem } from "@/services/account.service";
 import type { ExposureRadarRegion } from "@/services/exposure-radar.service";
 import type { OAFBot } from "@/types/oaf-bot";
+import { formatCompact } from "@/components/exposure-radar/radar-utils";
 import type { LoadState } from "@/components/exposure-radar/types";
 
 type RadarFiltersProps = {
@@ -80,7 +81,7 @@ export function RadarFilters({
             onChange={(value) => onRegionChange(value as ExposureRadarRegion)}
           />
           <NumberButtons label={t("exposureRadar.filters.hours")} values={hourOptions} value={hours} suffix="h" onChange={onHoursChange} />
-          <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompactNumber} onChange={onMaxFansChange} />
+          <NumberButtons label={t("exposureRadar.filters.maxFans")} values={fanOptions} value={maxFans} formatter={formatCompact} onChange={onMaxFansChange} />
           <NumberButtons label={t("exposureRadar.filters.hotCount")} values={hotCountOptions} value={minHotCount} formatter={(value) => (value === 0 ? t("common.all") : `>=${value}`)} onChange={onMinHotCountChange} disabled={region === "en"} />
         </div>
         {sourceHealth}
@@ -153,10 +154,4 @@ function SelectField({ icon, label, value, options, emptyLabel, onChange }: { ic
       </select>
     </label>
   );
-}
-
-function formatCompactNumber(value: number) {
-  if (value >= 1000000) return `${Math.round(value / 1000000)}M`;
-  if (value >= 1000) return `${value / 1000}K`;
-  return String(value);
 }

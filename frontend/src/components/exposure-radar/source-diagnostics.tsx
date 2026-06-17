@@ -6,6 +6,7 @@ import { Activity, CheckCircle2, Clock3, Database, Gauge, Info } from "lucide-re
 import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarData, ExposureRadarDiagnosticIssueApi, ExposureRadarDiagnosticsApi } from "@/services/exposure-radar.service";
+import { diagnosticSeverityDot, diagnosticStatusClass, formatCompact, formatOneDecimal, formatPercent, normalizeDiagnosticStatus, normalizeSourceStatus, normalizeSourceType, sourceStatusClass } from "@/components/exposure-radar/radar-utils";
 
 export function SourceHealthPanel({ data, timeZone }: { data: ExposureRadarData; timeZone: string }) {
   const { t } = useT();
@@ -165,42 +166,6 @@ function SourceMetaItem({ icon, label, value, valueClassName }: { icon: ReactNod
   );
 }
 
-function normalizeSourceType(value?: string) {
-  if (value === "owned_collector" || value === "tl1_fallback" || value === "x_trends_cache") return value;
-  return "unknown";
-}
-
-function normalizeSourceStatus(value?: string) {
-  if (value === "fresh" || value === "stale" || value === "fallback" || value === "cache" || value === "empty") return value;
-  return "unknown";
-}
-
-function normalizeDiagnosticStatus(value?: string) {
-  if (value === "healthy" || value === "warming" || value === "limited" || value === "empty" || value === "fallback" || value === "stale" || value === "blocked") return value;
-  return "limited";
-}
-
-function sourceStatusClass(status: string) {
-  if (status === "fresh") return "text-[#7ee0b5]";
-  if (status === "stale" || status === "fallback") return "text-[#f6d96b]";
-  if (status === "empty") return "text-[#ff8a91]";
-  return "text-[#8ecdf8]";
-}
-
-function diagnosticStatusClass(status: string) {
-  if (status === "healthy") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  if (status === "warming") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (status === "limited" || status === "stale" || status === "fallback") return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
-  if (status === "blocked" || status === "empty") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-  return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
-}
-
-function diagnosticSeverityDot(severity?: string) {
-  if (severity === "critical") return "bg-[#f4212e]";
-  if (severity === "warning") return "bg-[#f59e0b]";
-  return "bg-[#1d9bf0]";
-}
-
 function diagnosticIssueText(issue: ExposureRadarDiagnosticIssueApi, t: (key: string, params?: Record<string, string | number>) => string) {
   const known = new Set([
     "diagnostic_query_failed",
@@ -263,19 +228,4 @@ function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, t: (key
   if (codes.has("no_true_hot")) add("exposureRadar.diagnostics.suggestion.useRising");
   if (suggestions.length === 0) add("exposureRadar.diagnostics.suggestion.operate");
   return suggestions.slice(0, 5);
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
-}
-
-function formatOneDecimal(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
+import { formatCompact, formatVelocityLabel, normalizeQualityStage, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import type { DailyActionPlanItem, DailyActionType, DailyTaskStatus, WorkbenchStats } from "@/components/exposure-radar/types";
 
 type TodayMovesPanelProps = {
@@ -165,60 +166,4 @@ function actionPlanIcon(action: DailyActionType) {
     default:
       return <Search className="size-3.5" />;
   }
-}
-
-function normalizeQualityStage(value?: string, item?: ExposureRadarItemApi) {
-  if (value === "act_now" || value === "watch" || value === "expired") return value;
-  const tier = normalizeOpportunityTier(item?.opportunity_tier);
-  const velocityState = normalizeVelocityState(item?.velocity_state, item?.status);
-  if (item?.cooling || velocityState === "cooling") return "expired";
-  if (item?.risk_level === "medium" || item?.risk_level === "high") return "watch";
-  if (tier === "hot_opportunity" && (velocityState === "burst" || velocityState === "rising" || (item?.score || 0) >= 75)) return "act_now";
-  if (tier === "rising_opportunity" && (velocityState === "burst" || (item?.views_per_min || 0) >= 8 || (item?.score || 0) >= 85)) return "act_now";
-  return "watch";
-}
-
-function normalizeOpportunityTier(value?: string) {
-  if (value === "hot_opportunity") return "hot_opportunity";
-  if (value === "rising_opportunity" || value === "rising_signal") return "rising_opportunity";
-  if (value === "topic_lead") return "topic_lead";
-  if (value === "needs_sampling" || value === "early_signal") return "needs_sampling";
-  return "needs_sampling";
-}
-
-function normalizeVelocityState(value?: string, fallback?: string) {
-  const raw = (value || fallback || "").toLowerCase();
-  if (raw === "new" || raw === "burst" || raw === "rising" || raw === "steady" || raw === "cooling") return raw;
-  if (raw === "fire") return "burst";
-  if (raw === "hot") return "rising";
-  if (raw === "observed" || raw === "normal") return "steady";
-  return "unknown";
-}
-
-function qualityStageClass(stage: string) {
-  switch (normalizeQualityStage(stage)) {
-    case "act_now":
-      return "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "expired":
-      return "border-[#64748b]/35 bg-[#64748b]/10 text-[#94a3b8]";
-    default:
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  }
-}
-
-function formatVelocityLabel(value: number | undefined, samplingLabel: string) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return samplingLabel;
-  }
-  const rounded = Math.round(value);
-  if (rounded < 1) {
-    return samplingLabel;
-  }
-  return `${rounded}/min`;
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
 }

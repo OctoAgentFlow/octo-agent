@@ -30,13 +30,14 @@ import { PerformanceMetric, PerformancePanel } from "@/components/exposure-radar
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
+import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeManualOutcome, normalizeManualTaskStatus, normalizeOpportunityTier, normalizePeopleRadarStage, normalizeQualityStage, normalizeSafetyReviewStatus, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
 import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
-import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, DailyDeskFocusKey, DailyTaskStatus, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayActivationAction, FirstDayActivationMode, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, DailyDeskFocusKey, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayActivationAction, FirstDayActivationMode, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
 export default function ExposureRadarPage() {
@@ -4126,17 +4127,6 @@ function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; valu
   );
 }
 
-function formatVelocityLabel(value: number | undefined, samplingLabel: string) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return samplingLabel;
-  }
-  const rounded = Math.round(value);
-  if (rounded < 1) {
-    return samplingLabel;
-  }
-  return `${rounded}/min`;
-}
-
 function buildRadarMemoryPayload(item: ExposureRadarItemApi, twitterAccountID: number, botID: number, selectedReplyAngle?: ReplyAngleSuggestion): ContentLibraryItemPayload {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const qualityStage = normalizeQualityStage(item.quality_stage, item);
@@ -6468,35 +6458,6 @@ function selectedReplyAngleForItem(item: ExposureRadarItemApi, selectedReplyAngl
   return suggestions.find((angle) => angle.id === selectedReplyAngleIDs[item.id]) || suggestions[0];
 }
 
-function normalizeManualTaskStatus(value?: string): DailyTaskStatus | undefined {
-  if (value === "todo" || value === "in_progress" || value === "done" || value === "skipped" || value === "later") return value;
-  return undefined;
-}
-
-function normalizeManualOutcome(value?: string): ManualOutcome | undefined {
-  if (value === "effective" || value === "neutral" || value === "ineffective" || value === "not_suitable") return value;
-  return undefined;
-}
-
-function normalizeSafetyReviewStatus(value?: string): SafetyReviewStatus | undefined {
-  if (value === "pass" || value === "watch" || value === "block") return value;
-  return undefined;
-}
-
-function normalizePeopleRadarStage(value?: string): PeopleRadarStage {
-  if (value === "priority" || value === "repeat" || value === "engaged" || value === "watch" || value === "avoid" || value === "new") return value;
-  return "new";
-}
-
-function normalizeContentDraftStatus(value?: string) {
-  if (value === "published") return "published";
-  if (value === "rejected") return "rejected";
-  if (value === "failed") return "failed";
-  if (value === "approved" || value === "ready_to_publish") return "ready";
-  if (value === "pending_review") return "review";
-  return "draft";
-}
-
 function apiBudgetMode(diagnostics: ExposureRadarDiagnosticsApi | null) {
   if (!diagnostics) return "conservative";
   if ((diagnostics.search_results || 0) <= 25 && (diagnostics.refresh_interval_minutes || 0) >= 30) return "conservative";
@@ -6564,41 +6525,6 @@ function signalRecoverySuggestions(
   return suggestions.slice(0, 4);
 }
 
-function normalizeOpportunityTier(value?: string) {
-  if (value === "hot_opportunity") return "hot_opportunity";
-  if (value === "rising_opportunity" || value === "rising_signal") return "rising_opportunity";
-  if (value === "topic_lead") return "topic_lead";
-  if (value === "needs_sampling" || value === "early_signal") return "needs_sampling";
-  return "needs_sampling";
-}
-
-function normalizeQualityStage(value?: string, item?: ExposureRadarItemApi) {
-  if (value === "act_now" || value === "watch" || value === "expired") return value;
-  const tier = normalizeOpportunityTier(item?.opportunity_tier);
-  const velocityState = normalizeVelocityState(item?.velocity_state, item?.status);
-  if (item?.cooling || velocityState === "cooling") return "expired";
-  if (item?.risk_level === "medium" || item?.risk_level === "high") return "watch";
-  if (tier === "hot_opportunity" && (velocityState === "burst" || velocityState === "rising" || (item?.score || 0) >= 75)) return "act_now";
-  if (tier === "rising_opportunity" && (velocityState === "burst" || (item?.views_per_min || 0) >= 8 || (item?.score || 0) >= 85)) return "act_now";
-  return "watch";
-}
-
-function qualityStageClass(stage: string) {
-  switch (normalizeQualityStage(stage)) {
-    case "act_now":
-      return "border-[#00ba7c]/30 bg-[#00ba7c]/10 text-[#7ee0b5]";
-    case "expired":
-      return "border-[#64748b]/35 bg-[#64748b]/10 text-[#94a3b8]";
-    default:
-      return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  }
-}
-
-function normalizeDataConfidence(value?: string, dataQuality?: string) {
-  if (value === "real_impressions" || value === "engagement_estimate" || value === "topic_level" || value === "first_sample") return value;
-  return dataQuality === "topic_level" ? "topic_level" : "first_sample";
-}
-
 function exposureMetricSummary(item: ExposureRadarItemApi) {
   const values = [
     typeof item.reply_count === "number" ? `replies=${item.reply_count}` : "",
@@ -6662,72 +6588,11 @@ function getNonNegativeParam(params: URLSearchParams, key: string, fallback: num
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-function formatFreshness(seconds: number, t: (key: string, params?: Record<string, string | number>) => string) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "-";
-  if (seconds < 60) return t("exposureRadar.leaderboard.secondsAgo", { count: Math.round(seconds) });
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return t("exposureRadar.leaderboard.minutesAgo", { count: minutes });
-  return t("exposureRadar.leaderboard.hoursAgo", { count: Math.round(minutes / 60) });
-}
-
-function formatArchiveDate(value: string, timeZone: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone }).format(date);
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
-}
-
-function formatOneDecimal(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
 function extractTweetID(raw: string) {
   const trimmed = raw.trim();
   if (/^\d+$/.test(trimmed)) return trimmed;
   const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
   return match?.[1] || "";
-}
-
-function normalizeSourceType(value?: string) {
-  if (value === "owned_collector" || value === "tl1_fallback" || value === "x_trends_cache") return value;
-  return "unknown";
-}
-
-function normalizeSourceStatus(value?: string) {
-  if (value === "fresh" || value === "stale" || value === "fallback" || value === "cache" || value === "empty") return value;
-  return "unknown";
-}
-
-function normalizeDiagnosticStatus(value?: string) {
-  if (value === "healthy" || value === "warming" || value === "limited" || value === "empty" || value === "fallback" || value === "stale" || value === "blocked") return value;
-  return "limited";
-}
-
-function normalizeVelocityState(value?: string, fallback?: string) {
-  const raw = (value || fallback || "").toLowerCase();
-  if (raw === "new" || raw === "burst" || raw === "rising" || raw === "steady" || raw === "cooling") return raw;
-  if (raw === "fire") return "burst";
-  if (raw === "hot") return "rising";
-  if (raw === "observed" || raw === "normal") return "steady";
-  return "unknown";
-}
-
-function diagnosticStatusClass(status: string) {
-  if (status === "healthy") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  if (status === "warming") return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (status === "limited" || status === "stale" || status === "fallback") return "border-[#f59e0b]/25 bg-[#f59e0b]/10 text-[#f6d96b]";
-  if (status === "blocked" || status === "empty") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-  return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
 }
 
 function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, t: (key: string, params?: Record<string, string | number>) => string) {

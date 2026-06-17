@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarPerformanceData } from "@/services/exposure-radar.service";
+import { formatCompact, formatPercent } from "@/components/exposure-radar/radar-utils";
 
 export function PerformancePanel({ data, timeZone }: { data: ExposureRadarPerformanceData | null; timeZone: string }) {
   const { t } = useT();
@@ -110,16 +111,6 @@ export function PerformanceMetric({ label, value, detail }: { label: string; val
       <p className="mt-1 text-xs text-[#8b98a5]">{detail}</p>
     </div>
   );
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
-}
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
 }
 
 function normalizeLearningMode(value?: string) {

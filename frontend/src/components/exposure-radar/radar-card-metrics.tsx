@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { formatCompact } from "@/components/exposure-radar/radar-utils";
 import { useT } from "@/i18n/use-t";
 
 export function MetricPill({ icon, label, value }: { icon: ReactNode; label: string; value?: number }) {
@@ -39,10 +40,4 @@ export function VelocitySparkline({ values }: { values: number[] }) {
       </svg>
     </div>
   );
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
 }

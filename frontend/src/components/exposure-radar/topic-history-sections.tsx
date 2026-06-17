@@ -7,6 +7,7 @@ import { CardHeader } from "@/components/ui/card";
 import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarArchiveDayApi } from "@/services/exposure-radar.service";
+import { formatCompact } from "@/components/exposure-radar/radar-utils";
 
 export type ArchiveTotals = {
   signals: number;
@@ -85,10 +86,4 @@ export function ArchiveDayRow({ day, dateLabel }: { day: ExposureRadarArchiveDay
       </div>
     </div>
   );
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 10000000 ? 0 : 1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return String(value);
 }

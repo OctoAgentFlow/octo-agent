@@ -1563,6 +1563,7 @@ export default function ContentDraftsPage() {
             ) : null}
 
             {activePanel === "content" ? (
+              <div id="content-library" className="scroll-mt-24">
               <Card>
                 <CardHeader
                   title={t("contentDrafts.contentLibrary.title")}
@@ -1789,6 +1790,7 @@ export default function ContentDraftsPage() {
                   </div>
                 )}
               </Card>
+              </div>
             ) : null}
 
             {activePanel === "generate" ? (

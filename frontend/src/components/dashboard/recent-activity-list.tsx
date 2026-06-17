@@ -98,7 +98,7 @@ export function RecentActivityList({ records, loading, errorMessage, onRetry }: 
               <p className="font-semibold text-[#e7e9ea]">{t("dashboard.activity.emptyTitle")}</p>
               <p className="mt-1 text-sm leading-6 text-[#71767b]">{t("dashboard.activity.empty")}</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link href="/automations" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
+                <Link href="/start-today" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white transition hover:bg-[#1a8cd8]">
                   {t("dashboard.activity.emptyAutomationCta")}
                   <ChevronRight className="size-4" />
                 </Link>

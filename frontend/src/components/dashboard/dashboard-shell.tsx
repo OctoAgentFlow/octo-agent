@@ -17,7 +17,6 @@ type DashboardShellProps = {
 const PATHS_WITH_DATA_REFRESH = new Set([
   "/dashboard",
   "/accounts",
-  "/agents",
   "/automations",
   "/content-drafts",
   "/handling-list",

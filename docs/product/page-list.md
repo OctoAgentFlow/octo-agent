@@ -15,11 +15,12 @@ This document maps the current product pages to their backend API areas. It is w
 | Path | Purpose | Backend/API |
 | --- | --- | --- |
 | `/dashboard` | Operator overview: subscription, readiness, recent activity, account status, and workflow health. | `GET /dashboard/overview`, `GET /billing/subscription`, `GET /activities`, `GET /automations/runtime-status`. |
-| `/start-today` | Stable first-run entry point for a safe daily growth session; redirects to Daily Growth Desk today view. | Redirects to `/exposure-radar?tab=today`. |
+| `/start-today` | Stable first-run entry point for a safe daily growth session; redirects to the day-one Daily Growth Desk path. | Redirects to `/exposure-radar?tab=today&activation=first_day#first-day-path`. |
 | `/accounts` | Bind, inspect, and disconnect X accounts; show readiness and account intelligence entry points. | `GET /accounts`, `POST /accounts/oauth/x/start`, OAuth callback, `DELETE /accounts/:id`. |
 | `/oaf-bots` | Configure account persona, voice, topics, boundaries, language style, and learning preferences. | `GET/POST/PUT /oaf-bots`, `POST /oaf-bots/:id/test-generate`, `GET /oaf-bots/:id/generation-usages`. |
 | `/exposure-radar` | Daily Growth Desk: opportunity signals, hot/rising filters, diagnostics, strategy, reply angles, people radar, manual records, and learning loop. | `/trends/exposure-radar*`, `/exposure-radar/drafts*`, `/exposure-radar/manual-records*`, `/exposure-radar/strategy`, `/exposure-radar/people*`. |
 | `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
+| `/content-library` | Content Memory entry point; opens the Content Library panel inside Content Drafts so memory links never dead-end. | Redirects to `/content-drafts?panel=content#content-library`; data comes from `/content-library/items`. |
 | `/daily-x-queue` | Daily content material and draft preparation workflow with website import and generation run tracking. | `/daily-x-queue*`, content memory, OAF Bot, website source import, draft generation APIs, and run/item summaries. |
 | `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
 | `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |
@@ -45,6 +46,7 @@ This document maps the current product pages to their backend API areas. It is w
 | `/auto-replies` API | Downlined authenticated legacy automation API. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |
 | Authenticated `/auto-dm` API | Downlined authenticated legacy automation API. Public unsubscribe remains. | Manual growth workflows and account operations; no direct replacement for automated DM outreach. |
 | `/auto-comment` and `/auto-comments` APIs | Downlined authenticated legacy automation APIs. | `/api/v1/exposure-radar/drafts` and manual handling records. |
+| `/agents` page | Legacy frontend route now redirects to the real OAF Bot workspace. | `/oaf-bots`. Backend `/api/v1/agents` remains a compatibility API only. |
 
 Historical DB fields, stored activity keys, and DTO names may still use old `auto_*` wording for data compatibility. They are not public product routes.
 

@@ -66,7 +66,7 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 
 | Priority | Status | Notes |
 | --- | --- | --- |
-| Legacy route protection and documentation alignment | Done | Old `/auto-post`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. Public DM unsubscribe remains for compliance. |
+| Legacy route protection and documentation alignment | Done / refreshed | Old `/auto-post`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. Public DM unsubscribe remains for compliance. P0 cleanup also added a real `/content-library` entry, redirected `/agents` to `/oaf-bots`, and consolidated nav/start links around Daily Growth Desk, Content Memory, OAF Bots, and Handling List. |
 | Exposure Radar modularization | In progress | The page has been split into many helpers/components and is much smaller. Recent checkpoints include workspace panels, operating desk panels, people relationship desk, memory asset desk containers, and learning/history panels. Continue extracting remaining page-local panels opportunistically. |
 | Cost and rate observability | Done / refining | `CostUsageLedger` records OpenAI generation cost and major X API usage. Admin exposes OpenAI cost, X API calls, X Trends/Exposure refresh config, skip/failure health, estimated Exposure refreshes/day, and budget guardrail status. |
 | Opportunity quality and learning loop | Done / refining | Hot/rising, quality tiers, manual records, result backfill, memory, strategy, people radar, and weekly review exist. Keep improving ranking quality and user-facing explanations. |

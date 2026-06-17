@@ -58,7 +58,7 @@ export function UserOnboardingCard({
       titleKey: "onboarding.step.oafBot.title",
       descriptionKey: "onboarding.step.oafBot.description",
       ctaKey: "onboarding.step.oafBot.cta",
-      href: "/agents",
+      href: "/oaf-bots",
     },
     {
       done: hasDailyDeskReady,

@@ -6,15 +6,12 @@ import {
   BadgeDollarSign,
   BarChart3,
   Bot,
-  Coins,
-  Flame,
+  Database,
   LayoutDashboard,
   ListChecks,
   Radar,
   ReceiptText,
   Settings,
-  Sparkles,
-  UserCircle,
   Users,
 } from "lucide-react";
 
@@ -23,17 +20,14 @@ import { isAdminFrontend } from "@/lib/frontend-role";
 
 const navItems = [
   { labelKey: "sidebar.nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
-  { labelKey: "sidebar.nav.dailyXQueue", href: "/daily-x-queue", icon: Sparkles },
   { labelKey: "sidebar.nav.exposureRadar", href: "/exposure-radar", icon: Radar },
-  { labelKey: "sidebar.nav.trends", href: "/trends", icon: Flame },
+  { labelKey: "sidebar.nav.contentMemory", href: "/content-library", icon: Database },
+  { labelKey: "sidebar.nav.oafBots", href: "/oaf-bots", icon: Bot },
+  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
   { labelKey: "sidebar.nav.executionQueue", href: "/handling-list", icon: ListChecks },
   { labelKey: "sidebar.nav.analytics", href: "/analytics", icon: BarChart3 },
-  { labelKey: "sidebar.nav.accounts", href: "/accounts", icon: Users },
-  { labelKey: "sidebar.nav.points", href: "/points", icon: Coins },
   { labelKey: "sidebar.nav.billing", href: "/billing", icon: BadgeDollarSign },
   { labelKey: "sidebar.nav.settings", href: "/settings", icon: Settings },
-  { labelKey: "sidebar.nav.profile", href: "/profile", icon: UserCircle },
 ];
 
 const adminNavItems = [

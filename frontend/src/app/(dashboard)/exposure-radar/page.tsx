@@ -24,7 +24,7 @@ import { actionPlanIcon, actionPlanTone, buildDailyActionPlan, exposureLearningT
 import { BoostedSignalsCard, LearningControlsCard, LearningFeedbackCard, LearningImpactCard } from "@/components/exposure-radar/learning-insights-cards";
 import { buildExposureLearningAngles, buildExposureLearningProfile, buildExposureLearningTopics, buildLearningImpactRows } from "@/components/exposure-radar/learning-profile-utils";
 import { DiagnosticMetric, LeaderboardStatusStrip, RadarViewTabs } from "@/components/exposure-radar/list-support";
-import { isExposureRadarWorkspaceTab, radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
+import { radarOperatorNoteKey, radarRankStorageKey, readManualActionStates, readOperatorNotes, readPublishGateStates, readSessionFocuses, readStoredRadarRanks, writeManualActionStates, writeOperatorNotes, writePublishGateStates, writeSessionFocuses, writeStoredRadarRanks } from "@/components/exposure-radar/local-state";
 import { bestExposureResultRecord, buildDailyReviewActions, buildDailyReviewReportText, buildDailyReviewTopics, buildGrowthDeskBrief, buildGrowthDeskBriefPreview, isRecentManualRecord } from "@/components/exposure-radar/growth-desk-utils";
 import { buildManualOutcomePayload, buildManualRecordPayload, buildManualResultPatch, buildResolvedManualResultPatch, buildSampleResolvedResultPatch, mergeManualRecordStates, mergePeopleRadar, normalizeResultLookupStatus, type ManualResultInput } from "@/components/exposure-radar/manual-record-utils";
 import { ManualHandlingPanel } from "@/components/exposure-radar/manual-handling-panel";
@@ -42,6 +42,7 @@ import { buildDraftReason, buildDraftRecommendedUse, buildMemoryOpportunityExpla
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeOpportunityTier, normalizeQualityStage, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
+import { exposureRadarQueryStateFromSearch, exposureRadarQueryStringFromState } from "@/components/exposure-radar/route-query-utils";
 import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposure-radar/signal-analysis-cards";
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { buildStarterStrategyTemplates, parseCommaList, strategyFormFromApi } from "@/components/exposure-radar/strategy-form-utils";
@@ -102,30 +103,32 @@ export default function ExposureRadarPage() {
   const previousRanksRef = useRef<Map<string, number>>(new Map());
   const [rankChanges, setRankChanges] = useState<Map<string, RankChange>>(new Map());
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
+  const initialQueryStateRef = useRef({
+    region,
+    hours,
+    maxFans,
+    minHotCount,
+    selectedAccountID,
+    selectedBotID,
+    workspaceTab,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const nextRegion = params.get("region");
-    if (nextRegion === "zh" || nextRegion === "en") setRegion(nextRegion);
-    setHours((current) => getPositiveParam(params, "hours", current));
-    setMaxFans((current) => getPositiveParam(params, "max_fans", getPositiveParam(params, "maxFans", current)));
-    setMinHotCount((current) => getNonNegativeParam(params, "min_hot_count", getNonNegativeParam(params, "minHotCount", current)));
-    setSelectedAccountID((current) => getPositiveParam(params, "x_account_id", getPositiveParam(params, "account_id", current)));
-    setSelectedBotID((current) => getPositiveParam(params, "bot_id", current));
-    const nextTab = params.get("tab");
-    if (isExposureRadarWorkspaceTab(nextTab)) setWorkspaceTab(nextTab);
+    const queryState = exposureRadarQueryStateFromSearch(window.location.search, initialQueryStateRef.current);
+    setRegion(queryState.region);
+    setHours(queryState.hours);
+    setMaxFans(queryState.maxFans);
+    setMinHotCount(queryState.minHotCount);
+    setSelectedAccountID(queryState.selectedAccountID);
+    setSelectedBotID(queryState.selectedBotID);
+    setWorkspaceTab(queryState.workspaceTab);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    params.set("region", region);
-    params.set("hours", String(hours));
-    params.set("max_fans", String(maxFans));
-    params.set("min_hot_count", String(minHotCount));
-    params.set("tab", workspaceTab);
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    const query = exposureRadarQueryStringFromState(window.location.search, { region, hours, maxFans, minHotCount, workspaceTab });
+    window.history.replaceState(null, "", `${window.location.pathname}?${query}`);
   }, [hours, maxFans, minHotCount, region, workspaceTab]);
 
   useEffect(() => {
@@ -5075,14 +5078,4 @@ function sessionStateTone(state: "complete" | "active" | "review" | "quiet") {
     default:
       return "border-[#2f3336] bg-[#16181c] text-[#8b98a5]";
   }
-}
-
-function getPositiveParam(params: URLSearchParams, key: string, fallback: number) {
-  const value = Number(params.get(key));
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function getNonNegativeParam(params: URLSearchParams, key: string, fallback: number) {
-  const value = Number(params.get(key));
-  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }

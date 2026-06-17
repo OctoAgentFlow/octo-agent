@@ -29,11 +29,12 @@ import { AccountHealthScoreCard, GrowthExperimentCard, MemoryAssetDeskCard, Oppo
 import { OpportunitySignalList } from "@/components/exposure-radar/opportunity-signal-list";
 import { OpportunityDecisionBrief, OpportunityExplanationPanel, ReplyPlanCard } from "@/components/exposure-radar/opportunity-explanation-cards";
 import { PerformanceMetric, PerformancePanel } from "@/components/exposure-radar/performance-panel";
+import { buildPeopleRadar, buildPeopleRadarNextTouch, buildPeopleRadarPlaybook, peopleRadarPlaybookTone, peopleRadarStage, peopleRadarStageWeight, publicEngagementCount, radarItemTimeValue } from "@/components/exposure-radar/people-radar-utils";
 import { diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnostic-utils";
 import { ManualHandlingRecord, ManualWorkflowPanel, manualResultFormKey } from "@/components/exposure-radar/radar-card-manual-workflow";
 import { RadarCardActionFooter, RadarCardBadges, RadarCardGeneratedCommentBlock, RadarCardHeader, RadarCardPrimaryMetrics, RadarCardPublicMetrics, RadarCardRecommendedUse, RadarCardVelocityTrend } from "@/components/exposure-radar/radar-card-sections";
 import { RadarFilters } from "@/components/exposure-radar/radar-filters";
-import { clampPriority, compactTitle, extractTweetID, isSampleRadarItem, radarCardAnchorID, scoreManualResult, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
+import { clampPriority, compactTitle, extractTweetID, hasManualBackfill, isManualActionHandled, isRadarItemSaved, isSampleRadarItem, radarCardAnchorID, radarItemSavedMemoryID, scoreManualResult, uniqueList } from "@/components/exposure-radar/radar-signal-utils";
 import { diagnosticStatusClass, formatArchiveDate, formatCompact, formatFreshness, formatOneDecimal, formatPercent, formatVelocityLabel, normalizeContentDraftStatus, normalizeDataConfidence, normalizeDiagnosticStatus, normalizeManualOutcome, normalizeManualTaskStatus, normalizeOpportunityTier, normalizePeopleRadarStage, normalizeQualityStage, normalizeSafetyReviewStatus, normalizeSourceStatus, normalizeSourceType, normalizeVelocityState, qualityStageClass } from "@/components/exposure-radar/radar-utils";
 import { MemoryDrivenReplyPanel, ReplyAngleSuggestionsPanel } from "@/components/exposure-radar/reply-guidance-panels";
 import { ReplyQualityPanel, SafetyReviewPanel } from "@/components/exposure-radar/reply-safety-panels";
@@ -41,7 +42,7 @@ import { SignalCredibilityPanel, SignalDecisionCard } from "@/components/exposur
 import { CollectionDiagnosticsPanel, SourceHealthPanel } from "@/components/exposure-radar/source-diagnostics";
 import { TodayMovesPanel } from "@/components/exposure-radar/today-moves-panel";
 import { ArchiveDayRow, ArchivePanelHeader, ArchiveTotalsMetrics } from "@/components/exposure-radar/topic-history-sections";
-import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PeopleRadarStage, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
+import type { AccountHealthScore, ContentDraftBridgeData, DailyActionPlanItem, DailyActionReason, DailyActionType, ExposureLearningProfile, ExposureRadarWorkspaceTab, FirstDayStepKey, GrowthExperiment, LeaderboardStats, LeaderboardStatus, LearningImpactRow, LoadState, ManualActionState, ManualOutcome, MaybePromise, MemoryReplyCue, OperatorSessionNote, OpportunityExplanation, PeopleRadarEntry, PublishGateKey, PublishGateState, RadarViewFilter, RankChange, ReplyAngleGenerationGuide, ReplyAngleID, ReplyAngleSuggestion, ReplyPlan, ReplyQualityScore, ResultLearningMove, ResultLearningSummary, SafetyReview, SafetyReviewCheck, SafetyReviewStatus, SessionFocusKey, SignalCredibility, SignalCredibilityStatus, SignalDecisionSummary, SignalQualityStatus, StarterStrategyTemplate, StrategyFormState, WorkbenchStats } from "@/components/exposure-radar/types";
 import type { OAFBot } from "@/types/oaf-bot";
 
 export default function ExposureRadarPage() {
@@ -5559,152 +5560,6 @@ function buildExposureLearningAngles(records: ExposureRadarManualRecordApi[], st
     .map(([angle, count]) => `${angle} · ${count}`);
 }
 
-function buildPeopleRadar(items: ExposureRadarItemApi[], manualActionStates: Record<string, ManualActionState>, savedMemoryIDs: Set<string>): PeopleRadarEntry[] {
-  const people = new Map<string, PeopleRadarEntry>();
-  for (const item of items) {
-    if (item.data_quality !== "tweet_level") continue;
-    const handle = (item.author_handle || "").replace(/^@/, "").trim();
-    const name = item.author_name || handle || item.author_id || "";
-    if (!handle && !name) continue;
-    const key = (handle || item.author_id || name).toLowerCase();
-    const existing = people.get(key);
-    const state = manualActionStates[item.id];
-    const handled = isManualActionHandled(item, state) ? 1 : 0;
-    const drafted = item.generated_comment || item.review_task_id ? 1 : 0;
-    const saved = isRadarItemSaved(item, savedMemoryIDs) ? 1 : 0;
-    const engagement = publicEngagementCount(item);
-    if (!existing) {
-      people.set(key, {
-        key,
-        name,
-        handle: handle || undefined,
-        count: 1,
-        handled,
-        drafted,
-        saved,
-        maxScore: item.score || 0,
-        totalEngagement: engagement,
-        followers: item.followers_count,
-        stage: "new",
-        latestItem: item,
-      });
-      continue;
-    }
-    existing.count += 1;
-    existing.handled += handled;
-    existing.drafted += drafted;
-    existing.saved += saved;
-    existing.maxScore = Math.max(existing.maxScore, item.score || 0);
-    existing.totalEngagement += engagement;
-    if (typeof item.followers_count === "number" && item.followers_count > 0) {
-      existing.followers = typeof existing.followers === "number" && existing.followers > 0 ? Math.max(existing.followers, item.followers_count) : item.followers_count;
-    }
-    if (radarItemTimeValue(item) > radarItemTimeValue(existing.latestItem)) {
-      existing.latestItem = item;
-    }
-  }
-  return Array.from(people.values())
-    .map((person) => ({ ...person, stage: peopleRadarStage(person) }))
-    .sort((a, b) => {
-      const stageDelta = peopleRadarStageWeight(b.stage) - peopleRadarStageWeight(a.stage);
-      if (stageDelta !== 0) return stageDelta;
-      if (a.maxScore !== b.maxScore) return b.maxScore - a.maxScore;
-      if (a.count !== b.count) return b.count - a.count;
-      return b.totalEngagement - a.totalEngagement;
-    });
-}
-
-function publicEngagementCount(item: ExposureRadarItemApi) {
-  return (item.reply_count || 0) + (item.retweet_count || 0) + (item.like_count || 0) + (item.quote_count || 0) + (item.bookmark_count || 0);
-}
-
-function radarItemTimeValue(item: ExposureRadarItemApi) {
-  const raw = item.published_at || item.updated_at || "";
-  const value = raw ? new Date(raw).getTime() : 0;
-  return Number.isFinite(value) ? value : 0;
-}
-
-function peopleRadarStage(person: PeopleRadarEntry): PeopleRadarStage {
-  const unhandled = Math.max(0, person.count - person.handled);
-  if (unhandled > 0 && person.maxScore >= 75) return "priority";
-  if (person.count >= 2) return "repeat";
-  if (person.handled > 0 || person.drafted > 0 || person.saved > 0) return "engaged";
-  return "new";
-}
-
-function buildPeopleRadarPlaybook(people: PeopleRadarEntry[], t: (key: string, params?: Record<string, string | number>) => string) {
-  const priority = people.filter((person) => person.stage === "priority").length;
-  const repeat = people.filter((person) => person.stage === "repeat").length;
-  const engaged = people.filter((person) => person.stage === "engaged").length;
-  const avoid = people.filter((person) => person.stage === "avoid" || person.crmStage === "avoid").length;
-  if (priority > 0) {
-    return {
-      title: t("exposureRadar.peopleRadar.playbook.priority.title"),
-      detail: t("exposureRadar.peopleRadar.playbook.priority.detail", { count: priority }),
-      tone: "positive" as const,
-    };
-  }
-  if (repeat > 0) {
-    return {
-      title: t("exposureRadar.peopleRadar.playbook.repeat.title"),
-      detail: t("exposureRadar.peopleRadar.playbook.repeat.detail", { count: repeat }),
-      tone: "neutral" as const,
-    };
-  }
-  if (engaged > 0) {
-    return {
-      title: t("exposureRadar.peopleRadar.playbook.engaged.title"),
-      detail: t("exposureRadar.peopleRadar.playbook.engaged.detail", { count: engaged }),
-      tone: "positive" as const,
-    };
-  }
-  if (avoid > 0) {
-    return {
-      title: t("exposureRadar.peopleRadar.playbook.avoid.title"),
-      detail: t("exposureRadar.peopleRadar.playbook.avoid.detail", { count: avoid }),
-      tone: "warning" as const,
-    };
-  }
-  return {
-    title: t("exposureRadar.peopleRadar.playbook.default.title"),
-    detail: t("exposureRadar.peopleRadar.playbook.default.detail"),
-    tone: "neutral" as const,
-  };
-}
-
-function peopleRadarPlaybookTone(tone: "positive" | "warning" | "neutral") {
-  if (tone === "positive") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  if (tone === "warning") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-  return "border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-}
-
-function buildPeopleRadarNextTouch(person: PeopleRadarEntry, t: (key: string, params?: Record<string, string | number>) => string) {
-  const stage = person.crmStage || person.stage;
-  if (stage === "avoid") return t("exposureRadar.peopleRadar.nextTouch.avoid");
-  if (stage === "priority") return t("exposureRadar.peopleRadar.nextTouch.priority", { title: compactTitle(person.latestItem.title) });
-  if (stage === "repeat") return t("exposureRadar.peopleRadar.nextTouch.repeat", { count: person.count });
-  if (stage === "engaged") return t("exposureRadar.peopleRadar.nextTouch.engaged");
-  if (person.saved > 0) return t("exposureRadar.peopleRadar.nextTouch.saved");
-  return t("exposureRadar.peopleRadar.nextTouch.default");
-}
-
-function peopleRadarStageWeight(stage: PeopleRadarStage) {
-  switch (stage) {
-    case "priority":
-      return 4;
-    case "repeat":
-      return 3;
-    case "engaged":
-      return 2;
-    case "watch":
-      return 2;
-    case "avoid":
-      return 0;
-    default:
-      return 1;
-  }
-}
-
 function dailyActionPriority(item: ExposureRadarItemApi, state: ManualActionState | undefined, savedMemoryIDs: Set<string>, learningProfile: ExposureLearningProfile) {
   const velocityState = normalizeVelocityState(item.velocity_state, item.status);
   const tier = normalizeOpportunityTier(item.opportunity_tier);
@@ -5834,16 +5689,8 @@ function radarItemMatchesFilter(item: ExposureRadarItemApi, filter: RadarViewFil
   }
 }
 
-function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
-  return Boolean(state?.handled) || state?.taskStatus === "done" || item.status === "handled" || item.review_status === "handled";
-}
-
 function isDeferredManualTask(state?: ManualActionState) {
   return state?.taskStatus === "skipped" || state?.taskStatus === "later";
-}
-
-function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState) {
-  return Boolean(item.comment_url || item.comment_tweet_id || state?.publishedUrl);
 }
 
 function buildManualOutcomePayload(outcome: ManualOutcome, comment: string, item: ExposureRadarItemApi) {
@@ -6223,15 +6070,6 @@ function exposureMetricSummary(item: ExposureRadarItemApi) {
     typeof item.impression_count === "number" ? `impressions=${item.impression_count}` : "",
   ].filter(Boolean);
   return values.length ? `Public metrics: ${values.join("; ")}` : "";
-}
-
-function isRadarItemSaved(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
-  return Boolean(item.saved_memory_id) || savedMemoryIDs.has(item.id);
-}
-
-function radarItemSavedMemoryID(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
-  if (item.saved_memory_id) return item.saved_memory_id;
-  return savedMemoryIDs.has(item.id) ? -1 : 0;
 }
 
 function buildLeaderboardStats(items: ExposureRadarItemApi[], rankChanges: Map<string, RankChange>): LeaderboardStats {

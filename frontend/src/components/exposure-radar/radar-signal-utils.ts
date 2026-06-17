@@ -1,4 +1,5 @@
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
+import type { ManualActionState } from "@/components/exposure-radar/types";
 
 export function isSampleRadarItem(item: ExposureRadarItemApi) {
   return item.id.startsWith("sample-") || item.data_source === "sample_mode";
@@ -43,4 +44,21 @@ export function extractTweetID(raw: string) {
   if (/^\d+$/.test(trimmed)) return trimmed;
   const match = trimmed.match(/\/status(?:es)?\/(\d+)/);
   return match?.[1] || "";
+}
+
+export function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
+  return Boolean(state?.handled) || state?.taskStatus === "done" || item.status === "handled" || item.review_status === "handled";
+}
+
+export function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState) {
+  return Boolean(item.comment_url || item.comment_tweet_id || state?.publishedUrl);
+}
+
+export function isRadarItemSaved(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
+  return Boolean(item.saved_memory_id) || savedMemoryIDs.has(item.id);
+}
+
+export function radarItemSavedMemoryID(item: ExposureRadarItemApi, savedMemoryIDs: Set<string>) {
+  if (item.saved_memory_id) return item.saved_memory_id;
+  return savedMemoryIDs.has(item.id) ? -1 : 0;
 }

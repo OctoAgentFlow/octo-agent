@@ -8,7 +8,7 @@ import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarItemApi } from "@/services/exposure-radar.service";
 import { manualOutcomeOptions } from "@/components/exposure-radar/constants";
-import { extractTweetID } from "@/components/exposure-radar/radar-signal-utils";
+import { extractTweetID, hasManualBackfill, isManualActionHandled } from "@/components/exposure-radar/radar-signal-utils";
 import type { ManualActionState, ManualOutcome, SafetyReviewStatus } from "@/components/exposure-radar/types";
 
 type ResultPayload = {
@@ -292,14 +292,6 @@ function manualRecordStatus(item: ExposureRadarItemApi, state?: ManualActionStat
   if (isManualActionHandled(item, state)) return "handled";
   if (state?.copied || state?.opened || state?.saved) return "in_progress";
   return "generated";
-}
-
-function hasManualBackfill(item: ExposureRadarItemApi, state?: ManualActionState) {
-  return Boolean(item.comment_url || item.comment_tweet_id || state?.publishedUrl);
-}
-
-function isManualActionHandled(item: ExposureRadarItemApi, state?: ManualActionState) {
-  return Boolean(state?.handled) || state?.taskStatus === "done" || item.status === "handled" || item.review_status === "handled";
 }
 
 function manualResultFormFromState(state?: ManualActionState) {

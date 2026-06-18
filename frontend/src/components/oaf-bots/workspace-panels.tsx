@@ -12,7 +12,6 @@ import type { ContentDraftPlanApi } from "@/services/content-drafts.service";
 import type { ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { OAFBot } from "@/types/oaf-bot";
 
-type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type BotAutomationType = "post" | "reply" | "comment" | "dm";
 type BotAutomationState = {

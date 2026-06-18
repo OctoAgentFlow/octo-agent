@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -10,25 +9,11 @@ import {
   Bot,
   CheckCircle2,
   ChevronRight,
-  Clock3,
-  Copy,
-  FilePlus2,
-  Globe2,
   Info,
-  ListChecks,
   Lock,
-  MessageCircle,
-  MessagesSquare,
-  RefreshCw,
-  Rocket,
   Save,
-  Send,
   Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
   WalletCards,
-  Workflow,
 } from "lucide-react";
 
 import { SectionCard } from "@/components/dashboard/section-card";
@@ -48,29 +33,28 @@ import {
   WizardPanel,
 } from "@/components/oaf-bots/form-fields";
 import { LearningRulesCenter } from "@/components/oaf-bots/learning-center-panel";
+import { errorMessage, getErrorBody } from "@/components/oaf-bots/oaf-bot-errors";
+import { aggregateMonthlyUsage, botToPayload, calculatePersonaCompleteness, contentItemMatchesBot, createEmptyForm, summarizeQueue, usageSceneOrder } from "@/components/oaf-bots/oaf-bot-model";
 import { ProfileDiffPreview, SamplePanel, getFeedbackSuggestionDiffs, mergeFeedbackSuggestionProfile, normalizeSampleContent, splitMultiValue } from "@/components/oaf-bots/sample-learning-panels";
 import { LanguageConfigPanel, SafetyRulesPanel } from "@/components/oaf-bots/safety-persona-panels";
 import { AccountArchetypePicker, QuotaCard, StyleRecommendationPanel, TopicGuardrailRecommendationPanel } from "@/components/oaf-bots/strategy-persona-panels";
+import { useOAFBotActions } from "@/components/oaf-bots/use-oaf-bot-actions";
+import { useOAFBotLearningData } from "@/components/oaf-bots/use-oaf-bot-learning-data";
+import { useOAFBotMatrix, type MatrixFilterKey } from "@/components/oaf-bots/use-oaf-bot-matrix";
 import { BotMatrixPanel, BotRelationshipCard, BotStatusPill, ListStat, OAFBotDangerZone, OAFBotFocusPanel } from "@/components/oaf-bots/workspace-panels";
 import { useT } from "@/i18n/use-t";
 import { broadcastDataSynced } from "@/lib/app-page-refresh";
-import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import { accountService, type AccountListItem } from "@/services/account.service";
 import { automationService, type AutomationModuleApi } from "@/services/automation.service";
 import { contentDraftService, type ContentDraftPlanApi } from "@/services/content-drafts.service";
 import { contentLibraryService, type ContentLibraryItemApi } from "@/services/content-library.service";
 import { oafBotService } from "@/services/oaf-bot.service";
-import { reviewQueueService, type ReviewQueueFeedbackIssueVerdictStatApi, type ReviewQueueItemApi } from "@/services/review-queue.service";
+import { reviewQueueService, type ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { PlanLimits, PlanUsage } from "@/types/billing";
 import type {
   OAFBot,
-  OAFBotCompleteProfileResult,
   OAFBotFeedbackProfileSuggestionResult,
-  OAFBotGenerationFeedback,
   OAFBotGenerationFeedbackRating,
-  OAFBotGenerationUsage,
-  OAFBotLearningRulePreference,
-  OAFBotMatrixInspectionSummary,
   OAFBotPayload,
   OAFBotProfileAssistMode,
   OAFBotSampleContext,
@@ -88,13 +72,6 @@ type BotAutomationState = {
   mode: "manual" | "review" | "autopilot";
   href: string;
 };
-type QueueSummary = {
-  total: number;
-  pendingReview: number;
-  readyToPublish: number;
-  failed: number;
-  published: number;
-};
 type ContentDraftReadinessStep = {
   key: "account" | "content" | "planner" | "autopilot";
   ready: boolean;
@@ -109,36 +86,8 @@ type PendingAppliedFormChange = {
   source: "complete_profile" | "feedback_suggestion";
   count: number;
 };
-type SafetyRewritePreview = {
-  before: string;
-  result: OAFBotTestGenerateResult;
-};
 type SafetyRewriteMode = "natural" | "conservative" | "shorter";
 type AccountArchetypeKey = "brand" | "founder" | "kol" | "community" | "agency";
-type ProfileDiffItem = {
-  key: keyof OAFBotPayload;
-  before: OAFBotPayload[keyof OAFBotPayload];
-  after: OAFBotPayload[keyof OAFBotPayload];
-};
-type MatrixFilterKey = "all" | "unbound" | "auto_post_not_ready" | "negative_feedback" | "review_backlog";
-type BotMatrixRow = {
-  bot: OAFBot;
-  account?: AccountListItem;
-  completion: number;
-  activeContentCount: number;
-  queueSummary: QueueSummary;
-  plan?: ContentDraftPlanApi;
-  contentDraftReady: boolean;
-  monthlyUsage: number;
-  negativeFeedback: number;
-  inspectionFlags: string[];
-};
-type MatrixInspectionItem = {
-  key: MatrixFilterKey;
-  count: number;
-  tone: "neutral" | "warning" | "danger";
-};
-
 type SelectOption = {
   value: string;
   label: string;
@@ -146,59 +95,13 @@ type SelectOption = {
 
 type ChipOption = SelectOption;
 
-type ApiErrorBody = {
-  message?: string;
-  error_code?: string;
-};
-
 const wizardStepOrder: WizardStep[] = ["identity", "brand", "style", "topics", "goals", "test"];
 const personaChecklistKeys = ["name", "account", "role", "brand", "audience", "language", "personality", "topics", "contentStrategy", "guardrails", "summary", "goal"] as const;
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
-const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment"];
 const accountArchetypeKeys: AccountArchetypeKey[] = ["brand", "founder", "kol", "community", "agency"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
-const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
-  "name",
-  "twitter_account_id",
-  "occupation",
-  "industry",
-  "personality_tags",
-  "identity_summary",
-  "voice_tone",
-  "topics",
-  "forbidden_topics",
-  "growth_goal",
-  "project_one_liner",
-  "target_audience",
-  "core_value_props",
-  "product_features",
-  "differentiators",
-  "content_pillars",
-  "content_objectives",
-  "preferred_cta",
-  "website_url",
-  "telegram_url",
-  "discord_url",
-  "docs_url",
-  "cta_policy",
-  "hashtags",
-  "keywords",
-  "compliance_notes",
-  "avoid_claims",
-  "safety_mode",
-  "primary_language",
-  "language_strategy",
-  "trend_regions",
-  "trend_categories",
-  "allow_general_trends",
-  "sensitive_trend_policy",
-];
-const matrixFilters: MatrixFilterKey[] = ["all", "unbound", "auto_post_not_ready", "negative_feedback", "review_backlog"];
-const safetyRewriteModes: SafetyRewriteMode[] = ["natural", "conservative", "shorter"];
-const negativeFeedbackInspectionThreshold = 3;
-const reviewBacklogInspectionThreshold = 5;
 const trendRegionValues = ["1", "23424977"];
 const trendCategoryValues = ["crypto", "finance", "tech", "sports", "entertainment", "gaming", "politics", "news", "culture", "lifestyle", "meme", "other"];
 const sensitiveTrendPolicyValues = ["avoid", "review_only", "allow"];
@@ -423,49 +326,6 @@ const emptyUsage: PlanUsage = {
   autoDMsToday: 0,
 };
 
-function createEmptyForm(defaultPrimaryLanguage: string): OAFBotPayload {
-  return {
-    name: "",
-    twitter_account_id: 0,
-    occupation: "",
-    industry: "",
-    age_range: "",
-    gender: "",
-    education: "",
-    mbti: "",
-    personality_tags: [],
-    identity_summary: "",
-    voice_tone: "",
-    topics: [],
-    forbidden_topics: [],
-    growth_goal: "",
-    project_one_liner: "",
-    target_audience: "",
-    core_value_props: "",
-    product_features: "",
-    differentiators: "",
-    content_pillars: [],
-    content_objectives: "",
-    preferred_cta: "",
-    website_url: "",
-    telegram_url: "",
-    discord_url: "",
-    docs_url: "",
-    cta_policy: "",
-    hashtags: [],
-    keywords: [],
-    compliance_notes: "",
-    avoid_claims: [],
-    safety_mode: "balanced",
-    primary_language: defaultPrimaryLanguage,
-    language_strategy: "follow_context",
-    trend_regions: ["1", "23424977"],
-    trend_categories: [],
-    allow_general_trends: false,
-    sensitive_trend_policy: "avoid",
-  };
-}
-
 const mbtiValues = [
   "not_set",
   "INTJ",
@@ -645,35 +505,49 @@ export default function OAFBotsPage() {
   const [sampleContexts, setSampleContexts] = useState<OAFBotSampleContext>({});
   const [samples, setSamples] = useState<OAFBotTestGenerateResult | null>(null);
   const [learningComparison, setLearningComparison] = useState<OAFBotTestGenerateResult | null>(null);
-  const [disabledLearningIssues, setDisabledLearningIssues] = useState<string[]>([]);
-  const [learningRulePreferences, setLearningRulePreferences] = useState<OAFBotLearningRulePreference[]>([]);
-  const [learningVerdictStats, setLearningVerdictStats] = useState<ReviewQueueFeedbackIssueVerdictStatApi[]>([]);
-  const [generationUsages, setGenerationUsages] = useState<OAFBotGenerationUsage[]>([]);
-  const [generationFeedback, setGenerationFeedback] = useState<OAFBotGenerationFeedback[]>([]);
-  const [matrixUsageByBot, setMatrixUsageByBot] = useState<Record<number, OAFBotGenerationUsage[]>>({});
-  const [matrixFeedbackByBot, setMatrixFeedbackByBot] = useState<Record<number, OAFBotGenerationFeedback[]>>({});
-  const [matrixInspectionFlagsByBot, setMatrixInspectionFlagsByBot] = useState<Record<number, string[]>>({});
-  const [matrixInspectionSummary, setMatrixInspectionSummary] = useState<OAFBotMatrixInspectionSummary | null>(null);
-  const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterKey>("all");
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
-  const [feedbackSaving, setFeedbackSaving] = useState(false);
-  const [feedbackDeletingID, setFeedbackDeletingID] = useState<number | null>(null);
   const [feedbackSuggestionLoading, setFeedbackSuggestionLoading] = useState(false);
-  const [completeProfilePreview, setCompleteProfilePreview] = useState<OAFBotCompleteProfileResult | null>(null);
   const [feedbackSuggestionPreview, setFeedbackSuggestionPreview] = useState<OAFBotFeedbackProfileSuggestionResult | null>(null);
-  const [safetyRewritePreview, setSafetyRewritePreview] = useState<SafetyRewritePreview | null>(null);
   const [pendingAppliedFormChange, setPendingAppliedFormChange] = useState<PendingAppliedFormChange | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState<FeedbackDraft>({ rating: "", issueTags: [], comment: "" });
-  const [saving, setSaving] = useState(false);
-  const [deletingBot, setDeletingBot] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [comparingLearning, setComparingLearning] = useState(false);
-  const [rewritingSafety, setRewritingSafety] = useState(false);
-  const [completingProfile, setCompletingProfile] = useState(false);
   const [profileAssistMode, setProfileAssistMode] = useState<OAFBotProfileAssistMode>("fill_missing_only");
 
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const {
+    generationUsages,
+    generationFeedback,
+    disabledLearningIssues,
+    learningRulePreferences,
+    learningVerdictStats,
+    feedbackLoading,
+    feedbackSaving,
+    feedbackDeletingID,
+    resetLearningData,
+    loadGenerationUsages,
+    toggleLearningIssue,
+    createGenerationFeedback,
+    deleteGenerationFeedback: deleteGenerationFeedbackAction,
+  } = useOAFBotLearningData({ selectedID, pushToast, t });
+  const {
+    matrixLoading,
+    matrixRows,
+    matrixSummary,
+    matrixInspectionItems,
+    filteredMatrixRows,
+    refreshMatrixSignals,
+    removeBotFromMatrix,
+    prependBotFeedback,
+    removeBotFeedback,
+  } = useOAFBotMatrix({
+    bots,
+    accounts,
+    contentDraftPlans,
+    contentItems,
+    queueItems,
+    currentMonth,
+    defaultPrimaryLanguage,
+    matrixFilter,
+  });
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === selectedID) ?? null, [bots, selectedID]);
   const botListStats = useMemo(() => {
     const bound = bots.filter((bot) => Boolean(bot.twitter_account_id)).length;
@@ -690,11 +564,6 @@ export default function OAFBotsPage() {
     if (!selectedBot) return false;
     return JSON.stringify(botToPayload(selectedBot, defaultPrimaryLanguage)) !== JSON.stringify(form);
   }, [defaultPrimaryLanguage, form, selectedBot]);
-  const completeProfileDiffs = useMemo(
-    () => (completeProfilePreview ? getFeedbackSuggestionDiffs(form, completeProfilePreview.profile) : []),
-    [completeProfilePreview, form],
-  );
-
   const accountByID = useMemo(() => {
     return new Map(accounts.map((account) => [account.id, account]));
   }, [accounts]);
@@ -755,72 +624,6 @@ export default function OAFBotsPage() {
       };
     });
   }, [automationModules, selectedContentDraftPlan]);
-  const matrixRows = useMemo<BotMatrixRow[]>(() => {
-    return bots.map((bot) => {
-      const account = bot.twitter_account_id ? accountByID.get(bot.twitter_account_id) : undefined;
-      const plan = contentDraftPlans.find((item) => item.bot_id === bot.id || item.x_account_id === bot.twitter_account_id);
-      const compatibleContent = contentItems.filter((item) => contentItemMatchesBot(item, bot));
-      const activeContentCount = compatibleContent.filter((item) => item.status === "active").length;
-      const botQueueItems = queueItems.filter((item) => item.bot_id === bot.id);
-      const usageByScene = aggregateMonthlyUsage(matrixUsageByBot[bot.id] || [], currentMonth);
-      const monthlyUsage = usageSceneOrder.reduce((sum, scene) => sum + (usageByScene.get(scene)?.count ?? 0), 0);
-      const feedback = matrixFeedbackByBot[bot.id] || [];
-      const queueSummary = summarizeQueue(botQueueItems);
-      const fallbackFlags = [
-        ...(!account ? ["unbound"] : []),
-        ...(!(account && plan?.enabled && activeContentCount > 0) ? ["auto_post_not_ready"] : []),
-        ...(feedback.filter((item) => item.rating === "negative").length >= negativeFeedbackInspectionThreshold ? ["negative_feedback"] : []),
-        ...(queueSummary.pendingReview >= reviewBacklogInspectionThreshold ? ["review_backlog"] : []),
-      ];
-      return {
-        bot,
-        account,
-        completion: calculatePersonaCompleteness(botToPayload(bot, defaultPrimaryLanguage)),
-        activeContentCount,
-        queueSummary,
-        plan,
-        contentDraftReady: Boolean(account && plan?.enabled && activeContentCount > 0),
-        monthlyUsage,
-        negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
-        inspectionFlags: matrixInspectionFlagsByBot[bot.id] || fallbackFlags,
-      };
-    });
-  }, [accountByID, contentDraftPlans, bots, contentItems, currentMonth, defaultPrimaryLanguage, matrixFeedbackByBot, matrixInspectionFlagsByBot, matrixUsageByBot, queueItems]);
-  const matrixSummary = useMemo(() => {
-    return matrixRows.reduce(
-      (summary, row) => {
-        summary.bound += row.account ? 1 : 0;
-        summary.ready += row.contentDraftReady ? 1 : 0;
-        summary.review += row.queueSummary.pendingReview;
-        summary.usage += row.monthlyUsage;
-        summary.negativeFeedback += row.negativeFeedback;
-        return summary;
-      },
-      { bound: 0, ready: 0, review: 0, usage: 0, negativeFeedback: 0 },
-    );
-  }, [matrixRows]);
-  const matrixInspectionItems = useMemo<MatrixInspectionItem[]>(() => {
-    const unbound = matrixInspectionSummary?.unbound_count ?? matrixRows.filter((row) => !row.account).length;
-    const contentDraftNotReady = matrixInspectionSummary?.auto_post_not_ready_count ?? matrixRows.filter((row) => !row.contentDraftReady).length;
-    const negativeFeedback = matrixInspectionSummary?.negative_feedback_count ?? matrixRows.filter((row) => row.negativeFeedback >= negativeFeedbackInspectionThreshold).length;
-    const reviewBacklog = matrixInspectionSummary?.review_backlog_count ?? matrixRows.filter((row) => row.queueSummary.pendingReview >= reviewBacklogInspectionThreshold).length;
-    return [
-      { key: "unbound", count: unbound, tone: unbound > 0 ? "warning" : "neutral" },
-      { key: "auto_post_not_ready", count: contentDraftNotReady, tone: contentDraftNotReady > 0 ? "warning" : "neutral" },
-      { key: "negative_feedback", count: negativeFeedback, tone: negativeFeedback > 0 ? "danger" : "neutral" },
-      { key: "review_backlog", count: reviewBacklog, tone: reviewBacklog > 0 ? "danger" : "neutral" },
-    ];
-  }, [matrixInspectionSummary, matrixRows]);
-  const filteredMatrixRows = useMemo(() => {
-    if (matrixFilter === "all") return matrixRows;
-    return matrixRows.filter((row) => {
-      if (matrixFilter === "unbound") return row.inspectionFlags.includes("unbound");
-      if (matrixFilter === "auto_post_not_ready") return row.inspectionFlags.includes("auto_post_not_ready");
-      if (matrixFilter === "negative_feedback") return row.inspectionFlags.includes("negative_feedback");
-      if (matrixFilter === "review_backlog") return row.inspectionFlags.includes("review_backlog");
-      return true;
-    });
-  }, [matrixFilter, matrixRows]);
 
   const selectedAccountConflict = form.twitter_account_id ? accountBoundByOtherBot.get(form.twitter_account_id) : undefined;
   const personaCompleteness = useMemo(() => calculatePersonaCompleteness(form), [form]);
@@ -1105,121 +908,66 @@ export default function OAFBotsPage() {
     });
   }, [defaultPrimaryLanguage, selectedID]);
 
-  const loadGenerationUsages = useCallback(async (botID: number) => {
-    try {
-      const data = await oafBotService.generationUsages(botID);
-      setGenerationUsages(data.items);
-    } catch (error) {
-      pushToast(errorMessage(error, t("oafBots.usages.loadFailed")));
-      setGenerationUsages([]);
-    }
-  }, [pushToast, t]);
+  const {
+    completeProfilePreview,
+    setCompleteProfilePreview,
+    safetyRewritePreview,
+    setSafetyRewritePreview,
+    saving,
+    deletingBot,
+    generating,
+    comparingLearning,
+    rewritingSafety,
+    completingProfile,
+    clearActionPreviews,
+    save,
+    deleteSelectedBot,
+    completeProfile,
+    testGenerate,
+    compareWithoutLearningRules,
+    rewriteSampleForSafety,
+    applySafetyRewritePreview,
+    handlePreviewTest,
+  } = useOAFBotActions({
+    t,
+    pushToast,
+    confirm,
+    defaultPrimaryLanguage,
+    selectedID,
+    selectedBot,
+    selectedAccountConflict,
+    bots,
+    form,
+    formChanged,
+    sampleScene,
+    sampleContexts,
+    samples,
+    disabledLearningIssues,
+    safetyRewriteMode,
+    profileAssistMode,
+    canTestBot,
+    setBots,
+    setSelectedID,
+    setForm,
+    setUsage,
+    setActiveStep,
+    setSampleContexts,
+    setSamples,
+    setLearningComparison,
+    setFeedbackDraft,
+    setFeedbackSuggestionPreview,
+    setPendingAppliedFormChange,
+    resetLearningData,
+    loadGenerationUsages,
+    refreshMatrixSignals,
+    removeBotFromMatrix,
+    loadRelationshipContext,
+  });
 
-  const loadGenerationFeedback = useCallback(async (botID: number) => {
-    setFeedbackLoading(true);
-    try {
-      const data = await oafBotService.generationFeedback(botID);
-      setGenerationFeedback(data.items);
-    } catch (error) {
-      pushToast(errorMessage(error, t("oafBots.feedback.loadFailed")));
-      setGenerationFeedback([]);
-    } finally {
-      setFeedbackLoading(false);
-    }
-  }, [pushToast, t]);
-
-  const loadLearningRulePreferences = useCallback(async (botID: number) => {
-    try {
-      const data = await oafBotService.learningRulePreferences(botID);
-      setLearningRulePreferences(data.items);
-      setDisabledLearningIssues(data.items.filter((item) => item.status === "disabled").map((item) => item.feedback_issue));
-    } catch {
-      setLearningRulePreferences([]);
-      setDisabledLearningIssues([]);
-    }
-  }, []);
-
-  const loadLearningVerdictStats = useCallback(async () => {
-    try {
-      const data = await reviewQueueService.feedbackIssueVerdictStats();
-      setLearningVerdictStats(data.issues || []);
-    } catch {
-      setLearningVerdictStats([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!selectedID) {
-      setGenerationUsages([]);
-      return;
-    }
-    void loadGenerationUsages(selectedID);
-  }, [loadGenerationUsages, selectedID]);
-
-  useEffect(() => {
-    if (!selectedID) {
-      setGenerationFeedback([]);
-      return;
-    }
-    void loadGenerationFeedback(selectedID);
-  }, [loadGenerationFeedback, selectedID]);
-
-  useEffect(() => {
-    if (!selectedID) {
-      setDisabledLearningIssues([]);
-      setLearningRulePreferences([]);
-      return;
-    }
-    void loadLearningRulePreferences(selectedID);
-  }, [loadLearningRulePreferences, selectedID]);
-
-  useEffect(() => {
-    void loadLearningVerdictStats();
-  }, [loadLearningVerdictStats]);
-
-  const loadMatrixSignals = useCallback(async (items: OAFBot[]) => {
-    if (items.length === 0) {
-      setMatrixUsageByBot({});
-      setMatrixFeedbackByBot({});
-      setMatrixInspectionFlagsByBot({});
-      setMatrixInspectionSummary(null);
-      return;
-    }
-    setMatrixLoading(true);
-    try {
-      const signals = await oafBotService.matrixSignals();
-      const knownIDs = new Set(items.map((bot) => bot.id));
-      const usageByBot: Record<number, OAFBotGenerationUsage[]> = {};
-      const feedbackByBot: Record<number, OAFBotGenerationFeedback[]> = {};
-      const flagsByBot: Record<number, string[]> = {};
-      signals.items.forEach((item) => {
-        if (!knownIDs.has(item.bot_id)) return;
-        usageByBot[item.bot_id] = item.usages || [];
-        feedbackByBot[item.bot_id] = item.feedback || [];
-        flagsByBot[item.bot_id] = item.inspection_flags || [];
-      });
-      items.forEach((bot) => {
-        usageByBot[bot.id] ||= [];
-        feedbackByBot[bot.id] ||= [];
-        flagsByBot[bot.id] ||= [];
-      });
-      setMatrixUsageByBot(usageByBot);
-      setMatrixFeedbackByBot(feedbackByBot);
-      setMatrixInspectionFlagsByBot(flagsByBot);
-      setMatrixInspectionSummary(signals.summary || null);
-    } catch {
-      setMatrixUsageByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
-      setMatrixFeedbackByBot(Object.fromEntries(items.map((bot) => [bot.id, []])));
-      setMatrixInspectionFlagsByBot({});
-      setMatrixInspectionSummary(null);
-    } finally {
-      setMatrixLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadMatrixSignals(bots);
-  }, [bots, loadMatrixSignals]);
+  const completeProfileDiffs = useMemo(
+    () => (completeProfilePreview ? getFeedbackSuggestionDiffs(form, completeProfilePreview.profile) : []),
+    [completeProfilePreview, form],
+  );
 
   const updateForm = <K extends keyof OAFBotPayload>(key: K, value: OAFBotPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -1261,11 +1009,8 @@ export default function OAFBotsPage() {
     setLearningComparison(null);
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
-    setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
-    setSafetyRewritePreview(null);
-    setPendingAppliedFormChange(null);
-    void loadLearningRulePreferences(bot.id);
+    clearActionPreviews();
   };
 
   const startCreate = () => {
@@ -1274,16 +1019,11 @@ export default function OAFBotsPage() {
     setActiveStep("identity");
     setSamples(null);
     setLearningComparison(null);
-    setGenerationUsages([]);
-    setGenerationFeedback([]);
-    setDisabledLearningIssues([]);
-    setLearningRulePreferences([]);
+    resetLearningData();
     setSampleContexts({});
     setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
-    setCompleteProfilePreview(null);
     setFeedbackSuggestionPreview(null);
-    setSafetyRewritePreview(null);
-    setPendingAppliedFormChange(null);
+    clearActionPreviews();
   };
 
   const goStep = (direction: "previous" | "next") => {
@@ -1295,145 +1035,6 @@ export default function OAFBotsPage() {
     setActiveStep("test");
   };
 
-  const toggleLearningIssue = async (issue: string) => {
-    const key = issue.trim();
-    if (!key) return;
-    if (!selectedID) return;
-    const nextStatus = disabledLearningIssues.includes(key) ? "enabled" : "disabled";
-    setDisabledLearningIssues((current) => (nextStatus === "disabled" ? [...new Set([...current, key])] : current.filter((item) => item !== key)));
-    setLearningRulePreferences((current) => {
-      const rest = current.filter((item) => item.feedback_issue !== key);
-      return [...rest, { bot_id: selectedID, feedback_issue: key, status: nextStatus }];
-    });
-    try {
-      await oafBotService.saveLearningRulePreference(selectedID, key, nextStatus);
-      pushToast(t(nextStatus === "disabled" ? "oafBots.samples.learningRuleSavedDisabled" : "oafBots.samples.learningRuleSavedEnabled"));
-    } catch (error) {
-      setDisabledLearningIssues((current) => (nextStatus === "disabled" ? current.filter((item) => item !== key) : [...new Set([...current, key])]));
-      setLearningRulePreferences((current) => {
-        const rest = current.filter((item) => item.feedback_issue !== key);
-        return nextStatus === "disabled" ? rest : [...rest, { bot_id: selectedID, feedback_issue: key, status: "disabled" }];
-      });
-      pushToast(errorMessage(error, t("oafBots.samples.learningRuleSaveFailed")));
-    }
-  };
-
-  const save = async () => {
-    if (selectedAccountConflict) {
-      pushToast(t("oafBots.toast.accountAlreadyBound", { name: selectedAccountConflict.name }));
-      return;
-    }
-    setSaving(true);
-    try {
-      const saved = selectedID ? await oafBotService.update(selectedID, form) : await oafBotService.create(form);
-      setBots((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
-      setSelectedID(saved.id);
-      setForm(botToPayload(saved, defaultPrimaryLanguage));
-      setCompleteProfilePreview(null);
-      setFeedbackSuggestionPreview(null);
-      setSafetyRewritePreview(null);
-      setPendingAppliedFormChange(null);
-      setUsage((prev) => ({ ...prev, oafBots: selectedID ? prev.oafBots : prev.oafBots + 1 }));
-      pushToast(t("oafBots.toast.saved"));
-    } catch (error) {
-      const body = getErrorBody(error);
-      if (body?.error_code === "oaf_bot_twitter_account_already_bound") {
-        pushToast(t("oafBots.toast.accountBoundError"));
-      } else {
-        pushToast(body?.message || t("oafBots.toast.saveFailed"));
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteSelectedBot = async () => {
-    if (!selectedBot || deletingBot) return;
-    const name = selectedBot.name || t("oafBots.preview.unnamed");
-    const confirmed = await confirm({
-      title: t("oafBots.delete.confirmTitle"),
-      description: t("oafBots.delete.confirm", { name }),
-      confirmLabel: t("oafBots.delete.action"),
-      tone: "destructive",
-    });
-    if (!confirmed) return;
-    setDeletingBot(true);
-    try {
-      await oafBotService.delete(selectedBot.id);
-      const remaining = bots.filter((item) => item.id !== selectedBot.id);
-      setBots(remaining);
-      setUsage((prev) => ({ ...prev, oafBots: Math.max(0, prev.oafBots - 1) }));
-      setMatrixUsageByBot((current) => {
-        const next = { ...current };
-        delete next[selectedBot.id];
-        return next;
-      });
-      setMatrixFeedbackByBot((current) => {
-        const next = { ...current };
-        delete next[selectedBot.id];
-        return next;
-      });
-      setMatrixInspectionFlagsByBot((current) => {
-        const next = { ...current };
-        delete next[selectedBot.id];
-        return next;
-      });
-      setSamples(null);
-      setLearningComparison(null);
-      setGenerationUsages([]);
-      setGenerationFeedback([]);
-      setDisabledLearningIssues([]);
-      setLearningRulePreferences([]);
-      setSampleContexts({});
-      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
-      setCompleteProfilePreview(null);
-      setFeedbackSuggestionPreview(null);
-      setSafetyRewritePreview(null);
-      setPendingAppliedFormChange(null);
-      const next = remaining[0] || null;
-      if (next) {
-        setSelectedID(next.id);
-        setForm(botToPayload(next, defaultPrimaryLanguage));
-        setActiveStep("identity");
-        void loadLearningRulePreferences(next.id);
-      } else {
-        setSelectedID(null);
-        setForm(createEmptyForm(defaultPrimaryLanguage));
-        setActiveStep("identity");
-      }
-      void loadRelationshipContext();
-      broadcastDataSynced(Date.now());
-      pushToast(t("oafBots.delete.deleted"));
-    } catch (error) {
-      pushToast(errorMessage(error, t("oafBots.delete.failed")));
-    } finally {
-      setDeletingBot(false);
-    }
-  };
-
-  const completeProfile = async () => {
-    if (!hasProfileAssistSeed(form)) {
-      pushToast(t("oafBots.completeProfile.needSeed"));
-      return;
-    }
-    setCompletingProfile(true);
-    try {
-      const result = await oafBotService.completeProfile(form, profileAssistMode);
-      setCompleteProfilePreview(result);
-      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.completeProfile.previewReady"));
-    } catch (error) {
-      const body = getErrorBody(error);
-      if (body?.error_code === "ai_generation_quota_exceeded") {
-        pushToast(t("oafBots.test.quotaExceeded"));
-      } else {
-        pushToast(body?.message || t("oafBots.completeProfile.failed"));
-      }
-    } finally {
-      setCompletingProfile(false);
-    }
-  };
-
   const applyCompleteProfilePreview = () => {
     if (!completeProfilePreview) return;
     const changedCount = getFeedbackSuggestionDiffs(form, completeProfilePreview.profile).length;
@@ -1442,129 +1043,6 @@ export default function OAFBotsPage() {
     setCompleteProfilePreview(null);
     setPendingAppliedFormChange({ source: "complete_profile", count: changedCount });
     pushToast(t("oafBots.completeProfile.success"));
-  };
-
-  const testGenerate = async () => {
-    if (!selectedID) {
-      pushToast(t("oafBots.test.saveFirst"));
-      return;
-    }
-    if (formChanged) {
-      pushToast(t("oafBots.test.saveChangesFirst"));
-      return;
-    }
-    const validationMessage = validateBeforeGenerate(form, t);
-    if (validationMessage) {
-      pushToast(validationMessage);
-      return;
-    }
-    setGenerating(true);
-    try {
-      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene], disabledLearningIssues);
-      setSamples(result);
-      setLearningComparison(null);
-      setSafetyRewritePreview(null);
-      setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
-      await loadGenerationUsages(selectedID);
-      void loadMatrixSignals(bots);
-      void loadRelationshipContext();
-      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.test.success"));
-    } catch (error) {
-      const body = getErrorBody(error);
-      if (body?.error_code === "ai_generation_quota_exceeded") {
-        pushToast(t("oafBots.test.quotaExceeded"));
-      } else {
-        pushToast(body?.message || t("oafBots.test.failed"));
-      }
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const compareWithoutLearningRules = async () => {
-    if (!selectedID || !samples) return;
-    const appliedIssues = (samples.feedback_signal_summary?.applied_learning_rules || []).map((rule) => rule.issue).filter(Boolean);
-    if (appliedIssues.length === 0) {
-      pushToast(t("oafBots.learningCompare.noRules"));
-      return;
-    }
-    setComparingLearning(true);
-    try {
-      const disabledForCompare = Array.from(new Set([...disabledLearningIssues, ...appliedIssues]));
-      const result = await oafBotService.testGenerate(selectedID, sampleScene, sampleContexts[sampleScene], disabledForCompare);
-      setLearningComparison(result);
-      await loadGenerationUsages(selectedID);
-      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      pushToast(t("oafBots.learningCompare.ready"));
-    } catch (error) {
-      const body = getErrorBody(error);
-      if (body?.error_code === "ai_generation_quota_exceeded") {
-        pushToast(t("oafBots.test.quotaExceeded"));
-      } else {
-        pushToast(body?.message || t("oafBots.learningCompare.failed"));
-      }
-    } finally {
-      setComparingLearning(false);
-    }
-  };
-
-  const rewriteSampleForSafety = async () => {
-    if (!selectedID || !samples) return;
-    const content = normalizeSampleContent(samples, sampleScene);
-    if (!content.trim()) {
-      pushToast(t("oafBots.safetyRewrite.needContent"));
-      return;
-    }
-    setRewritingSafety(true);
-    try {
-      const result = await oafBotService.rewriteSafety(selectedID, {
-        scene: sampleScene,
-        content,
-        sample_context: sampleContexts[sampleScene] || "",
-        rewrite_mode: safetyRewriteMode,
-        matched_hits: samples.safety_evaluation?.matched_hits || [],
-        disabled_learning_issues: disabledLearningIssues,
-      });
-      setSafetyRewritePreview({ before: content, result });
-      setUsage((prev) => ({ ...prev, aiGenerationsMonth: prev.aiGenerationsMonth + (result.usage_consumed || 1) }));
-      await loadGenerationUsages(selectedID);
-      void loadMatrixSignals(bots);
-      pushToast(t("oafBots.safetyRewrite.previewReady"));
-    } catch (error) {
-      const body = getErrorBody(error);
-      if (body?.error_code === "ai_generation_quota_exceeded") {
-        pushToast(t("oafBots.test.quotaExceeded"));
-      } else {
-        pushToast(body?.message || t("oafBots.safetyRewrite.failed"));
-      }
-    } finally {
-      setRewritingSafety(false);
-    }
-  };
-
-  const applySafetyRewritePreview = () => {
-    if (!safetyRewritePreview) return;
-    setSamples(safetyRewritePreview.result);
-    setSafetyRewritePreview(null);
-    pushToast(t("oafBots.safetyRewrite.applied"));
-  };
-
-  const handlePreviewTest = () => {
-    if (!canTestBot) {
-      pushToast(t("oafBots.test.disabledHint"));
-      return;
-    }
-    setActiveStep("test");
-    if (!selectedID) {
-      pushToast(t("oafBots.test.saveFirst"));
-      return;
-    }
-    if (formChanged) {
-      pushToast(t("oafBots.test.saveChangesFirst"));
-      return;
-    }
-    void testGenerate();
   };
 
   const submitGenerationFeedback = async () => {
@@ -1578,40 +1056,26 @@ export default function OAFBotsPage() {
       pushToast(t("oafBots.feedback.needSample"));
       return;
     }
-    setFeedbackSaving(true);
-    try {
-      const saved = await oafBotService.createGenerationFeedback(selectedID, {
-        scene: sampleScene,
-        rating: feedbackDraft.rating,
-        issue_tags: feedbackDraft.issueTags,
-        comment: feedbackDraft.comment,
-        sample_context: sampleContexts[sampleScene] || "",
-        generated_content: generatedContent,
-        provider: samples.provider || "",
-      });
-      setGenerationFeedback((items) => [saved, ...items].slice(0, 10));
-      setMatrixFeedbackByBot((prev) => ({ ...prev, [selectedID]: [saved, ...(prev[selectedID] || [])].slice(0, 10) }));
+    const saved = await createGenerationFeedback({
+      scene: sampleScene,
+      rating: feedbackDraft.rating,
+      issue_tags: feedbackDraft.issueTags,
+      comment: feedbackDraft.comment,
+      sample_context: sampleContexts[sampleScene] || "",
+      generated_content: generatedContent,
+      provider: samples.provider || "",
+    });
+    if (saved) {
+      prependBotFeedback(selectedID, saved);
       setFeedbackDraft({ rating: "", issueTags: [], comment: "" });
-      pushToast(t("oafBots.feedback.saved"));
-    } catch (error) {
-      pushToast(errorMessage(error, t("oafBots.feedback.saveFailed")));
-    } finally {
-      setFeedbackSaving(false);
     }
   };
 
   const deleteGenerationFeedback = async (feedbackID: number) => {
     if (!selectedID) return;
-    setFeedbackDeletingID(feedbackID);
-    try {
-      await oafBotService.deleteGenerationFeedback(selectedID, feedbackID);
-      setGenerationFeedback((items) => items.filter((item) => item.id !== feedbackID));
-      setMatrixFeedbackByBot((prev) => ({ ...prev, [selectedID]: (prev[selectedID] || []).filter((item) => item.id !== feedbackID) }));
-      pushToast(t("oafBots.feedback.deleted"));
-    } catch (error) {
-      pushToast(errorMessage(error, t("oafBots.feedback.deleteFailed")));
-    } finally {
-      setFeedbackDeletingID(null);
+    const deleted = await deleteGenerationFeedbackAction(feedbackID);
+    if (deleted) {
+      removeBotFeedback(selectedID, feedbackID);
     }
   };
 
@@ -2548,49 +2012,6 @@ export default function OAFBotsPage() {
   );
 }
 
-function botToPayload(bot: OAFBot, defaultPrimaryLanguage = "zh-CN"): OAFBotPayload {
-  return {
-    name: bot.name,
-    twitter_account_id: bot.twitter_account_id,
-    occupation: bot.occupation,
-    industry: bot.industry,
-    age_range: bot.age_range,
-    gender: bot.gender,
-    education: bot.education,
-    mbti: bot.mbti,
-    personality_tags: bot.personality_tags || [],
-    identity_summary: bot.identity_summary,
-    voice_tone: bot.voice_tone,
-    topics: bot.topics || [],
-    forbidden_topics: bot.forbidden_topics || [],
-    growth_goal: bot.growth_goal,
-    project_one_liner: bot.project_one_liner || "",
-    target_audience: bot.target_audience || "",
-    core_value_props: bot.core_value_props || "",
-    product_features: bot.product_features || "",
-    differentiators: bot.differentiators || "",
-    content_pillars: bot.content_pillars || [],
-    content_objectives: bot.content_objectives || "",
-    preferred_cta: bot.preferred_cta || "",
-    website_url: bot.website_url || "",
-    telegram_url: bot.telegram_url || "",
-    discord_url: bot.discord_url || "",
-    docs_url: bot.docs_url || "",
-    cta_policy: bot.cta_policy || "",
-    hashtags: bot.hashtags || [],
-    keywords: bot.keywords || [],
-    compliance_notes: bot.compliance_notes || "",
-    avoid_claims: bot.avoid_claims || [],
-    safety_mode: bot.safety_mode || "balanced",
-    primary_language: bot.primary_language || defaultPrimaryLanguage,
-    language_strategy: bot.language_strategy || "follow_context",
-    trend_regions: bot.trend_regions?.length ? bot.trend_regions : ["1", "23424977"],
-    trend_categories: bot.trend_categories || [],
-    allow_general_trends: Boolean(bot.allow_general_trends),
-    sensitive_trend_policy: bot.sensitive_trend_policy || "avoid",
-  };
-}
-
 function isUnconfiguredDraft(form: OAFBotPayload) {
   return (
     !form.name.trim() &&
@@ -2633,24 +2054,6 @@ function optionKeys(namespace: string, keys: string[], t: (key: string, params?:
     value: recommendedOptionValues[namespace]?.[key] ?? key,
     label: t(`oafBots.options.${namespace}.${key}`),
   }));
-}
-
-function calculatePersonaCompleteness(form: OAFBotPayload) {
-  let score = 0;
-  if (form.name.trim()) score += 10;
-  if (form.twitter_account_id) score += 10;
-  if (form.occupation.trim() || form.industry.trim()) score += 10;
-  if (form.project_one_liner.trim()) score += 10;
-  if (form.target_audience.trim() || form.core_value_props.trim()) score += 10;
-  if (form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) score += 4;
-  if (form.primary_language.trim() && form.language_strategy.trim()) score += 8;
-  if (form.personality_tags.length > 0) score += 8;
-  if (form.topics.length > 0) score += 10;
-  if (form.content_pillars.length > 0 || form.content_objectives.trim()) score += 8;
-  if (form.forbidden_topics.length > 0 || form.avoid_claims.length > 0 || form.compliance_notes.trim()) score += 8;
-  if (form.identity_summary.trim()) score += 10;
-  if (form.growth_goal.trim()) score += 8;
-  return Math.min(score, 100);
 }
 
 function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
@@ -2719,26 +2122,6 @@ function getPersonaQualityDiagnostics(form: OAFBotPayload, t: (key: string) => s
   return diagnostics.slice(0, 5);
 }
 
-function validateBeforeGenerate(form: OAFBotPayload, t: (key: string) => string) {
-  if (!form.name.trim()) return t("oafBots.test.needName");
-  if (form.topics.length === 0) return t("oafBots.test.needTopic");
-  if (!form.identity_summary.trim() && !form.voice_tone.trim()) return t("oafBots.test.needPersona");
-  return "";
-}
-
-function hasProfileAssistSeed(form: OAFBotPayload) {
-  return Boolean(
-    form.name.trim() ||
-      form.occupation.trim() ||
-      form.industry.trim() ||
-      form.project_one_liner.trim() ||
-      form.target_audience.trim() ||
-      form.core_value_props.trim() ||
-      form.product_features.trim() ||
-      form.topics.length > 0,
-  );
-}
-
 function joinMultiValues(values: string[]) {
   return values.map((item) => item.trim()).filter(Boolean).join(",");
 }
@@ -2775,65 +2158,8 @@ function applyAccountArchetypePreset(current: OAFBotPayload, type: AccountArchet
   };
 }
 
-function summarizeQueue(items: ReviewQueueItemApi[]): QueueSummary {
-  return items.reduce<QueueSummary>(
-    (summary, item) => {
-      summary.total += 1;
-      if (item.status === "pending_review") summary.pendingReview += 1;
-      if (item.status === "ready_to_publish") summary.readyToPublish += 1;
-      if (item.status === "failed") summary.failed += 1;
-      if (item.status === "published") summary.published += 1;
-      return summary;
-    },
-    { total: 0, pendingReview: 0, readyToPublish: 0, failed: 0, published: 0 },
-  );
-}
-
-function contentItemMatchesBot(item: ContentLibraryItemApi, bot: OAFBot) {
-  const accountID = bot.twitter_account_id || 0;
-  if (item.twitter_account_id && item.twitter_account_id !== accountID) return false;
-  if (item.bot_id && item.bot_id !== bot.id) return false;
-  return true;
-}
-
 function automationHref(type: BotAutomationType) {
   if (type === "post") return "/content-drafts";
   if (type === "comment") return "/exposure-radar";
   return "/handling-list";
-}
-
-function getErrorBody(error: unknown): ApiErrorBody | undefined {
-  if (!axios.isAxiosError(error)) return undefined;
-  return error.response?.data as ApiErrorBody | undefined;
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  return getErrorBody(error)?.message || fallback;
-}
-
-function getChipLabel(value: string, options: ChipOption[]) {
-  return options.find((option) => option.value === value)?.label ?? value;
-}
-
-function getSelectLabel(value: string, options: SelectOption[]) {
-  return options.find((option) => option.value === value)?.label ?? value;
-}
-
-function normalizeUsageScene(scene: string) {
-  return scene === "test_generate" ? "oaf_bot_test_generate" : scene;
-}
-
-function aggregateMonthlyUsage(items: OAFBotGenerationUsage[], currentMonth: string) {
-  const usageByScene = new Map<string, OAFBotGenerationUsage>();
-  items.forEach((item) => {
-    const scene = normalizeUsageScene(item.scene);
-    if (item.month !== currentMonth) return;
-    const existing = usageByScene.get(scene);
-    usageByScene.set(scene, {
-      ...item,
-      scene,
-      count: (existing?.count ?? 0) + item.count,
-    });
-  });
-  return usageByScene;
 }

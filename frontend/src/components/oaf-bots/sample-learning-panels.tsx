@@ -10,7 +10,6 @@ import { formatDateTime, usePreferredTimeZone } from "@/lib/timezone";
 import type { AccountListItem } from "@/services/account.service";
 import type { OAFBotFeedbackProfileSuggestionResult, OAFBotGenerationFeedback, OAFBotGenerationFeedbackRating, OAFBotPayload, OAFBotSampleScene, OAFBotTestGenerateResult } from "@/types/oaf-bot";
 
-type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 type SampleScene = OAFBotSampleScene;
 type FeedbackDraft = { rating: OAFBotGenerationFeedbackRating | ""; issueTags: string[]; comment: string };
 type SafetyRewritePreview = { before: string; result: OAFBotTestGenerateResult };

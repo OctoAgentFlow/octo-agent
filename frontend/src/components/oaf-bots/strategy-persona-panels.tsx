@@ -5,7 +5,6 @@ import { CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getChipLabel, type ChipOption } from "@/components/oaf-bots/form-fields";
 
-type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 type AccountArchetypeKey = "brand" | "founder" | "kol" | "community" | "agency";
 type TopicGuardrailRecommendationPreset = {
   topics: string[];

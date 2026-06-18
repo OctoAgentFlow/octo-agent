@@ -1696,7 +1696,7 @@ func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateCont
 	}
 	direction := strings.TrimSpace(firstNonEmpty(in.ContentDirection, in.Topic))
 	system := strings.Join([]string{
-		"You are Octo-Agent Flow's Daily X Queue post generator.",
+		"You are Octo-Agent Flow's Content Draft post generator.",
 		"Write one publishable X/Twitter post for the provided account.",
 		"The post should feel like a real founder/operator social post, not product documentation.",
 		"Output plain text only. Do not include JSON, markdown, labels, field names, or surrounding quotes.",
@@ -1770,26 +1770,26 @@ func (s *AIService) GenerateDailyXQueuePost(ctx context.Context, in GenerateCont
 			user.WriteString("- " + truncateRunes(post, 220) + "\n")
 		}
 	}
-	writeGenerationFeedbackSignals(&user, "Recent OAF Bot memory from Daily X Queue reviews to apply:", in.FeedbackSignals)
+	writeGenerationFeedbackSignals(&user, "Recent OAF Bot memory from Content Draft reviews to apply:", in.FeedbackSignals)
 	user.WriteString("OAF Bot memory usage rules:\n")
 	user.WriteString("- User-provided source material is the trusted factual source.\n")
-	user.WriteString("- Approved, copied, or edited Daily X Queue outputs are voice/style references only.\n")
+	user.WriteString("- Approved, copied, or edited Content Draft outputs are voice/style references only.\n")
 	user.WriteString("- Rejected outputs are negative patterns to avoid.\n")
 	user.WriteString("- Do not launder generated outputs into new factual claims.\n")
 	user.WriteString("Batch diversity rules:\n")
-	user.WriteString("- You are writing one draft inside a 3-draft Daily X Queue batch; follow the Draft angle exactly.\n")
+	user.WriteString("- You are writing one draft inside a small Content Draft batch; follow the Draft angle exactly.\n")
 	user.WriteString("- Across the batch, only one draft may center on generic control, review-first, or style-learning framing.\n")
 	user.WriteString("- If this Draft angle is not Workflow proof, do not make review-first control the main claim.\n")
-	user.WriteString("- If the Draft angle is Operator pain, the first sentence must describe the pain only; do not mention Daily X Queue, OAF Bot, bot memory, edits/rejections, review-first, control, or style-learning until the pain is concrete.\n")
+	user.WriteString("- If the Draft angle is Operator pain, the first sentence must describe the pain only; do not mention Content Drafts, OAF Bot, bot memory, edits/rejections, review-first, control, or style-learning until the pain is concrete.\n")
 	user.WriteString("- If the Draft angle is OAF Bot memory boundary, explain the boundary as a practical operator lesson: memory learns voice/style, trusted sources supply facts.\n")
 	user.WriteString("- For non-workflow angles, use a different primary angle: account operating pain, memory-vs-source boundary, human decision-making before publishing, or how edit/reject feedback changes future queues.\n")
 	user.WriteString("- Do not reuse the same opening, product noun sequence, or claim structure from rejected/recent drafts.\n")
-	user.WriteString("Daily X Queue writing rules:\n")
+	user.WriteString("Content Draft writing rules:\n")
 	user.WriteString("- Target 120-200 characters; hard maximum 220 characters.\n")
 	user.WriteString("- End with a complete sentence. Never end mid-phrase or mid-list.\n")
 	user.WriteString("- Do not write a feature checklist unless the angle explicitly asks for workflow proof.\n")
-	user.WriteString("- Do not start with generic product-manual openings such as \"The Daily X Queue lets\", \"Simplify your daily X posting\", or \"Managing daily X posts\".\n")
-	user.WriteString("- Make the three daily drafts meaningfully different in opening, structure, and angle.\n")
+	user.WriteString("- Do not start with generic product-manual openings such as \"Content Drafts lets\", \"Simplify your daily X posting\", or \"Managing daily X posts\".\n")
+	user.WriteString("- Make the draft meaningfully different from recent openings, structures, and angles.\n")
 	user.WriteString("- Prefer a concrete operator insight, before/after contrast, or review-first workflow proof over promotional copy.\n")
 	user.WriteString("- Mention no-OAuth only when it is the main useful point; do not repeat it in every draft.\n")
 	user.WriteString("- Avoid guaranteed growth, spam language, financial promises, or autopilot claims.\n")

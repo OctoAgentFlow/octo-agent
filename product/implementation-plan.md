@@ -1,5 +1,10 @@
 # 2-Week Implementation Plan: Daily X Queue
 
+Status: Historical implementation plan. It documents the older Daily X Queue
+exploration and should not be treated as the current product mainline. Current
+first-day and daily-return work should be planned around Daily Growth Desk /
+Exposure Radar, Content Drafts, Content Memory, OAF Bots, and Handling List.
+
 ## Goal
 
 Create the smallest usable Daily X Queue experience:
@@ -28,7 +33,7 @@ here.
 | P0.5 Make dashboard point to daily queue | Superseded by Daily Growth Desk IA | Dashboard hero, today workbench, homepage hero, `/start-today`, and primary navigation now point to Daily Growth Desk as the first-day path. Daily X Queue remains linked from content-prep contexts only. |
 | P1.1 Reply opportunities in daily queue | Moved / partially solved | Reply and opportunity handling is implemented in Exposure Radar and Handling List, not directly inside Daily X Queue. This may be the right split, but the product IA should make the relationship clear. |
 | P1.2 Website context import | Open | Daily X Queue has a `website_url` field, but automatic fetch/readability/summarization into source material is not implemented yet. |
-| P1.3 Daily queue run tracking | Partially done | `DailyXQueueContext` exists. Dedicated run/item tracking for cohort metrics is still open. |
+| P1.3 Daily queue run tracking | Superseded by current activation readiness | `DailyXQueueContext` remains historical compatibility context. Current validation moved to `scripts/smoke-core-api.mjs`, which checks Daily Growth Desk / Content Drafts / Handling List API shapes and prints activation-readiness status without reviving dedicated Daily X Queue run tracking. |
 | P1.4 Manual publish and copy flow | Partially done | Copy flow exists and is safe. Real publish remains outside the core Daily X Queue path and should stay guarded. |
 | P1.5 Activation analytics | Partially done | Daily X Queue tracks review/copy/activation counts and activity events. A complete activation analytics dashboard is still open. |
 

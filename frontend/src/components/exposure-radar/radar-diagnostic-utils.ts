@@ -31,6 +31,27 @@ const knownDiagnosticMissingReasons = new Set([
   "no_true_hot",
 ]);
 
+export type DiagnosticReliabilityCode =
+  | "ready"
+  | "usable"
+  | "blocked"
+  | "fallback"
+  | "stale"
+  | "no_owned_signals"
+  | "filters_hide_data"
+  | "query_low_yield"
+  | "x_impressions_sparse"
+  | "insufficient_resampling"
+  | "threshold_gap"
+  | "warming";
+
+export type DiagnosticReliabilityInsight = {
+  code: DiagnosticReliabilityCode;
+  title: string;
+  detail: string;
+  action: string;
+};
+
 export function diagnosticIssueText(issue: ExposureRadarDiagnosticIssueApi, t: TranslationFn) {
   if (knownDiagnosticIssueCodes.has(issue.code)) return t(`exposureRadar.diagnostics.issue.${issue.code}`);
   return issue.message || issue.code;
@@ -66,6 +87,67 @@ export function diagnosticSuggestions(diagnostics: ExposureRadarDiagnosticsApi, 
   if (codes.has("no_true_hot")) add("exposureRadar.diagnostics.suggestion.useRising");
   if (suggestions.length === 0) add("exposureRadar.diagnostics.suggestion.operate");
   return suggestions.slice(0, 5);
+}
+
+export function diagnosticReliabilityInsight(diagnostics: ExposureRadarDiagnosticsApi, t: TranslationFn): DiagnosticReliabilityInsight {
+  const code = diagnosticReliabilityCode(diagnostics);
+  const params = {
+    hot: diagnostics.hot_opportunity_count || 0,
+    rising: diagnostics.rising_opportunity_count || 0,
+    visible: diagnostics.visible_pool_count || diagnostics.tweet_level_count || diagnostics.returned_count || 0,
+    owned: diagnostics.owned_signal_count || 0,
+    window: diagnostics.window_hours || 0,
+    views: formatCompact(diagnostics.max_impression_count || 0),
+    threshold: formatCompact(diagnostics.configured_hot_min_views || 0),
+    speed: formatOneDecimal(diagnostics.max_views_per_minute || 0),
+    coverage: Math.round((diagnostics.real_view_coverage || 0) * 100),
+    sampling: Math.round((diagnostics.sampling_coverage || 0) * 100),
+  };
+  return {
+    code,
+    title: t(`exposureRadar.diagnostics.reliability.${code}.title`, params),
+    detail: t(`exposureRadar.diagnostics.reliability.${code}.detail`, params),
+    action: t(`exposureRadar.diagnostics.reliability.${code}.action`, params),
+  };
+}
+
+export function diagnosticReliabilityClass(code: DiagnosticReliabilityCode) {
+  switch (code) {
+    case "ready":
+      return "border-[#00ba7c]/25 bg-[#052217] text-[#7ee0b5]";
+    case "usable":
+      return "border-[#1d9bf0]/25 bg-[#07111a] text-[#8ecdf8]";
+    case "blocked":
+      return "border-[#f4212e]/25 bg-[#26070a] text-[#ff8a91]";
+    case "fallback":
+    case "stale":
+    case "query_low_yield":
+    case "x_impressions_sparse":
+    case "insufficient_resampling":
+    case "threshold_gap":
+      return "border-[#f59e0b]/25 bg-[#241a04] text-[#f6d96b]";
+    default:
+      return "border-[#2f3336] bg-[#0f1419] text-[#e7e9ea]";
+  }
+}
+
+function diagnosticReliabilityCode(diagnostics: ExposureRadarDiagnosticsApi): DiagnosticReliabilityCode {
+  const reason = diagnostics.top_missing_reason || "";
+  if (!diagnostics.x_trends_enabled || !diagnostics.bearer_token_configured || diagnostics.status === "blocked" || reason === "x_config_blocked") return "blocked";
+  if (diagnostics.status === "fallback" || diagnostics.source_status === "fallback" || diagnostics.source_status === "cache") return "fallback";
+  if (diagnostics.status === "stale" || diagnostics.source_status === "stale") return "stale";
+  if ((diagnostics.hot_opportunity_count || 0) > 0) return "ready";
+  if ((diagnostics.rising_opportunity_count || 0) > 0 || (diagnostics.returned_count || 0) > 0) {
+    if (reason === "x_impressions_sparse") return "x_impressions_sparse";
+    if (reason === "insufficient_resampling" || (diagnostics.sampling_coverage || 0) < 0.35) return "insufficient_resampling";
+    if (reason === "query_low_yield") return "query_low_yield";
+    if (reason === "views_below_threshold" || reason === "velocity_below_threshold" || reason === "no_true_hot") return "threshold_gap";
+    return "usable";
+  }
+  if (reason === "no_owned_signals" || (diagnostics.owned_signal_count || 0) === 0) return "no_owned_signals";
+  if (reason === "window_too_short" || reason === "fan_filter_strict" || reason === "filters_empty") return "filters_hide_data";
+  if (reason === "query_low_yield") return "query_low_yield";
+  return "warming";
 }
 
 export function exposureSignalQualityStatus(data: ExposureRadarData | null, loadState: LoadState): SignalQualityStatus {

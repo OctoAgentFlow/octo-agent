@@ -1,6 +1,6 @@
 # Exposure Radar Smoke Test Runbook
 
-Last updated: 2026-06-11
+Last updated: 2026-06-18
 
 ## Purpose
 
@@ -49,6 +49,11 @@ Expected:
   - `x_trends_cache`
 - `data_quality = "tweet_level"` when owned signals are present.
 - `learning_controls` exists.
+- `diagnostics.status`, `diagnostics.top_missing_reason`,
+  `diagnostics.max_impression_count`, `diagnostics.real_view_coverage`, and
+  `diagnostics.sampling_coverage` are present so the UI can explain whether the
+  result is ready, warming, blocked, stale, fallback, threshold-limited, or
+  sample-limited.
 - No publishing action occurs.
 
 ### 2. Check Chinese Radar
@@ -65,6 +70,9 @@ Expected:
   - `owned_collector`
   - `tl1_fallback`
 - `source_notice` clearly identifies fallback behavior if TL1 is used.
+- `diagnostics` explains the top reason when no true hot posts are visible:
+  token/config blockage, no owned signals, strict filters, low query yield,
+  sparse X view metrics, insufficient resampling, or threshold gap.
 - No publishing action occurs.
 
 ### 3. Check Bot/Account-Scoped Radar
@@ -130,7 +138,33 @@ Expected:
 - Fallback notices are explicit.
 - Data quality is visible.
 
-### 3. Verify Learning Controls
+### 3. Verify Collection Diagnostics
+
+Open the diagnostics/source-health view or the diagnostics panel in Daily Growth
+Desk.
+
+Expected:
+
+- The panel shows a data reliability verdict, not only raw counters.
+- The verdict explains the current state in operator language:
+  - ready to work
+  - usable but not true hot yet
+  - collection blocked
+  - fallback data only
+  - stale collector data
+  - no owned tweet-level signals
+  - filters hiding stored signals
+  - query coverage too narrow
+  - sparse X view metrics
+  - velocity needs another sample
+  - threshold gap
+  - collector warming up
+- Hot-post gap analysis shows max views, max speed, real-view coverage, and
+  resample coverage.
+- Suggested actions tell the operator whether to refresh, widen filters, inspect
+  seed topics, wait for another sample, or work rising cards first.
+
+### 4. Verify Learning Controls
 
 In the Performance panel, confirm:
 
@@ -140,7 +174,7 @@ In the Performance panel, confirm:
 - Window matches prod config.
 - Ranking scope changes when selecting a Bot/account.
 
-### 4. Generate One Review Draft
+### 5. Generate One Review Draft
 
 Pick a tweet-level Radar card.
 
@@ -158,7 +192,7 @@ Expected:
 - The draft is `pending_review`.
 - No post/reply is published automatically.
 
-### 5. Review Queue Verification
+### 6. Review Queue Verification
 
 Open:
 
@@ -225,6 +259,8 @@ If TL1 is unavailable and no owned Chinese signals exist:
 
 - Both regions load.
 - Source Health accurately identifies owned, fallback, or cache source.
+- Collection Diagnostics gives a clear reliability verdict and next action when
+  hot opportunities are absent.
 - Performance panel loads with learning controls.
 - One tweet-level Radar card can generate a pending review draft.
 - Draft appears in review queue.

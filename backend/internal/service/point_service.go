@@ -200,26 +200,29 @@ func defaultPointActivities() []pointActivityDefinition {
 			ClaimPeriod: "once",
 			Claimable:   pointActivityClaimable("add_source_material"),
 		},
+		// Codes keep the historical daily_x_queue suffix for redeemed activity
+		// compatibility; user-facing copy follows the current Content Draft /
+		// Daily Growth Desk product language.
 		{
 			Code:        "generate_daily_x_queue",
-			Title:       "Generate today's Daily X Queue",
-			Description: "Claim once per day after generating a Daily X Queue.",
+			Title:       "Generate content drafts",
+			Description: "Compatibility task: unlock after generating OAF Bot content drafts.",
 			Points:      3,
 			ClaimPeriod: "daily",
 			Claimable:   pointActivityClaimable("generate_daily_x_queue"),
 		},
 		{
 			Code:        "review_daily_x_queue",
-			Title:       "Review 3 Daily X drafts",
-			Description: "Claim once per day after completing at least 3 Daily X Queue review actions.",
+			Title:       "Review content drafts",
+			Description: "Compatibility task: unlock after editing, marking usable, rejecting, rewriting, or copying OAF Bot drafts.",
 			Points:      5,
 			ClaimPeriod: "daily",
 			Claimable:   pointActivityClaimable("review_daily_x_queue"),
 		},
 		{
 			Code:        "activate_daily_x_queue",
-			Title:       "Activate Daily X Queue",
-			Description: "Claim after completing the first-value Daily X Queue activation loop.",
+			Title:       "Complete a content draft loop",
+			Description: "Compatibility task: unlock after generating drafts, reviewing items, and marking at least one useful or copied.",
 			Points:      20,
 			ClaimPeriod: "once",
 			Claimable:   pointActivityClaimable("activate_daily_x_queue"),

@@ -6,7 +6,7 @@ import { Activity, CheckCircle2, Clock3, Database, Gauge, Info } from "lucide-re
 import { useT } from "@/i18n/use-t";
 import { formatDateTime } from "@/lib/timezone";
 import type { ExposureRadarData, ExposureRadarDiagnosticsApi } from "@/services/exposure-radar.service";
-import { diagnosticIssueText, diagnosticMissingReasonDetail, diagnosticMissingReasonText, diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnostic-utils";
+import { diagnosticIssueText, diagnosticMissingReasonDetail, diagnosticMissingReasonText, diagnosticReliabilityClass, diagnosticReliabilityInsight, diagnosticSuggestions } from "@/components/exposure-radar/radar-diagnostic-utils";
 import { diagnosticSeverityDot, diagnosticStatusClass, formatCompact, formatOneDecimal, formatPercent, normalizeDiagnosticStatus, normalizeSourceStatus, normalizeSourceType, sourceStatusClass } from "@/components/exposure-radar/radar-utils";
 
 export function SourceHealthPanel({ data, timeZone }: { data: ExposureRadarData; timeZone: string }) {
@@ -54,6 +54,7 @@ export function CollectionDiagnosticsPanel({ diagnostics, timeZone }: { diagnost
   const suggestions = diagnosticSuggestions(diagnostics, t);
   const missingReason = diagnostics.top_missing_reason || "none";
   const visiblePool = diagnostics.visible_pool_count || diagnostics.tweet_level_count || 0;
+  const reliability = diagnosticReliabilityInsight(diagnostics, t);
 
   return (
     <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
@@ -77,6 +78,19 @@ export function CollectionDiagnosticsPanel({ diagnostics, timeZone }: { diagnost
             <Database className="size-3.5" />
             {diagnostics.bearer_token_configured ? t("exposureRadar.diagnostics.tokenReady") : t("exposureRadar.diagnostics.tokenMissing")}
           </span>
+        </div>
+      </div>
+
+      <div className={`mt-4 rounded-xl border p-3 ${diagnosticReliabilityClass(reliability.code)}`}>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-normal opacity-75">{t("exposureRadar.diagnostics.reliability.label")}</p>
+            <p className="mt-1 text-sm font-semibold">{reliability.title}</p>
+            <p className="mt-1 text-xs leading-5 opacity-80">{reliability.detail}</p>
+          </div>
+          <div className="rounded-lg border border-current/20 bg-black/25 px-3 py-2 text-xs leading-5 opacity-90 lg:max-w-sm">
+            {reliability.action}
+          </div>
         </div>
       </div>
 

@@ -511,7 +511,7 @@ func (s *AutoPostService) UpdateDraft(userID, id uint, content string) (*dto.Aut
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts must be edited from Daily X Queue")
+		return nil, fmt.Errorf("legacy daily draft records must be edited from the Content Drafts compatibility flow")
 	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be edited from status %s", draft.Status)
@@ -546,7 +546,7 @@ func (s *AutoPostService) RewriteDraft(ctx context.Context, userID, id uint, req
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts must be rewritten from Daily X Queue")
+		return nil, fmt.Errorf("legacy daily draft records must be rewritten from the Content Drafts compatibility flow")
 	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be rewritten from status %s", draft.Status)
@@ -661,7 +661,7 @@ func (s *AutoPostService) ApproveDraft(userID, id uint) (*dto.AutoPostDraftItem,
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts cannot be approved from Content Drafts")
+		return nil, fmt.Errorf("legacy daily draft records cannot be approved from this Content Drafts action")
 	}
 	if draft.Status != "review" && draft.Status != "pending_review" && draft.Status != "draft" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot be approved from status %s", draft.Status)
@@ -691,7 +691,7 @@ func (s *AutoPostService) PreparePublish(userID, id uint) (*dto.AutoPostDraftIte
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts cannot be prepared for publishing")
+		return nil, fmt.Errorf("legacy daily draft records cannot be prepared for publishing from this action")
 	}
 	if draft.Status != "ready_to_publish" && draft.Status != "approved" {
 		return nil, fmt.Errorf("draft cannot prepare publish from status %s", draft.Status)
@@ -712,7 +712,7 @@ func (s *AutoPostService) RejectDraft(userID, id uint, reason string) (*dto.Auto
 		return nil, err
 	}
 	if isDailyXQueueDraft(*draft) {
-		return nil, fmt.Errorf("daily x queue drafts must be rejected from Daily X Queue")
+		return nil, fmt.Errorf("legacy daily draft records must be rejected from the Content Drafts compatibility flow")
 	}
 	now := time.Now().UTC()
 	draft.Status = "rejected"

@@ -1,4 +1,4 @@
-# Product Strength Audit: Daily X Operating Queue
+# Product Strength Audit: Daily Growth Desk
 
 ## Summary
 
@@ -23,10 +23,10 @@ original concerns.
 | --- | --- | --- |
 | Product sounded like broad automation instead of safe daily operation. | Done | README, roadmap, page list, billing copy, and dashboard copy now position the product around manual, human-in-the-loop X operation. Legacy Auto Reply, authenticated Auto DM, Auto Comment, and Auto Comments APIs are protected by default and logged. |
 | Auto Post / Execution Queue naming was too prominent. | Mostly done | `/content-drafts` and `/handling-list` are the product routes. `/auto-post` and `/execution-queue` remain compatibility routes only. Frontend services and many i18n keys moved to Content Draft / Handling List wording. |
-| First value needed a focused daily workflow. | Mostly done | `/daily-x-queue` now exists with setup, source material, generate, edit, approve, reject, rewrite, and copy actions. Backend has `/api/v1/daily-x-queue/*`, `DailyXQueueContext`, and service tests. |
+| First value needed a focused daily workflow. | Done / repositioned | Daily Growth Desk is now the focused first-day workflow through `/start-today` and `/exposure-radar`. `/daily-x-queue` remains only as a downlined compatibility route into Content Drafts, not the product mainline. |
 | Opportunity discovery needed to be core, not a side feature. | Done / refining | `/exposure-radar` is now packaged as Daily Growth Desk with Chinese/English signals, hot/rising classification, quality tiers, diagnostics, reply angles, people radar, manual handling, and learning loop. |
 | Reply/comment opportunities should not auto-comment by default. | Done | Exposure Radar supports manual reply generation, copy/open-original workflows, manual records, and result backfill. Automatic commenting is not the default product path. |
-| Feedback should teach the system. | Done / refining | Daily X Queue captures reject feedback. Exposure Radar stores manual handling records, published-result backfill, memory payloads, people notes, topic learning, weekly review, and strategy recommendations. |
+| Feedback should teach the system. | Done / refining | Exposure Radar stores manual handling records, published-result backfill, memory payloads, people notes, topic learning, weekly review, and strategy recommendations. Content Draft / Handling List feedback remains a supporting learning path. |
 | Opportunity evidence and learning explainability needed to be clearer. | Done / refining | Exposure Radar cards now include an Operator Evidence layer that explains why now, account fit, manual move, and risk. Learning Insights now shows what feedback changed: boosted topics, cautious lanes, preferred reply angles, linked result metrics, and pending backfills. |
 | New users needed a stronger product coach after the first IA cleanup. | Done | Daily Growth Desk now includes a first-day coach panel that tells users what to do now, why it matters, and what counts as done for each activation step. |
 | Opportunity batch quality needed to be legible at a glance. | Done | Opportunity Evidence Desk now includes a quality gate with readiness score and a handle / observe / tune recommendation. |
@@ -38,6 +38,7 @@ original concerns.
 | Account analysis needed explicit data boundaries. | Done | Account Intelligence now includes a visible Data Boundary panel for public X data, user-provided context, OAF workflow data, and unavailable Creator Studio private analytics. Roadmap and product copy continue to avoid assuming private Creator Studio data. |
 | Exposure Radar page was too large and risky to modify. | Done / maintain boundary | `page.tsx` is now about 1.2k lines and mainly handles data/state orchestration. P1 moved hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused component modules. |
 | Website/product context import was missing from the core strategy flow. | Done / refining | Exposure Radar strategy setup now accepts pasted website/product/FAQ/changelog text, extracts audience, topics, guardrails, reply style, and operator notes, and can save the context as Content Memory. |
+| Core workflow API smoke and activation tracking was missing. | Done / refining | Added `scripts/smoke-core-api.mjs` and `npm --prefix frontend run smoke:api` to check API health, anonymous auth boundaries, authenticated response shapes, Exposure Radar diagnostics, and a read-only activation-readiness summary for account, Bot, strategy, opportunity pool, Content Memory, Content Drafts, Handling List, and manual result records. |
 
 ### Partially Solved
 
@@ -45,12 +46,12 @@ original concerns.
 | --- | --- | --- |
 | Single first-value entry point | Solved for current IA | Daily Growth Desk is the default first-day workbench. `/start-today`, dashboard CTA, homepage hero CTA, and primary nav now reinforce Daily Growth Desk; Daily X Queue and Analytics are supporting surfaces, not primary activation nav items. Tracked as completed PS-0 and PS-8 in `docs/product/product-strength-optimization-plan.md`. |
 | Minimal setup form | Solved for first session / refining | `/start-today` now opens a guided Daily Growth Desk first-session mode. It keeps users on one path from account/Bot context to strategy, first opportunity, first reply, and result record. Strategy setup can import product context into strategy and Content Memory. |
-| Posts + replies in one queue | Partially solved | Daily X Queue handles post drafts. Exposure Radar handles reply/opportunity signals. Handling List can review both, but the user still sees multiple surfaces. |
+| Posts + replies in one queue | Reframed for current IA | Daily Growth Desk handles opportunity discovery and manual replies; Content Drafts handles reusable post drafts; Handling List is the shared human decision surface. The remaining gap is clearer cross-surface guidance, not reviving Daily X Queue as the first-value route. |
 | Learning explainability | Solved for current loop / refining | Learning panels, weekly review, memory cues, result feedback, and the new Learning Change Summary explain how feedback changes future ranking, topics, angles, and backfill gaps. |
 | Cost and rate observability | Done / refining | Admin tracks OpenAI generations/costs, X API call breakdown, X Trends config, Exposure refresh interval, source health, refresh skips, failure reasons, and recent cost-driving events from the unified cost ledger. |
 | Page modularization | Solved for current risk level | Exposure Radar is no longer a monolithic product page. Remaining work is boundary discipline: keep future UI panels in component/helper modules and avoid putting new display logic back into `page.tsx`. |
-| Core workflow smoke checks | Done / refining | `scripts/smoke-core-workflows.sh` covers static/prod route checks, and `scripts/smoke-core-ui.mjs` now starts/checks the API frontend HTML shell for login, Daily Growth Desk, Content Memory, Content Drafts, Handling List, OAF Bots, Billing, and Admin. |
-| Creator Studio private analytics intake | Done / local-first | Account Intelligence keeps private analytics notes in the browser, labels them as user-provided data, and appends them into Growth Strategy operator notes when the user applies strategy. |
+| Core workflow smoke checks | Done / refining | `scripts/smoke-core-workflows.sh` covers static/prod route checks, `scripts/smoke-core-ui.mjs` starts/checks the API frontend HTML shell, and `scripts/smoke-core-api.mjs` validates API health, auth boundaries, core response shapes, Exposure Radar diagnostics, and activation readiness. |
+| Creator Studio private analytics intake | Done / local-first | Account Intelligence keeps private analytics notes in the browser, supports local paste/file import for `.txt`, `.csv`, and `.json` Creator Studio observations, parses audience/country/active-time/growth/content/weak-signal fields locally, labels them as user-provided data, and appends the structured notes into Growth Strategy operator notes when the user applies strategy. |
 | Legacy route traffic audit | Done / operational gate | `docs/runbooks/legacy-route-traffic-audit.md` remains the access-log gate for any final deletion, while old product routes are already downlined. |
 | High-risk legacy data migration plan | Done / compatibility boundary | `docs/technical/high-risk-legacy-data-migration-plan.md` defines the dual-read/dual-write, backup, backfill, test, and rollback requirements before touching DB table names, JSON fields, activity keys, or AI scene values. |
 | Self-serve proof and pricing clarity | Solved for current packaging / refining | Product and billing language now packages the paid promise around Daily Growth Desk refreshes, opportunity drafts, account intelligence, content memory, review capacity, and result learning. Continue refining once real usage appears. |
@@ -59,8 +60,7 @@ original concerns.
 
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
-| P1 | Daily queue run tracking. | `DailyXQueueContext` exists, but dedicated `daily_queue_runs` / `daily_queue_items` style tracking is not fully implemented. |
-| P2 | Creator Studio export upload / authorized sync. | The product now supports local manual notes and strategy application. Actual file upload, structured import, or future authorized private metrics sync is still a separate data-ingestion project. |
+| P2 | Authorized Creator Studio/private metrics sync. | Local structured import is now available for user-provided exports and notes. Automatic cloud sync still requires a confirmed authorized data path from X or another user-approved source before building backend ingestion. |
 | P2 | High-risk backend naming/data migration execution. | A migration plan exists, but `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design until a dedicated migration project is approved. |
 
 ## Original User Journey At Time Of Audit
@@ -185,11 +185,11 @@ Delay:
 
 ## Product Wedge
 
-Daily X Operating Queue should become the first product surface:
+Daily Growth Desk is the first product surface:
 
-"Give OctoAgentFlow your X handle and product context. It generates today's X operating queue: posts to review, reply opportunities to consider, and learning from every edit or rejection."
+"Give OctoAgentFlow your X handle and product context. It shows today's manual growth desk: opportunity signals to review, persona-safe replies to draft and copy, and learning from every edit, save, handled record, or result backfill."
 
-This is narrower, easier to activate, and still uses the platform's real strengths: persona-based workflow, content memory, guardrails, review queue, execution queue, publishing pipeline, and human-in-the-loop feedback.
+This is narrower, easier to activate, and still uses the platform's real strengths: persona-based workflow, content memory, guardrails, review queues, publishing workflows, and human-in-the-loop feedback.
 
 ## Documentation Maintenance Rule
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -36,7 +36,17 @@ type PrivateAnalyticsNotes = {
   followerGrowth: string;
   topFormats: string;
   weakSignals: string;
+  importedSummary?: string;
+  importedAt?: string;
   updatedAt?: string;
+};
+
+const privateAnalyticsImportFields = ["audience", "countries", "activeTimes", "followerGrowth", "topFormats", "weakSignals"] as const;
+type PrivateAnalyticsImportField = typeof privateAnalyticsImportFields[number];
+type PrivateAnalyticsImportResult = {
+  notes: Partial<Pick<PrivateAnalyticsNotes, PrivateAnalyticsImportField | "importedSummary" | "importedAt">>;
+  matchedFields: PrivateAnalyticsImportField[];
+  lineCount: number;
 };
 
 const emptyPrivateAnalyticsNotes: PrivateAnalyticsNotes = {
@@ -507,9 +517,49 @@ function PrivateAnalyticsPanel({
   onSave: () => void;
 }) {
   const { t } = useT();
+  const [importText, setImportText] = useState("");
+  const [importResult, setImportResult] = useState<PrivateAnalyticsImportResult | null>(null);
+  const [importError, setImportError] = useState("");
   const suggestions = buildPrivateAnalyticsSuggestions(notes, t);
   const hasPrivateNotes = hasPrivateAnalyticsNotes(notes);
   const fieldClass = "min-h-24 w-full rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]";
+  const parseImport = () => {
+    const result = parsePrivateAnalyticsImport(importText);
+    setImportResult(result);
+    if (!result.matchedFields.length) {
+      setImportError(t("accounts.intelligence.private.import.noMatch"));
+      return;
+    }
+    setImportError("");
+    onChange({
+      ...notes,
+      ...result.notes,
+    });
+  };
+  const clearImport = () => {
+    setImportText("");
+    setImportResult(null);
+    setImportError("");
+  };
+  const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 512 * 1024) {
+      setImportError(t("accounts.intelligence.private.import.sizeError"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImportText(String(reader.result || ""));
+      setImportResult(null);
+      setImportError("");
+    };
+    reader.onerror = () => {
+      setImportError(t("accounts.intelligence.private.import.readError"));
+    };
+    reader.readAsText(file);
+  };
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -517,6 +567,56 @@ function PrivateAnalyticsPanel({
         <span className="inline-flex w-fit items-center rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-xs font-semibold text-[#f6d96b]">
           {t("accounts.intelligence.private.localOnly")}
         </span>
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#07111a] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#e7e9ea]">{t("accounts.intelligence.private.import.title")}</p>
+            <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("accounts.intelligence.private.import.description")}</p>
+          </div>
+          <label className="inline-flex h-9 w-fit cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#2f3336] px-3 text-sm font-semibold text-[#e7e9ea] hover:bg-[#16181c]">
+            <FileText className="size-4" />
+            {t("accounts.intelligence.private.import.file")}
+            <input type="file" accept=".txt,.csv,.json,text/plain,text/csv,application/json" className="hidden" onChange={handleImportFile} />
+          </label>
+        </div>
+        <textarea
+          value={importText}
+          onChange={(event) => {
+            setImportText(event.target.value);
+            setImportResult(null);
+            setImportError("");
+          }}
+          placeholder={t("accounts.intelligence.private.import.placeholder")}
+          className="mt-3 min-h-28 w-full rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]"
+        />
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] leading-5 text-[#71767b]">{t("accounts.intelligence.private.import.privacy")}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={!importText.trim()} onClick={parseImport}>
+              <Sparkles className="size-4" />
+              {t("accounts.intelligence.private.import.parse")}
+            </Button>
+            <Button type="button" variant="ghost" disabled={!importText.trim() && !importResult} onClick={clearImport}>
+              {t("accounts.intelligence.private.import.clear")}
+            </Button>
+          </div>
+        </div>
+        {importError ? (
+          <p className="mt-3 rounded-xl border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-2 text-xs leading-5 text-[#f6d96b]">{importError}</p>
+        ) : null}
+        {importResult?.matchedFields.length ? (
+          <div className="mt-3 rounded-xl border border-[#00ba7c]/25 bg-[#00ba7c]/10 px-3 py-2">
+            <p className="text-xs font-semibold text-[#e7e9ea]">{t("accounts.intelligence.private.import.parsed", { count: importResult.matchedFields.length })}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {importResult.matchedFields.map((field) => (
+                <span key={field} className="rounded-full border border-[#00ba7c]/25 bg-black/35 px-2 py-1 text-[11px] font-semibold text-[#7ee0b5]">
+                  {t(`accounts.intelligence.private.field.${field}`)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {(["audience", "countries", "activeTimes", "followerGrowth", "topFormats", "weakSignals"] as const).map((field) => (
@@ -872,7 +972,7 @@ function privateAnalyticsStorageKey(accountID: number) {
 
 function hasPrivateAnalyticsNotes(notes?: PrivateAnalyticsNotes) {
   if (!notes) return false;
-  return Boolean(notes.audience.trim() || notes.countries.trim() || notes.activeTimes.trim() || notes.followerGrowth.trim() || notes.topFormats.trim() || notes.weakSignals.trim());
+  return Boolean(notes.audience.trim() || notes.countries.trim() || notes.activeTimes.trim() || notes.followerGrowth.trim() || notes.topFormats.trim() || notes.weakSignals.trim() || notes.importedSummary?.trim());
 }
 
 function privateAnalyticsStrategyNotes(notes?: PrivateAnalyticsNotes) {
@@ -884,6 +984,7 @@ function privateAnalyticsStrategyNotes(notes?: PrivateAnalyticsNotes) {
     notes.followerGrowth.trim() ? `Follower growth notes: ${notes.followerGrowth.trim()}` : "",
     notes.topFormats.trim() ? `Top content formats: ${notes.topFormats.trim()}` : "",
     notes.weakSignals.trim() ? `Weak signals/drop-offs: ${notes.weakSignals.trim()}` : "",
+    notes.importedSummary?.trim() ? `Imported analytics summary: ${notes.importedSummary.trim()}` : "",
   ].filter(Boolean);
   return rows.length ? `User-provided Creator Studio notes:\n${rows.join("\n")}` : "";
 }
@@ -895,6 +996,87 @@ function buildPrivateAnalyticsSuggestions(notes: PrivateAnalyticsNotes, t: (key:
   if (notes.topFormats.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.format"));
   if (notes.followerGrowth.trim() || notes.weakSignals.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.gap"));
   return suggestions;
+}
+
+function parsePrivateAnalyticsImport(raw: string): PrivateAnalyticsImportResult {
+  const importedAt = new Date().toISOString();
+  const lines = normalizeAnalyticsImportLines(raw);
+  const notes: PrivateAnalyticsImportResult["notes"] = { importedAt };
+  const matchedFields: PrivateAnalyticsImportField[] = [];
+  for (const field of privateAnalyticsImportFields) {
+    const value = extractAnalyticsField(lines, privateAnalyticsKeywords[field]);
+    if (value) {
+      notes[field] = value;
+      matchedFields.push(field);
+    }
+  }
+  notes.importedSummary = buildAnalyticsImportSummary(lines, matchedFields);
+  return { notes, matchedFields, lineCount: lines.length };
+}
+
+function normalizeAnalyticsImportLines(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const jsonLines = parseAnalyticsJSONLines(trimmed);
+  const source = jsonLines.length ? jsonLines.join("\n") : trimmed;
+  return source
+    .replace(/\r/g, "\n")
+    .split(/\n|[|]/)
+    .map((line) => line.replace(/\s+/g, " ").replace(/^[-*•,\s]+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 120);
+}
+
+function parseAnalyticsJSONLines(raw: string) {
+  if (!raw.startsWith("{") && !raw.startsWith("[")) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const lines: string[] = [];
+    flattenAnalyticsJSON(parsed, "", lines);
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
+function flattenAnalyticsJSON(value: unknown, prefix: string, lines: string[]) {
+  if (lines.length >= 120) return;
+  if (Array.isArray(value)) {
+    value.slice(0, 30).forEach((item, index) => flattenAnalyticsJSON(item, prefix ? `${prefix}.${index + 1}` : String(index + 1), lines));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      flattenAnalyticsJSON(item, prefix ? `${prefix}.${key}` : key, lines);
+    });
+    return;
+  }
+  const stringValue = String(value ?? "").trim();
+  if (stringValue) lines.push(prefix ? `${prefix}: ${stringValue}` : stringValue);
+}
+
+const privateAnalyticsKeywords: Record<PrivateAnalyticsImportField, string[]> = {
+  audience: ["audience", "age", "gender", "male", "female", "13-17", "18-24", "25-34", "35-44", "45-54", "受众", "年龄", "性别", "男性", "女性", "画像"],
+  countries: ["country", "countries", "region", "location", "geo", "united states", "nigeria", "india", "turkey", "国家", "地区", "地域", "位置"],
+  activeTimes: ["active", "time", "hour", "engaged", "heatmap", "timezone", "活跃", "时间", "小时", "高峰"],
+  followerGrowth: ["follower growth", "followers over time", "new followers", "unfollow", "follows", "粉丝增长", "新增粉丝", "取关", "关注变化"],
+  topFormats: ["top post", "best post", "content", "format", "video", "impressions", "engagement", "likes", "replies", "高表现", "最佳内容", "内容形式", "浏览", "互动", "点赞", "回复"],
+  weakSignals: ["drop", "decline", "low", "weak", "loss", "negative", "fall", "下滑", "弱信号", "低", "流失", "下降", "负反馈"],
+};
+
+function extractAnalyticsField(lines: string[], keywords: string[]) {
+  const matches = lines.filter((line) => {
+    const normalized = line.toLowerCase();
+    return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
+  });
+  return uniqueStrings(matches, 5).join("; ").slice(0, 420);
+}
+
+function buildAnalyticsImportSummary(lines: string[], fields: PrivateAnalyticsImportField[]) {
+  if (!lines.length) return "";
+  const prefix = fields.length ? `Parsed ${fields.length} Creator Studio field(s).` : "Imported Creator Studio text without confident field matches.";
+  const preview = lines.slice(0, 4).join("; ").slice(0, 360);
+  return preview ? `${prefix} Source preview: ${preview}` : prefix;
 }
 
 function diagnosisStatusTone(status: AccountDiagnosisStatus) {

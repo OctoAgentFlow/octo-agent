@@ -408,7 +408,7 @@ func (s *ReviewQueueService) deleteQueueItem(userID uint, item dto.ReviewQueueBu
 			return err
 		}
 		if isDailyXQueueDraft(*draft) {
-			return errors.New("daily x queue drafts must be managed from Daily X Queue")
+			return errors.New("legacy daily draft records must be managed from the Content Drafts compatibility flow")
 		}
 		if err := assertReviewQueueDeleteAllowed("post", draft.Status); err != nil {
 			return err

@@ -1,58 +1,78 @@
 # Activation Metrics
 
+Status: Current product activation metrics. Historical Daily X Queue metrics are
+no longer the primary activation definition; the current first-value path is
+Daily Growth Desk / Exposure Radar with manual reply handling and result
+backfill.
+
 ## Effective User Definition
 
 An effective user is not someone who signs up, creates a bot, or visits automation settings. An effective user is someone who uses OctoAgentFlow to operate an X account through a daily review workflow.
 
 Effective user:
 
-- Has a Daily X Queue generated from account and product context.
-- Reviews generated outputs.
-- Approves, edits, rejects, or publishes at least one useful item.
-- Produces learning signals that improve the next queue.
+- Connects or selects an X account.
+- Runs or reviews Account Intelligence / Growth Strategy context.
+- Opens Daily Growth Desk and reviews real or clearly labeled demo opportunity signals.
+- Generates, copies, and manually publishes at least one safe reply draft.
+- Records the outcome so Content Memory and strategy recommendations can learn.
 
 ## Activation Event
 
 Primary activation event:
 
-`daily_x_queue_activated`
+`daily_growth_desk_activated`
 
 Definition:
 
 - User creates or confirms an OAF Bot profile.
-- User adds at least one source material item or product context.
-- User generates a Daily X Queue.
-- Queue contains at least 3 items.
-- User performs at least 3 review actions.
-- At least 1 item is approved or copied/published.
+- User connects or selects an X account.
+- User applies account/product context into Growth Strategy.
+- User opens Daily Growth Desk with a visible data-source / reliability state.
+- User generates one manual reply draft from an opportunity signal.
+- User copies the reply or marks it handled.
+- User records a result or adds a note explaining the outcome.
 
 Minimum activation threshold:
 
 - `daily_queue_generated_count >= 1`
-- `queue_items_generated >= 3`
-- `review_actions_count >= 3`
-- `approved_outputs_count >= 1`
+- `opportunity_reply_drafts_generated >= 1`
+- `manual_reply_copied_count >= 1`
+- `manual_handling_records_count >= 1`
+- `strategy_applied_count >= 1`
+
+## Operational Smoke Coverage
+
+Use `npm --prefix frontend run smoke:api` to validate that the activation path is
+reachable at the API layer. Without a JWT it confirms protected core workflow
+surfaces reject anonymous traffic. With `SMOKE_JWT`, it checks response shapes
+for accounts, OAF Bots, Growth Strategy, Exposure Radar diagnostics, Content
+Memory, Content Drafts, Handling List, and manual handling records, then prints
+a read-only activation-readiness summary.
+
+Set `SMOKE_REQUIRE_ACTIVATED=1` only for a seeded validation account where every
+activation threshold is expected to be complete.
 
 ## Weekly Active Usage
 
 Primary WAU metric:
 
-`weekly_active_queue_operator`
+`weekly_active_growth_operator`
 
 Definition:
 
-- User generated or reviewed a Daily X Queue in the last 7 days.
-- User performed at least 2 review actions in the last 7 days.
+- User opened Daily Growth Desk in the last 7 days.
+- User generated, copied, handled, or backfilled at least 2 opportunity drafts in the last 7 days.
 
 Stronger WAU:
 
-`weekly_effective_queue_operator`
+`weekly_effective_growth_operator`
 
 Definition:
 
-- User generated at least 1 queue in the last 7 days.
-- User approved, edited, copied, published, or rejected at least 3 items.
-- User created at least 1 learning signal.
+- User handled at least 3 opportunity signals or content drafts in the last 7 days.
+- User backfilled at least 1 published-result link or public metric.
+- User created at least 1 memory, strategy, or learning signal.
 
 ## Review Actions
 

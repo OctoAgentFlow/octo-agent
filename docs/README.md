@@ -44,6 +44,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 - `product/product-strength-next-optimization-plan.md`：PS-0 到 PS-9 之后的产品力增强计划与完成度跟踪。
 - `product/current-product-strength-execution.md`：当前 9 项产品力收尾批次，包括 smoke、页面拆分、私有分析导入、学习闭环和兼容边界。
 - `product/archive/legacy-automation-docs.md`：旧自动化设计文档历史归档入口。
+- `../product/README.md`：旧 Daily X Queue 研究资料目录说明；这些文件是历史参考，不是当前首日主线。
 - `product/oaf-bot-billing.md`：OAF Bot + Billing 会员体系。
 - `product/oaf-bot-execution-mode.md`：OAF Bot 执行模式产品设计。
 - `product/auto-post-oaf-bot-redesign.md`：Auto Post 在 OAF Bot 体系下的产品重设计。

@@ -143,8 +143,8 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 		},
 		{
 			Code:        "generate_daily_x_queue",
-			Title:       "Generate today's Daily X Queue",
-			Description: "Claim once per day after generating a Daily X Queue.",
+			Title:       "Generate content drafts",
+			Description: "Compatibility task: unlock after generating OAF Bot content drafts.",
 			Points:      3,
 			ClaimPeriod: "daily",
 			Enabled:     true,
@@ -152,8 +152,8 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 		},
 		{
 			Code:        "review_daily_x_queue",
-			Title:       "Review 3 Daily X drafts",
-			Description: "Claim once per day after completing at least 3 Daily X Queue review actions.",
+			Title:       "Review content drafts",
+			Description: "Compatibility task: unlock after editing, marking usable, rejecting, rewriting, or copying OAF Bot drafts.",
 			Points:      5,
 			ClaimPeriod: "daily",
 			Enabled:     true,
@@ -161,8 +161,8 @@ func SeedDefaultPointActivities(db *gorm.DB) error {
 		},
 		{
 			Code:        "activate_daily_x_queue",
-			Title:       "Activate Daily X Queue",
-			Description: "Claim after completing the first-value Daily X Queue activation loop.",
+			Title:       "Complete a content draft loop",
+			Description: "Compatibility task: unlock after generating drafts, reviewing items, and marking at least one useful or copied.",
 			Points:      20,
 			ClaimPeriod: "once",
 			Enabled:     true,

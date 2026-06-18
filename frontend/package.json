@@ -12,7 +12,8 @@
     "start:admin-front": "NEXT_PUBLIC_FRONTEND_ROLE=admin NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1 next start -p 3001",
     "lint": "eslint",
     "lint:i18n": "node scripts/check-i18n.mjs",
-    "smoke:core": "node ../scripts/smoke-core-ui.mjs"
+    "smoke:core": "node ../scripts/smoke-core-ui.mjs",
+    "smoke:api": "node ../scripts/smoke-core-api.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

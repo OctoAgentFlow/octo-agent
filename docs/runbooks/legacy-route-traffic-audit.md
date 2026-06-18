@@ -54,4 +54,8 @@ Only consider route removal after:
 - 14 consecutive days of no meaningful production traffic.
 - A release note documents the removal.
 - A rollback path is available.
-- Smoke tests pass for `/content-drafts`, `/handling-list`, `/exposure-radar`, and `/daily-x-queue`.
+- Smoke tests pass for the current core workflow: `/start-today`,
+  `/exposure-radar`, `/accounts`, `/oaf-bots`, `/content-library`,
+  `/content-drafts`, and `/handling-list`. Downlined compatibility routes such
+  as `/daily-x-queue` can be checked separately when preparing final removal,
+  but they are not part of the core smoke path.

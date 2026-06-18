@@ -1181,5 +1181,5 @@ func dailyLearningSummary(rows []model.OAFBotGenerationFeedback, rules []dto.OAF
 	if count == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Applied %d OAF Bot memory signal(s) from prior Daily X Queue reviews.", count)
+	return fmt.Sprintf("Applied %d OAF Bot memory signal(s) from prior Content Draft compatibility reviews.", count)
 }

@@ -6,10 +6,11 @@ import type { AutoPostDraftApi } from "@/services/content-drafts.service";
 /**
  * Deprecated compatibility client.
  *
- * The public `/daily-x-queue` page now redirects into Content Drafts. Keep this
- * service only for older backend endpoints, rollback safety, and historical
- * tests. New product work should use `content-drafts.service.ts` or
- * `content-library.service.ts` instead.
+ * The public `/daily-x-queue` page now redirects into Content Drafts, and the
+ * backend `/api/v1/daily-x-queue/*` route is no longer registered by default.
+ * Keep this service only for rollback safety and historical tests. New product
+ * work should use `content-drafts.service.ts` or `content-library.service.ts`
+ * instead.
  */
 
 type ApiResponse<T> = {

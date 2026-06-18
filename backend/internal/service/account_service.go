@@ -419,6 +419,64 @@ func (s *AccountService) fetchXProfile(ctx context.Context, accessToken string) 
 	return &result, nil
 }
 
+func (s *AccountService) refreshXAccessToken(ctx context.Context, account *model.TwitterAccount) (*model.TwitterAccount, error) {
+	if account == nil {
+		return nil, fmt.Errorf("x account is not connected")
+	}
+	refreshToken := strings.TrimSpace(account.RefreshToken)
+	if refreshToken == "" {
+		return nil, fmt.Errorf("missing x refresh token")
+	}
+	clientID := strings.TrimSpace(s.oauth.ClientID)
+	clientSecret := strings.TrimSpace(s.oauth.ClientSecret)
+	if clientID == "" || clientSecret == "" {
+		return nil, fmt.Errorf("x oauth refresh is not configured")
+	}
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.x.com/2/oauth2/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(clientID, clientSecret)
+	client := s.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("x oauth refresh failed: %s", truncateErrMsg(string(body)))
+	}
+	var tokenResp xTokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(tokenResp.AccessToken) == "" {
+		return nil, fmt.Errorf("x oauth refresh returned empty access_token")
+	}
+	now := time.Now().UTC()
+	account.AccessToken = strings.TrimSpace(tokenResp.AccessToken)
+	if strings.TrimSpace(tokenResp.RefreshToken) != "" {
+		account.RefreshToken = strings.TrimSpace(tokenResp.RefreshToken)
+	}
+	if strings.TrimSpace(tokenResp.Scope) != "" {
+		account.OAuthScopes = normalizedOAuthScopes(tokenResp.Scope)
+	}
+	account.Status = "connected"
+	account.LastSyncedAt = &now
+	if err := s.repo.UpdateOAuthTokens(account); err != nil {
+		return nil, err
+	}
+	return account, nil
+}
+
 type oauthStatePayload struct {
 	UserID       uint   `json:"u"`
 	CodeVerifier string `json:"v"`

@@ -44,10 +44,10 @@ func (s *AccountService) Intelligence(ctx context.Context, userID, accountID uin
 		return resp, nil
 	}
 
-	tweets, err := twitter.ListUserRootTweets(ctx, s.httpClient, acc.AccessToken, acc.TwitterUserID, accountIntelligencePostLimit)
+	tweets, err := s.listUserRootTweetsForIntelligence(ctx, acc, accountIntelligencePostLimit)
 	if err != nil {
 		resp.SourceStatus = "limited"
-		resp.LimitReason = "X returned a limited response for recent posts. The report falls back to profile-level positioning until the token or X API window is available: " + err.Error()
+		resp.LimitReason = accountIntelligenceLimitReason(err)
 		resp.Positioning = fallbackAccountPositioning(acc.DisplayName, acc.Username)
 		resp.BotSuggestion = accountBotSuggestion(*acc, resp.Positioning)
 		resp.RadarGuidance = accountRadarGuidance(resp.Positioning)
@@ -71,6 +71,33 @@ func (s *AccountService) Intelligence(ctx context.Context, userID, accountID uin
 	resp.RadarGuidance = accountRadarGuidance(resp.Positioning)
 	resp.WeeklyReview = accountWeeklyReview(resp.Positioning, resp.Metrics)
 	return resp, nil
+}
+
+func (s *AccountService) listUserRootTweetsForIntelligence(ctx context.Context, acc *model.TwitterAccount, maxResults int) ([]twitter.UserTweet, error) {
+	tweets, err := twitter.ListUserRootTweets(ctx, s.httpClient, acc.AccessToken, acc.TwitterUserID, maxResults)
+	if err == nil || !isXUnauthorizedError(err) {
+		return tweets, err
+	}
+	refreshed, refreshErr := s.refreshXAccessToken(ctx, acc)
+	if refreshErr != nil {
+		if s != nil && s.repo != nil && acc != nil {
+			_ = s.repo.MarkNeedsReauth(acc.UserID, acc.ID)
+		}
+		return nil, fmt.Errorf("%w; token_refresh_failed: %v", err, refreshErr)
+	}
+	return twitter.ListUserRootTweets(ctx, s.httpClient, refreshed.AccessToken, refreshed.TwitterUserID, maxResults)
+}
+
+func accountIntelligenceLimitReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(err.Error())
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "token_refresh_failed") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "401") {
+		return "X authorization expired or was revoked. Reconnect the X account, then rerun Account Intelligence."
+	}
+	return "X returned a limited response for recent posts. The report falls back to profile-level positioning until the token or X API window is available: " + msg
 }
 
 func accountIntelligencePosts(username string, tweets []twitter.UserTweet) []dto.AccountIntelligencePost {

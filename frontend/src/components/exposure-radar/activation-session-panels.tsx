@@ -83,6 +83,7 @@ export function FirstDayLaunchCard({
         <FirstDaySetupChip icon={<Bot className="size-3.5" />} label={t("exposureRadar.firstDay.selected.bot")} value={selectedBotLabel} />
         <FirstDaySetupChip icon={<Target className="size-3.5" />} label={t("exposureRadar.firstDay.selected.lane")} value={selectedLaneLabel} />
       </div>
+      <FirstDayCoachCard currentStep={doneCount === steps.length ? "complete" : nextStep.key} doneCount={doneCount} total={steps.length} anchor={nextStep.anchor} />
       <SetupWizardPanel steps={wizardSteps} usingSampleMode={usingSampleMode} onStartSample={onStartSample} onExitSample={onExitSample} />
       <FirstDayActivationCard mode={activationMode} actions={activationActions} />
       <FirstSessionPath steps={steps} checklist={checklist} />
@@ -101,6 +102,46 @@ export function FirstDayLaunchCard({
       <FirstDayChecklist checklist={checklist} />
       <FirstDayTimebox />
     </Card>
+  );
+}
+
+function FirstDayCoachCard({
+  currentStep,
+  doneCount,
+  total,
+  anchor,
+}: {
+  currentStep: FirstDayStepKey | "complete";
+  doneCount: number;
+  total: number;
+  anchor: string;
+}) {
+  const { t } = useT();
+  return (
+    <div className="mt-4 rounded-2xl border border-[#1d9bf0]/25 bg-[#07111a] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#1d9bf0]/25 bg-black px-3 py-1 text-xs font-semibold text-[#8ecdf8]">
+            <Info className="size-3.5" />
+            {t("exposureRadar.firstDay.coach.badge", { done: doneCount, total })}
+          </span>
+          <p className="mt-3 text-base font-semibold text-[#e7e9ea]">{t(`exposureRadar.firstDay.coach.${currentStep}.title`)}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#8b98a5]">{t(`exposureRadar.firstDay.coach.${currentStep}.description`)}</p>
+        </div>
+        <a href={anchor} className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+          {t(`exposureRadar.firstDay.coach.${currentStep}.cta`)}
+          <ArrowRight className="size-3.5" />
+        </a>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {["now", "why", "done"].map((key) => (
+          <div key={key} className="rounded-xl border border-[#2f3336] bg-black/70 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71767b]">{t(`exposureRadar.firstDay.coach.label.${key}`)}</p>
+            <p className="mt-2 text-xs leading-5 text-[#c9d1d9]">{t(`exposureRadar.firstDay.coach.${currentStep}.${key}`)}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

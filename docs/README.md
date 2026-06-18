@@ -40,6 +40,7 @@ Octo-Agent 文档按用途归档在本目录下。根目录只保留 `README.md`
 - `product/page-list.md`：页面清单。
 - `product/roadmap.md`：产品路线图。
 - `product/product-strength-optimization-plan.md`：产品力短板优化计划与完成度跟踪。
+- `product/product-strength-next-optimization-plan.md`：PS-0 到 PS-9 之后的产品力增强计划与完成度跟踪。
 - `product/archive/legacy-automation-docs.md`：旧自动化设计文档历史归档入口。
 - `product/oaf-bot-billing.md`：OAF Bot + Billing 会员体系。
 - `product/oaf-bot-execution-mode.md`：OAF Bot 执行模式产品设计。

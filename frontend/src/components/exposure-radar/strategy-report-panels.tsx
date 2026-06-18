@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BarChart3, BrainCircuit, CheckCircle2, Clipboard, Clock3, Database, ShieldAlert, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, BrainCircuit, CheckCircle2, Clipboard, Clock3, Database, Repeat2, ShieldAlert, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -131,6 +131,9 @@ export function ResultLearningLoopPanel({
   const effectiveRecords = resultRecords.filter((record) => record.outcome === "effective" || (record.result_score || 0) >= 60);
   const pendingBackfill = recentRecords.filter((record) => (record.handled_at || record.task_status === "done" || record.published_url) && !record.result_checked_at && !record.result_score).length;
   const summary = buildResultLearningSummary({ moves, recentRecords, weeklyReview, safety, learningProfile, pendingBackfill, t });
+  const repeatAction = actions.find((action) => action.key === "best" || action.key === "boosted") || actions.find((action) => action.key === "next") || actions[0];
+  const slowAction = actions.find((action) => action.key === "caution" || action.key === "diagnostic") || actions.find((action) => action.key === "backfill") || summary;
+  const measureAction = actions.find((action) => action.key === "backfill") || actions.find((action) => action.key === "next") || summary;
   return (
     <Card className="bg-[#0f1419]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -153,6 +156,7 @@ export function ResultLearningLoopPanel({
         </p>
         <p className="mt-2 text-xs leading-5 opacity-85">{summary.detail}</p>
       </div>
+      <LearningDecisionStrip repeatAction={repeatAction} slowAction={slowAction} measureAction={measureAction} />
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {actions.map((action) => (
           <div key={action.key} className={`rounded-2xl border p-4 ${resultLearningTone(action.tone)}`}>
@@ -175,5 +179,43 @@ export function ResultLearningLoopPanel({
         ))}
       </div>
     </Card>
+  );
+}
+
+function LearningDecisionStrip({
+  repeatAction,
+  slowAction,
+  measureAction,
+}: {
+  repeatAction: { title: string; detail: string; metric?: string };
+  slowAction: { title: string; detail: string; metric?: string };
+  measureAction: { title: string; detail: string; metric?: string };
+}) {
+  const { t } = useT();
+  const decisions = [
+    { key: "repeat", icon: <Repeat2 className="size-4" />, action: repeatAction, tone: "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]" },
+    { key: "slow", icon: <ShieldAlert className="size-4" />, action: slowAction, tone: "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]" },
+    { key: "measure", icon: <BarChart3 className="size-4" />, action: measureAction, tone: "border-[#1d9bf0]/25 bg-[#07111a] text-[#8ecdf8]" },
+  ];
+  return (
+    <div className="mt-4 grid gap-3 lg:grid-cols-3">
+      {decisions.map((decision) => (
+        <div key={decision.key} className={`rounded-2xl border p-4 ${decision.tone}`}>
+          <div className="flex items-start justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              {decision.icon}
+              {t(`exposureRadar.learningLoop.decision.${decision.key}.title`)}
+            </p>
+            {decision.action.metric ? (
+              <span className="max-w-[8rem] truncate rounded-full border border-current/20 bg-black/25 px-2 py-0.5 text-[11px] font-semibold">
+                {decision.action.metric}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-xs font-semibold opacity-90">{decision.action.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-80">{decision.action.detail}</p>
+        </div>
+      ))}
+    </div>
   );
 }

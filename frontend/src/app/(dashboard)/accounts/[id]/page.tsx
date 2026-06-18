@@ -22,6 +22,13 @@ type AccountDiagnosis = {
   status: AccountDiagnosisStatus;
   checks: Array<{ key: string; pass: boolean; value: string }>;
 };
+type AccountGrowthDiagnosis = {
+  lane: string;
+  nextMove: string;
+  contentGap: string;
+  safetyBoundary: string;
+  handoff: string;
+};
 
 export default function AccountDetailPage() {
   const { t } = useT();
@@ -140,6 +147,7 @@ export default function AccountDetailPage() {
   const accountLabel = `@${data.account.username}`;
   const sourceStatus = normalizeSourceStatus(data.source_status);
   const diagnosis = buildAccountDiagnosis(data, Boolean(boundBot), sourceStatus, t);
+  const growthDiagnosis = buildAccountGrowthDiagnosis(data, diagnosis, strategyPreview, Boolean(boundBot), t);
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -218,6 +226,8 @@ export default function AccountDetailPage() {
           </Link>
         </div>
       </Card>
+
+      <AccountGrowthDiagnosisPanel diagnosis={growthDiagnosis} radarHref={radarHref} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
         <div className="space-y-4">
@@ -347,6 +357,44 @@ export default function AccountDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AccountGrowthDiagnosisPanel({ diagnosis, radarHref }: { diagnosis: AccountGrowthDiagnosis; radarHref: string }) {
+  const { t } = useT();
+  const cards = [
+    { key: "lane", icon: <Target className="size-4" />, value: diagnosis.lane, tone: "border-[#1d9bf0]/25 bg-[#07111a] text-[#8ecdf8]" },
+    { key: "nextMove", icon: <TrendingUp className="size-4" />, value: diagnosis.nextMove, tone: "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]" },
+    { key: "contentGap", icon: <BrainCircuit className="size-4" />, value: diagnosis.contentGap, tone: "border-[#a78bfa]/25 bg-[#171125] text-[#c4b5fd]" },
+    { key: "safetyBoundary", icon: <ShieldAlert className="size-4" />, value: diagnosis.safetyBoundary, tone: "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]" },
+  ];
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("accounts.intelligence.growthDiagnosis.title")} description={t("accounts.intelligence.growthDiagnosis.description")} className="mb-0" />
+        <Link href={radarHref} className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#1d9bf0] px-3 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+          {t("accounts.intelligence.growthDiagnosis.cta")}
+          <ArrowRight className="size-4" />
+        </Link>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <div key={card.key} className={`rounded-2xl border p-4 ${card.tone}`}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-8 items-center justify-center rounded-full border border-current/25 bg-black/35">
+                {card.icon}
+              </span>
+              <p className="text-sm font-semibold text-[#e7e9ea]">{t(`accounts.intelligence.growthDiagnosis.${card.key}.title`)}</p>
+            </div>
+            <p className="mt-3 line-clamp-4 text-xs leading-5 text-[#c9d1d9]">{card.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-2xl border border-[#2f3336] bg-black p-4">
+        <p className="text-sm font-semibold text-[#e7e9ea]">{t("accounts.intelligence.growthDiagnosis.handoff.title")}</p>
+        <p className="mt-2 text-xs leading-5 text-[#8b98a5]">{diagnosis.handoff}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -663,6 +711,39 @@ function buildAccountDiagnosis(
         value: t("accounts.intelligence.diagnosis.value.rules", { count: ruleCount }),
       },
     ],
+  };
+}
+
+function buildAccountGrowthDiagnosis(
+  data: AccountIntelligenceApi,
+  diagnosis: AccountDiagnosis,
+  strategy: ExposureRadarGrowthStrategyPayload | null,
+  hasBoundBot: boolean,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): AccountGrowthDiagnosis {
+  const firstTopic = data.positioning.detected_topics?.[0] || strategy?.core_topics?.[0] || t("accounts.intelligence.growthDiagnosis.fallback.topic");
+  const lane = data.positioning.audience_guess || data.positioning.positioning_summary || t("accounts.intelligence.growthDiagnosis.fallback.lane");
+  const nextMove = diagnosis.status === "needs_data"
+    ? t("accounts.intelligence.growthDiagnosis.move.needsData")
+    : diagnosis.status === "needs_lane" || !hasBoundBot
+      ? t("accounts.intelligence.growthDiagnosis.move.needsLane")
+      : t("accounts.intelligence.growthDiagnosis.move.ready", { topic: firstTopic });
+  const contentGap = data.positioning.risks?.[0]
+    || data.weekly_review.next_actions?.[0]
+    || t("accounts.intelligence.growthDiagnosis.fallback.gap");
+  const safetyBoundary = data.radar_guidance.avoid_keywords?.[0]
+    || data.positioning.risks?.[0]
+    || strategy?.avoid_topics?.[0]
+    || t("accounts.intelligence.growthDiagnosis.fallback.safety");
+  const handoff = strategy?.core_topics?.length
+    ? t("accounts.intelligence.growthDiagnosis.handoff.ready", { audience: strategy.target_audience || lane, topics: strategy.core_topics.slice(0, 3).join(", ") })
+    : t("accounts.intelligence.growthDiagnosis.handoff.empty", { lane });
+  return {
+    lane,
+    nextMove,
+    contentGap,
+    safetyBoundary,
+    handoff,
   };
 }
 

@@ -24,6 +24,12 @@ type EvidenceDiagnostics = {
   coverage: string;
 };
 
+type EvidenceQualityGate = {
+  status: "handle" | "observe" | "tune";
+  score: number;
+  signal: string;
+};
+
 export function AccountHealthScoreCard({ health }: { health: AccountHealthScore }) {
   const { t } = useT();
   return (
@@ -71,6 +77,7 @@ export function OpportunityEvidenceDeskCard({
   weak,
   topSignal,
   diagnostics,
+  qualityGate,
 }: {
   itemCount: number;
   loadState: LoadState;
@@ -80,6 +87,7 @@ export function OpportunityEvidenceDeskCard({
   weak: number;
   topSignal: EvidenceTopSignal | null;
   diagnostics: EvidenceDiagnostics;
+  qualityGate: EvidenceQualityGate;
 }) {
   const { t } = useT();
   return (
@@ -96,6 +104,21 @@ export function OpportunityEvidenceDeskCard({
         <PanelMiniStat icon={<Gauge className="size-3.5" />} label={t("exposureRadar.evidenceDesk.usable")} value={String(usable)} />
         <PanelMiniStat icon={<Info className="size-3.5" />} label={t("exposureRadar.evidenceDesk.thin")} value={String(thin)} />
         <PanelMiniStat icon={<ShieldAlert className="size-3.5" />} label={t("exposureRadar.evidenceDesk.weak")} value={String(weak)} />
+      </div>
+      <div className={`mt-4 rounded-2xl border p-4 ${evidenceQualityGateTone(qualityGate.status)}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <Target className="size-4" />
+              {t(`exposureRadar.evidenceDesk.quality.${qualityGate.status}.title`)}
+            </p>
+            <p className="mt-2 text-xs leading-5 opacity-85">{t(`exposureRadar.evidenceDesk.quality.${qualityGate.status}.description`, { signal: qualityGate.signal })}</p>
+          </div>
+          <div className="shrink-0 rounded-xl border border-current/20 bg-black/25 px-3 py-2 text-right">
+            <p className="text-[11px] font-semibold opacity-75">{t("exposureRadar.evidenceDesk.quality.score")}</p>
+            <p className="text-2xl font-semibold">{qualityGate.score}</p>
+          </div>
+        </div>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="rounded-2xl border border-[#2f3336] bg-black p-4">
@@ -125,6 +148,12 @@ export function OpportunityEvidenceDeskCard({
       </div>
     </Card>
   );
+}
+
+function evidenceQualityGateTone(status: EvidenceQualityGate["status"]) {
+  if (status === "handle") return "border-[#00ba7c]/25 bg-[#061a14] text-[#7ee0b5]";
+  if (status === "observe") return "border-[#ffd400]/25 bg-[#1f1a07] text-[#f6d96b]";
+  return "border-[#1d9bf0]/25 bg-[#07111a] text-[#8ecdf8]";
 }
 
 export function GrowthExperimentCard({ experiments }: { experiments: GrowthExperiment[] }) {

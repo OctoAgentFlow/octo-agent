@@ -72,6 +72,8 @@ export function OpportunityEvidenceDeskPanel({ items, moves, data, loadState }: 
   const topMove = moves[0]?.item || items[0];
   const topCredibility = topMove ? buildSignalCredibility(topMove, t) : null;
   const diagnostics = data?.diagnostics || null;
+  const evidenceScore = itemCountQualityScore(strong, usable, thin, weak);
+  const qualityStatus = itemCountQualityStatus({ itemCount: items.length, strong, usable, weak, score: evidenceScore });
   return (
     <OpportunityEvidenceDeskCard
       itemCount={items.length}
@@ -92,8 +94,37 @@ export function OpportunityEvidenceDeskPanel({ items, moves, data, loadState }: 
         maxSpeed: formatOneDecimal(diagnostics?.max_views_per_minute || 0),
         coverage: formatPercent(diagnostics?.real_view_coverage || 0),
       }}
+      qualityGate={{
+        status: qualityStatus,
+        score: evidenceScore,
+        signal: topMove ? topMove.title : (diagnostics?.top_missing_reason || t("exposureRadar.evidenceDesk.quality.noSignal")),
+      }}
     />
   );
+}
+
+function itemCountQualityScore(strong: number, usable: number, thin: number, weak: number) {
+  const total = strong + usable + thin + weak;
+  if (!total) return 0;
+  return Math.round(((strong * 1 + usable * 0.7 + thin * 0.35) / total) * 100);
+}
+
+function itemCountQualityStatus({
+  itemCount,
+  strong,
+  usable,
+  weak,
+  score,
+}: {
+  itemCount: number;
+  strong: number;
+  usable: number;
+  weak: number;
+  score: number;
+}): "handle" | "observe" | "tune" {
+  if (!itemCount || weak > strong + usable || score < 35) return "tune";
+  if (strong >= 1 || strong + usable >= 3 || score >= 62) return "handle";
+  return "observe";
 }
 
 export function GrowthExperimentPanel({

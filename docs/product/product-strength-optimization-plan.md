@@ -65,6 +65,5 @@ When a product-strength item is fixed:
 
 ## Current Next Step
 
-PS-0 through PS-9 are complete. Next product-strength work should come from
-real usage feedback or the next dedicated enhancement plan, not more first-day
-IA cleanup.
+PS-0 through PS-9 are complete. The next dedicated enhancement batch is tracked
+in `docs/product/product-strength-next-optimization-plan.md`.

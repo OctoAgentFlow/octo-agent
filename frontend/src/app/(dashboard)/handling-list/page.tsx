@@ -65,7 +65,7 @@ type SmartBulkGroup = {
   retryCount: number;
 };
 
-const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply", "dm"];
+const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
 const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review", "autopilot"];
 const publishOutcomeOptions: PublishOutcomeFilter[] = ["all", "pending", "published", "failed", "dry_run", "real"];
@@ -196,6 +196,12 @@ function moduleNameKey(type: string) {
   if (type === "comment") return "automation.module.comment.name";
   if (type === "reply") return "automation.module.reply.name";
   return "automation.module.dm.name";
+}
+
+function moduleWorkspaceHref(type: string) {
+  if (type === "post") return "/content-drafts?panel=planner";
+  if (type === "comment") return "/exposure-radar";
+  return "/handling-list";
 }
 
 function normalizedTypeFilter(value: string | null): ReviewQueueType {
@@ -690,7 +696,7 @@ export default function ExecutionQueuePage() {
         description: t("handlingList.blockers.pausedModules.description", {
           modules: disabledModuleTypes.map((type) => t(moduleNameKey(type))).join(" / "),
         }),
-        href: "/automations#automation-modules",
+        href: moduleWorkspaceHref(disabledModuleTypes[0] || "post"),
         actionLabel: t("handlingList.blockers.pausedModules.action"),
         severity: "danger",
         countLabel: String(disabledModuleTypes.length),
@@ -1394,7 +1400,7 @@ export default function ExecutionQueuePage() {
             {disabledModuleTypes.map((type) => (
               <Link
                 key={type}
-                href={`/automations?module=${type}#automation-modules`}
+                href={moduleWorkspaceHref(type)}
                 className="inline-flex h-8 items-center justify-center gap-2 rounded-full border border-amber-300/25 bg-black/20 px-3 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/10"
               >
                 {t("handlingList.pausedNotice.fixModule", { module: t(moduleNameKey(type)) })}
@@ -1975,7 +1981,7 @@ function QueueProgressCard({ stats, pausedCount }: { stats: { pending_review: nu
     { key: "pending", value: pending, href: "/handling-list?status=pending_review", tone: "text-amber-100" },
     { key: "completed", value: completed, href: "/handling-list?status=approved", tone: "text-emerald-100" },
     { key: "failed", value: stats.failed, href: "/handling-list?status=failed", tone: "text-rose-100" },
-    { key: "paused", value: pausedCount, href: "/automations#automation-modules", tone: "text-[#8ecdf8]" },
+    { key: "paused", value: pausedCount, href: "/content-drafts?panel=planner", tone: "text-[#8ecdf8]" },
   ];
   return (
     <Card className="border-[#1d9bf0]/25 bg-[#06111d] p-4">

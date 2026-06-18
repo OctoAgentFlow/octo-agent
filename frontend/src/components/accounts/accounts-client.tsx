@@ -134,7 +134,7 @@ export function AccountsClient() {
         contentDraftService.plans(),
         reviewQueueService.list({ pageSize: 100 }),
       ]);
-      setAutomationModules(automationData.modules);
+      setAutomationModules(automationData.modules.filter((module) => module.type !== "dm"));
       setContentDraftPlans(planData.items);
       setQueueItems(queueData.items);
     } catch {
@@ -269,7 +269,7 @@ export function AccountsClient() {
     const blockers: OperationalBlocker[] = [];
     const reauthCount = accounts.filter((account) => account.status !== "connected" || account.publishReauthRequired).length;
     const unboundBotCount = accounts.filter((account) => !bots.some((bot) => Number(account.id) === bot.twitter_account_id)).length;
-    const pausedAutomationCount = automationModules.filter((module) => !module.config.enabled).length;
+    const pausedAutomationCount = automationModules.filter((module) => module.type !== "dm" && !module.config.enabled).length;
     const queueAttentionCount = queueItems.filter((item) => item.status === "pending_review" || item.status === "ready_to_publish" || item.status === "failed").length;
     if (reauthCount > 0) {
       blockers.push({
@@ -298,7 +298,7 @@ export function AccountsClient() {
         id: "paused_automation",
         title: t("accounts.blockers.pausedAutomation.title", { count: pausedAutomationCount }),
         description: t("accounts.blockers.pausedAutomation.description"),
-        href: "/automations#automation-modules",
+        href: "/content-drafts?panel=planner",
         actionLabel: t("accounts.blockers.pausedAutomation.action"),
         severity: "warning",
         countLabel: String(pausedAutomationCount),

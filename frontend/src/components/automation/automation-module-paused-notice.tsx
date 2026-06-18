@@ -13,6 +13,12 @@ import { automationService, type AutomationModuleApi } from "@/services/automati
 
 type AutomationModuleType = AutomationModuleApi["type"];
 
+function workspaceHref(type: AutomationModuleType) {
+  if (type === "post") return "/content-drafts?panel=planner";
+  if (type === "comment") return "/exposure-radar";
+  return "/handling-list";
+}
+
 export function AutomationModulePausedNotice({
   type,
   onEnabledChange,
@@ -83,9 +89,9 @@ export function AutomationModulePausedNotice({
             {enabling ? <Loader2 className="size-4 animate-spin" /> : <Power className="size-4" />}
             {t("automation.pausedNotice.enable")}
           </Button>
-          <Link href="/automations#automation-modules" className="inline-flex">
+          <Link href={workspaceHref(type)} className="inline-flex">
             <Button type="button" variant="outline">
-              {t("automation.pausedNotice.openControl")}
+              {t("automation.actions.openWorkspace")}
               <ArrowRight className="size-4" />
             </Button>
           </Link>

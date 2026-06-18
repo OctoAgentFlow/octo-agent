@@ -17,7 +17,7 @@ type AccountListProps = {
   disconnectingAccountId?: string | null;
 };
 
-const automationTypes: Array<AccountAutomationState["type"]> = ["post", "reply", "comment", "dm"];
+const automationTypes: Array<AccountAutomationState["type"]> = ["post", "reply", "comment"];
 
 export function AccountList({
   accounts,

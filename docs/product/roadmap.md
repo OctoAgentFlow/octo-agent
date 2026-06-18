@@ -21,7 +21,7 @@ The product should help operators find good opportunities, draft with persona an
 | Dashboard | `/dashboard` | real | Subscription summary, readiness, recent activity, and operational status. |
 | Analytics | `/analytics` | real / evolving | Internal activity analytics, content/handling performance, and available public X metrics. |
 | Admin | `/admin` | real | Admin overview, user management, execution metrics, billing operations, and system status. |
-| Legacy Automation | downlined | deprecated | Auto Reply, authenticated Auto DM, Auto Comment, Auto Comments, old Auto Post, and old Execution Queue routes are no longer registered as product surfaces. |
+| Legacy Automation | downlined | deprecated | Auto Reply, authenticated Auto DM, Auto Comment, Auto Comments, old Auto Post, old Automations page, and old Execution Queue routes are no longer registered as product surfaces. |
 
 ## Runtime Stance
 
@@ -77,7 +77,7 @@ workbench, then make the first useful value easier to understand and repeat.
 
 | Priority | Status | Notes |
 | --- | --- | --- |
-| Legacy route protection and documentation alignment | Done / refreshed | Old `/auto-post`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. Public DM unsubscribe remains for compliance. P0 cleanup also added a real `/content-library` entry, redirected `/agents` to `/oaf-bots`, and consolidated nav/start links around Daily Growth Desk, Content Memory, OAF Bots, and Handling List. |
+| Legacy route protection and documentation alignment | Done / refreshed | Old `/auto-post`, `/automations`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. `/automations` now redirects to Dashboard, while authenticated `/automations` API calls remain only as internal compatibility for workflow health and paused-module recovery. Public DM unsubscribe remains for compliance. P0 cleanup also added a real `/content-library` entry, redirected `/agents` to `/oaf-bots`, and consolidated nav/start links around Daily Growth Desk, Content Memory, OAF Bots, and Handling List. |
 | First-day IA and product-strength optimization | Done / complete for current batch | PS-0 through PS-9 are complete: Daily Growth Desk is the dominant first-run and daily-return workbench, Daily X Queue and Analytics are supporting surfaces, `/start-today` enters a guided first-session mode, opportunity cards explain operator evidence, learning panels show what feedback changed, strategy setup can import product context into strategy plus Content Memory, pricing/proof copy is aligned to manual operating capacity, activation loop visibility exists, and Account Intelligence labels data-source boundaries. |
 | Exposure Radar modularization | Done / maintain boundary | The former large `/exposure-radar` page is now about 1.2k lines and mainly orchestrates data/state. P1 extracted hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused modules. Future work should keep new panels outside `page.tsx`. |
 | Cost and rate observability | Done / refining | `CostUsageLedger` records OpenAI generation cost and major X API usage. Admin exposes OpenAI cost, X API calls, X Trends/Exposure refresh config, skip/failure health, estimated Exposure refreshes/day, budget guardrail status, and recent cost-driving events. |

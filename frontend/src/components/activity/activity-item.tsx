@@ -140,7 +140,7 @@ export function ActivityItem({ record }: { record: ActivityRecord }) {
             </Link>
           ) : null}
           {record.status === "failed" ? (
-            <Link href="/automations" className="text-sm font-semibold text-[#ff8a91] hover:underline">
+            <Link href="/handling-list?status=failed" className="text-sm font-semibold text-[#ff8a91] hover:underline">
               {t("activity.actions.troubleshoot")}
             </Link>
           ) : null}

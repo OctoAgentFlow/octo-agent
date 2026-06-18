@@ -278,7 +278,7 @@ export default function DashboardPage() {
     setAutomationError(null);
     try {
       const data = await automationService.list();
-      setAutomations(data.modules.map((item) => mapAutomation(item, timeZone)));
+      setAutomations(data.modules.filter((item) => item.type !== "dm").map((item) => mapAutomation(item, timeZone)));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         setAutomationError(error.response?.data?.message || t("dashboard.errors.loadAutomations"));
@@ -1055,7 +1055,7 @@ function WorkflowProgressCard({
     { key: "pending", value: pending, tone: "text-amber-100", href: "/handling-list?status=pending_review" },
     { key: "completed", value: completed, tone: "text-emerald-100", href: "/handling-list?status=approved" },
     { key: "failed", value: failed, tone: "text-rose-100", href: "/handling-list?status=failed" },
-    { key: "paused", value: paused, tone: "text-[#8ecdf8]", href: "/automations#automation-modules" },
+    { key: "paused", value: paused, tone: "text-[#8ecdf8]", href: "/content-drafts?panel=planner" },
   ];
   return (
     <Card className="bg-[#0f1419]">

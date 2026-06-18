@@ -41,6 +41,7 @@ This document maps the current product pages to their backend API areas. It is w
 | Legacy Path/API | Current Status | Replacement |
 | --- | --- | --- |
 | `/auto-post` page/API | Downlined. | `/content-drafts` and `/api/v1/content-drafts`. |
+| `/automations` page | Downlined frontend route; redirects to Dashboard. Authenticated `/api/v1/automations*` remains internal compatibility for workflow health and paused-module recovery. | `/dashboard`, `/content-drafts`, `/handling-list`, and `/exposure-radar`. |
 | `/execution-queue` page | Downlined. | `/handling-list`. |
 | `/review-queue` page | Downlined frontend route; backend API remains for Handling List data. | `/handling-list`. |
 | `/auto-replies` API | Downlined authenticated legacy automation API. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |

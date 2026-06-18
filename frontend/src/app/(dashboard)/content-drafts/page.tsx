@@ -518,7 +518,7 @@ export default function ContentDraftsPage() {
   const aiRemaining = Math.max(aiLimit - aiUsed, 0);
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
   const runTotalPages = Math.max(1, Math.ceil(runPagination.total / runPagination.pageSize));
-  const canAutopilotPublish = (selectedPlan?.execution_mode || form.executionMode) === "autopilot";
+  const handlingModeReady = Boolean(selectedPlan?.execution_mode || form.executionMode);
   const selectedAccountTier = selectedAccount?.x_subscription_tier || "unknown";
   const selectedAccountIsPremium = selectedAccountTier === "premium" || selectedAccountTier === "premium_plus";
   const selectedPostingWindowHours = useMemo(() => parsePostingWindowHours(form.postingWindows), [form.postingWindows]);
@@ -553,7 +553,7 @@ export default function ContentDraftsPage() {
         id: "module_paused",
         title: t("contentDrafts.blockers.modulePaused.title"),
         description: t("contentDrafts.blockers.modulePaused.description"),
-        href: "/automations?module=post#automation-modules",
+        href: "/content-drafts?panel=planner",
         actionLabel: t("contentDrafts.blockers.modulePaused.action"),
         severity: "danger",
       });
@@ -1307,7 +1307,7 @@ export default function ContentDraftsPage() {
             hasAccount={Boolean(selectedAccountID)}
             hasActiveContent={activeContentCount > 0}
             plannerEnabled={Boolean(selectedPlan?.enabled || form.enabled)}
-            autopilotEnabled={canAutopilotPublish}
+            handlingModeReady={handlingModeReady}
             onOpenPanel={openPanel}
           />
 
@@ -2198,13 +2198,13 @@ function ContentDraftSetupGuide({
   hasAccount,
   hasActiveContent,
   plannerEnabled,
-  autopilotEnabled,
+  handlingModeReady,
   onOpenPanel,
 }: {
   hasAccount: boolean;
   hasActiveContent: boolean;
   plannerEnabled: boolean;
-  autopilotEnabled: boolean;
+  handlingModeReady: boolean;
   onOpenPanel: (panel: WorkbenchPanel) => void;
 }) {
   const { t } = useT();
@@ -2228,7 +2228,7 @@ function ContentDraftSetupGuide({
       action: { label: t("contentDrafts.setup.actions.openPlanner"), panel: "planner" as WorkbenchPanel },
     },
     {
-      done: autopilotEnabled,
+      done: handlingModeReady,
       title: t("contentDrafts.setup.autopilot.title"),
       description: t("contentDrafts.setup.autopilot.description"),
       action: { label: t("contentDrafts.setup.actions.setAutopilot"), panel: "planner" as WorkbenchPanel },

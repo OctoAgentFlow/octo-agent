@@ -141,7 +141,7 @@ const personaChecklistKeys = ["name", "account", "role", "brand", "audience", "l
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
-const automationTypes: BotAutomationType[] = ["post", "reply", "comment", "dm"];
+const automationTypes: BotAutomationType[] = ["post", "reply", "comment"];
 const accountArchetypeKeys: AccountArchetypeKey[] = ["brand", "founder", "kol", "community", "agency"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
 const feedbackSuggestionDiffKeys: Array<keyof OAFBotPayload> = [
@@ -716,7 +716,7 @@ export default function OAFBotsPage() {
       { key: "account", ready: Boolean(selectedAccount), href: "/accounts" },
       { key: "content", ready: selectedActiveContentItems.length > 0, href: accountID ? `/content-drafts?panel=content&account=${accountID}` : "/content-drafts?panel=content" },
       { key: "planner", ready: Boolean(selectedContentDraftPlan?.enabled), href: accountID ? `/content-drafts?panel=planner&account=${accountID}` : "/content-drafts?panel=planner" },
-      { key: "autopilot", ready: selectedContentDraftPlan?.execution_mode === "autopilot", href: accountID ? `/content-drafts?panel=planner&account=${accountID}` : "/content-drafts?panel=planner" },
+      { key: "autopilot", ready: Boolean(selectedContentDraftPlan?.enabled), href: accountID ? `/content-drafts?panel=planner&account=${accountID}` : "/content-drafts?panel=planner" },
     ];
   }, [selectedAccount, selectedActiveContentItems.length, selectedBot, selectedContentDraftPlan]);
 
@@ -753,7 +753,7 @@ export default function OAFBotsPage() {
       const queueSummary = summarizeQueue(botQueueItems);
       const fallbackFlags = [
         ...(!account ? ["unbound"] : []),
-        ...(!(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0) ? ["auto_post_not_ready"] : []),
+        ...(!(account && plan?.enabled && activeContentCount > 0) ? ["auto_post_not_ready"] : []),
         ...(feedback.filter((item) => item.rating === "negative").length >= negativeFeedbackInspectionThreshold ? ["negative_feedback"] : []),
         ...(queueSummary.pendingReview >= reviewBacklogInspectionThreshold ? ["review_backlog"] : []),
       ];
@@ -764,7 +764,7 @@ export default function OAFBotsPage() {
         activeContentCount,
         queueSummary,
         plan,
-        contentDraftReady: Boolean(account && plan?.enabled && plan.execution_mode === "autopilot" && activeContentCount > 0),
+        contentDraftReady: Boolean(account && plan?.enabled && activeContentCount > 0),
         monthlyUsage,
         negativeFeedback: feedback.filter((item) => item.rating === "negative").length,
         inspectionFlags: matrixInspectionFlagsByBot[bot.id] || fallbackFlags,
@@ -1063,7 +1063,7 @@ export default function OAFBotsPage() {
         reviewQueueService.list({ pageSize: 100 }),
         contentLibraryService.list({ limit: 100 }),
       ]);
-      setAutomationModules(automationData.modules);
+      setAutomationModules(automationData.modules.filter((module) => module.type !== "dm"));
       setContentDraftPlans(planData.items);
       setQueueItems(queueData.items);
       setContentItems(contentData.items);
@@ -3610,9 +3610,9 @@ function BotRelationshipCard({
                   <ContentDraftReadinessTile
                     title={t("oafBots.relationship.readiness.autopilot")}
                     description={t(`handlingList.executionMode.${contentDraftPlan?.execution_mode || "review"}`)}
-                    ready={contentDraftPlan?.execution_mode === "autopilot"}
+                    ready={Boolean(contentDraftPlan?.enabled)}
                     href={account ? `/content-drafts?panel=planner&account=${account.id}` : "/content-drafts?panel=planner"}
-                    action={contentDraftPlan?.execution_mode === "autopilot" ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
+                    action={contentDraftPlan?.enabled ? t("oafBots.relationship.readiness.manage") : t("oafBots.relationship.readiness.fix")}
                   />
                 </div>
               </div>

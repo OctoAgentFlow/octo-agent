@@ -34,7 +34,26 @@ import {
 } from "@/components/oaf-bots/form-fields";
 import { LearningRulesCenter } from "@/components/oaf-bots/learning-center-panel";
 import { errorMessage, getErrorBody } from "@/components/oaf-bots/oaf-bot-errors";
-import { aggregateMonthlyUsage, botToPayload, calculatePersonaCompleteness, contentItemMatchesBot, createEmptyForm, summarizeQueue, usageSceneOrder } from "@/components/oaf-bots/oaf-bot-model";
+import {
+  aggregateMonthlyUsage,
+  automationHref,
+  botToPayload,
+  calculatePersonaCompleteness,
+  contentItemMatchesBot,
+  createEmptyForm,
+  getPersonaChecklist,
+  getPersonaQualityDiagnostics,
+  getStepCompletion,
+  isUnconfiguredDraft,
+  joinMultiValues,
+  mergeRuleText,
+  mergeUniqueValues,
+  summarizeQueue,
+  usageSceneOrder,
+  wizardStepOrder,
+  type BotAutomationType,
+  type WizardStep,
+} from "@/components/oaf-bots/oaf-bot-model";
 import { ProfileDiffPreview, SamplePanel, getFeedbackSuggestionDiffs, mergeFeedbackSuggestionProfile, normalizeSampleContent, splitMultiValue } from "@/components/oaf-bots/sample-learning-panels";
 import { LanguageConfigPanel, SafetyRulesPanel } from "@/components/oaf-bots/safety-persona-panels";
 import { AccountArchetypePicker, QuotaCard, StyleRecommendationPanel, TopicGuardrailRecommendationPanel } from "@/components/oaf-bots/strategy-persona-panels";
@@ -62,9 +81,7 @@ import type {
   OAFBotTestGenerateResult,
 } from "@/types/oaf-bot";
 
-type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
 type SampleScene = OAFBotSampleScene;
-type BotAutomationType = "post" | "reply" | "comment" | "dm";
 type BotAutomationState = {
   type: BotAutomationType;
   enabled: boolean;
@@ -94,10 +111,6 @@ type SelectOption = {
 };
 
 type ChipOption = SelectOption;
-
-const wizardStepOrder: WizardStep[] = ["identity", "brand", "style", "topics", "goals", "test"];
-const personaChecklistKeys = ["name", "account", "role", "brand", "audience", "language", "personality", "topics", "contentStrategy", "guardrails", "summary", "goal"] as const;
-type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment"];
 const accountArchetypeKeys: AccountArchetypeKey[] = ["brand", "founder", "kol", "community", "agency"];
@@ -2012,126 +2025,11 @@ export default function OAFBotsPage() {
   );
 }
 
-function isUnconfiguredDraft(form: OAFBotPayload) {
-  return (
-    !form.name.trim() &&
-    !form.twitter_account_id &&
-    !form.occupation.trim() &&
-    !form.industry.trim() &&
-    !form.age_range.trim() &&
-    !form.gender.trim() &&
-    !form.education.trim() &&
-    !form.mbti.trim() &&
-    form.personality_tags.length === 0 &&
-    !form.identity_summary.trim() &&
-    !form.voice_tone.trim() &&
-    form.topics.length === 0 &&
-    form.forbidden_topics.length === 0 &&
-    !form.growth_goal.trim() &&
-    !form.project_one_liner.trim() &&
-    !form.target_audience.trim() &&
-    !form.core_value_props.trim() &&
-    !form.product_features.trim() &&
-    !form.differentiators.trim() &&
-    form.content_pillars.length === 0 &&
-    !form.content_objectives.trim() &&
-    !form.preferred_cta.trim() &&
-    !form.website_url.trim() &&
-    !form.telegram_url.trim() &&
-    !form.discord_url.trim() &&
-    !form.docs_url.trim() &&
-    !form.cta_policy.trim() &&
-    form.hashtags.length === 0 &&
-    form.keywords.length === 0 &&
-    !form.compliance_notes.trim() &&
-    form.avoid_claims.length === 0 &&
-    form.safety_mode === "balanced"
-  );
-}
-
 function optionKeys(namespace: string, keys: string[], t: (key: string, params?: Record<string, string | number>) => string): ChipOption[] {
   return keys.map((key) => ({
     value: recommendedOptionValues[namespace]?.[key] ?? key,
     label: t(`oafBots.options.${namespace}.${key}`),
   }));
-}
-
-function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
-  return {
-    identity: Boolean(form.name.trim() && form.twitter_account_id && (form.occupation.trim() || form.industry.trim())),
-    brand: Boolean(form.project_one_liner.trim() && (form.target_audience.trim() || form.core_value_props.trim())),
-    style: Boolean((form.primary_language.trim() && form.language_strategy.trim()) || form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
-    topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
-    goals: Boolean(form.growth_goal.trim()),
-    test: hasSavedBot,
-  };
-}
-
-function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
-  const completed = new Set<PersonaChecklistKey>();
-  if (form.name.trim()) completed.add("name");
-  if (form.twitter_account_id) completed.add("account");
-  if (form.occupation.trim() || form.industry.trim()) completed.add("role");
-  if (form.project_one_liner.trim() || form.core_value_props.trim() || form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) completed.add("brand");
-  if (form.target_audience.trim()) completed.add("audience");
-  if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
-  if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
-  if (form.topics.length > 0) completed.add("topics");
-  if (form.content_pillars.length > 0 || form.content_objectives.trim() || form.preferred_cta.trim()) completed.add("contentStrategy");
-  if (form.forbidden_topics.length > 0 || form.avoid_claims.length > 0 || form.compliance_notes.trim() || form.safety_mode.trim()) completed.add("guardrails");
-  if (form.identity_summary.trim()) completed.add("summary");
-  if (form.growth_goal.trim()) completed.add("goal");
-
-  const configured = personaChecklistKeys
-    .filter((key) => completed.has(key))
-    .map((key) => t(`oafBots.checklist.${key}`));
-  const missing = personaChecklistKeys
-    .filter((key) => !completed.has(key))
-    .map((key) => t(`oafBots.checklist.${key}`));
-  const nextKey = personaChecklistKeys.find((key) => !completed.has(key)) ?? "test";
-
-  return {
-    configured,
-    missing,
-    nextSuggestion: t(`oafBots.preview.next.${nextKey}`),
-  };
-}
-
-function getPersonaQualityDiagnostics(form: OAFBotPayload, t: (key: string) => string) {
-  const diagnostics: Array<{ tone: "warning" | "info"; message: string }> = [];
-  const weakSummary = form.identity_summary.trim().length > 0 && form.identity_summary.trim().length < 40;
-  const weakGoal = form.growth_goal.trim().length > 0 && form.growth_goal.trim().length < 30;
-  const broadTopics = form.topics.length > 6;
-  const missingProductContext = !form.project_one_liner.trim() && !form.core_value_props.trim() && !form.product_features.trim();
-  const missingAudience = !form.target_audience.trim();
-  const missingGuardrails = form.forbidden_topics.length === 0 && form.avoid_claims.length === 0 && !form.compliance_notes.trim();
-  const missingVoice = form.personality_tags.length === 0 && !form.voice_tone.trim();
-  const strongCTA = /(buy now|moon|guarantee|guaranteed|airdrop|claim|暴富|稳赚|空投|领取|立即购买)/i.test(form.preferred_cta);
-
-  if (!form.identity_summary.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingSummary") });
-  else if (weakSummary) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakSummary") });
-  if (!form.growth_goal.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGoal") });
-  else if (weakGoal) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakGoal") });
-  if (missingProductContext) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingProductContext") });
-  if (missingAudience) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingAudience") });
-  if (missingVoice) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingVoice") });
-  if (broadTopics) diagnostics.push({ tone: "info", message: t("oafBots.quality.tooManyTopics") });
-  if (missingGuardrails) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGuardrails") });
-  if (strongCTA) diagnostics.push({ tone: "warning", message: t("oafBots.quality.strongCTA") });
-
-  return diagnostics.slice(0, 5);
-}
-
-function joinMultiValues(values: string[]) {
-  return values.map((item) => item.trim()).filter(Boolean).join(",");
-}
-
-function mergeUniqueValues(current: string[] = [], additions: string[] = []) {
-  return Array.from(new Set([...current, ...additions].map((item) => item.trim()).filter(Boolean)));
-}
-
-function mergeRuleText(current = "", additions = "") {
-  return mergeUniqueValues(current.split(/\n+/), additions.split(/\n+/)).join("\n");
 }
 
 function detectAccountArchetype(form: OAFBotPayload): AccountArchetypeKey | null {
@@ -2156,10 +2054,4 @@ function applyAccountArchetypePreset(current: OAFBotPayload, type: AccountArchet
     content_objectives: current.content_objectives.trim() || preset.content_objectives || "",
     safety_mode: current.safety_mode || preset.safety_mode || "balanced",
   };
-}
-
-function automationHref(type: BotAutomationType) {
-  if (type === "post") return "/content-drafts";
-  if (type === "comment") return "/exposure-radar";
-  return "/handling-list";
 }

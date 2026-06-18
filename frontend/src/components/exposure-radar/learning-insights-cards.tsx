@@ -29,6 +29,44 @@ export function LearningFeedbackCard({
   );
 }
 
+export function ResultLearningStatusCard({
+  handledCount,
+  pendingBackfillCount,
+  backfilledCount,
+  learnedSignalCount,
+}: {
+  handledCount: number;
+  pendingBackfillCount: number;
+  backfilledCount: number;
+  learnedSignalCount: number;
+}) {
+  const { t } = useT();
+  return (
+    <div className="rounded-2xl border border-[#00ba7c]/20 bg-[#061a14] p-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("exposureRadar.learningPanel.resultStatus.title")}</p>
+          <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("exposureRadar.learningPanel.resultStatus.description")}</p>
+        </div>
+        <span className="inline-flex w-fit rounded-full border border-[#00ba7c]/25 bg-black px-2.5 py-1 text-[11px] font-semibold text-[#7ee0b5]">
+          {t("exposureRadar.learningPanel.resultStatus.badge")}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-4">
+        <LeaderboardPill label={t("exposureRadar.learningPanel.resultStatus.handled")} value={handledCount} tone="border-[#2f3336] bg-black text-[#8b98a5]" />
+        <LeaderboardPill label={t("exposureRadar.learningPanel.resultStatus.pending")} value={pendingBackfillCount} tone="border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]" />
+        <LeaderboardPill label={t("exposureRadar.learningPanel.resultStatus.backfilled")} value={backfilledCount} tone="border-[#1d9bf0]/25 bg-[#1d9bf0]/10 text-[#8ecdf8]" />
+        <LeaderboardPill label={t("exposureRadar.learningPanel.resultStatus.learned")} value={learnedSignalCount} tone="border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]" />
+      </div>
+      <p className="mt-3 text-xs leading-5 text-[#8b98a5]">
+        {pendingBackfillCount > 0
+          ? t("exposureRadar.learningPanel.resultStatus.pendingHint", { count: pendingBackfillCount })
+          : t("exposureRadar.learningPanel.resultStatus.cleanHint")}
+      </p>
+    </div>
+  );
+}
+
 export function BoostedSignalsCard({ items }: { items: ExposureRadarItemApi[] }) {
   const { t } = useT();
   return (

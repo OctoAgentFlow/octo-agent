@@ -4,12 +4,75 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { ArrowRight, Bot, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, MessageCircle, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, Clock, ExternalLink, Pencil, RefreshCw, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Trash2, Wand2, XCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { OperationalBlockersCard, type OperationalBlocker } from "@/components/operations/operational-blockers-card";
+import {
+  automationPausedToast,
+  canBulkApprove,
+  canBulkReject,
+  canBulkRetry,
+  canDeleteQueueItem,
+  canEditQueueItem,
+  canManualPublish,
+  compactQueueContent,
+  defaultContentDraftRewriteMode,
+  defaultSocialRewriteMode,
+  deliveryLabelKey,
+  failureGroupForItem,
+  feedbackIssueLabel,
+  feedbackIssueMatch,
+  feedbackSceneForQueueType,
+  feedbackSceneLabel,
+  issueVerdictStatForIssue,
+  isActionableQueueItem,
+  modeOptions,
+  moduleNameKey,
+  moduleWorkspaceHref,
+  normalizeFeedbackIssue,
+  normalizeTargetSummary,
+  normalizedFocusType,
+  normalizedModeFilter,
+  normalizedPublishOutcomeFilter,
+  normalizedStatusFilter,
+  normalizedTypeFilter,
+  percent,
+  prioritizeByFeedbackIssue,
+  publishOutcomeMatches,
+  publishOutcomeOptions,
+  publishStatusKey,
+  publishTone,
+  queueContentPreviewLength,
+  queueItemKey,
+  queuePageSize,
+  reasonWeightsForIssue,
+  rejectReasons,
+  sourceDescriptionForItem,
+  sourceLabelKey,
+  sourceLabelKeyForItem,
+  sourceTone,
+  statusOptions,
+  statusTone,
+  targetLabelForItem,
+  typeIcon,
+  typeOptions,
+  type BulkAction,
+  type FailureGroupKey,
+  type FeedbackIssueKey,
+  type FeedbackIssueVerdict,
+  type LoadState,
+  type ModuleType,
+  type PublishOutcomeFilter,
+  type QueueFocus,
+  type QueueQualitySignal,
+  type RejectDraft,
+  type RejectReasonKey,
+  type SmartBulkGroup,
+  type SocialRewriteMode,
+} from "@/components/handling-list/handling-list-model";
 import { useConfirm } from "@/components/providers/confirm-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { useT } from "@/i18n/use-t";
@@ -30,382 +93,6 @@ import {
   type ReviewQueueStatus,
   type ReviewQueueType,
 } from "@/services/review-queue.service";
-
-type LoadState = "loading" | "ready" | "error";
-type ModuleType = "post" | "comment" | "reply" | "dm";
-type QueueQualitySignal = "liked" | "disliked" | "more_like_this";
-type SocialRewriteMode = "natural" | "shorter" | "human_reply" | "less_marketing" | "more_specific";
-type QueueFocus = {
-  type: ReviewQueueType;
-  sourceID: number | null;
-};
-type RejectReasonKey = "irrelevant" | "too_salesy" | "wrong_tone" | "fact_risk" | "weak_context" | "other";
-type RejectDraft = {
-  reason: RejectReasonKey;
-  note: string;
-};
-type FeedbackIssueKey = RejectReasonKey | "missing_context" | "";
-type FeedbackIssueMatch = {
-  score: number;
-  reasons: string[];
-  reasonKeys: string[];
-};
-type FeedbackIssueVerdict = "accurate" | "irrelevant";
-type BulkAction = "approve" | "reject" | "retry" | "delete";
-type FailureGroupKey = "authorization" | "module_paused" | "rate_limit" | "safety" | "publish_api" | "content" | "unknown";
-type PublishOutcomeFilter = "all" | "pending" | "published" | "failed" | "dry_run" | "real";
-type SmartBulkGroup = {
-  id: string;
-  category: "failure" | "feedback" | "bot" | "account" | "type";
-  title: string;
-  description: string;
-  items: ReviewQueueItemApi[];
-  approveCount: number;
-  rejectCount: number;
-  retryCount: number;
-};
-
-const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply"];
-const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
-const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review"];
-const publishOutcomeOptions: PublishOutcomeFilter[] = ["all", "pending", "published", "failed"];
-const rejectReasons: RejectReasonKey[] = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "other"];
-const queuePageSize = 24;
-const queueContentPreviewLength = 360;
-
-function compactQueueContent(content?: string) {
-  const normalized = (content || "").trim();
-  if (!normalized) return "—";
-  if (normalized.length <= queueContentPreviewLength) return normalized;
-  return `${normalized.slice(0, queueContentPreviewLength).trimEnd()}...`;
-}
-
-function statusTone(status: string) {
-  if (status === "ready_to_publish") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  if (status === "processing") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (status === "pending_review" || status === "draft") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-  if (status === "approved" || status === "published") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (status === "rejected" || status === "failed") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-  return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
-}
-
-function typeIcon(type: string) {
-  if (type === "comment") return MessageCircle;
-  if (type === "post") return FileText;
-  if (type === "dm") return Send;
-  return Bot;
-}
-
-function sourceTone(type: string) {
-  if (type === "post") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (type === "comment") return "border-[#7856ff]/30 bg-[#7856ff]/12 text-[#b8a7ff]";
-  if (type === "reply") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-}
-
-function sourceLabelKey(type: string) {
-  if (type === "post") return "handlingList.source.autoPost";
-  if (type === "comment") return "handlingList.source.autoComment";
-  if (type === "reply") return "handlingList.source.autoReply";
-  return "handlingList.source.autoDm";
-}
-
-function sourceLabelKeyForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.source_type === "exposure_radar") return "handlingList.source.exposureRadar";
-  return sourceLabelKey(item.type);
-}
-
-function deliveryLabelKey(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.delivery.quotePost";
-  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "handlingList.delivery.manualComment";
-  if (item.type === "comment" && item.delivery_mode === "auto_comment") return "handlingList.delivery.autoComment";
-  return "";
-}
-
-function sourceDescriptionKey(type: string) {
-  if (type === "post") return "handlingList.sourceDesc.post";
-  if (type === "comment") return "handlingList.sourceDesc.comment";
-  if (type === "reply") return "handlingList.sourceDesc.reply";
-  return "handlingList.sourceDesc.dm";
-}
-
-function sourceDescriptionForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.source_type === "exposure_radar") return "handlingList.sourceDesc.exposureRadar";
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.sourceDesc.quotePost";
-  if (item.type === "comment" && item.delivery_mode === "manual_comment") return "handlingList.sourceDesc.manualComment";
-  return sourceDescriptionKey(item.type);
-}
-
-function canManualPublish(item: ReviewQueueItemApi) {
-  if (item.type !== "post") return false;
-  if (!item.publish_job_id) return false;
-  if (item.status === "ready_to_publish" || item.status === "failed") return true;
-  return item.status === "published" && (item.publish_mode === "simulated" || item.publish_mode === "dry_run");
-}
-
-function targetLabelKey(type: string) {
-  if (type === "post") return "handlingList.item.contentSource";
-  if (type === "comment") return "handlingList.item.targetTweet";
-  if (type === "reply") return "handlingList.item.replyTarget";
-  return "handlingList.item.target";
-}
-
-function targetLabelForItem(item: ReviewQueueItemApi) {
-  if (item.type === "comment" && item.delivery_mode === "quote_post") return "handlingList.item.quoteTarget";
-  return targetLabelKey(item.type);
-}
-
-function normalizeTargetSummary(type: string, value: string | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
-  const summary = (value || "").trim();
-  if (!summary) return "—";
-  if (type === "post" && summary === "Content Library Item") return t("handlingList.target.contentLibraryItem");
-  if (type === "post" && ["Auto Post", "Content Draft", "Content Draft Planner"].includes(summary)) return t("handlingList.target.autoPostPlanner");
-  return summary;
-}
-
-function publishStatusKey(status?: string) {
-  if (!status) return "handlingList.publishState.notCreated";
-  if (status === "pending") return "handlingList.publishState.pending";
-  if (status === "processing") return "handlingList.publishState.processing";
-  if (status === "published") return "handlingList.publishState.published";
-  if (status === "failed") return "handlingList.publishState.failed";
-  if (status === "cancelled") return "handlingList.publishState.cancelled";
-  return "handlingList.publishState.unknown";
-}
-
-function publishTone(status?: string) {
-  if (status === "published") return "border-[#00ba7c]/25 bg-[#00ba7c]/10 text-[#7ee0b5]";
-  if (status === "processing") return "border-[#1d9bf0]/35 bg-[#1d9bf0]/10 text-[#8ecdf8]";
-  if (status === "failed" || status === "cancelled") return "border-[#f4212e]/25 bg-[#f4212e]/10 text-[#ff8a91]";
-  if (status === "pending") return "border-[#ffd400]/25 bg-[#ffd400]/10 text-[#f6d96b]";
-  return "border-[#2f3336] bg-[#16181c] text-[#71767b]";
-}
-
-function publishOutcomeMatches(item: ReviewQueueItemApi, filter: PublishOutcomeFilter) {
-  if (filter === "all") return true;
-  if (filter === "dry_run" || filter === "real") return item.publish_mode === filter;
-  if (filter === "pending") return item.publish_status === "pending" || item.publish_status === "processing";
-  return item.publish_status === filter;
-}
-
-function automationPausedToast(t: (key: string, values?: Record<string, string | number>) => string, error: unknown, fallback: string) {
-  return apiErrorCode(error) === "automation_module_paused" ? t("automation.pausedNotice.toast") : apiErrorMessage(error) || fallback;
-}
-
-function moduleNameKey(type: string) {
-  if (type === "post") return "automation.module.post.name";
-  if (type === "comment") return "automation.module.comment.name";
-  if (type === "reply") return "automation.module.reply.name";
-  return "automation.module.dm.name";
-}
-
-function moduleWorkspaceHref(type: string) {
-  if (type === "post") return "/content-drafts?panel=planner";
-  if (type === "comment") return "/exposure-radar";
-  return "/handling-list";
-}
-
-function normalizedTypeFilter(value: string | null): ReviewQueueType {
-  return value && typeOptions.includes(value as ReviewQueueType) ? (value as ReviewQueueType) : "all";
-}
-
-function normalizedStatusFilter(value: string | null): ReviewQueueStatus {
-  return value && statusOptions.includes(value as ReviewQueueStatus) ? (value as ReviewQueueStatus) : "all";
-}
-
-function normalizedModeFilter(value: string | null): ReviewQueueExecutionMode {
-  return value && modeOptions.includes(value as ReviewQueueExecutionMode) ? (value as ReviewQueueExecutionMode) : "all";
-}
-
-function normalizedPublishOutcomeFilter(value: string | null): PublishOutcomeFilter {
-  return value && publishOutcomeOptions.includes(value as PublishOutcomeFilter) ? (value as PublishOutcomeFilter) : "all";
-}
-
-function normalizedFocusType(value: string | null): ReviewQueueType {
-  const type = normalizedTypeFilter(value);
-  return type === "all" ? "all" : type;
-}
-
-function normalizeFeedbackIssue(value: string | null): FeedbackIssueKey {
-  if (value === "irrelevant" || value === "too_salesy" || value === "wrong_tone" || value === "fact_risk" || value === "weak_context" || value === "missing_context" || value === "other") return value;
-  return "";
-}
-
-function defaultContentDraftRewriteMode(issue: FeedbackIssueKey): ContentDraftRewriteMode {
-  switch (issue) {
-    case "too_salesy":
-      return "less_marketing";
-    case "weak_context":
-    case "missing_context":
-    case "irrelevant":
-    case "fact_risk":
-      return "more_specific";
-    case "wrong_tone":
-      return "founder_voice";
-    default:
-      return "more_specific";
-  }
-}
-
-function defaultSocialRewriteMode(issue: FeedbackIssueKey): SocialRewriteMode {
-  switch (issue) {
-    case "too_salesy":
-      return "less_marketing";
-    case "weak_context":
-    case "missing_context":
-    case "irrelevant":
-    case "fact_risk":
-      return "more_specific";
-    case "wrong_tone":
-      return "human_reply";
-    default:
-      return "natural";
-  }
-}
-
-function issueSearchText(item: ReviewQueueItemApi) {
-  return [
-    item.content,
-    item.target_summary,
-    item.content_title,
-    item.content_direction,
-    item.bot_name,
-    item.twitter_account_name,
-    ...(item.risk_reasons || []),
-  ].filter(Boolean).join(" ").toLowerCase();
-}
-
-function feedbackIssueMatch(item: ReviewQueueItemApi, issue: FeedbackIssueKey, t?: (key: string, params?: Record<string, string | number>) => string, reasonWeights: Record<string, number> = {}): FeedbackIssueMatch {
-  if (!issue) return { score: 0, reasons: [], reasonKeys: [] };
-  const text = issueSearchText(item);
-  const content = (item.content || "").trim();
-  const reasons: string[] = [];
-  const reasonKeys: string[] = [];
-  const add = (score: number, key: string) => {
-    reasonKeys.push(key);
-    if (t) reasons.push(t(key));
-    return Math.max(0, score + (reasonWeights[key] || 0));
-  };
-
-  let score = 0;
-  if (issue === "too_salesy") {
-    const salesTerms = ["try", "start", "boost", "instantly", "best", "join", "visit", "sign up", "signup", "free trial", "cta", "click", "buy", "limited"];
-    const hits = salesTerms.filter((term) => text.includes(term)).length;
-    if (hits > 0) score += add(Math.min(5, hits + 1), "handlingList.feedbackFocus.reason.salesTerms");
-    if (/https?:\/\//i.test(content)) score += add(2, "handlingList.feedbackFocus.reason.link");
-    if ((content.match(/!/g) || []).length >= 2) score += add(1, "handlingList.feedbackFocus.reason.exclamation");
-  } else if (issue === "missing_context" || issue === "weak_context") {
-    if (content.length > 0 && content.length < 190) score += add(3, "handlingList.feedbackFocus.reason.short");
-    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(2, "handlingList.feedbackFocus.reason.noContext");
-    const genericTerms = ["teams", "automation", "growth", "operations", "content", "community"];
-    const genericHits = genericTerms.filter((term) => text.includes(term)).length;
-    if (genericHits >= 3 && !/octo|oaf|agent|web3|socialfi|x operations/.test(text)) score += add(2, "handlingList.feedbackFocus.reason.generic");
-  } else if (issue === "wrong_tone") {
-    const toneTerms = ["announcing", "excited", "revolutionary", "must", "don't miss", "game-changing", "ultimate"];
-    if (toneTerms.some((term) => text.includes(term))) score += add(3, "handlingList.feedbackFocus.reason.announcementTone");
-    if ((content.match(/#/g) || []).length >= 4) score += add(1, "handlingList.feedbackFocus.reason.tooManyHashtags");
-  } else if (issue === "fact_risk") {
-    const riskTerms = ["guarantee", "guaranteed", "always", "never", "100%", "risk-free", "profit", "price prediction", "official partnership", "best"];
-    const hits = riskTerms.filter((term) => text.includes(term)).length;
-    if (hits > 0) score += add(Math.min(5, hits + 1), "handlingList.feedbackFocus.reason.riskyClaims");
-    if (item.risk_level === "high") score += add(2, "handlingList.feedbackFocus.reason.highRisk");
-  } else if (issue === "irrelevant") {
-    if (item.type === "post" && item.selected_trends?.length) score += add(2, "handlingList.feedbackFocus.reason.trendMismatch");
-    if (!item.target_summary && !item.content_title && !item.content_direction) score += add(1, "handlingList.feedbackFocus.reason.noContext");
-  } else if (issue === "other") {
-    if (item.risk_level === "high" || item.status === "failed") score += add(2, "handlingList.feedbackFocus.reason.needsReview");
-  }
-  return {
-    score,
-    reasons: Array.from(new Set(reasons)).slice(0, 3),
-    reasonKeys: Array.from(new Set(reasonKeys)).slice(0, 3),
-  };
-}
-
-function prioritizeByFeedbackIssue(items: ReviewQueueItemApi[], issue: FeedbackIssueKey, reasonWeights: Record<string, number>) {
-  if (!issue) return items;
-  return [...items].sort((a, b) => {
-    const scoreDiff = feedbackIssueMatch(b, issue, undefined, reasonWeights).score - feedbackIssueMatch(a, issue, undefined, reasonWeights).score;
-    if (scoreDiff !== 0) return scoreDiff;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-}
-
-function issueVerdictStatForIssue(stats: ReviewQueueFeedbackIssueVerdictStatApi[], issue: FeedbackIssueKey) {
-  if (!issue) return null;
-  return stats.find((item) => item.feedback_issue === issue) || null;
-}
-
-function reasonWeightsForIssue(stats: ReviewQueueFeedbackIssueVerdictStatApi[], issue: FeedbackIssueKey) {
-  const stat = issueVerdictStatForIssue(stats, issue);
-  if (!stat) return {};
-  return Object.fromEntries(stat.reasons.map((reason) => [reason.reason, reason.score_adjustment]));
-}
-
-function percent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
-function canEditQueueItem(item: ReviewQueueItemApi) {
-  if (item.type !== "comment" && item.type !== "post") return false;
-  return item.status === "pending_review" || item.status === "draft" || item.status === "approved";
-}
-
-function isActionableQueueItem(item: ReviewQueueItemApi) {
-  if (item.type !== "comment" && item.type !== "post") return false;
-  return ["draft", "pending_review", "approved", "ready_to_publish", "failed"].includes(item.status);
-}
-
-function feedbackSceneForQueueType(type: string) {
-  if (type === "post") return "tweet";
-  if (type === "reply") return "reply";
-  if (type === "comment") return "comment";
-  return "dm";
-}
-
-function queueItemKey(item: ReviewQueueItemApi) {
-  return `${item.type}-${item.id}`;
-}
-
-function canBulkApprove(item: ReviewQueueItemApi, moduleEnabled: Record<ModuleType, boolean>) {
-  return (item.type === "comment" || item.type === "post")
-    && (item.status === "pending_review" || item.status === "draft")
-    && moduleEnabled[item.type as ModuleType] !== false;
-}
-
-function canBulkReject(item: ReviewQueueItemApi) {
-  return (item.type === "comment" || item.type === "post")
-    && item.status !== "rejected"
-    && item.status !== "published";
-}
-
-function canBulkRetry(item: ReviewQueueItemApi, moduleEnabled: Record<ModuleType, boolean>) {
-  return item.status === "failed" && Boolean(item.publish_job_id) && moduleEnabled[item.type as ModuleType] !== false;
-}
-
-function canDeleteQueueItem(item: ReviewQueueItemApi) {
-  if (item.type !== "comment" && item.type !== "post") return false;
-  if (item.status === "processing" || item.status === "published") return false;
-  if (item.publish_status === "processing" || item.publish_status === "published") return false;
-  return ["draft", "pending_review", "approved", "ready_to_publish", "rejected", "failed"].includes(item.status);
-}
-
-function failureGroupForItem(item: ReviewQueueItemApi): FailureGroupKey {
-  const text = [
-    item.publish_last_error,
-    item.source_status,
-    item.risk_level,
-    ...(item.risk_reasons || []),
-  ].filter(Boolean).join(" ").toLowerCase();
-  if (!text.trim()) return "unknown";
-  if (/auth|oauth|scope|permission|tweet\.write|unauthori[sz]ed|token|credential/.test(text)) return "authorization";
-  if (/paused|module|disabled|automation_module_paused/.test(text)) return "module_paused";
-  if (/rate|limit|429|too many|cooldown|retry after/.test(text)) return "rate_limit";
-  if (/safety|risk|policy|blocked|sensitive|rejected|guard/.test(text)) return "safety";
-  if (/publish|x api|twitter|api|network|timeout|external/.test(text)) return "publish_api";
-  if (/content|empty|length|invalid|validation|format/.test(text)) return "content";
-  return "unknown";
-}
 
 export default function ExecutionQueuePage() {
   const { t } = useT();
@@ -2769,20 +2456,6 @@ function FeedbackSignalSummary({
       ) : null}
     </div>
   );
-}
-
-function feedbackIssueLabel(tag: string, t: (key: string, params?: Record<string, string | number>) => string) {
-  const normalized = tag.trim();
-  const known = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "missing_context", "other"];
-  if (known.includes(normalized)) return t(`handlingList.rejectDialog.reason.${normalized}`);
-  return normalized.replace(/_/g, " ");
-}
-
-function feedbackSceneLabel(scene: string, t: (key: string, params?: Record<string, string | number>) => string) {
-  const normalized = scene.trim();
-  const known = ["tweet", "reply", "comment", "auto_comment", "dm"];
-  if (known.includes(normalized)) return t(`dashboard.feedbackLearning.scene.${normalized}`);
-  return normalized.replace(/_/g, " ");
 }
 
 function QueueTrendContext({ trends, botID, xAccountID, sourceID }: { trends: TrendTopicApi[]; botID: number; xAccountID: number; sourceID: number }) {

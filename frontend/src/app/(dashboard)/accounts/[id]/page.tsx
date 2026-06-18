@@ -65,7 +65,10 @@ export default function AccountDetailPage() {
 
   const boundBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === accountID), [accountID, bots]);
   const strategyRegion = useMemo(() => accountIntelligenceRegion(data), [data]);
-  const strategyPreview = useMemo(() => data ? buildGrowthStrategyPayloadFromAccount(data, accountID, boundBot?.id || 0, strategyRegion) : null, [accountID, boundBot?.id, data, strategyRegion]);
+  const strategyPreview = useMemo(
+    () => data ? buildGrowthStrategyPayloadFromAccount(data, accountID, boundBot?.id || 0, strategyRegion, privateAnalyticsNotes) : null,
+    [accountID, boundBot?.id, data, privateAnalyticsNotes, strategyRegion]
+  );
   const radarHref = useMemo(() => {
     const query = new URLSearchParams({
       x_account_id: String(accountID || data?.account.id || 0),
@@ -505,6 +508,7 @@ function PrivateAnalyticsPanel({
 }) {
   const { t } = useT();
   const suggestions = buildPrivateAnalyticsSuggestions(notes, t);
+  const hasPrivateNotes = hasPrivateAnalyticsNotes(notes);
   const fieldClass = "min-h-24 w-full rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]";
   return (
     <Card className="bg-[#0f1419]">
@@ -536,6 +540,11 @@ function PrivateAnalyticsPanel({
               <p className="text-xs leading-5 text-[#71767b]">{t("accounts.intelligence.private.suggestions.empty")}</p>
             )}
           </div>
+          {hasPrivateNotes ? (
+            <p className="mt-3 rounded-xl border border-[#1d9bf0]/25 bg-[#1d9bf0]/10 px-3 py-2 text-xs leading-5 text-[#8ecdf8]">
+              {t("accounts.intelligence.private.strategyIncluded")}
+            </p>
+          ) : null}
           {savedAt ? <p className="mt-3 text-[11px] text-[#71767b]">{t("accounts.intelligence.private.savedAt", { time: savedAt.slice(0, 16).replace("T", " ") })}</p> : null}
         </div>
         <Button type="button" onClick={onSave}>
@@ -681,7 +690,13 @@ function accountIntelligenceRegion(data: AccountIntelligenceApi | null): Exposur
   return language.startsWith("zh") || language.includes("chinese") ? "zh" : "en";
 }
 
-function buildGrowthStrategyPayloadFromAccount(data: AccountIntelligenceApi, accountID: number, botID: number, region: ExposureRadarRegion): ExposureRadarGrowthStrategyPayload {
+function buildGrowthStrategyPayloadFromAccount(
+  data: AccountIntelligenceApi,
+  accountID: number,
+  botID: number,
+  region: ExposureRadarRegion,
+  privateAnalyticsNotes?: PrivateAnalyticsNotes
+): ExposureRadarGrowthStrategyPayload {
   const bot = normalizeBotPayload(data.bot_suggestion);
   const coreTopics = uniqueStrings([
     ...(data.radar_guidance.fit_keywords || []),
@@ -708,7 +723,7 @@ function buildGrowthStrategyPayloadFromAccount(data: AccountIntelligenceApi, acc
     reply_style: inferReplyStyle(data),
     daily_move_limit: data.positioning.confidence >= 65 ? (region === "zh" ? 10 : 8) : 5,
     safety_mode: avoidTopics.length || data.positioning.risks?.length ? "conservative" : "balanced",
-    operator_notes: compactStrategyNotes(data),
+    operator_notes: [compactStrategyNotes(data), privateAnalyticsStrategyNotes(privateAnalyticsNotes)].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -853,6 +868,24 @@ function buildAccountGrowthDiagnosis(
 
 function privateAnalyticsStorageKey(accountID: number) {
   return `octo:account-private-analytics:${accountID}`;
+}
+
+function hasPrivateAnalyticsNotes(notes?: PrivateAnalyticsNotes) {
+  if (!notes) return false;
+  return Boolean(notes.audience.trim() || notes.countries.trim() || notes.activeTimes.trim() || notes.followerGrowth.trim() || notes.topFormats.trim() || notes.weakSignals.trim());
+}
+
+function privateAnalyticsStrategyNotes(notes?: PrivateAnalyticsNotes) {
+  if (!hasPrivateAnalyticsNotes(notes) || !notes) return "";
+  const rows = [
+    notes.audience.trim() ? `Audience profile: ${notes.audience.trim()}` : "",
+    notes.countries.trim() ? `Top countries/regions: ${notes.countries.trim()}` : "",
+    notes.activeTimes.trim() ? `Audience active times: ${notes.activeTimes.trim()}` : "",
+    notes.followerGrowth.trim() ? `Follower growth notes: ${notes.followerGrowth.trim()}` : "",
+    notes.topFormats.trim() ? `Top content formats: ${notes.topFormats.trim()}` : "",
+    notes.weakSignals.trim() ? `Weak signals/drop-offs: ${notes.weakSignals.trim()}` : "",
+  ].filter(Boolean);
+  return rows.length ? `User-provided Creator Studio notes:\n${rows.join("\n")}` : "";
 }
 
 function buildPrivateAnalyticsSuggestions(notes: PrivateAnalyticsNotes, t: (key: string) => string) {

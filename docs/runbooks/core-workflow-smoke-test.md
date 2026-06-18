@@ -23,6 +23,39 @@ This validates that the key frontend pages and backend routers/controllers still
 - Billing
 - Admin
 
+## Local UI Shell Check
+
+After a frontend build, run the UI shell smoke check:
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run smoke:core
+```
+
+The script starts the API frontend build when no `SMOKE_BASE_URL` is provided,
+then checks the key routes return a valid Next.js HTML shell instead of a
+server error:
+
+- Home
+- Login
+- Dashboard
+- Start Today
+- Daily Growth Desk
+- Content Memory
+- Content Drafts
+- Handling List
+- OAF Bots
+- Billing
+- Admin
+
+To check an already-running local or production frontend without starting a
+server:
+
+```bash
+SMOKE_BASE_URL=http://127.0.0.1:3000 node scripts/smoke-core-ui.mjs
+SMOKE_BASE_URL=https://octo-agent.com node scripts/smoke-core-ui.mjs
+```
+
 ## Production Route Check
 
 Run after deploy:

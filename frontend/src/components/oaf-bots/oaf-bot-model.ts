@@ -4,6 +4,25 @@ import type { ContentLibraryItemApi } from "@/services/content-library.service";
 import type { ReviewQueueItemApi } from "@/services/review-queue.service";
 import type { OAFBot, OAFBotGenerationUsage, OAFBotPayload } from "@/types/oaf-bot";
 
+export type WizardStep = "identity" | "brand" | "style" | "topics" | "goals" | "test";
+export type BotAutomationType = "post" | "reply" | "comment" | "dm";
+export type PersonaChecklistKey =
+  | "name"
+  | "account"
+  | "role"
+  | "brand"
+  | "audience"
+  | "language"
+  | "personality"
+  | "topics"
+  | "contentStrategy"
+  | "guardrails"
+  | "summary"
+  | "goal";
+
+export const wizardStepOrder: WizardStep[] = ["identity", "brand", "style", "topics", "goals", "test"];
+export const personaChecklistKeys: PersonaChecklistKey[] = ["name", "account", "role", "brand", "audience", "language", "personality", "topics", "contentStrategy", "guardrails", "summary", "goal"];
+
 export type QueueSummary = {
   total: number;
   pendingReview: number;
@@ -176,4 +195,125 @@ export function aggregateMonthlyUsage(items: OAFBotGenerationUsage[], currentMon
     });
   });
   return usageByScene;
+}
+
+export function isUnconfiguredDraft(form: OAFBotPayload) {
+  return (
+    !form.name.trim() &&
+    !form.twitter_account_id &&
+    !form.occupation.trim() &&
+    !form.industry.trim() &&
+    !form.age_range.trim() &&
+    !form.gender.trim() &&
+    !form.education.trim() &&
+    !form.mbti.trim() &&
+    form.personality_tags.length === 0 &&
+    !form.identity_summary.trim() &&
+    !form.voice_tone.trim() &&
+    form.topics.length === 0 &&
+    form.forbidden_topics.length === 0 &&
+    !form.growth_goal.trim() &&
+    !form.project_one_liner.trim() &&
+    !form.target_audience.trim() &&
+    !form.core_value_props.trim() &&
+    !form.product_features.trim() &&
+    !form.differentiators.trim() &&
+    form.content_pillars.length === 0 &&
+    !form.content_objectives.trim() &&
+    !form.preferred_cta.trim() &&
+    !form.website_url.trim() &&
+    !form.telegram_url.trim() &&
+    !form.discord_url.trim() &&
+    !form.docs_url.trim() &&
+    !form.cta_policy.trim() &&
+    form.hashtags.length === 0 &&
+    form.keywords.length === 0 &&
+    !form.compliance_notes.trim() &&
+    form.avoid_claims.length === 0 &&
+    form.safety_mode === "balanced"
+  );
+}
+
+export function getStepCompletion(form: OAFBotPayload, hasSavedBot: boolean): Record<WizardStep, boolean> {
+  return {
+    identity: Boolean(form.name.trim() && form.twitter_account_id && (form.occupation.trim() || form.industry.trim())),
+    brand: Boolean(form.project_one_liner.trim() && (form.target_audience.trim() || form.core_value_props.trim())),
+    style: Boolean((form.primary_language.trim() && form.language_strategy.trim()) || form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()),
+    topics: Boolean(form.topics.length > 0 && form.safety_mode.trim()),
+    goals: Boolean(form.growth_goal.trim()),
+    test: hasSavedBot,
+  };
+}
+
+export function getPersonaChecklist(form: OAFBotPayload, t: (key: string) => string) {
+  const completed = new Set<PersonaChecklistKey>();
+  if (form.name.trim()) completed.add("name");
+  if (form.twitter_account_id) completed.add("account");
+  if (form.occupation.trim() || form.industry.trim()) completed.add("role");
+  if (form.project_one_liner.trim() || form.core_value_props.trim() || form.website_url.trim() || form.telegram_url.trim() || form.discord_url.trim() || form.docs_url.trim()) completed.add("brand");
+  if (form.target_audience.trim()) completed.add("audience");
+  if (form.primary_language.trim() && form.language_strategy.trim()) completed.add("language");
+  if (form.personality_tags.length > 0 || form.voice_tone.trim() || form.mbti.trim()) completed.add("personality");
+  if (form.topics.length > 0) completed.add("topics");
+  if (form.content_pillars.length > 0 || form.content_objectives.trim() || form.preferred_cta.trim()) completed.add("contentStrategy");
+  if (form.forbidden_topics.length > 0 || form.avoid_claims.length > 0 || form.compliance_notes.trim() || form.safety_mode.trim()) completed.add("guardrails");
+  if (form.identity_summary.trim()) completed.add("summary");
+  if (form.growth_goal.trim()) completed.add("goal");
+
+  const configured = personaChecklistKeys
+    .filter((key) => completed.has(key))
+    .map((key) => t(`oafBots.checklist.${key}`));
+  const missing = personaChecklistKeys
+    .filter((key) => !completed.has(key))
+    .map((key) => t(`oafBots.checklist.${key}`));
+  const nextKey = personaChecklistKeys.find((key) => !completed.has(key)) ?? "test";
+
+  return {
+    configured,
+    missing,
+    nextSuggestion: t(`oafBots.preview.next.${nextKey}`),
+  };
+}
+
+export function getPersonaQualityDiagnostics(form: OAFBotPayload, t: (key: string) => string) {
+  const diagnostics: Array<{ tone: "warning" | "info"; message: string }> = [];
+  const weakSummary = form.identity_summary.trim().length > 0 && form.identity_summary.trim().length < 40;
+  const weakGoal = form.growth_goal.trim().length > 0 && form.growth_goal.trim().length < 30;
+  const broadTopics = form.topics.length > 6;
+  const missingProductContext = !form.project_one_liner.trim() && !form.core_value_props.trim() && !form.product_features.trim();
+  const missingAudience = !form.target_audience.trim();
+  const missingGuardrails = form.forbidden_topics.length === 0 && form.avoid_claims.length === 0 && !form.compliance_notes.trim();
+  const missingVoice = form.personality_tags.length === 0 && !form.voice_tone.trim();
+  const strongCTA = /(buy now|moon|guarantee|guaranteed|airdrop|claim|暴富|稳赚|空投|领取|立即购买)/i.test(form.preferred_cta);
+
+  if (!form.identity_summary.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingSummary") });
+  else if (weakSummary) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakSummary") });
+  if (!form.growth_goal.trim()) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGoal") });
+  else if (weakGoal) diagnostics.push({ tone: "info", message: t("oafBots.quality.weakGoal") });
+  if (missingProductContext) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingProductContext") });
+  if (missingAudience) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingAudience") });
+  if (missingVoice) diagnostics.push({ tone: "info", message: t("oafBots.quality.missingVoice") });
+  if (broadTopics) diagnostics.push({ tone: "info", message: t("oafBots.quality.tooManyTopics") });
+  if (missingGuardrails) diagnostics.push({ tone: "warning", message: t("oafBots.quality.missingGuardrails") });
+  if (strongCTA) diagnostics.push({ tone: "warning", message: t("oafBots.quality.strongCTA") });
+
+  return diagnostics.slice(0, 5);
+}
+
+export function joinMultiValues(values: string[]) {
+  return values.map((item) => item.trim()).filter(Boolean).join(",");
+}
+
+export function mergeUniqueValues(current: string[] = [], additions: string[] = []) {
+  return Array.from(new Set([...current, ...additions].map((item) => item.trim()).filter(Boolean)));
+}
+
+export function mergeRuleText(current = "", additions = "") {
+  return mergeUniqueValues(current.split(/\n+/), additions.split(/\n+/)).join("\n");
+}
+
+export function automationHref(type: BotAutomationType) {
+  if (type === "post") return "/content-drafts";
+  if (type === "comment") return "/exposure-radar";
+  return "/handling-list";
 }

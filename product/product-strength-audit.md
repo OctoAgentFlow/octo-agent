@@ -49,6 +49,10 @@ original concerns.
 | Learning explainability | Solved for current loop / refining | Learning panels, weekly review, memory cues, result feedback, and the new Learning Change Summary explain how feedback changes future ranking, topics, angles, and backfill gaps. |
 | Cost and rate observability | Done / refining | Admin tracks OpenAI generations/costs, X API call breakdown, X Trends config, Exposure refresh interval, source health, refresh skips, failure reasons, and recent cost-driving events from the unified cost ledger. |
 | Page modularization | Solved for current risk level | Exposure Radar is no longer a monolithic product page. Remaining work is boundary discipline: keep future UI panels in component/helper modules and avoid putting new display logic back into `page.tsx`. |
+| Core workflow smoke checks | Done / refining | `scripts/smoke-core-workflows.sh` covers static/prod route checks, and `scripts/smoke-core-ui.mjs` now starts/checks the API frontend HTML shell for login, Daily Growth Desk, Content Memory, Content Drafts, Handling List, OAF Bots, Billing, and Admin. |
+| Creator Studio private analytics intake | Done / local-first | Account Intelligence keeps private analytics notes in the browser, labels them as user-provided data, and appends them into Growth Strategy operator notes when the user applies strategy. |
+| Legacy route traffic audit | Done / operational gate | `docs/runbooks/legacy-route-traffic-audit.md` remains the access-log gate for any final deletion, while old product routes are already downlined. |
+| High-risk legacy data migration plan | Done / compatibility boundary | `docs/technical/high-risk-legacy-data-migration-plan.md` defines the dual-read/dual-write, backup, backfill, test, and rollback requirements before touching DB table names, JSON fields, activity keys, or AI scene values. |
 | Self-serve proof and pricing clarity | Solved for current packaging / refining | Product and billing language now packages the paid promise around Daily Growth Desk refreshes, opportunity drafts, account intelligence, content memory, review capacity, and result learning. Continue refining once real usage appears. |
 
 ### Still Open
@@ -56,10 +60,8 @@ original concerns.
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
 | P1 | Daily queue run tracking. | `DailyXQueueContext` exists, but dedicated `daily_queue_runs` / `daily_queue_items` style tracking is not fully implemented. |
-| P1 | UI smoke tests for core workflows. | The product now has many interconnected flows; smoke tests should cover login, Daily Growth Desk, Daily X Queue, Content Drafts, Handling List, Billing, and Admin health. |
-| P1 | Legacy route traffic audit and archive. | `/auto-post`, `/execution-queue`, and legacy docs remain for compatibility. Removal requires prod access-log evidence and an archive plan. |
-| P2 | Creator Studio / private analytics ingestion. | Data boundaries are now visible in Account Intelligence. Actual Creator Studio audience panels and long-range private metrics still need user-provided export or future authorized access. |
-| P2 | High-risk backend naming/data migrations. | `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design. They need a dedicated migration plan before renaming. |
+| P2 | Creator Studio export upload / authorized sync. | The product now supports local manual notes and strategy application. Actual file upload, structured import, or future authorized private metrics sync is still a separate data-ingestion project. |
+| P2 | High-risk backend naming/data migration execution. | A migration plan exists, but `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design until a dedicated migration project is approved. |
 
 ## Original User Journey At Time Of Audit
 

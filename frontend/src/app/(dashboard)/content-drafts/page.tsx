@@ -2181,7 +2181,7 @@ function ContentDraftTodayDraftsBridge() {
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[#b8a7ff]/80">{t("contentDrafts.todayDrafts.description")}</p>
         </div>
         <div className="grid gap-2 sm:flex sm:shrink-0">
-          <Link href="/daily-x-queue" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
+          <Link href="/content-drafts?panel=generate" className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1d9bf0] px-4 text-sm font-semibold text-white hover:bg-[#1a8cd8]">
             <Wand2 className="size-4" />
             {t("contentDrafts.todayDrafts.open")}
           </Link>

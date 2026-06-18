@@ -1,5 +1,13 @@
 import { request } from "@/lib/request";
 
+/**
+ * Deprecated compatibility layer for the former Auto Post client.
+ *
+ * New UI code should import through `content-drafts.service.ts`. This module
+ * keeps old DTO names and backend-compatible fields stable so historical data,
+ * rollback paths, and stored queue records continue to resolve correctly.
+ */
+
 type ApiResponse<T> = {
   code: number;
   message: string;

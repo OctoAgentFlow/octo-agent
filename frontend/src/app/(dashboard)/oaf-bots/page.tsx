@@ -17,7 +17,6 @@ import {
   Info,
   ListChecks,
   Lock,
-  Mail,
   MessageCircle,
   MessagesSquare,
   RefreshCw,
@@ -140,7 +139,7 @@ const wizardStepOrder: WizardStep[] = ["identity", "brand", "style", "topics", "
 const personaChecklistKeys = ["name", "account", "role", "brand", "audience", "language", "personality", "topics", "contentStrategy", "guardrails", "summary", "goal"] as const;
 type PersonaChecklistKey = typeof personaChecklistKeys[number];
 
-const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply", "auto_dm"] as const;
+const usageSceneOrder = ["oaf_bot_test_generate", "auto_post", "auto_comment", "auto_reply"] as const;
 const automationTypes: BotAutomationType[] = ["post", "reply", "comment"];
 const accountArchetypeKeys: AccountArchetypeKey[] = ["brand", "founder", "kol", "community", "agency"];
 const profileAssistModes: OAFBotProfileAssistMode[] = ["fill_missing_only", "improve_all"];
@@ -587,7 +586,7 @@ const recommendedOptionValues: Record<string, Record<string, string>> = {
     trial: "Drive free trials",
     leads: "Capture leads",
     brandAuthority: "Build brand authority",
-    dmConversion: "Convert through DMs",
+    dmConversion: "Drive qualified conversations",
   },
   ctaPresets: {
     websiteIntro: "Use the website link only when explaining product capability or inviting users to try the product.",
@@ -2212,7 +2211,7 @@ export default function OAFBotsPage() {
                     {t("oafBots.advancedTrends.title")}
                   </summary>
                   <p className="mt-2 text-xs leading-5 text-[#71767b]">{t("oafBots.advancedTrends.description")}</p>
-                  <Link href="/trends" className="mt-3 inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] transition hover:bg-[#16181c]">
+                  <Link href="/exposure-radar?view=source-health" className="mt-3 inline-flex h-8 items-center justify-center rounded-full border border-[#2f3336] px-3 text-xs font-semibold text-[#8ecdf8] transition hover:bg-[#16181c]">
                     {t("oafBots.advancedTrends.viewCurrent")}
                   </Link>
                   <div className="mt-4 grid gap-4">
@@ -3136,7 +3135,7 @@ function OAFBotFocusPanel({
               <Sparkles className="size-4" />
               {primaryAction}
             </Button>
-            <Link href={bot?.id ? `/daily-x-queue?bot_id=${bot.id}` : "/daily-x-queue"} className="inline-flex">
+            <Link href={bot?.id ? `/content-drafts?panel=generate&bot_id=${bot.id}` : "/content-drafts?panel=generate"} className="inline-flex">
               <Button type="button" variant="outline">
                 <ListChecks className="size-4" />
                 {t("oafBots.focus.dailyQueueCta")}
@@ -3526,7 +3525,7 @@ function BotRelationshipCard({
                 title={t("oafBots.relationship.readiness.dailyQueue")}
                 description={dailyQueueReady ? t("oafBots.relationship.readiness.dailyQueueReady") : t("oafBots.relationship.readiness.dailyQueueMissing")}
                 ready={dailyQueueReady}
-                href={`/daily-x-queue?bot_id=${bot.id}`}
+                href={`/content-drafts?panel=generate&bot_id=${bot.id}`}
                 action={t("oafBots.relationship.openDailyQueue")}
               />
               <ContentDraftReadinessTile
@@ -3545,7 +3544,7 @@ function BotRelationshipCard({
                 <p className="text-sm font-semibold text-[#d7ebff]">{t("oafBots.relationship.dailyQueueTitle")}</p>
                 <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.relationship.dailyQueueDescription")}</p>
               </div>
-              <Link href={`/daily-x-queue?bot_id=${bot.id}`} className="shrink-0 text-xs font-semibold text-[#8ecdf8] hover:text-white">
+              <Link href={`/content-drafts?panel=generate&bot_id=${bot.id}`} className="shrink-0 text-xs font-semibold text-[#8ecdf8] hover:text-white">
                 {t("oafBots.relationship.openDailyQueue")}
               </Link>
             </div>
@@ -4845,7 +4844,6 @@ function SamplePanel({
     { id: "tweet", icon: <Send className="size-4" />, title: t("oafBots.samples.tweet"), description: t("oafBots.samples.tweetContext") },
     { id: "reply", icon: <MessageCircle className="size-4" />, title: t("oafBots.samples.reply"), description: t("oafBots.samples.replyContext") },
     { id: "comment", icon: <MessagesSquare className="size-4" />, title: t("oafBots.samples.comment"), description: t("oafBots.samples.commentContext") },
-    { id: "dm", icon: <Mail className="size-4" />, title: t("oafBots.samples.dm"), description: t("oafBots.samples.dmContext") },
   ];
   const personaRows = getSamplePersonaRows(form, account, occupationOptions, industryOptions, safetyOptions, languageOptions, languageStrategyOptions, t);
   const selectedSceneItem = sceneItems.find((item) => item.id === scene) ?? sceneItems[0];
@@ -4979,7 +4977,7 @@ function SamplePanel({
                   <p className="text-sm font-semibold text-[#e7e9ea]">{t("oafBots.samples.dailyDraftTitle")}</p>
                   <p className="mt-1 text-xs leading-5 text-[#8b98a5]">{t("oafBots.samples.dailyDraftHint")}</p>
                 </div>
-                <Link href={`/daily-x-queue?bot_id=${selectedID}`} className="inline-flex shrink-0">
+                <Link href={`/content-drafts?panel=generate&bot_id=${selectedID}`} className="inline-flex shrink-0">
                   <Button type="button" size="sm">
                     <ListChecks className="size-4" />
                     {t("oafBots.samples.dailyDraftCta")}

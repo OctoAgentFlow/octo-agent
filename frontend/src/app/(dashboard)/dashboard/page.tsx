@@ -624,7 +624,7 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <DailyXQueueStartCard
+      <DailyGrowthDeskStartCard
         loading={loadState === "loading" || oafBotDashboardLoading}
         hasBot={botCount > 0}
         connectedAccounts={overview?.connected_x_count ?? 0}
@@ -754,7 +754,7 @@ export default function DashboardPage() {
   );
 }
 
-function DailyXQueueStartCard({
+function DailyGrowthDeskStartCard({
   loading,
   hasBot,
   connectedAccounts,
@@ -1627,7 +1627,7 @@ function PointsEntryCard({
                 <Copy className="size-4" />
                 {t("dashboard.points.copyInvite")}
               </Button>
-              <Link href="/points" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
+              <Link href="/billing" className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#2f3336] px-4 text-sm font-semibold text-[#e7e9ea] transition hover:bg-[#16181c]">
                 {t("dashboard.points.openCenter")}
                 <ChevronRight className="size-4" />
               </Link>

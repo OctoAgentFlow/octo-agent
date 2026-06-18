@@ -67,8 +67,8 @@ type SmartBulkGroup = {
 
 const typeOptions: ReviewQueueType[] = ["all", "post", "comment", "reply"];
 const statusOptions: ReviewQueueStatus[] = ["all", "draft", "pending_review", "ready_to_publish", "processing", "published", "approved", "rejected", "failed"];
-const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review", "autopilot"];
-const publishOutcomeOptions: PublishOutcomeFilter[] = ["all", "pending", "published", "failed", "dry_run", "real"];
+const modeOptions: ReviewQueueExecutionMode[] = ["all", "manual", "review"];
+const publishOutcomeOptions: PublishOutcomeFilter[] = ["all", "pending", "published", "failed"];
 const rejectReasons: RejectReasonKey[] = ["irrelevant", "too_salesy", "wrong_tone", "fact_risk", "weak_context", "other"];
 const queuePageSize = 24;
 const queueContentPreviewLength = 360;
@@ -137,6 +137,7 @@ function sourceDescriptionForItem(item: ReviewQueueItemApi) {
 }
 
 function canManualPublish(item: ReviewQueueItemApi) {
+  if (item.type !== "post") return false;
   if (!item.publish_job_id) return false;
   if (item.status === "ready_to_publish" || item.status === "failed") return true;
   return item.status === "published" && (item.publish_mode === "simulated" || item.publish_mode === "dry_run");

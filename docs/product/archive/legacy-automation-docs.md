@@ -20,7 +20,10 @@ Avoid reviving spam-like automation, bulk commenting, or fully automated outreac
 ## Historical Documents
 
 - `../auto-post-oaf-bot-redesign.md`
+- `../oaf-bot-billing.md`
 - `../oaf-bot-execution-mode.md`
+- `../publishing-pipeline.md`
+- `../oaf-product-deep-research-2026-05.md`
 - `../../technical/auto-post-oaf-bot-redesign-tech-design.md`
 - `../../technical/oaf-bot-execution-mode-tech-design.md`
 

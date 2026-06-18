@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import axios from "axios";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowRight, BarChart3, Bot, BrainCircuit, CheckCircle2, Database, ExternalLink, FileText, Gauge, Lock, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, Bot, BrainCircuit, CheckCircle2, Database, ExternalLink, FileText, Gauge, Lock, RefreshCw, Save, ShieldAlert, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -29,6 +29,24 @@ type AccountGrowthDiagnosis = {
   safetyBoundary: string;
   handoff: string;
 };
+type PrivateAnalyticsNotes = {
+  audience: string;
+  countries: string;
+  activeTimes: string;
+  followerGrowth: string;
+  topFormats: string;
+  weakSignals: string;
+  updatedAt?: string;
+};
+
+const emptyPrivateAnalyticsNotes: PrivateAnalyticsNotes = {
+  audience: "",
+  countries: "",
+  activeTimes: "",
+  followerGrowth: "",
+  topFormats: "",
+  weakSignals: "",
+};
 
 export default function AccountDetailPage() {
   const { t } = useT();
@@ -42,6 +60,8 @@ export default function AccountDetailPage() {
   const [applying, setApplying] = useState(false);
   const [applyingStrategy, setApplyingStrategy] = useState(false);
   const [strategyAppliedAt, setStrategyAppliedAt] = useState("");
+  const [privateAnalyticsNotes, setPrivateAnalyticsNotes] = useState<PrivateAnalyticsNotes>(emptyPrivateAnalyticsNotes);
+  const [privateAnalyticsSavedAt, setPrivateAnalyticsSavedAt] = useState("");
 
   const boundBot = useMemo(() => bots.find((bot) => bot.twitter_account_id === accountID), [accountID, bots]);
   const strategyRegion = useMemo(() => accountIntelligenceRegion(data), [data]);
@@ -87,6 +107,19 @@ export default function AccountDetailPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!Number.isFinite(accountID) || accountID <= 0 || typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(privateAnalyticsStorageKey(accountID));
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as PrivateAnalyticsNotes;
+      setPrivateAnalyticsNotes({ ...emptyPrivateAnalyticsNotes, ...parsed });
+      setPrivateAnalyticsSavedAt(parsed.updatedAt || "");
+    } catch {
+      setPrivateAnalyticsNotes(emptyPrivateAnalyticsNotes);
+    }
+  }, [accountID]);
+
   const applyBotSuggestion = useCallback(async () => {
     if (!data || !Number.isFinite(accountID) || accountID <= 0) return;
     setApplying(true);
@@ -121,6 +154,16 @@ export default function AccountDetailPage() {
       setApplyingStrategy(false);
     }
   }, [accountID, boundBot, data, pushToast, strategyPreview, t]);
+
+  const savePrivateAnalyticsNotes = useCallback(() => {
+    if (!Number.isFinite(accountID) || accountID <= 0 || typeof window === "undefined") return;
+    const updatedAt = new Date().toISOString();
+    const payload = { ...privateAnalyticsNotes, updatedAt };
+    window.localStorage.setItem(privateAnalyticsStorageKey(accountID), JSON.stringify(payload));
+    setPrivateAnalyticsNotes(payload);
+    setPrivateAnalyticsSavedAt(updatedAt);
+    pushToast(t("accounts.intelligence.private.toast.saved"));
+  }, [accountID, privateAnalyticsNotes, pushToast, t]);
 
   if (loadState === "loading") {
     return (
@@ -183,6 +226,12 @@ export default function AccountDetailPage() {
       </Card>
 
       <DataBoundaryPanel />
+      <PrivateAnalyticsPanel
+        notes={privateAnalyticsNotes}
+        savedAt={privateAnalyticsSavedAt}
+        onChange={setPrivateAnalyticsNotes}
+        onSave={savePrivateAnalyticsNotes}
+      />
 
       <Card className="bg-[#0f1419]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -438,6 +487,61 @@ function DataBoundaryPanel() {
             <p className="mt-3 text-xs leading-5 text-[#8b98a5]">{t(`accounts.intelligence.dataBoundary.${item.key}.description`)}</p>
           </div>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function PrivateAnalyticsPanel({
+  notes,
+  savedAt,
+  onChange,
+  onSave,
+}: {
+  notes: PrivateAnalyticsNotes;
+  savedAt: string;
+  onChange: (notes: PrivateAnalyticsNotes) => void;
+  onSave: () => void;
+}) {
+  const { t } = useT();
+  const suggestions = buildPrivateAnalyticsSuggestions(notes, t);
+  const fieldClass = "min-h-24 w-full rounded-2xl border border-[#2f3336] bg-black px-3 py-3 text-sm leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b] focus:border-[#1d9bf0]";
+  return (
+    <Card className="bg-[#0f1419]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <CardHeader title={t("accounts.intelligence.private.title")} description={t("accounts.intelligence.private.description")} className="mb-0" />
+        <span className="inline-flex w-fit items-center rounded-full border border-[#ffd400]/25 bg-[#ffd400]/10 px-3 py-1 text-xs font-semibold text-[#f6d96b]">
+          {t("accounts.intelligence.private.localOnly")}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {(["audience", "countries", "activeTimes", "followerGrowth", "topFormats", "weakSignals"] as const).map((field) => (
+          <label key={field} className="block space-y-1.5">
+            <span className="text-xs font-semibold text-[#71767b]">{t(`accounts.intelligence.private.field.${field}`)}</span>
+            <textarea
+              value={notes[field]}
+              onChange={(event) => onChange({ ...notes, [field]: event.target.value })}
+              className={fieldClass}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 rounded-2xl border border-[#2f3336] bg-black p-4">
+          <p className="text-sm font-semibold text-[#e7e9ea]">{t("accounts.intelligence.private.suggestions.title")}</p>
+          <div className="mt-3 space-y-2">
+            {suggestions.length > 0 ? suggestions.map((suggestion) => (
+              <p key={suggestion} className="text-xs leading-5 text-[#8b98a5]">{suggestion}</p>
+            )) : (
+              <p className="text-xs leading-5 text-[#71767b]">{t("accounts.intelligence.private.suggestions.empty")}</p>
+            )}
+          </div>
+          {savedAt ? <p className="mt-3 text-[11px] text-[#71767b]">{t("accounts.intelligence.private.savedAt", { time: savedAt.slice(0, 16).replace("T", " ") })}</p> : null}
+        </div>
+        <Button type="button" onClick={onSave}>
+          <Save className="size-4" />
+          {t("accounts.intelligence.private.save")}
+        </Button>
       </div>
     </Card>
   );
@@ -745,6 +849,19 @@ function buildAccountGrowthDiagnosis(
     safetyBoundary,
     handoff,
   };
+}
+
+function privateAnalyticsStorageKey(accountID: number) {
+  return `octo:account-private-analytics:${accountID}`;
+}
+
+function buildPrivateAnalyticsSuggestions(notes: PrivateAnalyticsNotes, t: (key: string) => string) {
+  const suggestions: string[] = [];
+  if (notes.audience.trim() || notes.countries.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.audience"));
+  if (notes.activeTimes.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.time"));
+  if (notes.topFormats.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.format"));
+  if (notes.followerGrowth.trim() || notes.weakSignals.trim()) suggestions.push(t("accounts.intelligence.private.suggestions.gap"));
+  return suggestions;
 }
 
 function diagnosisStatusTone(status: AccountDiagnosisStatus) {

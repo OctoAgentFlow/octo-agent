@@ -20,12 +20,12 @@ This document maps the current product pages to their backend API areas. It is w
 | `/oaf-bots` | Configure account persona, voice, topics, boundaries, language style, and learning preferences. | `GET/POST/PUT /oaf-bots`, `POST /oaf-bots/:id/test-generate`, `GET /oaf-bots/:id/generation-usages`. |
 | `/exposure-radar` | Daily Growth Desk: opportunity signals, hot/rising filters, diagnostics, strategy, reply angles, people radar, manual records, and learning loop. | `/trends/exposure-radar*`, `/exposure-radar/drafts*`, `/exposure-radar/manual-records*`, `/exposure-radar/strategy`, `/exposure-radar/people*`. |
 | `/content-drafts` | Content strategy drafts from persona, memory, trends, and opportunity context. | `/content-drafts/plans*`, `/content-drafts/runs`, `/content-drafts/drafts*`, `/content-library/items`. |
-| `/content-library` | Content Memory entry point; opens the Content Library panel inside Content Drafts so memory links never dead-end. | Redirects to `/content-drafts?panel=content#content-library`; data comes from `/content-library/items`. |
-| `/daily-x-queue` | Supporting content-prep workflow for preparing OAF Bot post drafts from one trusted source. It is not the primary first-day workbench; users can return to Daily Growth Desk from the page header. Automatic website summarization remains planned. | `/daily-x-queue*`, content memory, OAF Bot, draft generation APIs, and current run/item summaries. Website source import is tracked as a product-strength optimization item. |
-| `/handling-list` | Manual handling list: review, edit, copy, open original post, mark handled, inspect feedback, and track publishing/result states. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
-| `/posts` | Traditional post list and creation flow kept for direct content management. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`. |
-| `/activity` | Activity log and failure investigation. | `GET /activities` with type, status, time range, account, and failure filters. |
-| `/analytics` | Internal performance analytics and available public X metrics. | `GET /analytics/overview?range=7d|30d&account_id=...`. |
+| `/content-library` | First-class Content Memory page for reusable product context, signal notes, reply learnings, and source-traced memory. Focus links can open a specific memory item. | `GET/POST/PUT/DELETE /content-library/items`; generation handoff links back into `/content-drafts`. |
+| `/daily-x-queue` | Downlined compatibility route; redirects to Content Drafts generation mode. | Redirects to `/content-drafts?panel=generate&legacy_source=daily_x_queue`; old API client is compatibility-only. |
+| `/handling-list` | Manual handling list: review, edit, copy, open original post, mark usable/handled, inspect feedback, and track result states. Publisher actions stay limited to post drafts. | `GET /review-queue`, content draft actions, exposure draft actions, publishing job actions, and feedback APIs. |
+| `/posts` | Post archive and direct content management. New creation is routed into Content Drafts. | `GET/POST/PUT/DELETE /posts`, `POST /posts/:id/execute`, `POST /posts/generate`; `/posts/create` redirects to `/content-drafts?panel=generate&legacy_source=posts_create`. |
+| `/activity` | Support/debug activity log for generated drafts, manual handoffs, failures, and historical compatibility records. | `GET /activities` with type, status, time range, account, and failure filters. |
+| `/analytics` | Operations analytics and available public X metrics; not a replacement for Creator Studio private audience panels. | `GET /analytics/overview?range=7d|30d&account_id=...`. |
 | `/billing` | Plans, subscription, AI generation usage, opportunity draft capacity, orders, and payment methods. | `/billing/subscription`, `/billing/plans`, `/billing/payment-methods`, `/billing/orders*`. |
 | `/settings` | User profile, password, notification settings, and language preference. | `GET/PATCH /users/me`, `PATCH /users/me/password`, `GET/PATCH /users/me/notification-settings`. |
 | `/profile` | Current user profile. | `GET /users/me`. |
@@ -42,6 +42,8 @@ This document maps the current product pages to their backend API areas. It is w
 | --- | --- | --- |
 | `/auto-post` page/API | Downlined. | `/content-drafts` and `/api/v1/content-drafts`. |
 | `/automations` page | Downlined frontend route; redirects to Dashboard. Authenticated `/api/v1/automations*` remains internal compatibility for workflow health and paused-module recovery. | `/dashboard`, `/content-drafts`, `/handling-list`, and `/exposure-radar`. |
+| `/points` page | Downlined user route; redirects to Billing. Point-like concepts are treated as billing credits/referrals, not a standalone product loop. | `/billing`. |
+| `/trends` page | Downlined user route; redirects to Exposure Radar diagnostics. Trend cache tools remain admin/debug context. | `/exposure-radar?view=source-health` and Admin trend tools. |
 | `/execution-queue` page | Downlined. | `/handling-list`. |
 | `/review-queue` page | Downlined frontend route; backend API remains for Handling List data. | `/handling-list`. |
 | `/auto-replies` API | Downlined authenticated legacy automation API. | Manual reply/opportunity drafts through `/api/v1/exposure-radar/drafts`. |

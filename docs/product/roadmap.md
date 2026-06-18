@@ -40,9 +40,11 @@ Any new feature that calls X APIs or OpenAI must expose its refresh cadence, quo
 
 Detailed product-strength fixes are tracked in
 `docs/product/product-strength-optimization-plan.md` and
-`docs/product/product-strength-next-optimization-plan.md`. The current product
-focus is to make Daily Growth Desk the single first-day and daily-return
-workbench, then make the first useful value easier to understand and repeat.
+`docs/product/product-strength-next-optimization-plan.md`. Open product
+consolidation and cleanup candidates are tracked in
+`docs/product/product-optimization-backlog.md`. The current product focus is to
+make Daily Growth Desk the single first-day and daily-return workbench, then
+make the first useful value easier to understand and repeat.
 
 1. **Legacy route protection and documentation alignment**
    Keep historical compatibility data visible but safe. Old high-risk automation routes and old frontend aliases are downlined; documents stay aligned with the manual growth workflow.
@@ -78,13 +80,13 @@ workbench, then make the first useful value easier to understand and repeat.
 | Priority | Status | Notes |
 | --- | --- | --- |
 | Legacy route protection and documentation alignment | Done / refreshed | Old `/auto-post`, `/automations`, `/execution-queue`, `/review-queue`, authenticated `/auto-replies`, `/auto-dm`, `/auto-comment`, and `/auto-comments` product routes are downlined. `/automations` now redirects to Dashboard, while authenticated `/automations` API calls remain only as internal compatibility for workflow health and paused-module recovery. Public DM unsubscribe remains for compliance. P0 cleanup also added a real `/content-library` entry, redirected `/agents` to `/oaf-bots`, and consolidated nav/start links around Daily Growth Desk, Content Memory, OAF Bots, and Handling List. |
-| First-day IA and product-strength optimization | Done / complete for current batch | PS-0 through PS-9 are complete: Daily Growth Desk is the dominant first-run and daily-return workbench, Daily X Queue and Analytics are supporting surfaces, `/start-today` enters a guided first-session mode, opportunity cards explain operator evidence, learning panels show what feedback changed, strategy setup can import product context into strategy plus Content Memory, pricing/proof copy is aligned to manual operating capacity, activation loop visibility exists, and Account Intelligence labels data-source boundaries. |
+| First-day IA and product-strength optimization | Done / complete for current batch | PS-0 through PS-9 are complete: Daily Growth Desk is the dominant first-run and daily-return workbench, Content Drafts handles reusable draft generation, `/start-today` enters a guided first-session mode, opportunity cards explain operator evidence, learning panels show what feedback changed, strategy setup can import product context into strategy plus Content Memory, pricing/proof copy is aligned to manual operating capacity, activation loop visibility exists, and Account Intelligence labels data-source boundaries. |
 | Exposure Radar modularization | Done / maintain boundary | The former large `/exposure-radar` page is now about 1.2k lines and mainly orchestrates data/state. P1 extracted hero/playbook, session progress, daily review/result learning, operating diagnostics, session workflow, strategy/people radar, handling workbench, and `RadarCard` into focused modules. Future work should keep new panels outside `page.tsx`. |
 | Cost and rate observability | Done / refining | `CostUsageLedger` records OpenAI generation cost and major X API usage. Admin exposes OpenAI cost, X API calls, X Trends/Exposure refresh config, skip/failure health, estimated Exposure refreshes/day, budget guardrail status, and recent cost-driving events. |
 | Opportunity quality and learning loop | Done / refining | Hot/rising, quality tiers, manual records, result backfill, memory, strategy, people radar, weekly review, operator evidence, learning change summaries, opportunity quality gate, and repeat/slow/measure learning decisions exist. Keep improving ranking quality and context intake. |
 | Account Intelligence clarity | Done / refining | Current docs and product surfaces avoid assuming Creator Studio private data. Account Intelligence labels public X data, user-provided context, internal workflow data, unavailable private metrics, and now includes Account Growth Diagnosis before handoff to Daily Growth Desk. Next step is optional user-provided analytics import or future authorized private metrics access. |
 | Billing and quota semantic cleanup | Done / compatibility boundary | Frontend/API display prefers content drafts, opportunity drafts, review capacity, content memory, and account intelligence. Legacy DB/JSON fields remain by design for historical data. |
-| UI smoke tests for core workflows | Done / refining | Added `scripts/smoke-core-workflows.sh` and runbook coverage for login, dashboard, Start Today, Exposure Radar, Daily X Queue, Content Drafts, Handling List, Billing, Admin, and optional API health. |
+| UI smoke tests for core workflows | Done / refining | Added `scripts/smoke-core-workflows.sh` and runbook coverage for login, dashboard, Start Today, Exposure Radar, Content Memory, Content Drafts, Handling List, Billing, Admin, and optional API health. |
 | Legacy document archive | Done / refining | Added `docs/product/archive/legacy-automation-docs.md` as the historical archive entry. Individual old docs remain in place to avoid breaking links. |
 
 ## Next Product Enhancement Sequence

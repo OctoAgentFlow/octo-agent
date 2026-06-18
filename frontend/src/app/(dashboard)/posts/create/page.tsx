@@ -1,10 +1,5 @@
-import { PostCreateClient } from "@/components/posts/post-create-client";
+import { redirect } from "next/navigation";
 
-type CreatePostPageProps = {
-  searchParams?: Promise<{ source?: string }>;
-};
-
-export default async function CreatePostPage({ searchParams }: CreatePostPageProps) {
-  const params = await searchParams;
-  return <PostCreateClient source={params?.source === "auto_post" ? "auto_post" : undefined} />;
+export default function CreatePostPage() {
+  redirect("/content-drafts?panel=generate&legacy_source=posts_create");
 }

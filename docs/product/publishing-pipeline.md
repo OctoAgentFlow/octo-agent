@@ -1,5 +1,11 @@
 # Publishing Pipeline V2
 
+> Historical compatibility note, updated 2026-06-18:
+> Publishing Pipeline remains useful for post-draft tracking and historical
+> queue records, but it is not the primary product story. Current user-facing
+> workflows should emphasize copy, manual posting on X, result backfill, and
+> review-first handling.
+
 ## 产品定位
 
 Publishing Pipeline 是 Octo-Agent Flow 的统一发布器。它接管所有 `ready_to_publish` 的 AI 生成内容，避免 Auto Comment、Auto Reply、Auto Post、Auto DM 各自直接调用 X 发布接口。

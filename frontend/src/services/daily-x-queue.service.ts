@@ -3,6 +3,15 @@ import type { OAFBot } from "@/types/oaf-bot";
 import type { ContentLibraryItemApi } from "@/services/content-library.service";
 import type { AutoPostDraftApi } from "@/services/content-drafts.service";
 
+/**
+ * Deprecated compatibility client.
+ *
+ * The public `/daily-x-queue` page now redirects into Content Drafts. Keep this
+ * service only for older backend endpoints, rollback safety, and historical
+ * tests. New product work should use `content-drafts.service.ts` or
+ * `content-library.service.ts` instead.
+ */
+
 type ApiResponse<T> = {
   code: number;
   message: string;

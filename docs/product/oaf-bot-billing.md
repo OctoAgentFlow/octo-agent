@@ -1,5 +1,12 @@
 # OAF Bot + Billing 会员体系产品方案
 
+> Historical archive note, updated 2026-06-18:
+> This document includes older package and automation wording. Current pricing
+> language should be based on Account Intelligence, Daily Growth Desk,
+> opportunity drafts, Content Memory, review capacity, and conservative manual
+> handling. Do not reintroduce unattended comments, DM outreach, or guaranteed
+> growth promises from this document.
+
 ## 目标定位
 
 OAF Bot 是绑定在用户 X 账号背后的 AI 社交人格机器人。用户可以为机器人配置职业、年龄段、性别表达、学历、性格、MBTI、语言风格、主要输出语言、语言策略、话题领域、行为边界和增长目标。

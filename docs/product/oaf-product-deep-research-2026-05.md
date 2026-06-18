@@ -2,6 +2,12 @@
 
 日期：2026-05-31
 
+> Historical research note, updated 2026-06-18:
+> This research captured an earlier product state, including the old test
+> environment and automation-heavy surfaces. Reuse the analysis about controlled
+> social operations, trust, feedback, and first-value loops; do not treat older
+> auto-comment, auto-DM, or bulk automation ideas as current direction.
+
 ## 核心问题
 
 本次调研围绕一个判断标准：

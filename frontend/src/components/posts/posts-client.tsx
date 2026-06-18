@@ -112,7 +112,7 @@ export function PostsClient() {
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#71767b] md:text-[15px]">{t("posts.page.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/daily-x-queue" className={cn(buttonVariants())}>
+            <Link href="/content-drafts?panel=generate" className={cn(buttonVariants())}>
               <Sparkles className="size-4" />
               {t("posts.actions.openDailyDrafts")}
             </Link>
@@ -158,7 +158,7 @@ export function PostsClient() {
               <CalendarClock className="size-4" />
               {t("posts.actions.openAutoPost")}
             </Link>
-            <Link href="/daily-x-queue" className={cn(buttonVariants())}>
+            <Link href="/content-drafts?panel=generate" className={cn(buttonVariants())}>
               <Sparkles className="size-4" />
               {t("posts.actions.openDailyDrafts")}
             </Link>

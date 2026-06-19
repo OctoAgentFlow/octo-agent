@@ -6,8 +6,9 @@ import { ToastProvider } from "@/components/providers/toast-provider";
 import { ConfirmProvider } from "@/components/providers/confirm-provider";
 
 export const metadata: Metadata = {
-  title: "Octo-Agent Flow | AI Social Operations",
-  description: "AI workflow for X posting, replies, DMs, and growth analytics for Web3 projects and lean teams.",
+  title: "Octo-Agent Flow | Daily Growth Desk for X Operators",
+  description:
+    "AI social operations workbench for safe manual X growth with account intelligence, Exposure Radar, persona-aware drafts, content memory, and result learning.",
 };
 
 export default function RootLayout({

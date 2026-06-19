@@ -65,6 +65,16 @@ refactors:
 It also runs targeted Go tests for model table names, DTO aliases, repository
 aliases, billing JSON compatibility, and router registration.
 
+For release validation, the same guard can be included in the core smoke suite:
+
+```bash
+SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
+```
+
+The default smoke remains lightweight; use the opt-in guard when the branch
+touches backend compatibility surfaces or before approving a high-risk migration
+branch.
+
 ## Pre-Migration Checklist
 
 - [ ] Product owner confirms no rollback to old release is required.

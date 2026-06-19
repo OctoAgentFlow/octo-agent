@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${BASE_URL:-}"
 API_BASE_URL="${API_BASE_URL:-}"
+SMOKE_LEGACY_COMPAT="${SMOKE_LEGACY_COMPAT:-}"
 
 required_files=(
   "frontend/src/app/(dashboard)/dashboard/page.tsx"
@@ -21,6 +22,7 @@ required_files=(
   "backend/internal/router/content_library_router.go"
   "backend/internal/router/trend_router.go"
   "backend/internal/controller/admin_controller.go"
+  "scripts/check-legacy-compat-contracts.sh"
 )
 
 required_patterns=(
@@ -102,6 +104,11 @@ if [[ -n "$API_BASE_URL" ]]; then
     health_url="${api%/api}/health"
   fi
   check_url api-health "$health_url"
+fi
+
+if [[ "$SMOKE_LEGACY_COMPAT" == "1" || "$SMOKE_LEGACY_COMPAT" == "true" ]]; then
+  echo "[smoke] legacy compatibility guard"
+  "$ROOT_DIR/scripts/check-legacy-compat-contracts.sh"
 fi
 
 echo "[smoke] core workflow smoke checks passed"

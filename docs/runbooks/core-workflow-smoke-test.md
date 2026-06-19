@@ -35,6 +35,36 @@ registered in the production router.
 `/daily-x-queue` is a downlined compatibility redirect into Content Drafts. It
 is intentionally not part of this core smoke path.
 
+## Legacy Compatibility Guard
+
+Run this when a backend cleanup touches Content Drafts, Handling List, billing
+quota fields, activity display, AI usage scene labels, scheduler naming, or old
+route compatibility:
+
+```bash
+scripts/check-legacy-compat-contracts.sh
+```
+
+The guard verifies that the remaining historical contracts are still protected:
+
+- `auto_post_*` table/model anchors still exist for old rows.
+- `ContentDraft*` DTO/repository aliases still wrap legacy storage contracts.
+- Billing responses keep both semantic and legacy quota fields.
+- `scene=auto_post` remains available for historical AI usage aggregation.
+- Review and feedback logic still accepts legacy `queue_type=auto_post` rows.
+- The scheduler uses `RunContentDraftOnce` while keeping the old wrapper.
+- Old Auto Post and Daily X Queue API route registrations remain absent from the
+  production router.
+
+To include this guard inside the static core smoke:
+
+```bash
+SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
+```
+
+This path runs targeted Go tests, so use it for local/CI/release validation
+rather than lightweight production URL checks.
+
 ## Local UI Shell Check
 
 After a frontend build, run the UI shell smoke check:

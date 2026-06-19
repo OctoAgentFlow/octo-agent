@@ -330,3 +330,20 @@ gradually moving to the new names.
   repository aliases, billing JSON aliases, and route registration.
 - This is a guardrail step only. It does not rename DB tables, JSON tags,
   activity keys, AI scene values, queue types, or historical data.
+
+## P3.8 Smoke And Runbook Integration
+
+- Wired the compatibility guard into `scripts/smoke-core-workflows.sh` behind an
+  explicit opt-in flag:
+
+```bash
+SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
+```
+
+- Kept the default core smoke lightweight for route/static checks, because the
+  compatibility guard runs targeted Go tests and is better suited for local,
+  CI, or release validation.
+- Updated `docs/runbooks/core-workflow-smoke-test.md` with standalone and
+  integrated guard commands.
+- Still no data migration in this step. The guard only makes accidental
+  contract breakage more visible before any future high-risk branch.

@@ -81,6 +81,11 @@ The default smoke remains lightweight; use the opt-in guard when the branch
 touches backend compatibility surfaces or before approving a high-risk migration
 branch.
 
+The optional GitHub Actions workflow `Legacy Compatibility Guard` provides the
+same guard as a manual check and as a pull-request path trigger for guarded
+compatibility files. Passing CI does not approve a data migration; it only
+confirms that the existing compatibility boundary is still intact.
+
 ## Pre-Migration Checklist
 
 - [ ] Product owner confirms no rollback to old release is required.

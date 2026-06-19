@@ -51,6 +51,14 @@ Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test
 
 `prod-lite-build-upload.sh` packages the current commit, activates it on the server, and the remote activator removes old release directories and upload archives after health checks pass. Default retention is 3 releases; set `PROD_LITE_KEEP_RELEASES=5` when you want extra rollback points.
 
+如果本次 release 修改了 Content Drafts、Handling List、billing quota、scheduler、router、AI usage scene、activity compatibility 或 legacy `auto_post` 合约，部署前先运行：
+
+```bash
+SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
+```
+
+同一检查也接入了可选 GitHub Actions workflow：`Legacy Compatibility Guard`。它支持手动触发，并会在 PR 修改受保护兼容路径时自动运行。
+
 当前单服务部署：
 
 ```bash

@@ -66,6 +66,28 @@ scripts/prod-lite-enable-https.sh <your-server-ip>
 
 The lightweight deployment builds locally and only uploads the runtime artifact to the server. This avoids building Go and Next.js on t3.micro.
 
+### Release Checklist
+
+Before deploying a branch that touches Content Drafts, Handling List, billing
+quota fields, scheduler naming, router registration, AI usage scenes, activity
+display compatibility, or legacy `auto_post` contracts, run the compatibility
+guard locally:
+
+```bash
+scripts/check-legacy-compat-contracts.sh
+```
+
+Or include it in the core workflow smoke:
+
+```bash
+SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
+```
+
+The GitHub Actions workflow `Legacy Compatibility Guard` is also available as a
+manual `workflow_dispatch` check and runs automatically on pull requests that
+touch the guarded compatibility paths. It is a release safety check, not a data
+migration step.
+
 ```bash
 scripts/prod-lite-build-upload.sh <your-server-ip>
 ```

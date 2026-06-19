@@ -1,0 +1,43 @@
+name: Legacy Compatibility Guard
+
+"on":
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/internal/model/auto_post_*.go"
+      - "backend/internal/dto/automation_dto.go"
+      - "backend/internal/dto/billing_dto.go"
+      - "backend/internal/repository/auto_post_*repository.go"
+      - "backend/internal/repository/ai_generation_usage_repository.go"
+      - "backend/internal/service/review_queue_service.go"
+      - "backend/internal/service/feedback_learning_signals.go"
+      - "backend/internal/jobs/**"
+      - "backend/internal/router/**"
+      - "scripts/check-legacy-compat-contracts.sh"
+      - "scripts/smoke-core-workflows.sh"
+      - "docs/technical/content-draft-route-migration.md"
+      - "docs/technical/high-risk-legacy-data-migration-plan.md"
+      - "docs/runbooks/core-workflow-smoke-test.md"
+
+permissions:
+  contents: read
+
+jobs:
+  legacy-compat-guard:
+    name: Legacy compatibility guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Run guard
+        run: bash scripts/check-legacy-compat-contracts.sh

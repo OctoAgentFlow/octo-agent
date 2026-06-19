@@ -17,7 +17,7 @@ whenever an item is completed or deliberately held at a compatibility boundary.
 | 5 | Result backfill and learning loop reinforcement | Done / refining | Learning Insights now shows handled, pending backfill, backfilled, and learning-cue counts so result feedback is visible. |
 | 6 | First-day/user validation material | Done | Added `docs/runbooks/first-day-user-validation.md` for account analysis, strategy apply, manual reply, result backfill, and learning status validation. |
 | 7 | Legacy route traffic audit | Done / operational gate | Existing `docs/runbooks/legacy-route-traffic-audit.md` remains the production access-log gate before any final deletion. |
-| 8 | High-risk backend naming/data migration plan | Compatibility boundary documented | Added `docs/technical/high-risk-legacy-data-migration-plan.md`; do not rename `auto_post_*` DB tables, persisted JSON keys, AI scene names, or historical activity keys in this batch. |
+| 8 | High-risk backend naming/data migration plan | Compatibility boundary guarded | Added `docs/technical/high-risk-legacy-data-migration-plan.md`, `scripts/check-legacy-compat-contracts.sh`, `SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh`, and the optional `Legacy Compatibility Guard` GitHub Actions workflow. Do not rename `auto_post_*` DB tables, persisted JSON keys, AI scene names, or historical activity keys in this batch. |
 | 9 | Documentation sync | Done for this batch | Updated docs index, smoke runbook, execution plan, and product-strength audit references. |
 
 ## Completion Rules

@@ -74,6 +74,11 @@ SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
 This path runs targeted Go tests, so use it for local/CI/release validation
 rather than lightweight production URL checks.
 
+For branches that touch guarded compatibility paths, the optional GitHub Actions
+workflow `Legacy Compatibility Guard` can run the same guard via manual dispatch
+or PR path trigger. Treat it as a release checklist item, not as approval to run
+data migrations.
+
 ## Local UI Shell Check
 
 After a frontend build, run the UI shell smoke check:

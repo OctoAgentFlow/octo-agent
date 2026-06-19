@@ -362,3 +362,17 @@ SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
 - The intent is to make guard failures easier to interpret: some legacy names
   are required historical contracts, while old route registrations are expected
   to stay absent.
+
+## P3.10 Release Checklist And Optional CI Guard
+
+- Added `.github/workflows/legacy-compat-guard.yml` as a narrow optional CI
+  check.
+- The workflow supports manual `workflow_dispatch` and PR path triggers for the
+  guarded compatibility surfaces: Content Draft storage aliases, billing DTOs,
+  scheduler, router registration, AI usage scenes, review/feedback legacy queue
+  handling, the guard script, and related runbooks.
+- Updated the prod lite deployment runbook and deployment script guide so
+  release operators run `SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh`
+  before deploying branches that touch those compatibility surfaces.
+- This remains a release safety step only. It does not rename persisted values,
+  add dual-write behavior, or perform a data migration.

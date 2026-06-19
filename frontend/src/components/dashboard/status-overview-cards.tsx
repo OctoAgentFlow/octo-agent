@@ -61,7 +61,7 @@ export function StatusOverviewCards({ overview, loading = false }: StatusOvervie
     subStatus === "expired"
       ? t("dashboard.membership.subscriptionExpired")
       : isFreeTrial(plan)
-        ? t("dashboard.membership.trialDaysLeft", { days: overview?.trial_days_left ?? 0 })
+        ? t("dashboard.membership.permanentlyFree")
         : expiresAt
           ? t("dashboard.membership.expiresAt", { date: expiresAt })
           : t("dashboard.membership.active");

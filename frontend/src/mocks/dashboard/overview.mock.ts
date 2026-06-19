@@ -6,7 +6,7 @@ export const overviewStats: OverviewStat[] = [
   {
     titleKey: "dashboard.overview.membership.title",
     valueKey: "dashboard.membership.plan.freeTrial",
-    subValueKey: "dashboard.membership.trialDaysLeft",
+    subValueKey: "dashboard.membership.permanentlyFree",
     subValueParams: { days: 5 },
     icon: Crown,
   },

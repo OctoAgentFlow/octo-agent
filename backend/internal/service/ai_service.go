@@ -1503,6 +1503,8 @@ func (s *AIService) CompleteOAFBotProfile(ctx context.Context, in CompleteOAFBot
 	user.WriteString("Return JSON with exactly these keys:\n")
 	user.WriteString("occupation, industry, personality_tags, identity_summary, voice_tone, topics, forbidden_topics, growth_goal, project_one_liner, target_audience, core_value_props, product_features, differentiators, content_pillars, content_objectives, preferred_cta, website_url, telegram_url, discord_url, docs_url, cta_policy, hashtags, keywords, compliance_notes, avoid_claims, safety_mode, primary_language, language_strategy.\n")
 	user.WriteString("Rules:\n")
+	user.WriteString("- occupation and industry must be single strings, not arrays.\n")
+	user.WriteString("- personality_tags, topics, forbidden_topics, content_pillars, hashtags, keywords, and avoid_claims must be string arrays.\n")
 	user.WriteString("- Arrays must contain short strings, usually 3-6 items.\n")
 	user.WriteString("- Keep identity_summary under 260 characters.\n")
 	user.WriteString("- Keep voice_tone under 120 characters.\n")
@@ -2070,31 +2072,45 @@ func cleanupGeneratedPayload(raw string) string {
 
 func parseCompletedOAFBotProfile(raw string) (dto.OAFBotUpsertRequest, error) {
 	text := cleanupGeneratedPayload(raw)
-	var out dto.OAFBotUpsertRequest
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
+	var payload completedOAFBotProfilePayload
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
 		return dto.OAFBotUpsertRequest{}, fmt.Errorf("parse completed oaf bot profile: %w", err)
 	}
-	out.Occupation = strings.TrimSpace(out.Occupation)
-	out.Industry = strings.TrimSpace(out.Industry)
-	out.IdentitySummary = strings.TrimSpace(out.IdentitySummary)
-	out.VoiceTone = strings.TrimSpace(out.VoiceTone)
-	out.GrowthGoal = strings.TrimSpace(out.GrowthGoal)
-	out.ProjectOneLiner = strings.TrimSpace(out.ProjectOneLiner)
-	out.TargetAudience = strings.TrimSpace(out.TargetAudience)
-	out.CoreValueProps = strings.TrimSpace(out.CoreValueProps)
-	out.ProductFeatures = strings.TrimSpace(out.ProductFeatures)
-	out.Differentiators = strings.TrimSpace(out.Differentiators)
-	out.ContentObjectives = strings.TrimSpace(out.ContentObjectives)
-	out.PreferredCTA = strings.TrimSpace(out.PreferredCTA)
-	out.WebsiteURL = strings.TrimSpace(out.WebsiteURL)
-	out.TelegramURL = strings.TrimSpace(out.TelegramURL)
-	out.DiscordURL = strings.TrimSpace(out.DiscordURL)
-	out.DocsURL = strings.TrimSpace(out.DocsURL)
-	out.CTAPolicy = strings.TrimSpace(out.CTAPolicy)
-	out.ComplianceNotes = strings.TrimSpace(out.ComplianceNotes)
-	out.SafetyMode = strings.TrimSpace(out.SafetyMode)
-	out.PrimaryLanguage = strings.TrimSpace(out.PrimaryLanguage)
-	out.LanguageStrategy = strings.TrimSpace(out.LanguageStrategy)
+
+	out := dto.OAFBotUpsertRequest{
+		Occupation:        parseFlexibleJSONString(payload.Occupation),
+		Industry:          parseFlexibleJSONString(payload.Industry),
+		AgeRange:          parseFlexibleJSONString(payload.AgeRange),
+		Gender:            parseFlexibleJSONString(payload.Gender),
+		Education:         parseFlexibleJSONString(payload.Education),
+		MBTI:              parseFlexibleJSONString(payload.MBTI),
+		PersonalityTags:   parseFlexibleJSONStringList(payload.PersonalityTags),
+		IdentitySummary:   parseFlexibleJSONString(payload.IdentitySummary),
+		VoiceTone:         parseFlexibleJSONString(payload.VoiceTone),
+		Topics:            parseFlexibleJSONStringList(payload.Topics),
+		ForbiddenTopics:   parseFlexibleJSONStringList(payload.ForbiddenTopics),
+		GrowthGoal:        parseFlexibleJSONString(payload.GrowthGoal),
+		ProjectOneLiner:   parseFlexibleJSONString(payload.ProjectOneLiner),
+		TargetAudience:    parseFlexibleJSONString(payload.TargetAudience),
+		CoreValueProps:    parseFlexibleJSONString(payload.CoreValueProps),
+		ProductFeatures:   parseFlexibleJSONString(payload.ProductFeatures),
+		Differentiators:   parseFlexibleJSONString(payload.Differentiators),
+		ContentPillars:    parseFlexibleJSONStringList(payload.ContentPillars),
+		ContentObjectives: parseFlexibleJSONString(payload.ContentObjectives),
+		PreferredCTA:      parseFlexibleJSONString(payload.PreferredCTA),
+		WebsiteURL:        parseFlexibleJSONString(payload.WebsiteURL),
+		TelegramURL:       parseFlexibleJSONString(payload.TelegramURL),
+		DiscordURL:        parseFlexibleJSONString(payload.DiscordURL),
+		DocsURL:           parseFlexibleJSONString(payload.DocsURL),
+		CTAPolicy:         parseFlexibleJSONString(payload.CTAPolicy),
+		Hashtags:          parseFlexibleJSONStringList(payload.Hashtags),
+		Keywords:          parseFlexibleJSONStringList(payload.Keywords),
+		ComplianceNotes:   parseFlexibleJSONString(payload.ComplianceNotes),
+		AvoidClaims:       parseFlexibleJSONStringList(payload.AvoidClaims),
+		SafetyMode:        parseFlexibleJSONString(payload.SafetyMode),
+		PrimaryLanguage:   parseFlexibleJSONString(payload.PrimaryLanguage),
+		LanguageStrategy:  parseFlexibleJSONString(payload.LanguageStrategy),
+	}
 	out.PersonalityTags = cleanGeneratedStringList(out.PersonalityTags, 8)
 	out.Topics = cleanGeneratedStringList(out.Topics, 8)
 	out.ForbiddenTopics = cleanGeneratedStringList(out.ForbiddenTopics, 8)
@@ -2103,6 +2119,97 @@ func parseCompletedOAFBotProfile(raw string) (dto.OAFBotUpsertRequest, error) {
 	out.Keywords = cleanGeneratedStringList(out.Keywords, 10)
 	out.AvoidClaims = cleanGeneratedStringList(out.AvoidClaims, 8)
 	return out, nil
+}
+
+type completedOAFBotProfilePayload struct {
+	Occupation        json.RawMessage `json:"occupation"`
+	Industry          json.RawMessage `json:"industry"`
+	AgeRange          json.RawMessage `json:"age_range"`
+	Gender            json.RawMessage `json:"gender"`
+	Education         json.RawMessage `json:"education"`
+	MBTI              json.RawMessage `json:"mbti"`
+	PersonalityTags   json.RawMessage `json:"personality_tags"`
+	IdentitySummary   json.RawMessage `json:"identity_summary"`
+	VoiceTone         json.RawMessage `json:"voice_tone"`
+	Topics            json.RawMessage `json:"topics"`
+	ForbiddenTopics   json.RawMessage `json:"forbidden_topics"`
+	GrowthGoal        json.RawMessage `json:"growth_goal"`
+	ProjectOneLiner   json.RawMessage `json:"project_one_liner"`
+	TargetAudience    json.RawMessage `json:"target_audience"`
+	CoreValueProps    json.RawMessage `json:"core_value_props"`
+	ProductFeatures   json.RawMessage `json:"product_features"`
+	Differentiators   json.RawMessage `json:"differentiators"`
+	ContentPillars    json.RawMessage `json:"content_pillars"`
+	ContentObjectives json.RawMessage `json:"content_objectives"`
+	PreferredCTA      json.RawMessage `json:"preferred_cta"`
+	WebsiteURL        json.RawMessage `json:"website_url"`
+	TelegramURL       json.RawMessage `json:"telegram_url"`
+	DiscordURL        json.RawMessage `json:"discord_url"`
+	DocsURL           json.RawMessage `json:"docs_url"`
+	CTAPolicy         json.RawMessage `json:"cta_policy"`
+	Hashtags          json.RawMessage `json:"hashtags"`
+	Keywords          json.RawMessage `json:"keywords"`
+	ComplianceNotes   json.RawMessage `json:"compliance_notes"`
+	AvoidClaims       json.RawMessage `json:"avoid_claims"`
+	SafetyMode        json.RawMessage `json:"safety_mode"`
+	PrimaryLanguage   json.RawMessage `json:"primary_language"`
+	LanguageStrategy  json.RawMessage `json:"language_strategy"`
+}
+
+func parseFlexibleJSONString(raw json.RawMessage) string {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return strings.TrimSpace(value)
+	}
+	var items []string
+	if err := json.Unmarshal(raw, &items); err == nil {
+		parts := make([]string, 0, len(items))
+		for _, item := range items {
+			if v := strings.TrimSpace(item); v != "" {
+				parts = append(parts, v)
+			}
+		}
+		return strings.Join(parts, ", ")
+	}
+	return ""
+}
+
+func parseFlexibleJSONStringList(raw json.RawMessage) []string {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return nil
+	}
+	var items []string
+	if err := json.Unmarshal(raw, &items); err == nil {
+		return items
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil
+		}
+		if strings.Contains(value, ",") {
+			return splitCommaSeparatedValues(value)
+		}
+		return []string{value}
+	}
+	return nil
+}
+
+func splitCommaSeparatedValues(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func cleanGeneratedStringList(items []string, limit int) []string {

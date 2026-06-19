@@ -43,7 +43,7 @@ function mapPlanKey(code: string) {
 }
 
 function mapPlanName(code: string) {
-  if (code === "free_trial") return "Free Trial";
+  if (code === "free_trial") return "Free";
   if (code === "basic_monthly" || code === "basic") return "Starter";
   if (code === "plus") return "Growth";
   if (code === "pro") return "Operator";

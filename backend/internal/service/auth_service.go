@@ -14,7 +14,6 @@ import (
 	"octo-agent/backend/internal/email"
 	"octo-agent/backend/internal/model"
 	appjwt "octo-agent/backend/internal/pkg/jwt"
-	"octo-agent/backend/internal/pkg/subscription"
 	"octo-agent/backend/internal/pkg/utils"
 	"octo-agent/backend/internal/repository"
 
@@ -87,8 +86,6 @@ func (s *AuthService) Register(req dto.RegisterRequest) (*dto.AuthResponse, erro
 		name = "user"
 	}
 
-	now := time.Now().UTC()
-	trialEnd := now.AddDate(0, 0, subscription.DefaultTrialDays)
 	role := "user"
 	if count, err := s.userRepo.Count(); err != nil {
 		return nil, err
@@ -103,7 +100,7 @@ func (s *AuthService) Register(req dto.RegisterRequest) (*dto.AuthResponse, erro
 		Role:                  role,
 		SubscriptionPlanCode:  "free_trial",
 		SubscriptionStatus:    "active",
-		SubscriptionExpiresAt: &trialEnd,
+		SubscriptionExpiresAt: nil,
 	}
 	if err := s.userRepo.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
@@ -529,7 +526,6 @@ func (s *AuthService) getOrCreateAdminUser(email string) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
 	user = &model.User{
 		Email:                 email,
 		Password:              hash,
@@ -538,7 +534,7 @@ func (s *AuthService) getOrCreateAdminUser(email string) (*model.User, error) {
 		Role:                  "admin",
 		SubscriptionPlanCode:  "free_trial",
 		SubscriptionStatus:    "active",
-		SubscriptionExpiresAt: ptrTime(now.AddDate(0, 0, subscription.DefaultTrialDays)),
+		SubscriptionExpiresAt: nil,
 	}
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, err

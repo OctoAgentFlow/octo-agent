@@ -2,7 +2,7 @@ import type { CurrentSubscription, PaymentMethodOption, PaymentRecord, Plan } fr
 
 export const currentSubscription: CurrentSubscription = {
   plan: "free_trial",
-  planName: "免费试用",
+  planName: "免费版",
   billingCycle: "monthly",
   expirationDate: "2026-04-22",
   remainingTrialDays: 5,

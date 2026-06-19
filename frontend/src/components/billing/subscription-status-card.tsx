@@ -11,6 +11,7 @@ export function SubscriptionStatusCard({ subscription }: { subscription: Current
   if (!subscription) {
     return null;
   }
+  const isFreePlan = subscription.plan === "free_trial";
   return (
     <SectionCard className="bg-[#0f1419]">
       <CardHeader
@@ -32,12 +33,12 @@ export function SubscriptionStatusCard({ subscription }: { subscription: Current
           </div>
           <div>
             <p className="text-xs text-[#71767b]">{t("billing.subscription.fields.expirationDate")}</p>
-            <p className="text-sm font-medium text-white">{subscription.expirationDate}</p>
+            <p className="text-sm font-medium text-white">{isFreePlan ? "—" : subscription.expirationDate}</p>
           </div>
           <div>
-            <p className="text-xs text-[#71767b]">{t("billing.subscription.fields.remainingTrialDays")}</p>
+            <p className="text-xs text-[#71767b]">{t("billing.subscription.fields.planAccess")}</p>
             <p className="text-sm font-medium text-white">
-              {t("billing.subscription.remainingTrialDays", { days: subscription.remainingTrialDays })}
+              {isFreePlan ? t("billing.subscription.permanentlyFree") : t("billing.subscription.remainingTrialDays", { days: subscription.remainingTrialDays })}
             </p>
           </div>
           <div>

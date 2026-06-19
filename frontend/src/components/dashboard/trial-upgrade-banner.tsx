@@ -197,7 +197,6 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
   const automationBlocked = automationItems.some((item) => item.limit > 0 && item.used >= item.limit);
   const automationWarning = automationItems.some((item) => usagePct(item.used, item.limit) >= 80);
   const cycleKey = subscription?.billing_cycle === "yearly" ? "dashboard.subscription.yearly" : "dashboard.subscription.monthly";
-  const trialDaysLeft = subscription?.trial_days_left ?? overview?.trial_days_left ?? 0;
 
   const openCheckout = async () => {
     if (isHighestPlan || !targetPlan) {
@@ -227,12 +226,12 @@ export function TrialUpgradeBanner({ overview }: TrialUpgradeBannerProps) {
 
   const planLine = useMemo(() => {
     if (plan === "free_trial") {
-      return `${t("dashboard.subscription.trial")} · ${t("dashboard.subscription.daysLeft", { days: trialDaysLeft })}`;
+      return `${t("dashboard.subscription.trial")} · ${t("dashboard.subscription.permanentlyFree")}`;
     }
     const expiry = formatDate(subscription?.expiration_date, timeZone);
     const suffix = expiry ? ` · ${t("dashboard.subscription.expiresAt", { date: expiry })}` : "";
     return `${t("dashboard.subscription.currentPlan")}: ${t(planLabel(plan))} · ${t(cycleKey)}${suffix}`;
-  }, [cycleKey, plan, subscription?.expiration_date, t, timeZone, trialDaysLeft]);
+  }, [cycleKey, plan, subscription?.expiration_date, t, timeZone]);
 
   return (
     <SectionCard title={t("dashboard.subscription.title")} description={t("dashboard.subscription.subtitle")}>

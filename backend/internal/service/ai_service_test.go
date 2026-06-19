@@ -154,3 +154,29 @@ func TestPromptGuardMetadataCapturesLanguages(t *testing.T) {
 		t.Fatalf("expected retry count 1, got %d", usage.RetryCount)
 	}
 }
+
+func TestParseCompletedOAFBotProfileAcceptsIndustryArray(t *testing.T) {
+	raw := `{
+		"occupation": "founder",
+		"industry": ["Web3", "AI Agents"],
+		"personality_tags": ["practical", "operator"],
+		"identity_summary": "Builds safe social ops workflows.",
+		"voice_tone": "Calm and direct",
+		"topics": "AI, SocialFi",
+		"forbidden_topics": ["price predictions"],
+		"growth_goal": "awareness",
+		"primary_language": "en",
+		"language_strategy": "follow_context"
+	}`
+
+	profile, err := parseCompletedOAFBotProfile(raw)
+	if err != nil {
+		t.Fatalf("parseCompletedOAFBotProfile() error = %v", err)
+	}
+	if profile.Industry != "Web3, AI Agents" {
+		t.Fatalf("Industry = %q, want %q", profile.Industry, "Web3, AI Agents")
+	}
+	if len(profile.Topics) != 2 || profile.Topics[0] != "AI" || profile.Topics[1] != "SocialFi" {
+		t.Fatalf("Topics = %#v, want [AI SocialFi]", profile.Topics)
+	}
+}

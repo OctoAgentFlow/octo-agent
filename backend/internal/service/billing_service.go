@@ -181,16 +181,16 @@ func (s *BillingService) Plans() *dto.BillingPlansResponse {
 	items := make([]dto.BillingPlanData, 0, len(catalog)+1)
 	items = append(items, dto.BillingPlanData{
 		Code:         subscription.PlanFreeTrial,
-		Name:         "Free Trial",
+		Name:         "Free",
 		Price:        "0 USDT",
-		Period:       "14 days",
+		Period:       "forever",
 		MonthlyPrice: 0,
 		YearlyPrice:  0,
 		Currency:     "USDT",
-		Audience:     "14-day trial for new users",
-		Description:  "Try the manual social operations workflow before upgrading to Starter.",
+		Audience:     "Permanently free for new users",
+		Description:  "Use the core manual social operations workflow at no cost before upgrading to Starter.",
 		Features: []string{
-			"14-day free trial",
+			"Permanently free",
 			"1 OAF Bot",
 			"1 X account",
 			"100 AI generations / month",

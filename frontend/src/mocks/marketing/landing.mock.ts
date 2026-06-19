@@ -106,7 +106,7 @@ export const dashboardPreviewData: DashboardPreview = {
 export const pricingPlans: PricingPlan[] = [
   {
     code: "free_trial",
-    name: "Free Trial",
+    name: "Free",
     monthlyPrice: 0,
     yearlyPrice: 0,
     unit: "USDT",

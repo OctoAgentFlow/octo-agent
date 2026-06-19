@@ -152,6 +152,7 @@ function BillingCommandCenter({
   const currentPlanName = displayPlanName(subscription.plan, subscription.planName, t);
   const nextPlanName = displayPlanName(nextPlanCode, nextPlanCode, t);
   const isHighestPlan = subscription.plan === "pro_plus";
+  const isFreePlan = subscription.plan === "free_trial";
   const heroMetrics = [
     {
       labelKey: "billing.commandCenter.metrics.oafBots",
@@ -209,13 +210,13 @@ function BillingCommandCenter({
             />
             <StatusTile
               label={t("billing.subscription.fields.expirationDate")}
-              value={subscription.expirationDate || "—"}
-              helper={t("billing.commandCenter.expirationHelper")}
+              value={isFreePlan ? "—" : subscription.expirationDate || "—"}
+              helper={t(isFreePlan ? "billing.commandCenter.freePlanHelper" : "billing.commandCenter.expirationHelper")}
             />
             <StatusTile
-              label={t("billing.subscription.fields.remainingTrialDays")}
-              value={t("billing.subscription.remainingTrialDays", { days: subscription.remainingTrialDays })}
-              helper={t("billing.commandCenter.trialHelper")}
+              label={t("billing.subscription.fields.planAccess")}
+              value={isFreePlan ? t("billing.subscription.permanentlyFree") : t("billing.subscription.status.active")}
+              helper={t(isFreePlan ? "billing.commandCenter.trialHelper" : "billing.commandCenter.expirationHelper")}
             />
           </div>
 

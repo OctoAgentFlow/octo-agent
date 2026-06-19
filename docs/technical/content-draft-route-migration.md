@@ -347,3 +347,18 @@ SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
   integrated guard commands.
 - Still no data migration in this step. The guard only makes accidental
   contract breakage more visible before any future high-risk branch.
+
+## P3.9 Guard Boundary Output Cleanup
+
+- Reorganized `scripts/check-legacy-compat-contracts.sh` output into explicit
+  compatibility-boundary groups:
+  - Preserved storage contracts.
+  - Semantic alias layer.
+  - Preserved billing wire contracts.
+  - Historical workflow contracts.
+  - Downlined route surfaces.
+- Kept the same low-risk guard scope. This step does not add migrations, rename
+  persisted values, or change production behavior.
+- The intent is to make guard failures easier to interpret: some legacy names
+  are required historical contracts, while old route registrations are expected
+  to stay absent.

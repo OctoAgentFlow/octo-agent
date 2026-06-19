@@ -62,6 +62,12 @@ refactors:
 - Old `/api/v1/auto-post/*` and `/api/v1/daily-x-queue/*` route registrations
   stay absent from the production router.
 
+The output is intentionally grouped by boundary. A failure under preserved
+storage, billing wire, or historical workflow contracts usually means a
+compatibility contract was removed too early. A failure under downlined route
+surfaces usually means an old product route was reintroduced into active router
+registration.
+
 It also runs targeted Go tests for model table names, DTO aliases, repository
 aliases, billing JSON compatibility, and router registration.
 

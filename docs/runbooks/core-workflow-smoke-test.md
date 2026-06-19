@@ -56,6 +56,15 @@ The guard verifies that the remaining historical contracts are still protected:
 - Old Auto Post and Daily X Queue API route registrations remain absent from the
   production router.
 
+The guard output is grouped by compatibility boundary:
+
+- Preserved storage and billing wire contracts that must stay readable.
+- Semantic alias layer that new code should prefer.
+- Historical workflow contracts such as scene, queue type, and scheduler wrapper
+  compatibility.
+- Downlined route surfaces that must remain absent from active router
+  registration.
+
 To include this guard inside the static core smoke:
 
 ```bash

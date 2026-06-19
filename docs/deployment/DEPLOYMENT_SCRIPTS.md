@@ -54,6 +54,12 @@ Test 环境服务器已释放。所有 `*-test.sh` 部署脚本和 `https://test
 如果本次 release 修改了 Content Drafts、Handling List、billing quota、scheduler、router、AI usage scene、activity compatibility 或 legacy `auto_post` 合约，部署前先运行：
 
 ```bash
+scripts/check-legacy-compat-scope.sh --base origin/main
+```
+
+如果命中 guarded compatibility paths，再运行：
+
+```bash
 SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
 ```
 

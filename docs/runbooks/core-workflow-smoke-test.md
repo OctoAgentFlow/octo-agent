@@ -79,6 +79,14 @@ workflow `Legacy Compatibility Guard` can run the same guard via manual dispatch
 or PR path trigger. Treat it as a release checklist item, not as approval to run
 data migrations.
 
+To decide whether a local branch touched guarded compatibility paths:
+
+```bash
+scripts/check-legacy-compat-scope.sh --base origin/main
+```
+
+Add `--run` to execute the guard when a guarded path is detected.
+
 ## Local UI Shell Check
 
 After a frontend build, run the UI shell smoke check:

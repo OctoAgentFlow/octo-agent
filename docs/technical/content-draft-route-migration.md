@@ -376,3 +376,16 @@ SMOKE_LEGACY_COMPAT=1 scripts/smoke-core-workflows.sh
   before deploying branches that touch those compatibility surfaces.
 - This remains a release safety step only. It does not rename persisted values,
   add dual-write behavior, or perform a data migration.
+
+## P3.11 Local Guard Scope Advisor
+
+- Added `scripts/check-legacy-compat-scope.sh` as a local advisory helper.
+- The script compares the current working tree or a supplied base ref against
+  the same guarded compatibility paths used by the optional CI workflow.
+- It prints the recommended guard command when a branch touches Content Draft,
+  billing, scheduler, router, AI usage scene, review/feedback queue, or guard
+  runbook surfaces.
+- Optional `--run` executes `scripts/check-legacy-compat-contracts.sh` after a
+  guarded path is detected.
+- This is still a low-risk release-process helper only. It does not modify data
+  or change runtime behavior.

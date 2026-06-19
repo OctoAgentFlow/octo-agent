@@ -74,6 +74,12 @@ display compatibility, or legacy `auto_post` contracts, run the compatibility
 guard locally:
 
 ```bash
+scripts/check-legacy-compat-scope.sh --base origin/main
+```
+
+If the scope check reports guarded paths, run:
+
+```bash
 scripts/check-legacy-compat-contracts.sh
 ```
 

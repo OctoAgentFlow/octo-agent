@@ -86,6 +86,15 @@ same guard as a manual check and as a pull-request path trigger for guarded
 compatibility files. Passing CI does not approve a data migration; it only
 confirms that the existing compatibility boundary is still intact.
 
+To inspect a local branch before release, use:
+
+```bash
+scripts/check-legacy-compat-scope.sh --base origin/main
+```
+
+If guarded paths are reported, run the guard directly or rerun the scope helper
+with `--run`.
+
 ## Pre-Migration Checklist
 
 - [ ] Product owner confirms no rollback to old release is required.

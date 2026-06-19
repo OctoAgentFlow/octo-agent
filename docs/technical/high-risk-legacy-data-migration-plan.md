@@ -39,6 +39,32 @@ not rename them casually during UI cleanup or page modularization.
 - Treat any direct persisted rename as a separate migration project, not part of
   product-strength cleanup.
 
+## Compatibility Guard Script
+
+Run this before and after any backend cleanup that touches Content Draft,
+Handling List, billing quota, activity, AI usage, or legacy route compatibility:
+
+```bash
+scripts/check-legacy-compat-contracts.sh
+```
+
+The script checks the contracts that should remain stable during routine
+refactors:
+
+- `auto_post_*` persisted model/table anchors still exist.
+- `ContentDraft*` DTO and repository aliases still point at the legacy storage
+  contract.
+- Billing responses still expose both semantic and legacy quota fields.
+- `scene=auto_post` remains available for historical AI usage aggregation.
+- Review/feedback paths still accept legacy `queue_type=auto_post` rows.
+- The active scheduler uses `RunContentDraftOnce`, while the old wrapper remains
+  available for compatibility.
+- Old `/api/v1/auto-post/*` and `/api/v1/daily-x-queue/*` route registrations
+  stay absent from the production router.
+
+It also runs targeted Go tests for model table names, DTO aliases, repository
+aliases, billing JSON compatibility, and router registration.
+
 ## Pre-Migration Checklist
 
 - [ ] Product owner confirms no rollback to old release is required.
@@ -49,6 +75,8 @@ not rename them casually during UI cleanup or page modularization.
 - [ ] Activity rendering resolves both old and new preview keys.
 - [ ] Smoke tests pass for Content Drafts, Handling List, Daily Growth Desk,
       Billing, Admin, and account strategy handoff.
+- [ ] `scripts/check-legacy-compat-contracts.sh` passes before and after the
+      migration branch.
 
 ## Rollback Rule
 

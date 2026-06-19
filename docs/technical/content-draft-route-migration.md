@@ -308,3 +308,25 @@ gradually moving to the new names.
 - Kept all persisted and public contracts unchanged, including DB table names,
   model names, JSON fields, `scene=auto_post`, activity keys, queue types, and
   legacy API routes.
+
+## P3.7 Compatibility Guard Script
+
+- Added `scripts/check-legacy-compat-contracts.sh` as the executable guard for
+  the remaining high-risk compatibility boundary.
+- The script asserts that legacy persisted contracts still exist where they are
+  required:
+  - `AutoPost*` model/table anchors for existing `auto_post_*` rows.
+  - `ContentDraft*` DTO and repository aliases over legacy storage contracts.
+  - Billing semantic and legacy JSON fields.
+  - `AIGenerationSceneAutoPost = "auto_post"` for historical usage/cost rows.
+  - `queue_type = "auto_post"` compatibility in review/feedback logic.
+  - Active scheduler entrypoint `RunContentDraftOnce` plus legacy wrapper
+    `RunAutoPostOnce`.
+- The same script also asserts that old active route registrations remain
+  absent from the production router:
+  - `RegisterAutoPost`
+  - `RegisterDailyXQueue`
+- It runs targeted Go compatibility tests for model table names, DTO aliases,
+  repository aliases, billing JSON aliases, and route registration.
+- This is a guardrail step only. It does not rename DB tables, JSON tags,
+  activity keys, AI scene values, queue types, or historical data.

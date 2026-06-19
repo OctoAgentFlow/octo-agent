@@ -53,7 +53,7 @@ original concerns.
 | Core workflow smoke checks | Done / refining | `scripts/smoke-core-workflows.sh` covers static/prod route checks, `scripts/smoke-core-ui.mjs` starts/checks the API frontend HTML shell, and `scripts/smoke-core-api.mjs` validates API health, auth boundaries, core response shapes, Exposure Radar diagnostics, and activation readiness. |
 | Creator Studio private analytics intake | Done / local-first | Account Intelligence keeps private analytics notes in the browser, supports local paste/file import for `.txt`, `.csv`, and `.json` Creator Studio observations, parses audience/country/active-time/growth/content/weak-signal fields locally, labels them as user-provided data, and appends the structured notes into Growth Strategy operator notes when the user applies strategy. |
 | Legacy route traffic audit | Done / operational gate | `docs/runbooks/legacy-route-traffic-audit.md` remains the access-log gate for any final deletion, while old product routes are already downlined. |
-| High-risk legacy data migration plan | Done / compatibility boundary | `docs/technical/high-risk-legacy-data-migration-plan.md` defines the dual-read/dual-write, backup, backfill, test, and rollback requirements before touching DB table names, JSON fields, activity keys, or AI scene values. |
+| High-risk legacy data migration plan | Done / guarded compatibility boundary | `docs/technical/high-risk-legacy-data-migration-plan.md` defines the dual-read/dual-write, backup, backfill, test, and rollback requirements before touching DB table names, JSON fields, activity keys, or AI scene values. P3 added `scripts/check-legacy-compat-contracts.sh` so routine refactors can automatically verify these contracts remain stable. |
 | Self-serve proof and pricing clarity | Solved for current packaging / refining | Product and billing language now packages the paid promise around Daily Growth Desk refreshes, opportunity drafts, account intelligence, content memory, review capacity, and result learning. Continue refining once real usage appears. |
 
 ### Still Open
@@ -61,7 +61,7 @@ original concerns.
 | Priority | Open item | Why it still matters |
 | --- | --- | --- |
 | P2 | Authorized Creator Studio/private metrics sync. | Local structured import is now available for user-provided exports and notes. Automatic cloud sync still requires a confirmed authorized data path from X or another user-approved source before building backend ingestion. |
-| P2 | High-risk backend naming/data migration execution. | A migration plan exists, but `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design until a dedicated migration project is approved. |
+| P2 | High-risk backend naming/data migration execution. | Guardrails now exist, but `auto_post_*` DB tables, queue types, activity keys, and AI scene values remain compatibility contracts by design until a dedicated migration project is approved. |
 
 ## Original User Journey At Time Of Audit
 

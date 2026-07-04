@@ -22,7 +22,7 @@ Core surfaces:
 
 - Frontend: Next.js App Router, React, Tailwind CSS, shadcn-style components, React Hook Form, Zod.
 - Backend: Gin, GORM, MySQL.
-- Deployment: script-based four-service deployment under `scripts/`.
+- Tooling: Make targets plus smoke and compatibility checks under `scripts/`.
 
 ## Environment Prerequisites
 
@@ -39,7 +39,7 @@ Core surfaces:
    - API uses `backend/configs/config.local.api.yaml`.
    - Admin API uses `backend/configs/config.local.admin.yaml`.
    - Compatibility fallback: if `APP_SERVICE` is not set, backend reads `backend/configs/config.local.yaml`.
-   - Optional: set `APP_ENV` in `backend/configs/.env`; otherwise local is used.
+   - Optional: copy `backend/configs/.env.example` to `backend/configs/.env`; otherwise local is used.
 2. Ensure MySQL is running and the target database exists.
 3. Start backend services:
    - API: `make api-local`
@@ -76,9 +76,8 @@ Frontend service defaults:
 - `make admin-local` - run local Admin API service.
 - `make install` - install frontend dependencies and tidy Go modules.
 - `make lint` - run frontend lint and backend tests.
-- `./scripts/deploy-all-prod.sh` - deploy production API, Admin API, API Front, and Admin Front with script-managed release directories and PID files.
-
-Test deployment scripts are deprecated because the old test servers have been released.
+- `scripts/smoke-core-workflows.sh` - run static workflow checks.
+- `scripts/check-legacy-compat-contracts.sh` - validate preserved compatibility contracts.
 
 ## Runtime Notes
 
@@ -109,10 +108,14 @@ Some historical names remain in code, database fields, and compatibility DTOs be
 
 - `frontend/`: Next.js application.
 - `backend/`: Gin API and Admin API services.
-- `scripts/`: local helpers and production deployment scripts.
-- `docs/`: product, API, database, deployment, runbook, and audit documents.
+- `scripts/`: local development, smoke, and compatibility helpers.
+- `docs/`: public API and database reference documents.
 
-See [docs/product/roadmap.md](docs/product/roadmap.md),
-[docs/product/page-list.md](docs/product/page-list.md), and
-[docs/product/product-strength-optimization-plan.md](docs/product/product-strength-optimization-plan.md)
-for the current product map and product-strength optimization tracker.
+Private deployment runbooks, launch notes, growth plans, and acceptance reports
+are intentionally not included in this public repository.
+
+## Security
+
+Do not commit `.env` files, API keys, OAuth secrets, database credentials,
+wallet private keys, or production payment addresses. See [SECURITY.md](SECURITY.md)
+for reporting guidance.

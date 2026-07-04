@@ -17,9 +17,6 @@ name: Legacy Compatibility Guard
       - "scripts/check-legacy-compat-scope.sh"
       - "scripts/smoke-core-workflows.sh"
       - ".github/workflows/legacy-compat-guard.yml"
-      - "docs/technical/content-draft-route-migration.md"
-      - "docs/technical/high-risk-legacy-data-migration-plan.md"
-      - "docs/runbooks/core-workflow-smoke-test.md"
 
 permissions:
   contents: read

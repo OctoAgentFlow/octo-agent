@@ -24,13 +24,13 @@ func TestNormalizeTxHash(t *testing.T) {
 	}
 }
 
-func TestConfiguredTRC20AddressesAreValid(t *testing.T) {
+func TestSampleTRC20AddressesAreValid(t *testing.T) {
 	for _, addr := range []string{
 		"TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj",
 		"T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
 	} {
 		if _, err := tronAddressToEVMHex(addr); err != nil {
-			t.Fatalf("configured TRON address %s is invalid: %v", addr, err)
+			t.Fatalf("sample TRON address %s is invalid: %v", addr, err)
 		}
 	}
 }

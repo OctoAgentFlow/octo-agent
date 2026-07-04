@@ -7,6 +7,7 @@
     "dev:api-front": "NEXT_PUBLIC_FRONTEND_ROLE=api NEXT_PUBLIC_API_BASE_URL=http://localhost:10001/api/v1 next dev -p 3000",
     "dev:admin-front": "NEXT_PUBLIC_FRONTEND_ROLE=admin NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1 next dev -p 3001",
     "build": "next build",
+    "build:github-pages": "GITHUB_PAGES=true NEXT_PUBLIC_FRONTEND_ROLE=api NEXT_PUBLIC_BASE_PATH=/octo-agent sh -c 'next build && node scripts/export-github-pages-site.mjs'",
     "start": "next start -p 3000",
     "start:api-front": "NEXT_PUBLIC_FRONTEND_ROLE=api NEXT_PUBLIC_API_BASE_URL=http://localhost:10001/api/v1 next start -p 3000",
     "start:admin-front": "NEXT_PUBLIC_FRONTEND_ROLE=admin NEXT_PUBLIC_API_BASE_URL=http://localhost:10002/api/v1 next start -p 3001",

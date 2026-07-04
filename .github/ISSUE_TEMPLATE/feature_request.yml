@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a focused improvement to the social operations workflow.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep proposals aligned with controlled automation, review queues, content memory, guardrails, and human-in-the-loop workflows.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operator or developer problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should change?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Daily Growth Desk
+        - Exposure Radar
+        - OAF Bots
+        - Content Memory
+        - Content Drafts
+        - Handling List
+        - Account Intelligence
+        - Developer experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context

@@ -1,4 +1,10 @@
 <p align="center">
+  <strong>English</strong>
+  ·
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <a href="https://octoagentflow.github.io/octo-agent/">
     <img src="frontend/public/brand/oaf-octopus-icon.png" alt="OctoAgentFlow logo" width="96" />
   </a>
@@ -18,6 +24,8 @@
   <a href="CONTRIBUTING.md">Contributing</a>
   ·
   <a href="SECURITY.md">Security</a>
+  ·
+  <a href="SUPPORT.md">Support</a>
 </p>
 
 <p align="center">
@@ -151,6 +159,12 @@ workflow, developer experience, documentation quality, or security posture.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md), and please follow the
 [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Support
+
+Use GitHub Issues for reproducible bugs, documentation fixes, and focused
+feature proposals. Please use [GitHub Security Advisories](SECURITY.md) for
+vulnerability reports.
 
 ## License
 

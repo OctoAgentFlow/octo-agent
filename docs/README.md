@@ -1,5 +1,11 @@
 # Documentation
 
+<p>
+  <strong>English</strong>
+  ·
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 This public documentation set intentionally keeps only reference material that
 is useful to contributors and operators of a self-hosted development instance.
 

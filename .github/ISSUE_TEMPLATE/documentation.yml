@@ -1,0 +1,35 @@
+name: Documentation issue
+description: Report missing, unclear, or outdated public documentation.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: page
+    attributes:
+      label: Page or file
+      description: Which document needs attention?
+      placeholder: README.md, README.zh-CN.md, docs/api/README.md, ...
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What should change?
+      description: Explain what is missing, unclear, or outdated.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording or structure
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - English
+        - Simplified Chinese
+        - Both
+    validations:
+      required: true

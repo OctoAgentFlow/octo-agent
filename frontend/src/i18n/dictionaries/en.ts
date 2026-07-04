@@ -376,7 +376,7 @@ export const dict: I18nDict = {
   "marketing.loop.preview.queue.value": "Human inspection · Copy reply · Open original post",
   "marketing.loop.preview.queue.desc": "Decide first, then copy or open the original post manually to reduce platform risk.",
   "marketing.loop.cta.primary": "Create OAF Bot",
-  "marketing.loop.cta.secondary": "View plan benefits",
+  "marketing.loop.cta.secondary": "Read FAQ",
 
   "marketing.comparison.badge": "Why not a generic AI writer",
   "marketing.comparison.title": "Generic AI writes one line. OAF Bot operates one account.",

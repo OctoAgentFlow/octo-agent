@@ -6,7 +6,6 @@ import { MarketingFooter } from "@/components/marketing/footer";
 import { HeroSection } from "@/components/marketing/hero-section";
 import { MobileCtaBar } from "@/components/marketing/mobile-cta-bar";
 import { MarketingNavbar } from "@/components/marketing/navbar";
-import { PricingSection } from "@/components/marketing/pricing-section";
 import { DashboardPreviewSection } from "@/components/marketing/dashboard-preview-section";
 import { WorkflowSection } from "@/components/marketing/workflow-section";
 import { OAFBotSection } from "@/components/marketing/oaf-bot-section";
@@ -35,7 +34,6 @@ export default function Home() {
         <OperatingLoopSection />
         <ComparisonSection />
         <DashboardPreviewSection />
-        <PricingSection />
         <FAQSection />
       </main>
       <MarketingFooter />

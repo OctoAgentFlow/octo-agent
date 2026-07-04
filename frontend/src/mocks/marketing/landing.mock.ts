@@ -17,7 +17,6 @@ export const navItems: NavItem[] = [
   { labelKey: "marketing.nav.capabilities", href: "#capabilities" },
   { labelKey: "marketing.nav.autoPost", href: "#content-drafts" },
   { labelKey: "marketing.nav.workflow", href: "#workflow" },
-  { labelKey: "marketing.nav.pricing", href: "#pricing" },
   { labelKey: "marketing.nav.faq", href: "#faq" },
 ];
 

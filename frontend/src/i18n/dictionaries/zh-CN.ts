@@ -358,7 +358,7 @@ export const dict: I18nDict = {
   "marketing.loop.preview.queue.value": "人工检查 · 复制回复 · 打开原帖",
   "marketing.loop.preview.queue.desc": "先判断，再复制或打开原帖处理，避免不必要的平台风险。",
   "marketing.loop.cta.primary": "开始创建 OAF Bot",
-  "marketing.loop.cta.secondary": "查看套餐权益",
+  "marketing.loop.cta.secondary": "查看常见问题",
 
   "marketing.comparison.badge": "为什么不是普通 AI 文案工具",
   "marketing.comparison.title": "普通 AI 帮你写一句话，OAF Bot 帮你运营一个账号。",

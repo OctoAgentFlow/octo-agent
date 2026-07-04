@@ -97,7 +97,7 @@ export function OperatingLoopSection() {
                 >
                   {t("marketing.loop.cta.primary")}
                 </Link>
-                <a href="#pricing" className="inline-flex items-center gap-1 text-sm font-semibold text-blue-100 hover:text-white">
+                <a href="#faq" className="inline-flex items-center gap-1 text-sm font-semibold text-blue-100 hover:text-white">
                   {t("marketing.loop.cta.secondary")}
                   <ArrowRight className="size-4" />
                 </a>

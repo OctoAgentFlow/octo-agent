@@ -10,6 +10,7 @@ import { ConnectWalletButton } from "@/components/web3/connect-wallet-button";
 import { useWalletBinding } from "@/hooks/use-wallet-binding";
 import { useT } from "@/i18n/use-t";
 import { signIn } from "@/lib/auth-session";
+import { publicAssetPath } from "@/lib/public-assets";
 
 import { AuthModeSwitch } from "./auth-mode-switch";
 
@@ -50,7 +51,7 @@ export function AuthCard({ nextPath = "/dashboard", adminMode = false, inviteCod
         <div className="mb-6 flex items-center gap-3">
           <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-blue-300/20 bg-white/[0.055] shadow-[0_0_24px_rgba(80,132,255,0.18)]">
             <Image
-              src="/brand/oaf-octopus-icon.png"
+              src={publicAssetPath("/brand/oaf-octopus-icon.png")}
               alt={t("common.brand")}
               fill
               sizes="40px"

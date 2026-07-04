@@ -33,7 +33,7 @@ export function HeroSection() {
   const { t } = useT();
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-8 px-5 pt-7 pb-10 sm:px-6 md:grid-cols-[1.06fr_0.94fr] md:px-8 md:pt-16 md:pb-12 lg:gap-12">
-      <div className="flex flex-col justify-center space-y-5 md:space-y-6">
+      <div className="flex min-w-0 flex-col justify-center space-y-5 md:space-y-6">
         <span className="inline-flex w-fit rounded-full border border-blue-400/30 bg-blue-500/10 px-3.5 py-1.5 text-xs font-medium text-blue-100 shadow-[0_0_24px_rgba(59,130,246,0.12)]">
           {t("marketing.hero.badge")}
         </span>
@@ -87,7 +87,7 @@ export function HeroSection() {
           ))}
         </div>
       </div>
-      <div className="relative overflow-hidden rounded-3xl border border-white/12 bg-[#080d20]/95 p-2.5 shadow-2xl shadow-blue-950/30 sm:p-4">
+      <div className="relative min-w-0 overflow-hidden rounded-3xl border border-white/12 bg-[#080d20]/95 p-2.5 shadow-2xl shadow-blue-950/30 sm:p-4">
         <div className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-violet-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 size-64 rounded-full bg-blue-500/10 blur-3xl" />
         <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045]">

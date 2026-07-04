@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     ".next-api/**",
     ".next-admin/**",
     "out/**",
+    "out-github-pages/**",
     "build/**",
     "next-env.d.ts",
   ]),

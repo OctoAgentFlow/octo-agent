@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useT } from "@/i18n/use-t";
 import { isAdminFrontend } from "@/lib/frontend-role";
+import { publicAssetPath } from "@/lib/public-assets";
 
 const navGroups = [
   {
@@ -79,7 +80,7 @@ export function AppSidebar() {
       >
         <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#2f3336] bg-[#0f1419]">
           <Image
-            src="/brand/oaf-octopus-icon.png"
+            src={publicAssetPath("/brand/oaf-octopus-icon.png")}
             alt={t("common.brand")}
             width={32}
             height={32}

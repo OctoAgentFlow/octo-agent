@@ -1,26 +1,39 @@
 # Code of Conduct
 
-## Our Pledge
+## Our Standard
 
-We want this project to be a respectful, practical, and welcoming space for
-contributors.
+OctoAgentFlow should be a practical, respectful, and useful space for people
+building AI social operations tools.
+
+We value clear technical discussion, careful product judgment, and direct
+feedback that helps the project improve.
 
 ## Expected Behavior
 
-- Be kind and direct.
-- Assume good intent while staying precise about technical issues.
-- Give actionable feedback.
+- Be kind, direct, and specific.
+- Assume good intent while staying precise about technical concerns.
+- Give actionable feedback with enough context to reproduce or understand it.
 - Respect different levels of experience.
-- Keep discussions focused on the project.
+- Keep issues, pull requests, and discussions focused on the project.
+- Treat safety, privacy, and secret handling as shared responsibilities.
 
 ## Unacceptable Behavior
 
-- Harassment, threats, or personal attacks.
+- Harassment, threats, intimidation, or personal attacks.
 - Discriminatory language or behavior.
-- Publicly posting private information.
+- Publicly posting private information, credentials, logs, or user data.
 - Spam, trolling, or sustained disruption.
+- Encouraging abusive automation, credential misuse, or platform abuse.
+
+## Scope
+
+This code of conduct applies to repository activity, issues, pull requests,
+project discussions, and maintainer interactions related to OctoAgentFlow.
 
 ## Enforcement
 
-Maintainers may remove comments, close issues, or restrict participation when
-behavior harms the project or its contributors.
+Maintainers may edit or remove comments, close issues, decline pull requests,
+or restrict participation when behavior harms the project or its contributors.
+
+Enforcement decisions should be proportionate, documented when appropriate, and
+focused on keeping the project safe and useful.
